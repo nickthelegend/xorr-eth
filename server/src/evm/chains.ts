@@ -83,8 +83,24 @@ const BASE_SEPOLIA_ADDRESSES = {
   nativeEth: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
 } as const;
 
+/**
+ * Addresses for the chain the executor SETTLES on. Follows XORR_CHAIN.
+ */
 export const ADDRESSES =
   CHAIN_KEY === 'base-sepolia' ? BASE_SEPOLIA_ADDRESSES : BASE_MAINNET_ADDRESSES;
+
+/**
+ * Addresses for the chain 1inch is ASKED about, which is always Base mainnet.
+ *
+ * These are two different things and conflating them is a real bug: 1inch has no deployment or
+ * liquidity on Sepolia, so `ONEINCH_CHAIN_ID` is pinned to 8453 and every quote is a mainnet
+ * question. Handing it a Sepolia token address makes it 400 on a token that chain has never heard
+ * of — which is exactly what happened when the routing registry started following XORR_CHAIN.
+ *
+ * On a testnet the consequence is honest and worth stating: prices are real mainnet prices, and
+ * settlement is not possible. The fork is where both halves are real at once.
+ */
+export const QUOTE_ADDRESSES = BASE_MAINNET_ADDRESSES;
 
 /** True where the tokenized equities and Aqua actually exist. */
 export const IS_BASE_MAINNET_STATE = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-fork';

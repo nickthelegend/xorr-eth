@@ -11,7 +11,7 @@
 import 'dotenv/config';
 import { getJson } from '../http/get.js';
 import { STOCKS } from './stocks.js';
-import { ADDRESSES, CHAIN_KEY, ONEINCH_CHAIN_ID } from '../evm/chains.js';
+import { CHAIN_KEY, ONEINCH_CHAIN_ID, QUOTE_ADDRESSES } from '../evm/chains.js';
 import type { Address, Hex } from 'viem';
 
 const BASE = 'https://api.1inch.dev/swap/v6.0';
@@ -27,12 +27,16 @@ if (!API_KEY) {
  * Crypto plus the tokenized equities from `stocks.ts` — the stocks are ordinary ERC-20s on Base,
  * so the swap path does not need to know they represent shares. That is the whole point: "Buy $250
  * of NVDA" is the same code path as "Buy $250 of WETH".
+ *
+ * MAINNET addresses, always. 1inch is only asked about chain 8453, so a Sepolia address here is a
+ * token that chain has never heard of and the quote 400s. What the executor settles against is a
+ * separate question, answered by ADDRESSES.
  */
 export const TOKENS: Record<string, { address: Address; decimals: number }> = {
-  ETH: { address: ADDRESSES.nativeEth, decimals: 18 },
-  WETH: { address: ADDRESSES.wethBase, decimals: 18 },
-  USDC: { address: ADDRESSES.usdcBase, decimals: 6 },
-  CBBTC: { address: ADDRESSES.cbbtcBase, decimals: 8 },
+  ETH: { address: QUOTE_ADDRESSES.nativeEth, decimals: 18 },
+  WETH: { address: QUOTE_ADDRESSES.wethBase, decimals: 18 },
+  USDC: { address: QUOTE_ADDRESSES.usdcBase, decimals: 6 },
+  CBBTC: { address: QUOTE_ADDRESSES.cbbtcBase, decimals: 8 },
   ...Object.fromEntries(
     Object.values(STOCKS).map((s) => [s.symbol, { address: s.address, decimals: s.decimals }]),
   ),
@@ -151,6 +155,9 @@ const AMM_ONLY =
     ? '&complexityLevel=0&mainRouteParts=1&parts=1'
     : '';
 
+/** Where a swap can actually land. Base mainnet, or a fork of it. */
+export const CAN_SETTLE = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-fork';
+
 /**
  * Build the calldata for a real swap.
  *
@@ -170,6 +177,16 @@ export async function buildSwap(params: {
   receiver: Address;
   slippagePct?: number;
 }): Promise<SwapCalldata> {
+  // Quotes are a mainnet question and can be answered anywhere; a FILL cannot. On Base Sepolia
+  // there is no 1inch router and none of these tokens exist, so calldata built here would be sent
+  // to an address with no code and revert with nothing useful to show the user. Say what is
+  // actually wrong instead, and say it before anything is signed.
+  if (!CAN_SETTLE) {
+    throw new Error(
+      `Cannot fill on ${CHAIN_KEY}: 1inch has no deployment there. Prices are real (quoted against ` +
+        `Base mainnet); settlement needs XORR_CHAIN=base-fork or base.`,
+    );
+  }
   const src = TOKENS[params.inSymbol];
   const dst = TOKENS[params.outSymbol];
   if (!src || !dst) throw new Error(`No route for ${params.inSymbol} -> ${params.outSymbol}`);

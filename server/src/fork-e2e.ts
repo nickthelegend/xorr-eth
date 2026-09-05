@@ -67,6 +67,10 @@ async function fundUsdc(to: Address, amount: bigint) {
   await anvil('anvil_stopImpersonatingAccount', [whale]);
 }
 
+function tokenAddressOf(t: { address: Address }): Address {
+  return t.address;
+}
+
 function must(label: string, cond: boolean, detail = '') {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${label}${detail ? `  — ${detail}` : ''}`);
   if (!cond) process.exitCode = 1;
@@ -87,7 +91,30 @@ const DELEGATION_ABI = [
 async function main() {
   const token = TOKENS[SYMBOL] ?? STOCKS[SYMBOL];
   if (!token) throw new Error(`Unknown symbol ${SYMBOL}`);
-  const tokenAddress = 'address' in token ? token.address : (token as { address: Address }).address;
+
+  /*
+   * Ondo's tokenized equities cannot run on a fork at all.
+   *
+   * Their account code is the single byte 0xef — they are implemented natively inside the Base
+   * node, not in EVM bytecode — so anvil and revm both halt with OpcodeNotFound the moment
+   * anything touches them, including a plain balanceOf. They quote honestly against live Base and
+   * can only be filled there.
+   *
+   * The tokenized-equity path is proved instead in contracts/test/XorrStocks.fork.t.sol, which
+   * buys Backed's bNVDA (ordinary bytecode, real supply) through Aqua under a delegation policy.
+   */
+  const code = await pub.getBytecode({ address: tokenAddressOf(token) });
+  if (!code || code.length <= 4) {
+    console.error(
+      `\n${SYMBOL} has no EVM bytecode on this chain (code: ${code ?? '0x'}).\n` +
+        `Ondo's equities are native to the Base node, so no fork can execute them.\n` +
+        `For the tokenized-equity path run:\n` +
+        `  forge test --match-contract XorrStocksFork --fork-url $BASE_RPC\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const tokenAddress = tokenAddressOf(token);
   const decimals = token.decimals;
 
   console.log(`\nfork ${RPC}  block ${await pub.getBlockNumber()}  buying ${SPEND_USD} USDC of ${SYMBOL}\n`);

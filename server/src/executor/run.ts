@@ -320,28 +320,45 @@ export function humanFailure(error: string): string {
   const e = error.toLowerCase();
 
   /**
-   * Match the program error code EXACTLY. Substring matching is a trap here: "0x1771" (slippage)
-   * contains "0x1" (insufficient funds), so a naive `includes` reports the wrong cause to the
-   * user — which on a trading surface is worse than saying nothing.
+   * XorrDelegation's custom errors, by 4-byte selector.
+   *
+   * Match the selector EXACTLY. Substring matching is a trap here — one selector is a prefix of
+   * another often enough that a naive `includes` reports the wrong cause, which on a trading
+   * surface is worse than saying nothing. (These replaced a table of Solana Anchor codes that
+   * could never fire on an EVM chain, so every real revert fell through to the generic line.)
    */
-  const code = /custom program error:\s*(0x[0-9a-f]+)/.exec(e)?.[1];
-  const BY_CODE: Record<string, string> = {
-    '0x1': 'Not enough settled balance to cover this buy.',
-    '0x4': 'The trading permission no longer covers this account.',
-    '0x1771': 'The price moved more than your slippage limit while this was in flight.',
+  const BY_SELECTOR: Record<string, string> = {
+    '0x1db3b859': 'That agent is not the one you gave permission to.', // NotDelegate()
+    '0x430f7460': 'You revoked the trading permission, so nothing was placed.', // PolicyRevoked()
+    '0x9c5bebca': 'The trading permission has expired. Renew it to let the bot trade again.', // PolicyExpired()
+    '0x2114fba2': 'That venue is not on your allowlist, so the trade was refused.', // VenueNotAllowed
+    '0x3e814127': "Today's cap is used up. Nothing was placed.", // DailyCapExceeded
+    '0x1f2a2005': 'The order size came out as zero, so nothing was placed.', // ZeroAmount()
+    '0xc2e441e5': 'The venue rejected the order, so nothing was placed.', // VenueCallFailed()
   };
-  if (code) return BY_CODE[code] ?? 'The venue rejected the order, so nothing was placed.';
+  const selector = /(?:custom error|reverted with|signature)[^0-9a-fx]*(0x[0-9a-f]{8})\b/.exec(e)?.[1];
+  if (selector && BY_SELECTOR[selector]) return BY_SELECTOR[selector];
 
-  if (e.includes('insufficient funds')) return 'Not enough settled balance to cover this buy.';
-  if (e.includes('blockhash not found') || e.includes('expired'))
-    return 'The network moved on before this confirmed. Nothing was placed; I will retry.';
-  if (e.includes('slippage'))
+  // Named errors, when the RPC decodes them for us.
+  if (e.includes('dailycapexceeded')) return BY_SELECTOR['0x3e814127']!;
+  if (e.includes('policyrevoked')) return BY_SELECTOR['0x430f7460']!;
+  if (e.includes('policyexpired')) return BY_SELECTOR['0x9c5bebca']!;
+  if (e.includes('venuenotallowed')) return BY_SELECTOR['0x2114fba2']!;
+  if (e.includes('notdelegate')) return BY_SELECTOR['0x1db3b859']!;
+
+  if (e.includes('cannot fill on'))
+    return 'This network cannot settle trades. Prices are real; filling needs Base or a Base fork.';
+  if (e.includes('transfer amount exceeds allowance') || e.includes('pull failed'))
+    return 'The spending approval is too small or was withdrawn, so nothing could be pulled.';
+  if (e.includes('insufficient funds') || e.includes('exceeds balance'))
+    return 'Not enough settled balance to cover this buy.';
+  if (e.includes('slippage') || e.includes('returnamount') || e.includes('min return'))
     return 'The price moved more than your slippage limit while this was in flight.';
-  if (e.includes('owner does not match'))
-    return 'The trading permission no longer covers this account.';
+  if (e.includes('nonce') || e.includes('replacement transaction'))
+    return 'The network moved on before this confirmed. Nothing was placed; I will retry.';
   if (e.includes('timed out') || e.includes('timeout'))
     return 'The network did not confirm in time. I will check and retry rather than send twice.';
-  if (e.includes('priority') || e.includes('fee'))
+  if (e.includes('gas') || e.includes('fee too low') || e.includes('underpriced'))
     return 'The network was congested and the fee was too low to land.';
   return 'The transaction did not go through, so nothing was placed.';
 }
