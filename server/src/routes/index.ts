@@ -4,7 +4,6 @@
  */
 import { randomUUID } from 'node:crypto';
 import { Hono, type Context } from 'hono';
-import { PublicKey } from '@solana/web3.js';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
