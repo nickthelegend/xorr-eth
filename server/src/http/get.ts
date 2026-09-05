@@ -13,18 +13,40 @@
 const MIN_SPACING_MS = Number(process.env.HTTP_MIN_SPACING_MS ?? 1_100);
 const MAX_ATTEMPTS = 5;
 
-let queue: Promise<unknown> = Promise.resolve();
-let lastRequestAt = 0;
+/**
+ * One lane per upstream host.
+ *
+ * A single global queue meant a CoinGecko backlog — and the public tier backs up readily — stalled
+ * every 1inch call behind it, so a single slow feed could take a quote from 300ms to half a
+ * minute. Rate limits are per host, so the spacing belongs per host too.
+ */
+type Lane = { queue: Promise<unknown>; lastRequestAt: number };
+const lanes = new Map<string, Lane>();
+
+function laneFor(url: string): Lane {
+  const host = new URL(url).host;
+  let lane = lanes.get(host);
+  if (!lane) {
+    lane = { queue: Promise.resolve(), lastRequestAt: 0 };
+    lanes.set(host, lane);
+  }
+  return lane;
+}
+
 const cache = new Map<string, { at: number; value: unknown }>();
+/** In-flight requests, so N callers for the same URL make one call rather than N queued ones. */
+const inflight = new Map<string, Promise<unknown>>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function rawGet<T>(url: string, timeoutMs: number, headers: Record<string, string> = {}): Promise<T> {
+  const lane = laneFor(url);
   let lastStatus = 0;
+  let lastError: Error | undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const wait = MIN_SPACING_MS - (Date.now() - lastRequestAt);
+    const wait = MIN_SPACING_MS - (Date.now() - lane.lastRequestAt);
     if (wait > 0) await sleep(wait);
-    lastRequestAt = Date.now();
+    lane.lastRequestAt = Date.now();
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -44,10 +66,23 @@ async function rawGet<T>(url: string, timeoutMs: number, headers: Record<string,
       }
       if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
       return (await res.json()) as T;
+    } catch (e) {
+      // A timeout or a dropped connection is the same kind of failure as a 503 — the upstream is
+      // busy — and deserves the same backoff. Previously it escaped the loop on the first attempt,
+      // so a single slow response failed the whole call while a 503 got four more tries.
+      const transient =
+        e instanceof Error &&
+        (e.name === 'AbortError' ||
+          e.name === 'TimeoutError' ||
+          /aborted|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(e.message));
+      if (!transient || attempt === MAX_ATTEMPTS) throw e;
+      lastError = e;
+      await sleep(800 * 2 ** attempt);
     } finally {
       clearTimeout(timer);
     }
   }
+  if (lastError) throw lastError;
   throw new Error(`${lastStatus} after ${MAX_ATTEMPTS} attempts: ${url}`);
 }
 
@@ -60,11 +95,28 @@ export async function getJson<T>(
   const hit = cache.get(url);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
 
-  const run = queue.then(() => rawGet<T>(url, timeoutMs, headers));
-  queue = run.catch(() => undefined);
-  const value = await run;
-  cache.set(url, { at: Date.now(), value });
-  return value;
+  // Two callers wanting the same URL at the same moment should cost one request, not two queue
+  // slots. This is what keeps a page that mounts three components off the rate limiter.
+  const pending = inflight.get(url);
+  if (pending) return pending as Promise<T>;
+
+  const lane = laneFor(url);
+  const run = lane.queue.then(() => rawGet<T>(url, timeoutMs, headers));
+  lane.queue = run.catch(() => undefined);
+
+  const tracked = run.then(
+    (value) => {
+      cache.set(url, { at: Date.now(), value });
+      inflight.delete(url);
+      return value;
+    },
+    (e: unknown) => {
+      inflight.delete(url);
+      throw e;
+    },
+  );
+  inflight.set(url, tracked);
+  return tracked;
 }
 
 /**
@@ -81,4 +133,5 @@ export function staleValue<T>(url: string, maxAgeMs: number): T | undefined {
 
 export function clearHttpCache(): void {
   cache.clear();
+  inflight.clear();
 }

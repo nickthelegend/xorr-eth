@@ -48,19 +48,46 @@ export const rpcUrl = RPCS[CHAIN_KEY];
 /** The chain id 1inch is asked about. A local fork of Base Sepolia still quotes against Base. */
 export const ONEINCH_CHAIN_ID = 8453;
 
-/** Canonical addresses. */
-export const ADDRESSES = {
+/**
+ * Canonical addresses, per chain.
+ *
+ * These used to be a single flat object of Base MAINNET addresses used on every network. On Base
+ * Sepolia that meant the app asked for the balance of a USDC contract that does not exist there,
+ * got back `0x`, and the whole delegation flow died on a decode error before the user could sign
+ * anything. A token address is a property of a chain, not of a product.
+ *
+ * Circle deploys USDC to a different address on Sepolia; WETH is at the same predeploy on both.
+ * cbBTC and the tokenized equities are mainnet-only, and are absent here rather than pointed at an
+ * address with no code — code that reads them must handle absence, not discover it at runtime.
+ */
+const BASE_MAINNET_ADDRESSES = {
   /** 1inch Aggregation Router v6 — the same address across every chain it supports. */
-  oneInchRouter: '0x111111125421cA6dc452d289314280a0f8842A65' as const,
-  /** USDC on Base. */
-  usdcBase: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const,
-  /** WETH on Base. */
-  wethBase: '0x4200000000000000000000000000000000000006' as const,
+  oneInchRouter: '0x111111125421cA6dc452d289314280a0f8842A65',
+  usdcBase: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  wethBase: '0x4200000000000000000000000000000000000006',
   /** Coinbase Wrapped BTC on Base — 8 decimals, the Base-native way to hold BTC exposure. */
-  cbbtcBase: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf' as const,
+  cbbtcBase: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
   /** 1inch's sentinel for native ETH. */
-  nativeEth: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as const,
-};
+  nativeEth: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+} as const;
+
+const BASE_SEPOLIA_ADDRESSES = {
+  // 1inch does not run on Sepolia. The address is kept so the venue allowlist has a stable shape;
+  // nothing routes there on a testnet, and the executor's own tests use the fork for real fills.
+  oneInchRouter: '0x111111125421cA6dc452d289314280a0f8842A65',
+  /** Circle's USDC on Base Sepolia — a different deployment from mainnet. */
+  usdcBase: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  /** WETH is the same predeploy on every OP-stack chain. */
+  wethBase: '0x4200000000000000000000000000000000000006',
+  cbbtcBase: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf',
+  nativeEth: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+} as const;
+
+export const ADDRESSES =
+  CHAIN_KEY === 'base-sepolia' ? BASE_SEPOLIA_ADDRESSES : BASE_MAINNET_ADDRESSES;
+
+/** True where the tokenized equities and Aqua actually exist. */
+export const IS_BASE_MAINNET_STATE = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-fork';
 
 export function explorerTx(hash: string): string {
   // A fork shares mainnet's history up to the fork block, so an explorer link is right for a

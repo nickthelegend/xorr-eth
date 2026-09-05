@@ -12,6 +12,7 @@ module.exports = [
       // Vendored Solidity dependencies — not our source to lint.
       'contracts/**',
       'subgraph/**',
+      'subgraph-aqua/**',
     ],
   },
 ];

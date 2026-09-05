@@ -7,7 +7,22 @@
  * only a handful of those can be routed and settled. Offering a Buy on the rest would put a
  * strategy in the database that no signed transaction could ever fill.
  */
-export const TRADABLE = ['ETH', 'WETH', 'USDC', 'CBBTC'] as const;
+export const TRADABLE = [
+  // Crypto the delegation can route on Base.
+  'ETH',
+  'WETH',
+  'USDC',
+  'CBBTC',
+  // Tokenized equities. Ordinary ERC-20s to the swap path — see server/src/venues/stocks.ts.
+  'NVDAc',
+  'AAPLc',
+  'TSLAc',
+  'METAc',
+  'MSFTc',
+  'AMZNc',
+  'GOOGLc',
+  'MSTRc',
+] as const;
 
 export type TradableSymbol = (typeof TRADABLE)[number];
 

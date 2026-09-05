@@ -4,15 +4,10 @@
  * Base URL comes from EXPO_PUBLIC_API_URL so a device build can point at a deployed executor;
  * it defaults to the local dev server.
  */
-import Constants from 'expo-constants';
 import { accessToken } from '@/auth/token';
+import { API_BASE } from './apiBase';
 
-const DEFAULT_BASE = 'http://localhost:8788';
-
-export const API_BASE =
-  process.env.EXPO_PUBLIC_API_URL ??
-  (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
-  DEFAULT_BASE;
+export { API_BASE };
 
 /**
  * Every request carries the Privy access token. The executor rejects anything without one, so a

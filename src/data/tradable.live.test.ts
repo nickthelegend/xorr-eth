@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { TRADABLE } from './tradable';
-import { API_BASE } from './api';
+import { API_BASE } from './apiBase';
 
 describe('tradable set', () => {
   it('matches the executor exactly', async () => {
@@ -16,13 +16,24 @@ describe('tradable set', () => {
     expect([...rows.map((r) => r.symbol)].sort()).toEqual([...TRADABLE].sort());
   }, 30_000);
 
-  it('every tradable symbol also has a price feed', async () => {
-    const res = await fetch(`${API_BASE}/market/quotes?symbols=${TRADABLE.join(',')}`);
-    const quotes = (await res.json()) as Record<string, { price: number }>;
-    // ETH and WETH share a feed under different keys; both must resolve.
+  it('every tradable symbol is priced by one feed or the other', async () => {
+    // Crypto is priced by CoinGecko; the tokenized equities have no listing there and are priced
+    // off the 1inch route that would fill them. Either way a tradable symbol must have a number,
+    // or the app has a Buy button it cannot put a price on.
+    const [quotes, stocks] = await Promise.all([
+      fetch(`${API_BASE}/market/quotes?symbols=${TRADABLE.join(',')}`).then(
+        (r) => r.json() as Promise<Record<string, { price: number }>>,
+      ),
+      fetch(`${API_BASE}/market/stocks`).then(
+        (r) => r.json() as Promise<{ symbol: string; price: number | null }[]>,
+      ),
+    ]);
+    const stockPrice = new Map(stocks.map((s) => [s.symbol, s.price]));
+
     for (const sym of TRADABLE) {
-      expect(quotes[sym], `${sym} is tradable but has no quote`).toBeDefined();
-      expect(quotes[sym]!.price).toBeGreaterThan(0);
+      const price = quotes[sym]?.price ?? stockPrice.get(sym) ?? undefined;
+      expect(price, `${sym} is tradable but has no price`).toBeDefined();
+      expect(price!).toBeGreaterThan(0);
     }
-  }, 30_000);
+  }, 60_000);
 });

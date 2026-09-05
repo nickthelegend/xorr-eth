@@ -169,3 +169,21 @@ export async function spendAsDelegate(params: {
 }
 
 export const delegatePublicKey = delegateAccount.address;
+
+/**
+ * Wait for a transaction the client says it sent.
+ *
+ * The app reports a hash the moment the wallet broadcasts it, which is before any block contains
+ * it. Reading contract state at that instant sees the world as it was, so a grant that is on its
+ * way looks like a grant that never happened. Bounded, because a hash the chain never accepts must
+ * not hold a request open forever — the caller treats a timeout as "not confirmed", which is the
+ * honest answer.
+ */
+export async function waitForTx(hash: Hex, timeoutMs = 30_000): Promise<boolean> {
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash,
+    timeout: timeoutMs,
+    confirmations: 1,
+  });
+  return receipt.status === 'success';
+}

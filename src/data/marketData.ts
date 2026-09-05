@@ -12,7 +12,7 @@
  * price comes back absent and the UI stamps a SIMULATED tag on it.
  */
 import type { Bar, Candles, Timeframe } from './types';
-import { API_BASE } from './api';
+import { API_BASE } from './apiBase';
 
 /** The symbols with a real feed. Kept in sync with server/src/market/ids.ts, which is the source. */
 export const COINGECKO_IDS: Record<string, string> = {
@@ -37,6 +37,8 @@ export type Quote = { price: number; change24h: number; source: 'coingecko' };
  * should not produce two round trips for the same symbol list.
  */
 const TTL_MS = 15_000;
+/** How many times to wait out a "warming" 503 before giving up and letting the screen say so. */
+const WARMING_RETRIES = 3;
 const cache = new Map<string, { at: number; value: unknown }>();
 const inflight = new Map<string, Promise<unknown>>();
 
@@ -48,19 +50,35 @@ async function getJson<T>(path: string, ttlMs = TTL_MS): Promise<T> {
   if (pending) return pending as Promise<T>;
 
   const run = (async () => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15_000);
     try {
-      const res = await fetch(`${API_BASE}${path}`, {
-        signal: ctrl.signal,
-        headers: { accept: 'application/json' },
-      });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${path}`);
-      const value = (await res.json()) as T;
-      cache.set(path, { at: Date.now(), value });
-      return value;
+      // A 503 means the executor is still fetching this entry from the upstream, not that the
+      // data does not exist. It arrives with a Retry-After, so wait it out — rendering "no chart"
+      // for something a few seconds away is a worse lie than a brief spinner.
+      for (let attempt = 0; attempt < WARMING_RETRIES; attempt++) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 15_000);
+        try {
+          const res = await fetch(`${API_BASE}${path}`, {
+            signal: ctrl.signal,
+            headers: { accept: 'application/json' },
+          });
+          if (res.status === 503 && attempt < WARMING_RETRIES - 1) {
+            const after = Number(res.headers.get('retry-after'));
+            await new Promise((r) =>
+              setTimeout(r, Number.isFinite(after) && after > 0 ? after * 1000 : 2_000),
+            );
+            continue;
+          }
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${path}`);
+          const value = (await res.json()) as T;
+          cache.set(path, { at: Date.now(), value });
+          return value;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      throw new Error(`still warming after ${WARMING_RETRIES} attempts: ${path}`);
     } finally {
-      clearTimeout(timer);
       inflight.delete(path);
     }
   })();

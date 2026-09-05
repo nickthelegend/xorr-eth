@@ -11,10 +11,11 @@ import { evaluate, spentToday } from '../rules/engine.js';
 import { runStrategy, type StrategyRow } from '../executor/run.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { CHAIN_KEY, explorerTx, ADDRESSES } from '../evm/chains.js';
-import { delegatePublicKey, readPolicy, DELEGATION_ADDRESS } from '../evm/delegation.js';
+import { delegatePublicKey, readPolicy, waitForTx, DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { requireUser } from '../auth/middleware.js';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
+import { TOKENS } from '../venues/oneinch.js';
 import { getPosition, listPositions } from '../positions/index.js';
 
 /**
@@ -149,6 +150,16 @@ routes.post('/delegation/record', async (c) => {
     .parse(await c.req.json());
   const w = await requireWallet(c);
 
+  /*
+   * Wait for the transaction the client says it sent, THEN read the chain.
+   *
+   * `eth_sendTransaction` returns as soon as the tx is broadcast, so reading the policy straight
+   * away raced the block: the grant was genuinely on its way, the read came back empty, and the
+   * record was refused with "not granted on-chain" — for a grant that landed a second later. The
+   * trust model is unchanged; we still believe only what the chain says, we just let it say it.
+   */
+  await waitForTx(body.txHash as Hex).catch(() => undefined);
+
   const policy = await readPolicy(w.address as Address);
   if (!policy || policy.revoked) {
     // Trust the CHAIN, not the client's claim that it signed something.
@@ -223,7 +234,17 @@ const StrategyInput = z.object({
   kind: z.string(),
   state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']),
   label: z.string(),
-  symbol: z.string(),
+  /**
+   * Must be a symbol the executor can actually route and settle. The UI already only offers these,
+   * but the API is the boundary that matters: without this check a client could create a strategy
+   * that schedules forever and fails every run, and the failure would look like our bug rather
+   * than an impossible request.
+   */
+  symbol: z
+    .string()
+    .refine((v) => v.toUpperCase() in TOKENS || v in TOKENS, {
+      message: `not tradable on this chain — one of: ${Object.keys(TOKENS).join(', ')}`,
+    }),
   params: z.record(z.string(), z.unknown()).default({}),
   cadence: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
   nextRunAt: z.number().optional(),
@@ -259,27 +280,45 @@ routes.post('/strategies', async (c) => {
   const body = StrategyInput.parse(await c.req.json());
   const w = await requireWallet(c);
 
-  // PLAN.md 9.2: the sum of live strategies can never exceed the delegation's daily cap,
-  // enforced at CREATION so a user cannot quietly over-commit by adding one more.
-  const del = await one<{ daily_cap_usd: string }>(
-    `SELECT daily_cap_usd FROM delegations WHERE wallet_id=$1 AND revoked=false ORDER BY created_at DESC LIMIT 1`,
+  /*
+   * PLAN.md 9.2: the sum of live strategies can never exceed the delegation's daily cap, enforced
+   * at CREATION so a user cannot quietly over-commit by adding one more.
+   *
+   * Read from the CHAIN. This used to read a `delegations` row written by /delegation/record, and
+   * a row that was never written meant `del` was null and the whole check was skipped — a wallet
+   * with a real $1,600 on-chain cap accepted a $999,999/day strategy, because the guard's failure
+   * mode was to wave everything through. Absent permission has to mean refuse, not allow.
+   */
+  const policy = await readPolicy(w.address as Address);
+  if (!policy || policy.revoked) {
+    return c.json(
+      {
+        error: 'no_delegation',
+        message: 'No active trading permission on-chain. Grant one before creating a strategy.',
+      },
+      400,
+    );
+  }
+  if (policy.expiresAt <= Date.now()) {
+    return c.json(
+      { error: 'delegation_expired', message: 'The trading permission has expired. Renew it first.' },
+      400,
+    );
+  }
+
+  const sums = await query<{ sum: string | null }>(
+    `SELECT SUM(daily_allocation_usd) AS sum FROM strategies WHERE wallet_id=$1 AND state IN ('live','watch')`,
     [w.id],
   );
-  if (del) {
-    const sums = await query<{ sum: string | null }>(
-      `SELECT SUM(daily_allocation_usd) AS sum FROM strategies WHERE wallet_id=$1 AND state IN ('live','watch')`,
-      [w.id],
+  const committed = Number(sums[0]?.sum ?? 0) + body.dailyAllocationUsd;
+  if (committed > policy.dailyCapUsd) {
+    return c.json(
+      {
+        error: 'over_cap',
+        message: `That would commit $${committed.toLocaleString('en-US')} a day against a $${policy.dailyCapUsd.toLocaleString('en-US')} cap. Raise the cap or lower this strategy.`,
+      },
+      400,
     );
-    const committed = Number(sums[0]?.sum ?? 0) + body.dailyAllocationUsd;
-    if (committed > Number(del.daily_cap_usd)) {
-      return c.json(
-        {
-          error: 'over_cap',
-          message: `That would commit $${committed.toLocaleString('en-US')} a day against a $${Number(del.daily_cap_usd).toLocaleString('en-US')} cap. Raise the cap or lower this strategy.`,
-        },
-        400,
-      );
-    }
   }
 
   const nextRunAt = body.nextRunAt
