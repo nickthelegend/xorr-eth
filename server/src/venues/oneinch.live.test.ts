@@ -39,8 +39,11 @@ describe('1inch swap routing', () => {
       inSymbol: 'USDC',
       outSymbol: 'WETH',
       amount: 25,
-      // The delegation contract is what holds the tokens at execution time.
+      // The delegation contract is what holds the tokens at execution time...
       from: '0x33f1A1aAd627a71dCDED0686A2Ce4c08B772fb13',
+      // ...but the user is who receives them. A swap that delivers to the contract would make the
+      // product custodial.
+      receiver: '0x364d7Bbc139541e0e37450D527ae154B5C292581',
     });
     expect(tx.to.toLowerCase()).toBe(ADDRESSES.oneInchRouter.toLowerCase());
     expect(tx.data).toMatch(/^0x[0-9a-f]{8,}$/i);

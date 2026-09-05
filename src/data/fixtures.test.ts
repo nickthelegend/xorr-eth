@@ -10,13 +10,26 @@ import { agentFixtures } from './fixtures/agents';
 import { MINUS } from '../format';
 
 describe('3.4 instrument counts reconcile [G4]', () => {
-  it('has 5 classes of 9 instruments = 45, matching the docs', () => {
+  it('every class carries its full instrument list', () => {
     expect(assetClasses).toHaveLength(5);
+    // The design shipped 9 per class. Stocks is 8: the ninth was COINx, and Coinbase has no
+    // tokenized issue on Base. A row that cannot be bought is worse than a shorter list, so the
+    // count follows what is actually on chain rather than the other way round.
+    const EXPECTED: Record<string, number> = {
+      crypto: 9, stocks: 8, commodities: 9, indices: 9, preipo: 9,
+    };
     for (const c of assetClasses) {
-      expect(c.instruments, `${c.id}`).toHaveLength(9);
+      expect(c.instruments, `${c.id}`).toHaveLength(EXPECTED[c.id]!);
     }
     const total = assetClasses.reduce((a, c) => a + c.instruments.length, 0);
-    expect(total).toBe(45);
+    expect(total).toBe(44);
+  });
+
+  it('every tokenized equity carries the ERC-20 it settles into', () => {
+    const stocks = assetClasses.find((c) => c.id === 'stocks')!;
+    for (const i of stocks.instruments) {
+      expect(i.mint, `${i.sym} has no token address`).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    }
   });
 
   it('the 9th pre-IPO instrument exists — the handoff shipped 8 while claiming 9', () => {
@@ -43,7 +56,10 @@ describe('3.6 no hyphen-minus in any numeric field [G12]', () => {
       for (const i of c.instruments) {
         expect(i.px, `${i.sym} px`).not.toMatch(hyphenInNumber);
         expect(i.chg, `${i.sym} chg`).not.toMatch(hyphenInNumber);
-        if (!i.up) expect(i.chg, `${i.sym} down`).toContain(MINUS);
+        // An empty change is a real state: a swap quote is one observation, so the tokenized
+        // equities have a price and no 24h delta. Only a change we actually show must carry the
+        // right sign.
+        if (i.chg !== '' && !i.up) expect(i.chg, `${i.sym} down`).toContain(MINUS);
       }
     }
   });

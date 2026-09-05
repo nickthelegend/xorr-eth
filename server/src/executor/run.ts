@@ -11,7 +11,6 @@
  *   - The spend is recorded in the SAME transaction that records the run.
  */
 import { randomUUID } from 'node:crypto';
-import { PublicKey } from '@solana/web3.js';
 import type { PoolClient } from 'pg';
 import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
@@ -208,12 +207,14 @@ export async function runStrategy(
     const units = usd / price;
 
     // Real 1inch calldata. The delegation contract pulls the USDC and forwards this to the router
-    // inside one transaction, so the user's funds are never parked anywhere in between.
+    // inside one transaction, so the user's funds are never parked anywhere in between — and the
+    // bought token is delivered straight to the user's own wallet, never to the contract.
     const swap = await buildSwap({
       inSymbol: 'USDC',
       outSymbol: strategy.symbol === 'ETH' ? 'WETH' : strategy.symbol,
       amount: usd,
       from: DELEGATION_FROM,
+      receiver: owner,
     });
 
     const signature = await spendAsDelegate({

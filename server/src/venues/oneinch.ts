@@ -10,7 +10,8 @@
  */
 import 'dotenv/config';
 import { getJson } from '../http/get.js';
-import { ADDRESSES, ONEINCH_CHAIN_ID } from '../evm/chains.js';
+import { STOCKS } from './stocks.js';
+import { ADDRESSES, CHAIN_KEY, ONEINCH_CHAIN_ID } from '../evm/chains.js';
 import type { Address, Hex } from 'viem';
 
 const BASE = 'https://api.1inch.dev/swap/v6.0';
@@ -20,11 +21,21 @@ if (!API_KEY) {
   throw new Error('ONEINCH_API_KEY is required — swap routing has no offline fallback by design.');
 }
 
-/** The tokens the app trades on Base, with the decimals every amount is scaled by. */
+/**
+ * The tokens the app trades on Base, with the decimals every amount is scaled by.
+ *
+ * Crypto plus the tokenized equities from `stocks.ts` — the stocks are ordinary ERC-20s on Base,
+ * so the swap path does not need to know they represent shares. That is the whole point: "Buy $250
+ * of NVDA" is the same code path as "Buy $250 of WETH".
+ */
 export const TOKENS: Record<string, { address: Address; decimals: number }> = {
   ETH: { address: ADDRESSES.nativeEth, decimals: 18 },
   WETH: { address: ADDRESSES.wethBase, decimals: 18 },
   USDC: { address: ADDRESSES.usdcBase, decimals: 6 },
+  CBBTC: { address: ADDRESSES.cbbtcBase, decimals: 8 },
+  ...Object.fromEntries(
+    Object.values(STOCKS).map((s) => [s.symbol, { address: s.address, decimals: s.decimals }]),
+  ),
 };
 
 export type SwapQuote = {
@@ -127,15 +138,36 @@ export async function quote(params: {
 export type SwapCalldata = { to: Address; data: Hex; value: string };
 
 /**
+ * On a fork, ask 1inch for a plain AMM route.
+ *
+ * Its best route on Base normally includes a private market-maker hop, and those solvers verify
+ * off-chain state that a local fork cannot reproduce — the router reverts with 0xacfdb444 before
+ * touching a pool. Constraining to a single unsplit AMM path costs a few basis points and makes
+ * fills genuinely executable against the forked pools. Same router, same pools, real execution;
+ * only the route selection differs, so this is switched off on a real network.
+ */
+const AMM_ONLY =
+  CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet'
+    ? '&complexityLevel=0&mainRouteParts=1&parts=1'
+    : '';
+
+/**
  * Build the calldata for a real swap.
- * `from` is the address that will hold the tokens at execution time — the delegation contract,
- * not the user, because the contract pulls the funds and calls the router within one transaction.
+ *
+ * `from` is the address that holds the tokens at execution time — the delegation contract, because
+ * it pulls the funds and calls the router inside one transaction.
+ *
+ * `receiver` is where the bought tokens land, and it must be the USER, not the contract. Without
+ * it 1inch defaults the receiver to `from`, so every purchase would pile up inside XorrDelegation
+ * and the app would be custodial in exactly the way it promises not to be. The contract should be
+ * empty of user funds the moment the transaction ends.
  */
 export async function buildSwap(params: {
   inSymbol: string;
   outSymbol: string;
   amount: number;
   from: Address;
+  receiver: Address;
   slippagePct?: number;
 }): Promise<SwapCalldata> {
   const src = TOKENS[params.inSymbol];
@@ -145,8 +177,8 @@ export async function buildSwap(params: {
   const raw = scale(params.amount, src.decimals);
   const res = await getJson<{ tx: { to: Address; data: Hex; value: string } }>(
     `${BASE}/${ONEINCH_CHAIN_ID}/swap?src=${src.address}&dst=${dst.address}&amount=${raw}` +
-      `&from=${params.from}&origin=${params.from}` +
-      `&slippage=${params.slippagePct ?? DEFAULT_SLIPPAGE_PCT}&disableEstimate=true`,
+      `&from=${params.from}&origin=${params.from}&receiver=${params.receiver}` +
+      `&slippage=${params.slippagePct ?? DEFAULT_SLIPPAGE_PCT}&disableEstimate=true${AMM_ONLY}`,
     15_000,
     15_000,
     { Authorization: `Bearer ${API_KEY}` },
