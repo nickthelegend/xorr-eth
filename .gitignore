@@ -29,3 +29,4 @@ contracts/cache/
 expo-env.d.ts
 # @end expo-clitools/.auth.json
 contracts/lib/swap-vm/node_modules/
+.env.fork

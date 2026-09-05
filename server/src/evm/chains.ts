@@ -37,7 +37,15 @@ const RPCS: Record<ChainKey, string> = {
 
 const CHAINS: Record<ChainKey, Chain> = {
   localnet: { ...foundry, id: baseSepolia.id, name: 'Base Sepolia (local fork)' },
-  'base-fork': { ...foundry, id: base.id, name: 'Base (local mainnet fork)' },
+  /*
+   * A fork of Base IS Base — same chain id, same deployed contracts, same everything but the
+   * node. Spreading `foundry` first and only overriding the id kept foundry's empty `contracts`,
+   * so viem believed the chain had no Multicall3 and refused to batch. The whole balance read came
+   * back as zero through a `.catch`, and the home screen showed $0.00 for a funded wallet.
+   *
+   * So: take Base wholesale and change only the RPC.
+   */
+  'base-fork': { ...base, name: 'Base (local mainnet fork)' },
   'base-sepolia': baseSepolia,
   base,
 };

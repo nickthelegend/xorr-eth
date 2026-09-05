@@ -18,6 +18,26 @@ import 'dotenv/config';
 const ENDPOINT =
   process.env.SUBGRAPH_URL ?? 'https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2';
 
+/**
+ * The contract this index is about.
+ *
+ * A subgraph indexes one address on one network. Running the executor against a Base mainnet fork
+ * while the index still describes the Sepolia deployment produced a decision that read as
+ * authoritative and was about a different contract entirely — it reported a $1,600 cap for a
+ * wallet that had no policy on the fork at all.
+ *
+ * So the index is only consulted when it is describing the contract we are actually spending
+ * through. When it is not, `indexesThisDeployment()` is false, the agent says so, and the contract
+ * itself remains the authority — which it always was.
+ */
+const INDEXED_DELEGATION = (process.env.SUBGRAPH_DELEGATION_ADDRESS ??
+  '0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e').toLowerCase();
+
+export function indexesThisDeployment(): boolean {
+  const active = (process.env.DELEGATION_ADDRESS ?? '').toLowerCase();
+  return active.length > 0 && active === INDEXED_DELEGATION;
+}
+
 export type Policy = {
   id: string;
   owner: string;

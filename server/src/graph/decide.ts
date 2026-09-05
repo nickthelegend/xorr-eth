@@ -15,7 +15,14 @@
  * and a venue with no permission are equally dead. The join is what picks the route — an Aqua book
  * when one can fill the size, the 1inch aggregator when none can.
  */
-import { dailySpendFor, policyFor, spendsFor, unitsToUsd, type Spend } from './client.js';
+import {
+  dailySpendFor,
+  indexesThisDeployment,
+  policyFor,
+  spendsFor,
+  unitsToUsd,
+  type Spend,
+} from './client.js';
 import { aquaIndexConfigured, bestBookFor, AquaIndexUnavailable } from './aqua.js';
 
 /** Where the trade should go, and why. */
@@ -94,6 +101,19 @@ export async function decide(params: {
   tokenOut?: string;
   amountOut?: bigint;
 }): Promise<Decision> {
+  // 0. Is the index even about this contract? On a fork it is not, and a decision drawn from a
+  //    different deployment's history would be worse than no decision. The contract itself is
+  //    checked immediately after this in every caller, so standing aside here is safe.
+  if (!indexesThisDeployment()) {
+    return {
+      act: false,
+      reason: 'index_is_for_another_deployment',
+      rationale:
+        'The subgraph indexes a different delegation contract than this executor is using, so I ' +
+        'am not reading permission from it.',
+    };
+  }
+
   // 1. The permission, as the CHAIN records it. Our database is not consulted.
   const policy = await policyFor(params.owner);
   if (!policy) {

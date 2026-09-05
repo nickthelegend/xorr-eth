@@ -97,6 +97,14 @@ async function claimRun(
   return res.rows[0]?.id ?? null;
 }
 
+/**
+ * Strategy kinds the executor can actually run.
+ *
+ * Adding a tier to `src/strategies/ladder.ts` is not enough — it needs a branch here, and this set
+ * is what stops a half-built tier from silently behaving like a recurring buy.
+ */
+export const EXECUTABLE_KINDS = new Set(['dca', 'buy', 'recurring-buy']);
+
 export async function runStrategy(
   strategy: StrategyRow,
   at: Date = new Date(),
@@ -157,41 +165,58 @@ export async function runStrategy(
   }
 
   // ── 2. Limits, enforced here and not in the client. ──
-  const delegation = (
-    await query<{
-      daily_cap_usd: string;
-      expires_at: Date;
-      revoked: boolean;
-    }>(
-      `SELECT daily_cap_usd, expires_at, revoked FROM delegations
-       WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
-      [walletId],
-    )
-  )[0];
+  /*
+   * The permission, as the CHAIN records it.
+   *
+   * This used to read the `delegations` table. A row is written when the app records a grant, so a
+   * user who granted from another device — or before that write existed — had no row and every run
+   * was blocked for a permission that was live on chain. Failing closed is the right direction to
+   * be wrong in, but it is still wrong: the chain is the authority everywhere else in this file.
+   */
+  const ownerAddress = (
+    await one<{ address: string }>(`SELECT address FROM wallets WHERE id = $1`, [walletId])
+  )?.address as Address | undefined;
+  if (!ownerAddress) {
+    return finishBlocked(runId, walletId, strategy, 'no_wallet', 'This wallet has no address on file.');
+  }
 
-  if (!delegation) {
+  const chainPolicy = await readPolicy(ownerAddress);
+  if (!chainPolicy) {
     return finishBlocked(runId, walletId, strategy, 'no_delegation', 'No trading permission has been granted.');
   }
 
   const verdict = await evaluate({
     walletId,
     usd,
-    dailyCapUsd: Number(delegation.daily_cap_usd),
-    delegationExpiresAt: new Date(delegation.expires_at),
-    delegationRevoked: delegation.revoked,
+    dailyCapUsd: chainPolicy.dailyCapUsd,
+    delegationExpiresAt: new Date(chainPolicy.expiresAt),
+    delegationRevoked: chainPolicy.revoked,
   });
 
   if (!verdict.allowed) {
     return finishBlocked(runId, walletId, strategy, verdict.reason, verdict.detail);
   }
 
+  /*
+   * What KIND of strategy is this?
+   *
+   * Every strategy used to execute as a USDC->symbol buy regardless of what it said it was, so a
+   * rebalance or a stop-loss would have quietly bought instead. A kind with no branch must stop
+   * here, loudly, rather than do something plausible and wrong with the user's money.
+   */
+  if (!EXECUTABLE_KINDS.has(strategy.kind)) {
+    return finishBlocked(
+      runId,
+      walletId,
+      strategy,
+      'kind_not_executable',
+      `Nothing here knows how to run a "${strategy.kind}" strategy yet, so it was not run.`,
+    );
+  }
+
   // ── 3. Execute on chain. ──
   try {
-    const owner = (await one<{ address: string }>(
-      `SELECT address FROM wallets WHERE id = $1`,
-      [walletId],
-    ))?.address as Address | undefined;
-    if (!owner) throw new Error('This wallet has no address on file.');
+    const owner = ownerAddress;
 
     /**
      * Ask The Graph first. This is the agent reasoning over indexed chain data, and it can stop
@@ -210,7 +235,10 @@ export async function runStrategy(
       tokenOut: outToken?.address,
       amountOut: outToken ? await estimateOutUnits(usd, strategy.symbol, outToken.decimals) : undefined,
     }).catch(() => null);
-    if (graphCall && !graphCall.act) {
+    // "The index is about another contract" is not a reason to refuse the trade — it is the index
+    // declining to have an opinion. Treating it as a block would stop every run on a fork, where
+    // there is no subgraph at all. The contract check below is the authority either way.
+    if (graphCall && !graphCall.act && graphCall.reason !== 'index_is_for_another_deployment') {
       return finishBlocked(runId, walletId, strategy, graphCall.reason, graphCall.rationale);
     }
 
@@ -258,6 +286,54 @@ export async function runStrategy(
       venue: swap.to,
       usd,
       data: swap.data,
+    });
+
+    /*
+     * Record what just happened.
+     *
+     * This was missing entirely: the trade settled on chain and the app learned nothing from it —
+     * no position, no audit entry, no next run scheduled, and the run row left claimed but never
+     * finished. `applyFill` was imported and never called. The chain was right and every screen
+     * was wrong, which is the worst way for those two to disagree.
+     *
+     * One transaction, because a position without an audit entry is an unexplained holding and an
+     * audit entry without a position is a trade the portfolio does not know about.
+     */
+    await tx(async (client) => {
+      await client.query(
+        `UPDATE strategy_runs SET status='filled', signature=$2, units=$3, price=$4, finished_at=now()
+         WHERE id=$1`,
+        [runId, signature, units, price],
+      );
+      await applyFill(client, { walletId, symbol: strategy.symbol, units, usd });
+      await recordSpend(walletId, usd, client);
+      await append(
+        {
+          walletId,
+          agent: 'Yield Keeper',
+          action: `Bought ${units.toFixed(4)} ${strategy.symbol}`,
+          detail: `$${usd.toLocaleString('en-US')} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${strategy.label}.`,
+          kind: 'trade',
+          signature,
+          payload: {
+            runId,
+            strategyId: strategy.id,
+            units,
+            price,
+            usd,
+            explorer: explorerTx(signature),
+          },
+        },
+        client,
+      );
+      // Schedule the next one. Without this a strategy fills once and then sits there looking
+      // live, which is indistinguishable from being broken.
+      if (strategy.cadence) {
+        await client.query(`UPDATE strategies SET next_run_at=$2 WHERE id=$1`, [
+          strategy.id,
+          advance(at, strategy.cadence),
+        ]);
+      }
     });
 
     return { status: 'filled', runId, signature, units, price };
@@ -350,6 +426,10 @@ export function humanFailure(error: string): string {
     return 'This network cannot settle trades. Prices are real; filling needs Base or a Base fork.';
   if (e.includes('transfer amount exceeds allowance') || e.includes('pull failed'))
     return 'The spending approval is too small or was withdrawn, so nothing could be pulled.';
+  // The bot paying for gas and the user paying for the trade are different pockets, and saying
+  // "you are short" when the bot is short sends someone looking in the wrong place.
+  if (e.includes('exceeds the balance of the account') || e.includes('gas required exceeds'))
+    return 'The agent ran out of gas money on this network, so nothing was placed. Your funds are untouched.';
   if (e.includes('insufficient funds') || e.includes('exceeds balance'))
     return 'Not enough settled balance to cover this buy.';
   if (e.includes('slippage') || e.includes('returnamount') || e.includes('min return'))

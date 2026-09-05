@@ -150,9 +150,36 @@ export type SwapCalldata = { to: Address; data: Hex; value: string };
  * fills genuinely executable against the forked pools. Same router, same pools, real execution;
  * only the route selection differs, so this is switched off on a real network.
  */
+/**
+ * On a fork, allowlist ordinary AMMs by name.
+ *
+ * `complexityLevel=0` constrains the route's SHAPE but not its participants, so 1inch still picked
+ * a private market maker and the fill reverted before touching a pool — those solvers verify
+ * off-chain state a local fork cannot reproduce. Naming the AMMs is the only reliable way to get a
+ * route made entirely of contracts a fork can actually execute.
+ *
+ * Costs a few basis points versus the best available route. Same router, same pools, real
+ * execution — only the venue selection differs, and it is off on a real network.
+ */
+const FORK_AMMS = [
+  'BASE_UNISWAP_V2',
+  'BASE_UNISWAP_V3',
+  'BASE_UNISWAP_V4',
+  'BASE_AERODROME',
+  'BASE_AERODROME_V3',
+  'BASE_AERODROME_SLIPSTREAM',
+  'BASE_PANCAKESWAP_V2',
+  'BASE_PANCAKESWAP_V3',
+  'BASE_SUSHI_V2',
+  'BASE_SUSHI_V3',
+  'BASE_SOLIDLY_V3',
+  'BASE_BALANCER_V2',
+  'BASE_CURVE',
+].join(',');
+
 const AMM_ONLY =
   CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet'
-    ? '&complexityLevel=0&mainRouteParts=1&parts=1'
+    ? `&complexityLevel=0&mainRouteParts=1&parts=1&protocols=${FORK_AMMS}`
     : '';
 
 /** Where a swap can actually land. Base mainnet, or a fork of it. */

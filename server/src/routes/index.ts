@@ -15,6 +15,7 @@ import { delegatePublicKey, readPolicy, waitForTx, DELEGATION_ADDRESS } from '..
 import { requireUser } from '../auth/middleware.js';
 import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
+import { totalValueUsd } from '../evm/balances.js';
 import { TOKENS } from '../venues/oneinch.js';
 import { getPosition, listPositions } from '../positions/index.js';
 
@@ -97,10 +98,21 @@ routes.post('/wallet/connect', async (c) => {
 routes.get('/wallet/balance', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json({ usd: 0 });
-  const policy = await readPolicy(w.address as Address).catch(() => null);
+  const [policy, value] = await Promise.all([
+    readPolicy(w.address as Address).catch(() => null),
+    // Read the chain. This used to be a hardcoded 0, so the home screen said "$0.00" while the
+    // wallet held a real position.
+    totalValueUsd(w.address as Address).catch((e: unknown) => {
+      // A zero that came from a failed read looks exactly like a zero balance. Say which.
+      console.error('[balance] chain read failed:', e instanceof Error ? e.message : e);
+      return { cash: 0, holdings: [], total: 0 };
+    }),
+  ]);
   // Balance is what the user holds; the policy tells us what the bot may touch of it.
   return c.json({
-    usd: 0,
+    usd: value.total,
+    cashUsd: value.cash,
+    holdings: value.holdings,
     dailyCapUsd: policy?.dailyCapUsd ?? 0,
     remainingTodayUsd: policy?.remainingTodayUsd ?? 0,
   });
@@ -274,6 +286,28 @@ routes.get('/strategies', async (c) => {
     [w.id],
   );
   return c.json(rows.map(toApi));
+});
+
+/**
+ * Run one strategy now.
+ *
+ * A cadence is the point of the product, but it is useless for showing someone what the bot does:
+ * "come back on Sunday" is not a demo, and it is not a way to test a change either. This runs the
+ * same `runStrategy` the scheduler runs, with the same period claim — so triggering it twice in a
+ * period is a no-op rather than a double buy, which is the property that makes it safe to expose.
+ */
+routes.post('/strategies/:id/run', async (c) => {
+  const w = await requireWallet(c);
+  const row = await one<StrategyRow>(
+    `SELECT * FROM strategies WHERE id = $1 AND wallet_id = $2`,
+    [c.req.param('id'), w.id],
+  );
+  // Scoped to the caller's own wallet: an id from another user must look like a missing strategy,
+  // not like a permission error, because the latter confirms it exists.
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  const outcome = await runStrategy(row);
+  return c.json(outcome, outcome.status === 'failed' ? 502 : 200);
 });
 
 routes.post('/strategies', async (c) => {
