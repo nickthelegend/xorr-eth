@@ -72,12 +72,12 @@ Nothing below matters if the work is not pushed and legible.
 
 | # | Task | Status |
 |---|---|---|
-| 0.1 | `git remote add origin <url>` on `xorr-eth`, push `main`. **BLOCKED**: no remote is configured and no URL has been provided. Needs a GitHub repo to exist — `gh repo create xorr-finance/xorr-eth --private --source=. --push` once the org/name is settled. | **BLOCKED** |
-| 0.2 | Rewrite `README.md`: fix the stale "9 live tests" (now 33) and "400 USDC/day" (now 1,600), add the Base-mainnet-fork story, add the two-environment table from `docs/TESTPLAN.md`. | NOT STARTED |
-| 0.3 | Capture a PNG of every one of the 41 routes at 402×874 into `docs/screens/`, via the browser tools against `:8082` with a logged-in session. Name them `NN-route-name.png`. | NOT STARTED |
-| 0.4 | Add a "Every screen" section to `README.md` — a table of all 41 screens, each with its route, one-line purpose, and its screenshot inline. Group by Onboarding / Tabs / Markets / Trading / Agents / Safety / Dev. | NOT STARTED |
+| 0.1 | Remote + push. **DONE** — https://github.com/nickthelegend/xorr-eth, public, `main` tracking. History scanned for secrets first: 0 hits across every commit. | **DONE** |
+| 0.2 | README rewritten — counts corrected, two-environment story added, sponsor table now states SwapVM as done. | **DONE** |
+| 0.3 | 47 screens captured at 402×874 via `tools/shoot.mjs`, which provisions its own Privy test account and signs in, so the shots are the signed-in app. | **DONE** |
+| 0.4 | README "Every screen" section — all 47, grouped, inline. | **DONE** |
 | 0.5 | Record a 60-second demo GIF: sign in → grant → create a recurring buy → watch a fill on the fork → revoke. Link from the README top. | NOT STARTED |
-| 0.6 | `.env.example` must list every var the code now reads: `AQUA_SUBGRAPH_URL`, `AQUA_BOOK_ADDRESS`, `FORK_RPC`, `DELEGATE_PRIVATE_KEY`, `HTTP_MIN_SPACING_MS`, `SCHEDULER_TICK_MS`. Verify by grepping `process.env` across `server/src`. | NOT STARTED |
+| 0.6 | `.env.example` now lists all 29 vars, verified by grepping `process.env` — it is a superset of the working `.env`. | **DONE** |
 
 ### Phase 1 — Close the sponsor gaps · **NOT STARTED**
 The two items that cost prize points.
@@ -87,9 +87,9 @@ The two items that cost prize points.
 | 1.1 | Create the `xorr-aqua` subgraph slug in Subgraph Studio (dashboard action), then `cd subgraph-aqua && npx graph deploy xorr-aqua --version-label v0.0.1`. Build is already pinned: `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`. | **BLOCKED** on the dashboard click |
 | 1.2 | Set `AQUA_SUBGRAPH_URL` in `.env`, restart the executor, confirm `/agent/decision` returns `route.venue: "aqua"` when a deep book exists. Proves the two-index join for The Graph composable track. | BLOCKED on 1.1 |
 | 1.3 | Add `server/src/graph/aqua.live.test.ts`: assert `_meta.hasIndexingErrors === false` and that `openBooks()` returns rows, mirroring `decide.live.test.ts`. | BLOCKED on 1.1 |
-| 1.4 | **SwapVM program.** Read `contracts/lib/aqua` for the SwapVM interface. Write `contracts/src/XorrSwapVMStrategy.sol` — a bytecode program that gates a fill on the maker's oracle band, so `XorrAquaBook`'s price check runs *inside* SwapVM instead of in Solidity. | NOT STARTED |
-| 1.5 | `contracts/test/XorrSwapVM.fork.t.sol` against the real SwapVM on the Base mainnet fork: a program that permits an in-band fill and one that rejects an out-of-band fill, both asserted on real balances. | NOT STARTED |
-| 1.6 | Wire `XorrAquaBook` to execute through SwapVM when a program is set, falling back to the Solidity path when it is not. Keep all 22 existing fork tests green. | NOT STARTED |
+| 1.4 | **SwapVM program — DONE.** `contracts/src/XorrSwapVMBook.sol`. `xycProgram` for crypto, `peggedProgram` for a share pegged to a reference price. SwapVM is a separate 1inch repo, not part of `lib/aqua`; vendored as `lib/swap-vm`. | **DONE** |
+| 1.5 | `XorrSwapVM.fork.t.sol` — 10 tests against the real router `0x111111338c…`, whose `AQUA()` is asserted to match. Bot buys 0.1969 WETH for $500 under a signed cap; slippage floor, deadline and fee all enforced inside the VM. | **DONE** |
+| 1.6 | Superseded by the design that emerged: SwapVM is a *separate Aqua app*, not a mode of ours — a maker ships to one or the other. `XorrSwapVMBook` is the second venue and all 22 Aqua tests stay green (46 contract tests total). | **DONE** |
 | 1.7 | README section: "How this uses Aqua and SwapVM" — the composition diagram and the exact contract addresses, so a judge can verify in one read. | NOT STARTED |
 
 ### Phase 2 — Make the app take trades for real · **NOT STARTED**
@@ -200,11 +200,11 @@ Each currently 404s and the screen degrades. They are silent holes.
 Every gap ties to the task it blocks. Found by reading the code and running it, not the README.
 
 ### 4.1 Blocking a sponsor track
-| Gap | Evidence | Blocks |
-|---|---|---|
-| SwapVM entirely absent | No file references SwapVM outside `lib/aqua` | 1.4–1.7 |
-| Second subgraph not deployed | `graph deploy` → "Subgraph not found"; slug needs creating in Studio | 1.1–1.3 |
-| No git remote on `xorr-eth` | `git remote -v` is empty | 0.1 |
+| Gap | Evidence | Blocks | Status |
+|---|---|---|---|
+| SwapVM entirely absent | — | 1.4–1.7 | **CLOSED** — real programs on the real router, 10 fork tests |
+| Second subgraph not deployed | `graph deploy` → "Subgraph not found" | 1.1–1.3 | **BLOCKED** — the slug must be created in the Studio dashboard |
+| No git remote | — | 0.1 | **CLOSED** — pushed public |
 
 ### 4.2 Features that look built and are not
 | Gap | Evidence | Blocks |
@@ -216,7 +216,7 @@ Every gap ties to the task it blocks. Found by reading the code and running it, 
 | Alert creation discards the alert | `app/alerts/new.tsx` builds and drops it | 7.3 |
 | `GET /perp/:symbol` 404s | Verified with a valid token | 7.1 |
 | `POST /alerts/:id` 404s | Verified; `local.ts` swallows it with `.catch(() => undefined)` | 7.2 |
-| `VolumeRow` written and never rendered | No importer outside `charts/index.ts` | 6.6 |
+| ~~`VolumeRow` never rendered~~ | **This gap was wrong.** It IS rendered in `app/chart/[symbol].tsx:150`; the original grep used a broken `--include` glob and silently matched nothing | 6.6 — dropped |
 
 ### 4.3 Data that is not real
 | Gap | Evidence | Blocks |
