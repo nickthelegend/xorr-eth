@@ -6,11 +6,11 @@ schema:
 dataSources:
   - kind: ethereum
     name: XorrDelegation
-    network: base
+    network: base-sepolia
     source:
       abi: XorrDelegation
-      address: "0x0000000000000000000000000000000000000000"
-      startBlock: 0
+      address: "0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e"
+      startBlock: 46436481
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9

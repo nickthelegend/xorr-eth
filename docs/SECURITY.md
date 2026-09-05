@@ -95,3 +95,34 @@ move to the server before real value flows.** Recorded as a gap.
 - Jailbreak/root detection.
 - Rate limiting and authentication on the executor API: the dev server is single-user and has no
   auth. **This is the largest open item** and is tracked as PLAN.md 11.3 / [G21].
+
+---
+
+# Addendum — key handling on Base
+
+## The well-known-key incident
+
+During setup the deployer address quoted in a status report was `0xf39Fd6…92266` — **anvil's
+default account #0**, whose private key (`0xac09…ff80`) appears in every Foundry tutorial. Testnet
+funds were sent there before that was caught.
+
+The funds were swept to a freshly generated key
+(`0x364d7Bbc139541e0e37450D527ae154B5C292581`) in tx `0xb98293…4ab1`, and nothing was lost. But the
+lesson is worth writing down rather than quietly fixing:
+
+- **Never quote an anvil/hardhat default address as a funding target.** Sweeper bots watch those
+  addresses on every public chain and drain them within seconds.
+- Keys used on a public network are generated locally into `.keys/` (mode 600, gitignored) and have
+  never been published.
+
+## Delegate key
+
+`0xe992FE56589d1111d0b7Bb7c4Ca3946d4d53E403` signs scheduled trades. Its blast radius is bounded by
+`XorrDelegation`: capped per day, venue-allowlisted, time-boxed, and revocable by the user without
+this server's cooperation. **Before any deployment carrying real value it must move to a KMS or an
+HSM** — a file on a host is adequate for a testnet demo and is not adequate beyond that.
+
+## Env var naming
+
+`CHAIN` was renamed to `XORR_CHAIN` because Foundry auto-loads `.env` from the working directory and
+interprets `CHAIN` as its own `--chain` flag, which broke every `cast`/`forge` command in the repo.

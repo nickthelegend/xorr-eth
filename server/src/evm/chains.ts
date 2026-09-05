@@ -11,7 +11,9 @@ import 'dotenv/config';
 
 export type ChainKey = 'localnet' | 'base-sepolia' | 'base';
 
-export const CHAIN_KEY = (process.env.CHAIN ?? 'localnet') as ChainKey;
+// Named XORR_CHAIN, not CHAIN: Foundry auto-loads .env and treats CHAIN as its own --chain
+// flag, which makes every cast/forge command in this repo fail with a confusing parse error.
+export const CHAIN_KEY = (process.env.XORR_CHAIN ?? 'localnet') as ChainKey;
 
 /** Guardrail: mainnet needs a deliberate, reviewed decision, never a default. */
 if (CHAIN_KEY === 'base' && process.env.ALLOW_MAINNET !== 'yes') {
