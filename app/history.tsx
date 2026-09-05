@@ -17,10 +17,10 @@ import {
   Screen,
   ScreenHeader,
 } from '@/design/components';
-import { ink, pnl } from '@/design/colors';
+import { ink } from '@/design/colors';
 import { type } from '@/design/type';
 import { useAsync } from '@/data/useAsync';
-import { spendsFor, unitsToUsd, SUBGRAPH_ENDPOINT } from '@/data/subgraph';
+import { spendsFor, unitsToUsd } from '@/data/subgraph';
 import { useStore } from '@/state/store';
 import { money } from '@/format';
 
