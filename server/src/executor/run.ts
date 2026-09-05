@@ -17,11 +17,38 @@ import { append } from '../audit/log.js';
 import { evaluate, recordSpend } from '../rules/engine.js';
 import { readPolicy, spendAsDelegate } from '../evm/delegation.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
-import { buildSwap } from '../venues/oneinch.js';
+import { buildSwap, TOKENS } from '../venues/oneinch.js';
 import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { priceOf } from '../market/prices.js';
+
+/**
+ * Our XorrAquaBook deployment, when there is one. Aqua only exists on Base mainnet, so on Sepolia
+ * this is unset and every route falls to the aggregator — which the decision says out loud rather
+ * than pretending it considered a book.
+ */
+const AQUA_BOOK_ADDRESS = process.env.AQUA_BOOK_ADDRESS;
+
+/**
+ * Roughly how many base units of `symbol` a dollar amount buys, for the venue depth check.
+ *
+ * Approximate on purpose: it decides which venue to ASK, and the venue then quotes for real. A
+ * price lookup that failed should not block the trade, so it falls back to no depth constraint.
+ */
+async function estimateOutUnits(
+  usd: number,
+  symbol: string,
+  decimals: number,
+): Promise<bigint | undefined> {
+  try {
+    const px = await priceOf(symbol);
+    if (!(px > 0)) return undefined;
+    return BigInt(Math.floor((usd / px) * 10 ** decimals));
+  } catch {
+    return undefined;
+  }
+}
 import { applyFill } from '../positions/index.js';
 import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 
@@ -172,9 +199,17 @@ export async function runStrategy(
      * a cap already consumed by a trade we did not make, or realised flow that says the book is
      * being picked off.
      */
-    const graphCall = await decide({ owner, wantUsd: usd, token: ADDRESSES.usdcBase }).catch(
-      () => null,
-    );
+    const outToken = TOKENS[strategy.symbol === 'ETH' ? 'WETH' : strategy.symbol];
+    const graphCall = await decide({
+      owner,
+      wantUsd: usd,
+      token: ADDRESSES.usdcBase,
+      // The second index needs to know which app's books to look in and how much of the bought
+      // token has to come out of one for it to be a candidate.
+      aquaApp: AQUA_BOOK_ADDRESS,
+      tokenOut: outToken?.address,
+      amountOut: outToken ? await estimateOutUnits(usd, strategy.symbol, outToken.decimals) : undefined,
+    }).catch(() => null);
     if (graphCall && !graphCall.act) {
       return finishBlocked(runId, walletId, strategy, graphCall.reason, graphCall.rationale);
     }

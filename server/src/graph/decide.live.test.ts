@@ -60,3 +60,18 @@ describe('The Graph is load-bearing for the agent', () => {
     expect(daily.length).toBeGreaterThan(0);
   }, 60_000);
 });
+
+describe('the route is chosen by joining the two indexes', () => {
+  it('falls to the aggregator, and says why, when no venue index is configured', async () => {
+    // Composition has to degrade legibly. Aqua is Base-mainnet-only, so a Sepolia deployment has
+    // no venue index — the decision still happens, and the rationale says a book was never
+    // considered rather than implying one was looked at and rejected.
+    const d = await decide({ owner: OWNER, wantUsd: 25, token: USDC });
+    expect(d.act, 'the live policy should still permit a small trade').toBe(true);
+    if (!d.act) return;
+    expect(d.route.venue).toBe('1inch');
+    expect(d.route.why).toMatch(/index|book/i);
+    // The reason must reach the user-facing rationale, not be swallowed.
+    expect(d.rationale).toContain(d.route.why);
+  }, 30_000);
+});

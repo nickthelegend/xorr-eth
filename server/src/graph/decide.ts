@@ -3,11 +3,34 @@
  *
  * Every branch here changes what the bot DOES, which is the difference between using The Graph and
  * merely displaying it. Called by the executor before any spend.
+ *
+ * It reads TWO independent subgraphs over two different protocols:
+ *
+ *   - `xorr` (subgraph/)      — our XorrDelegation contract. What this user has permitted, what
+ *                               they have spent today, and how their realised flow has run.
+ *   - `xorr-aqua` (subgraph-aqua/) — the official 1inch Aqua deployment. Which maker books are
+ *                               open right now and how deep each one is.
+ *
+ * Neither index can see the other's half, and the decision needs both: a permission with no venue
+ * and a venue with no permission are equally dead. The join is what picks the route — an Aqua book
+ * when one can fill the size, the 1inch aggregator when none can.
  */
 import { dailySpendFor, policyFor, spendsFor, unitsToUsd, type Spend } from './client.js';
+import { aquaIndexConfigured, bestBookFor, AquaIndexUnavailable } from './aqua.js';
+
+/** Where the trade should go, and why. */
+export type Route =
+  | { venue: 'aqua'; strategyHash: string; maker: string; why: string }
+  | { venue: '1inch'; why: string };
 
 export type Decision =
-  | { act: true; sizeUsd: number; rationale: string; observedRemainingUsd: number }
+  | {
+      act: true;
+      sizeUsd: number;
+      rationale: string;
+      observedRemainingUsd: number;
+      route: Route;
+    }
   | { act: false; reason: string; rationale: string };
 
 /** How much of the cap the bot is willing to commit in one trade. */
@@ -27,10 +50,49 @@ export function flowImbalance(spends: Spend[], token: string): number {
   return sameToken / spends.length;
 }
 
+/**
+ * Which venue can fill this, according to the Aqua index.
+ *
+ * Three outcomes, all meaningful: a book deep enough (route there), no book deep enough (route to
+ * the aggregator), or the index is unreachable (route to the aggregator, and say so — silently
+ * treating "cannot see" as "nothing there" would hide an outage behind a worse fill).
+ */
+async function chooseRoute(params: {
+  app?: string;
+  tokenOut?: string;
+  amountOut?: bigint;
+}): Promise<Route> {
+  if (!aquaIndexConfigured() || !params.app || !params.tokenOut || params.amountOut === undefined) {
+    return { venue: '1inch', why: 'No Aqua book index configured for this deployment.' };
+  }
+  try {
+    const book = await bestBookFor(params.app, params.tokenOut, params.amountOut);
+    if (!book) {
+      return { venue: '1inch', why: 'No open Aqua book is deep enough for this size.' };
+    }
+    return {
+      venue: 'aqua',
+      strategyHash: book.id,
+      maker: book.maker,
+      why: `An open Aqua book has the depth and has filled ${book.fillCount} times.`,
+    };
+  } catch (e) {
+    if (e instanceof AquaIndexUnavailable) {
+      return { venue: '1inch', why: `Could not read the Aqua index (${e.message}).` };
+    }
+    throw e;
+  }
+}
+
 export async function decide(params: {
   owner: string;
   wantUsd: number;
   token: string;
+  /** The Aqua app to look for books under — our XorrAquaBook deployment. */
+  aquaApp?: string;
+  /** The token the trade buys, and how many base units of it, for the depth check. */
+  tokenOut?: string;
+  amountOut?: bigint;
 }): Promise<Decision> {
   // 1. The permission, as the CHAIN records it. Our database is not consulted.
   const policy = await policyFor(params.owner);
@@ -80,10 +142,19 @@ export async function decide(params: {
     };
   }
 
+  // 4. The venue, from the SECOND index. This is the join: the delegation subgraph says how much
+  //    may move, the Aqua subgraph says where it can move to.
+  const route = await chooseRoute({
+    app: params.aquaApp,
+    tokenOut: params.tokenOut,
+    amountOut: params.amountOut,
+  });
+
   return {
     act: true,
     sizeUsd,
     observedRemainingUsd: remaining,
-    rationale: 'Permission is live on-chain and today has room.',
+    route,
+    rationale: `Permission is live on-chain and today has room. ${route.why}`,
   };
 }
