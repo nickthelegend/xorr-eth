@@ -7,11 +7,15 @@
 
 CREATE TABLE IF NOT EXISTS wallets (
   id            TEXT PRIMARY KEY,
+  -- The verified Privy DID. Every query in the system is scoped by this; without it any caller
+  -- could act on any wallet, which is exactly the hole this build closes.
+  user_id       TEXT NOT NULL,
   address       TEXT NOT NULL UNIQUE,
   kind          TEXT NOT NULL CHECK (kind IN ('embedded','connected')),
   cluster       TEXT NOT NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS wallets_user_idx ON wallets(user_id);
 
 -- The delegation IS screen 4's four controls. Trade-only, capped, time-boxed, revocable.
 CREATE TABLE IF NOT EXISTS delegations (

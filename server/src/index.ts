@@ -4,7 +4,9 @@ import 'dotenv/config';
 import { routes } from './routes/index.js';
 import { extra } from './routes/extra.js';
 import { startScheduler } from './executor/scheduler.js';
-import { CLUSTER, RPC_URL } from './solana/connection.js';
+import { CHAIN_KEY, rpcUrl } from './evm/chains.js';
+import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
+import { authMiddleware } from './auth/middleware.js';
 import { DATABASE_URL } from './db/index.js';
 
 const app = new Hono();
@@ -23,6 +25,9 @@ app.onError((err, c) => {
   return c.json({ error: err.message }, 500);
 });
 
+// Auth before ANY route. An unauthenticated trading server must not be a possible state.
+app.use('*', authMiddleware);
+
 app.route('/', routes);
 app.route('/', extra);
 
@@ -30,6 +35,9 @@ const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port });
 console.log(`xorr executor on :${port}`);
 console.log(`  db      ${DATABASE_URL.replace(/:[^:@]*@/, ':***@')}`);
-console.log(`  cluster ${CLUSTER} ${RPC_URL}`);
+console.log(`  chain    ${CHAIN_KEY} ${rpcUrl}`);
+console.log(`  contract ${DELEGATION_ADDRESS}`);
+console.log(`  delegate ${delegatePublicKey}`);
+console.log('  auth     Privy (every route except /health)');
 
 if (process.env.SCHEDULER !== 'off') startScheduler();

@@ -19,3 +19,6 @@ typechain/
 *.tsbuildinfo
 subgraph/generated/
 subgraph/build/
+subgraph/node_modules/
+contracts/out/
+contracts/cache/

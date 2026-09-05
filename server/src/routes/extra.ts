@@ -1,6 +1,6 @@
 /** Backtest, leaderboard and proposal routes — PLAN.md 12.10 / 12.22 / 12.23. */
 import { randomUUID } from 'node:crypto';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
@@ -12,26 +12,27 @@ import { TONE_INSTRUCTIONS, type ToneId } from '../bot/tone.js';
 import { briefing } from '../news/feed.js';
 import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
-import { quote, routeLabel } from '../venues/swap.js';
-import { perpMetrics } from '../venues/perps.js';
-import { stakingYield } from '../venues/staking.js';
+import { quote } from '../venues/oneinch.js';
+import { requireUser } from '../auth/middleware.js';
 
 export const extra = new Hono();
 
-async function walletId(): Promise<string | undefined> {
-  const w = await one<{ id: string }>(`SELECT id FROM wallets ORDER BY created_at ASC LIMIT 1`);
+/** Scoped to the authenticated Privy user — never "the first wallet row". */
+async function walletId(c: Context): Promise<string | undefined> {
+  const { userId } = requireUser(c);
+  const w = await one<{ id: string }>(`SELECT id FROM wallets WHERE user_id = $1 LIMIT 1`, [userId]);
   return w?.id;
 }
 
 extra.get('/agents/leaderboard', async (c) => {
-  const id = await walletId();
+  const id = await walletId(c);
   if (!id) return c.json([]);
   return c.json(await leaderboard(id));
 });
 
 extra.get('/agents/:id/backtest', async (c) => {
   const lookback = (c.req.query('lookback') ?? '90d') as Lookback;
-  const id = await walletId();
+  const id = await walletId(c);
   const cap = id
     ? Number(
         (
@@ -61,7 +62,7 @@ extra.get('/agents/:id/backtest', async (c) => {
 // ── Approve-before-execute — PLAN.md 12.10 [G27] ─────────────────────────────
 
 extra.get('/proposals/current', async (c) => {
-  const id = await walletId();
+  const id = await walletId(c);
   if (!id) return c.json(null);
   const row = await one<{
     id: string;
@@ -89,7 +90,7 @@ extra.get('/proposals/current', async (c) => {
  * permanently empty.
  */
 extra.post('/proposals/generate', async (c) => {
-  const id = await walletId();
+  const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   const tone = ((await c.req.json().catch(() => ({}))) as { tone?: ToneId }).tone ?? 'dry';
   const result = await propose(id, tone);
@@ -124,7 +125,7 @@ extra.post('/proposals', async (c) => {
       ttlSeconds: z.number().positive().max(3600).default(252),
     })
     .parse(await c.req.json());
-  const id = await walletId();
+  const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   const row = await one(
     `INSERT INTO proposals (id, wallet_id, agent, payload, expires_at)
@@ -137,7 +138,7 @@ extra.post('/proposals', async (c) => {
 extra.post('/proposals/:id/decide', async (c) => {
   const body = z.object({ decision: z.enum(['approve', 'skip']) }).parse(await c.req.json());
   const pid = c.req.param('id');
-  const wid = await walletId();
+  const wid = await walletId(c);
   if (!wid) return c.json({ error: 'no_wallet' }, 400);
 
   return c.json(
@@ -226,7 +227,7 @@ extra.get('/agents', async (c) =>
 );
 
 extra.get('/briefing', async (c) => {
-  const id = await walletId();
+  const id = await walletId(c);
   if (!id) return c.json([]);
   const tone = (c.req.query('tone') ?? 'dry') as ToneId;
   try {
@@ -238,7 +239,7 @@ extra.get('/briefing', async (c) => {
 
 extra.post('/devices/register', async (c) => {
   const body = z.object({ token: z.string().min(10), platform: z.string() }).parse(await c.req.json());
-  const id = await walletId();
+  const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   await query(
     `INSERT INTO devices (token, wallet_id, platform) VALUES ($1,$2,$3)
@@ -249,7 +250,7 @@ extra.post('/devices/register', async (c) => {
 });
 
 extra.post('/notify/test', async (c) => {
-  const id = await walletId();
+  const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   return c.json(
     await send(id, {
@@ -260,34 +261,19 @@ extra.post('/notify/test', async (c) => {
   );
 });
 
-// ── Venues — PLAN.md 12.15 / 12.16 / 12.17 ──────────────────────────────────
+// ── Venues — 1inch ───────────────────────────────────────────────────────────
 
 extra.get('/swap/quote', async (c) => {
+  requireUser(c);
   try {
     const q = await quote({
-      inSymbol: (c.req.query('in') ?? 'SOL').toUpperCase(),
+      inSymbol: (c.req.query('in') ?? 'ETH').toUpperCase(),
       outSymbol: (c.req.query('out') ?? 'USDC').toUpperCase(),
       amount: Number(c.req.query('amount') ?? 1),
     });
-    return c.json({ ...q, route: routeLabel(q) });
+    return c.json(q);
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
-  }
-});
-
-extra.get('/perp/:symbol', async (c) => {
-  try {
-    const m = await perpMetrics(c.req.param('symbol').toUpperCase());
-    return m ? c.json(m) : c.json({ error: 'no_such_perp' }, 404);
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
-  }
-});
-
-extra.get('/staking/yield', async (c) => {
-  try {
-    return c.json(await stakingYield());
-  } catch (e) {
+    // No route is a real answer. The screen says so rather than showing a computed guess.
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
 });

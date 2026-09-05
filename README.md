@@ -10,9 +10,9 @@ Chain: **Base**. This repo is also the Base Build Camp submission.
 
 | Sponsor | What it does here | Status |
 |---|---|---|
-| **Privy** | Auth + embedded wallets. The user identity and the wallet that signs are one object, so there is no second account system. Closes the app's largest security gap — the executor previously had no auth at all. | credential verified, server auth built |
+| **Privy** | Auth + embedded wallets. The user identity and the wallet that signs are one object, so there is no second account system. Closes the app's largest security gap — the executor previously had no auth at all. | **server auth live** — every route 401s without a valid token, verified including a forged JWT |
 | **1inch** | Swap routing and execution. The Route row names the protocols actually routed through instead of a fixed string. | 9 live tests passing against real Base routes |
-| **The Graph** | Subgraph indexing delegation grants, revokes and spends, so the app reads its own history from the chain rather than trusting our database. | deploy key authenticated |
+| **The Graph** | Subgraph indexing delegation grants, revokes and spends, so the app reads its own history from the chain rather than trusting our database. | **DEPLOYED** — [studio](https://thegraph.com/studio/subgraph/xorr) · `api.studio.thegraph.com/query/1758741/xorr/v0.0.1` |
 
 ## The core primitive
 

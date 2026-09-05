@@ -3,7 +3,7 @@
  * swapping the app from fixtures to the server changes src/data/index.ts and nothing else.
  */
 import { randomUUID } from 'node:crypto';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { PublicKey } from '@solana/web3.js';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
@@ -11,33 +11,30 @@ import { append, exportTrail, list as listAudit, verify } from '../audit/log.js'
 import { evaluate, spentToday } from '../rules/engine.js';
 import { runStrategy, type StrategyRow } from '../executor/run.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
-import { CLUSTER, explorerTx } from '../solana/connection.js';
-import { delegateKeypair, devOwnerKeypair } from '../solana/keys.js';
-import { readState, setupDevnet, DECIMALS } from '../solana/setup.js';
-import {
-  approveDelegate,
-  baseUnitsToUsd,
-  readDelegation,
-  revokeDelegate,
-  usdToBaseUnits,
-} from '../solana/delegation.js';
+import { CHAIN_KEY, explorerTx, ADDRESSES } from '../evm/chains.js';
+import { delegatePublicKey, readPolicy, DELEGATION_ADDRESS } from '../evm/delegation.js';
+import { requireUser } from '../auth/middleware.js';
+import type { Address } from 'viem';
 import { priceOf } from '../market/prices.js';
 import { getPosition, listPositions } from '../positions/index.js';
 
 /**
- * Single-user dev server: one wallet row, keyed by the devnet owner. Multi-tenant auth is
- * PLAN.md 11.3 and is not pretended at here — the route reads the one wallet rather than
- * inventing a session that does not exist.
+ * Every wallet lookup is scoped to the AUTHENTICATED Privy user.
+ *
+ * The previous build read "the first wallet row", which was fine for one user on a laptop and
+ * catastrophic for two: any caller could act on anyone's capital. Privy gives a verified user id
+ * on every request and it is the key for everything below.
  */
-async function currentWallet() {
-  return one<{ id: string; address: string; kind: string; cluster: string }>(
-    `SELECT * FROM wallets ORDER BY created_at ASC LIMIT 1`,
-  );
+type WalletRow = { id: string; address: string; kind: string; cluster: string; user_id: string };
+
+async function currentWallet(c: Context) {
+  const { userId } = requireUser(c);
+  return one<WalletRow>(`SELECT * FROM wallets WHERE user_id = $1 LIMIT 1`, [userId]);
 }
 
-async function requireWallet() {
-  const w = await currentWallet();
-  if (!w) throw new Error('No wallet. POST /wallet/create first.');
+async function requireWallet(c: Context) {
+  const w = await currentWallet(c);
+  if (!w) throw new Error('No wallet for this user. POST /wallet/create first.');
   return w;
 }
 
@@ -45,101 +42,132 @@ export const routes = new Hono();
 
 routes.get('/health', async (c) => {
   const rows = await query<{ now: Date }>('SELECT now()');
-  return c.json({ ok: true, db: rows[0]?.now, cluster: CLUSTER });
+  return c.json({ ok: true, db: rows[0]?.now, chain: CHAIN_KEY, delegation: DELEGATION_ADDRESS });
 });
 
 // ── Wallet ───────────────────────────────────────────────────────────────────
 
-routes.get('/wallet', async (c) => c.json((await currentWallet()) ?? null));
+routes.get('/wallet', async (c) => c.json((await currentWallet(c)) ?? null));
 
 routes.post('/wallet/create', async (c) => {
-  const existing = await currentWallet();
+  const { userId, walletAddress } = requireUser(c);
+  const existing = await currentWallet(c);
   if (existing) return c.json(existing);
-  const state = readState() ?? (await setupDevnet());
-  const row = await one<{ id: string; address: string; kind: string; cluster: string }>(
-    `INSERT INTO wallets (id, address, kind, cluster) VALUES ($1,$2,'embedded',$3) RETURNING *`,
-    [randomUUID(), state.ownerPubkey, CLUSTER],
+
+  // Privy owns the embedded wallet, so the address comes from the verified identity rather than
+  // from a keypair this server generated. The user's keys never touch the executor.
+  const body = (await c.req.json().catch(() => ({}))) as { address?: string };
+  const address = walletAddress ?? body.address;
+  if (!address) {
+    return c.json(
+      {
+        error: 'no_wallet',
+        message: 'No embedded wallet on this Privy account yet. Create one in the app first.',
+      },
+      400,
+    );
+  }
+
+  const row = await one<WalletRow>(
+    `INSERT INTO wallets (id, user_id, address, kind, cluster) VALUES ($1,$2,$3,'embedded',$4)
+     ON CONFLICT (address) DO UPDATE SET user_id = EXCLUDED.user_id RETURNING *`,
+    [randomUUID(), userId, address, CHAIN_KEY],
   );
   await append({
     walletId: row!.id,
     agent: 'xorr',
-    action: 'Wallet created',
-    detail: `Keys are yours. ${CLUSTER}.`,
+    action: 'Wallet connected',
+    detail: `Your keys, held by you. ${CHAIN_KEY}.`,
     kind: 'risk',
   });
   return c.json(row);
 });
 
 routes.post('/wallet/connect', async (c) => {
-  const body = z.object({ address: z.string().min(32) }).parse(await c.req.json());
-  const row = await one(
-    `INSERT INTO wallets (id, address, kind, cluster) VALUES ($1,$2,'connected',$3)
-     ON CONFLICT (address) DO UPDATE SET kind='connected' RETURNING *`,
-    [randomUUID(), body.address, CLUSTER],
+  const { userId } = requireUser(c);
+  const body = z.object({ address: z.string().regex(/^0x[a-fA-F0-9]{40}$/) }).parse(await c.req.json());
+  const row = await one<WalletRow>(
+    `INSERT INTO wallets (id, user_id, address, kind, cluster) VALUES ($1,$2,$3,'connected',$4)
+     ON CONFLICT (address) DO UPDATE SET kind='connected', user_id = EXCLUDED.user_id RETURNING *`,
+    [randomUUID(), userId, body.address, CHAIN_KEY],
   );
   return c.json(row);
 });
 
 routes.get('/wallet/balance', async (c) => {
-  const state = readState();
-  if (!state) return c.json({ sol: 0, usd: 0 });
-  const d = await readDelegation(new PublicKey(state.ownerTokenAccount));
-  return c.json({ sol: 0, usd: baseUnitsToUsd(d.amount, DECIMALS) });
+  const w = await currentWallet(c);
+  if (!w) return c.json({ usd: 0 });
+  const policy = await readPolicy(w.address as Address).catch(() => null);
+  // Balance is what the user holds; the policy tells us what the bot may touch of it.
+  return c.json({
+    usd: 0,
+    dailyCapUsd: policy?.dailyCapUsd ?? 0,
+    remainingTodayUsd: policy?.remainingTodayUsd ?? 0,
+  });
 });
 
 // ── Delegation ───────────────────────────────────────────────────────────────
 
 routes.get('/delegation', async (c) => {
-  const w = await currentWallet();
+  const w = await currentWallet(c);
   if (!w) return c.json(null);
-  const row = await one(
-    `SELECT * FROM delegations WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
-    [w.id],
-  );
-  if (!row) return c.json(null);
-  // Reconcile against the chain: the chain is the truth, our row is a cache.
-  const state = readState();
-  const chain = state ? await readDelegation(new PublicKey(state.ownerTokenAccount)) : null;
+  const policy = await readPolicy(w.address as Address).catch(() => null);
+  if (!policy) return c.json(null);
   return c.json({
-    delegatePubkey: row.delegate_pubkey,
-    ownerPubkey: row.owner_pubkey,
-    dailyCapUsd: Number(row.daily_cap_usd),
-    expiresAt: new Date(row.expires_at).getTime(),
-    venueAllowlist: row.venue_allowlist,
-    withdrawalAllowlist: row.withdrawal_allowlist,
-    revoked: row.revoked || !chain?.delegate,
-    signature: row.grant_signature,
-    onChainRemainingUsd: chain ? baseUnitsToUsd(chain.delegatedAmount, DECIMALS) : null,
+    delegatePubkey: policy.delegate,
+    ownerPubkey: w.address,
+    dailyCapUsd: policy.dailyCapUsd,
+    expiresAt: policy.expiresAt,
+    venueAllowlist: [ADDRESSES.oneInchRouter],
+    withdrawalAllowlist: [],
+    revoked: policy.revoked,
+    onChainRemainingUsd: policy.remainingTodayUsd,
+    spentTodayUsd: policy.spentTodayUsd,
   });
 });
 
-routes.post('/delegation/grant', async (c) => {
-  const body = z
-    .object({ dailyCapUsd: z.number().positive().max(5000), durationMs: z.number().positive() })
-    .parse(await c.req.json());
-  const w = await requireWallet();
-  const state = readState() ?? (await setupDevnet());
-
-  const signature = await approveDelegate({
-    owner: devOwnerKeypair(),
-    ownerTokenAccount: new PublicKey(state.ownerTokenAccount),
-    delegate: delegateKeypair().publicKey,
-    amount: usdToBaseUnits(body.dailyCapUsd, DECIMALS),
+/**
+ * The parameters the app needs to build the grant transaction.
+ *
+ * The USER signs the grant, with their own Privy wallet — the executor never holds the owner key
+ * and so cannot grant itself permission. This route only says what to sign.
+ */
+routes.get('/delegation/params', async (c) => {
+  requireUser(c);
+  return c.json({
+    contract: DELEGATION_ADDRESS,
+    delegate: delegatePublicKey,
+    venues: [ADDRESSES.oneInchRouter],
+    token: ADDRESSES.usdcBase,
+    chain: CHAIN_KEY,
   });
+});
 
-  const expiresAt = new Date(Date.now() + body.durationMs);
-  const row = await one(
+/** Record a grant the user already signed, so the audit trail has it. */
+routes.post('/delegation/record', async (c) => {
+  const body = z
+    .object({ txHash: z.string(), dailyCapUsd: z.number().positive(), expiresAt: z.number() })
+    .parse(await c.req.json());
+  const w = await requireWallet(c);
+
+  const policy = await readPolicy(w.address as Address);
+  if (!policy || policy.revoked) {
+    // Trust the CHAIN, not the client's claim that it signed something.
+    return c.json({ error: 'not_granted_on_chain', message: 'No active policy found on-chain.' }, 400);
+  }
+
+  await one(
     `INSERT INTO delegations (id, wallet_id, owner_pubkey, delegate_pubkey, daily_cap_usd, expires_at, venue_allowlist, grant_signature)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [
       randomUUID(),
       w.id,
-      state.ownerPubkey,
-      state.delegatePubkey,
-      body.dailyCapUsd,
-      expiresAt,
-      [state.venueTokenAccount],
-      signature,
+      w.address,
+      policy.delegate,
+      policy.dailyCapUsd,
+      new Date(policy.expiresAt),
+      [ADDRESSES.oneInchRouter],
+      body.txHash,
     ],
   );
 
@@ -147,38 +175,32 @@ routes.post('/delegation/grant', async (c) => {
     walletId: w.id,
     agent: 'xorr',
     action: 'Trading permission granted',
-    detail: `Up to $${body.dailyCapUsd.toLocaleString('en-US')} a day, expiring ${expiresAt.toDateString()}.`,
+    detail: `Up to $${policy.dailyCapUsd.toLocaleString('en-US')} a day, expiring ${new Date(policy.expiresAt).toDateString()}.`,
     kind: 'risk',
-    signature,
-    payload: { explorer: explorerTx(signature) },
+    signature: body.txHash,
+    payload: { explorer: explorerTx(body.txHash) },
   });
 
-  return c.json({
-    delegatePubkey: row!.delegate_pubkey,
-    ownerPubkey: row!.owner_pubkey,
-    dailyCapUsd: Number(row!.daily_cap_usd),
-    expiresAt: expiresAt.getTime(),
-    venueAllowlist: row!.venue_allowlist,
-    withdrawalAllowlist: row!.withdrawal_allowlist,
-    revoked: false,
-    signature,
-  });
+  return c.json({ ok: true, ...policy });
 });
 
+/** Record a revoke the user already signed. */
 routes.post('/delegation/revoke', async (c) => {
-  const w = await requireWallet();
-  const state = readState();
-  if (!state) throw new Error('Chain accounts are not set up.');
+  const body = z.object({ txHash: z.string().optional() }).parse(await c.req.json().catch(() => ({})));
+  const w = await requireWallet(c);
 
-  const signature = await revokeDelegate({
-    owner: devOwnerKeypair(),
-    ownerTokenAccount: new PublicKey(state.ownerTokenAccount),
-  });
+  const policy = await readPolicy(w.address as Address);
+  if (policy && !policy.revoked) {
+    return c.json(
+      { error: 'still_active', message: 'The policy is still active on-chain. Sign the revoke first.' },
+      400,
+    );
+  }
 
   await tx(async (client) => {
     await client.query(
       `UPDATE delegations SET revoked=true, revoke_signature=$2 WHERE wallet_id=$1 AND revoked=false`,
-      [w.id, signature],
+      [w.id, body.txHash ?? null],
     );
     await append(
       {
@@ -187,24 +209,13 @@ routes.post('/delegation/revoke', async (c) => {
         action: 'All agents stopped',
         detail: 'Permission revoked on-chain. Open positions are untouched.',
         kind: 'risk',
-        signature,
-        payload: { explorer: explorerTx(signature) },
+        signature: body.txHash,
       },
       client,
     );
   });
 
-  const chain = await readDelegation(new PublicKey(state.ownerTokenAccount));
-  return c.json({
-    delegatePubkey: state.delegatePubkey,
-    ownerPubkey: state.ownerPubkey,
-    dailyCapUsd: 0,
-    expiresAt: Date.now(),
-    venueAllowlist: [],
-    withdrawalAllowlist: [],
-    revoked: chain.delegate === null,
-    signature,
-  });
+  return c.json({ revoked: true, ownerPubkey: w.address, dailyCapUsd: 0 });
 });
 
 // ── Strategies ───────────────────────────────────────────────────────────────
@@ -236,7 +247,7 @@ function toApi(r: StrategyRow) {
 }
 
 routes.get('/strategies', async (c) => {
-  const w = await currentWallet();
+  const w = await currentWallet(c);
   if (!w) return c.json([]);
   const rows = await query<StrategyRow>(
     `SELECT * FROM strategies WHERE wallet_id=$1 ORDER BY created_at DESC`,
@@ -247,7 +258,7 @@ routes.get('/strategies', async (c) => {
 
 routes.post('/strategies', async (c) => {
   const body = StrategyInput.parse(await c.req.json());
-  const w = await requireWallet();
+  const w = await requireWallet(c);
 
   // PLAN.md 9.2: the sum of live strategies can never exceed the delegation's daily cap,
   // enforced at CREATION so a user cannot quietly over-commit by adding one more.
@@ -333,19 +344,19 @@ routes.post('/strategies/:id/run', async (c) => {
 // ── Activity / audit ─────────────────────────────────────────────────────────
 
 routes.get('/positions', async (c) => {
-  const w = await currentWallet();
+  const w = await currentWallet(c);
   if (!w) return c.json([]);
   return c.json(await listPositions(w.id));
 });
 
 routes.get('/positions/:id', async (c) => {
-  const w = await requireWallet();
+  const w = await requireWallet(c);
   const p = await getPosition(w.id, c.req.param('id'));
   return p ? c.json(p) : c.json({ error: 'not_found' }, 404);
 });
 
 routes.get('/activity', async (c) => {
-  const w = await currentWallet();
+  const w = await currentWallet(c);
   if (!w) return c.json([]);
   const rows = await listAudit(w.id);
   return c.json(
@@ -363,7 +374,7 @@ routes.get('/activity', async (c) => {
 });
 
 routes.get('/activity/export', async (c) => {
-  const w = await requireWallet();
+  const w = await requireWallet(c);
   const format = c.req.query('format') === 'json' ? 'json' : 'csv';
   const body = await exportTrail(w.id, format);
   return c.text(body, 200, {
@@ -373,14 +384,14 @@ routes.get('/activity/export', async (c) => {
 });
 
 routes.get('/activity/verify', async (c) => {
-  const w = await requireWallet();
+  const w = await requireWallet(c);
   return c.json(await verify(w.id));
 });
 
 // ── Limits ───────────────────────────────────────────────────────────────────
 
 routes.get('/limits', async (c) => {
-  const w = await requireWallet();
+  const w = await requireWallet(c);
   const del = await one<{ daily_cap_usd: string; expires_at: Date; revoked: boolean }>(
     `SELECT daily_cap_usd, expires_at, revoked FROM delegations WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
     [w.id],
@@ -396,7 +407,7 @@ routes.get('/limits', async (c) => {
 
 routes.post('/limits/check', async (c) => {
   const body = z.object({ usd: z.number() }).parse(await c.req.json());
-  const w = await requireWallet();
+  const w = await requireWallet(c);
   const del = await one<{ daily_cap_usd: string; expires_at: Date; revoked: boolean }>(
     `SELECT daily_cap_usd, expires_at, revoked FROM delegations WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
     [w.id],

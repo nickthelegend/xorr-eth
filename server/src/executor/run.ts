@@ -13,16 +13,20 @@
 import { randomUUID } from 'node:crypto';
 import { PublicKey } from '@solana/web3.js';
 import type { PoolClient } from 'pg';
-import { pool, query, tx } from '../db/index.js';
+import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { evaluate, recordSpend } from '../rules/engine.js';
-import { delegateKeypair, devOwnerKeypair } from '../solana/keys.js';
-import { readState, DECIMALS } from '../solana/setup.js';
-import { readDelegation, spendAsDelegate, usdToBaseUnits } from '../solana/delegation.js';
-import { explorerTx } from '../solana/connection.js';
+import { readPolicy, spendAsDelegate } from '../evm/delegation.js';
+import { explorerTx, ADDRESSES } from '../evm/chains.js';
+import { buildSwap } from '../venues/oneinch.js';
+import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { priceOf } from '../market/prices.js';
 import { applyFill } from '../positions/index.js';
+import { DELEGATION_ADDRESS } from '../evm/delegation.js';
+
+/** The address that holds the tokens when the router is called: the delegation contract. */
+const DELEGATION_FROM = DELEGATION_ADDRESS;
 
 export type RunOutcome =
   | { status: 'filled'; runId: string; signature: string; units: number; price: number }
@@ -35,6 +39,8 @@ export type RunOutcome =
 export type StrategyRow = {
   id: string;
   wallet_id: string;
+  /** The user's own wallet address — the `owner` in the delegation policy. */
+  owner_address?: string;
   kind: string;
   state: string;
   label: string;
@@ -154,14 +160,18 @@ export async function runStrategy(
 
   // ── 3. Execute on chain. ──
   try {
-    const state = readState();
-    if (!state) throw new Error('Chain accounts are not set up. Run npm run setup:devnet.');
+    const owner = (await one<{ address: string }>(
+      `SELECT address FROM wallets WHERE id = $1`,
+      [walletId],
+    ))?.address as Address | undefined;
+    if (!owner) throw new Error('This wallet has no address on file.');
 
-    const ownerTokenAccount = new PublicKey(state.ownerTokenAccount);
-    const chain = await readDelegation(ownerTokenAccount);
-
-    // The chain is the source of truth for what the bot may spend — never our own database.
-    if (!chain.delegate) {
+    // The CHAIN is the source of truth for what the bot may spend — never our own database.
+    const policy = await readPolicy(owner);
+    if (!policy) {
+      return finishBlocked(runId, walletId, strategy, 'no_delegation', 'No trading permission is granted on-chain.');
+    }
+    if (policy.revoked) {
       return finishBlocked(
         runId,
         walletId,
@@ -170,57 +180,34 @@ export async function runStrategy(
         'The permission was revoked on-chain, so I did not place this.',
       );
     }
-    const wanted = usdToBaseUnits(usd, DECIMALS);
-    if (chain.delegatedAmount < wanted) {
+    if (usd > policy.remainingTodayUsd) {
       return finishBlocked(
         runId,
         walletId,
         strategy,
-        'onchain_allowance',
-        'The remaining on-chain allowance is smaller than this buy.',
+        'onchain_daily_cap',
+        `The contract allows ${policy.remainingTodayUsd.toFixed(2)} more today, and this asks for ${usd.toFixed(2)}.`,
       );
     }
 
     const price = await priceOf(strategy.symbol);
     const units = usd / price;
 
-    const signature = await spendAsDelegate({
-      delegate: delegateKeypair(),
-      source: ownerTokenAccount,
-      destination: new PublicKey(state.venueTokenAccount),
-      owner: devOwnerKeypair().publicKey,
-      amount: wanted,
+    // Real 1inch calldata. The delegation contract pulls the USDC and forwards this to the router
+    // inside one transaction, so the user's funds are never parked anywhere in between.
+    const swap = await buildSwap({
+      inSymbol: 'USDC',
+      outSymbol: strategy.symbol === 'ETH' ? 'WETH' : strategy.symbol,
+      amount: usd,
+      from: DELEGATION_FROM,
     });
 
-    await tx(async (client) => {
-      await client.query(
-        `UPDATE strategy_runs SET status='filled', usd=$2, units=$3, price=$4, signature=$5, finished_at=now()
-         WHERE id=$1`,
-        [runId, usd, units, price, signature],
-      );
-      await recordSpend(walletId, usd, client);
-      // A fill is what creates a position. Same transaction, so the book and the ledger can never
-      // disagree about whether a buy happened.
-      await applyFill(client, { walletId, symbol: strategy.symbol, units, usd });
-      if (strategy.cadence) {
-        await client.query(`UPDATE strategies SET next_run_at=$2 WHERE id=$1`, [
-          strategy.id,
-          advance(at, cadence),
-        ]);
-      }
-      await append(
-        {
-          walletId,
-          agent: 'Yield Keeper',
-          action: `Bought ${units.toFixed(4)} ${strategy.symbol}`,
-          detail: `${strategy.label} · $${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} avg`,
-          amount: `−$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          kind: 'trade',
-          signature,
-          payload: { runId, strategyId: strategy.id, explorer: explorerTx(signature) },
-        },
-        client,
-      );
+    const signature = await spendAsDelegate({
+      owner,
+      token: ADDRESSES.usdcBase,
+      venue: swap.to,
+      usd,
+      data: swap.data,
     });
 
     return { status: 'filled', runId, signature, units, price };
