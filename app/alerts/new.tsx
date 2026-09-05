@@ -1,0 +1,86 @@
+/**
+ * Add custom alert — PLAN.md 10.9 [G14]. Screen 18's ghost button had no destination.
+ */
+import React, { useState } from 'react';
+import { Text, TextInput, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Button, IconButton, Screen, ScreenHeader, Segmented } from '@/design/components';
+import { borders, ink, surfaces } from '@/design/colors';
+import { hairlineWidth, radius } from '@/design/space';
+import { type } from '@/design/type';
+
+const KINDS = ['Price', 'Agent', 'Risk'];
+
+export default function NewAlert() {
+  const router = useRouter();
+  const [kind, setKind] = useState(0);
+  const [symbol, setSymbol] = useState('SOL');
+  const [level, setLevel] = useState('95');
+
+  return (
+    <Screen>
+      <ScreenHeader
+        left={<Text style={[type.screenTitle, { color: ink.full }]}>New alert</Text>}
+        right={
+          <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
+        }
+      />
+
+      <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
+        Alerts interrupt you. Circuit breakers stop the bot. This creates the first kind.
+      </Text>
+
+      <Segmented
+        options={KINDS}
+        value={kind}
+        onChange={setKind}
+        style={{ marginTop: 18 }}
+        accessibilityLabel="Alert kind"
+      />
+
+      <Screen.Content style={{ marginTop: 20, gap: 14 }}>
+        <Field label="Symbol" value={symbol} onChange={setSymbol} />
+        <Field label="Above" value={level} onChange={setLevel} keyboard="decimal-pad" />
+      </Screen.Content>
+
+      <Button label={`Alert me when ${symbol} is above $${level}`} onPress={() => router.back()} />
+    </Screen>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  keyboard = 'default',
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  keyboard?: 'default' | 'decimal-pad';
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={[type.eyebrowSm, { color: ink.i32 }]}>{label}</Text>
+      <View
+        style={{
+          height: 48,
+          borderRadius: radius.md2,
+          backgroundColor: surfaces.inputBg,
+          borderWidth: hairlineWidth,
+          borderColor: borders.input,
+          paddingHorizontal: 14,
+          justifyContent: 'center',
+        }}
+      >
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          keyboardType={keyboard}
+          style={[type.body, { color: ink.full }]}
+          accessibilityLabel={label}
+        />
+      </View>
+    </View>
+  );
+}

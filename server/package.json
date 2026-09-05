@@ -1,0 +1,38 @@
+{
+  "name": "xorr-eth-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "migrate": "tsx src/db/migrate.ts",
+    "setup:devnet": "tsx src/solana/setup.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:chain": "CHAIN=1 vitest run src/solana/delegation.chain.test.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "@privy-io/server-auth": "^1.32.5",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "dotenv": "^17.2.3",
+    "hono": "^4.10.7",
+    "jose": "^6.2.12",
+    "pg": "^8.16.3",
+    "viem": "^2.56.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "@types/pg": "^8.15.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

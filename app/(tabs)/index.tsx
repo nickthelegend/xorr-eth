@@ -1,0 +1,211 @@
+/**
+ * Screen 2 — Wallet home. screens.md Group B.
+ *
+ * Gear / "Wallets" / more header. Eyebrow "Total value", balance 46/700, up delta chip.
+ * Three EQUAL action pills (Send / Swap / More) — flex:1, gutter-padded, never fixed-width.
+ * Cash row. "Agents" header with count. Two 106px agent cards. "Coins" -> row + staking note.
+ *
+ * [G16] The floating chat pill is gone: after the pivot the bot has a centre tab, and a second
+ * entry point to the same place on the busiest screen is clutter. PLAN.md 8.2 called this.
+ */
+import React from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
+import { Icon } from '@/design/Icon';
+import {
+  AgentOrb,
+  AssetMark,
+  IconButton,
+  NoteStrip,
+  Row,
+  Screen,
+  ScreenHeader,
+} from '@/design/components';
+import { borders, ink, pnl, surfaces } from '@/design/colors';
+import { agentGradient } from '@/design/gradients';
+import { hairlineWidth, radius } from '@/design/space';
+import { type } from '@/design/type';
+import { money, percent, quantity } from '@/format';
+import { repos } from '@/data';
+import { useAsync } from '@/data/useAsync';
+import { hiredCount, useHasHydrated, useStore } from '@/state/store';
+
+export default function Home() {
+  const router = useRouter();
+  const hydrated = useHasHydrated();
+  const wallet = useStore((s) => s.wallet);
+  const hired = useStore((s) => s.hired);
+  const stocksPaused = useStore((s) => s.stocksPaused);
+  const toggleStocksPaused = useStore((s) => s.toggleStocksPaused);
+
+  const balance = useAsync(() => repos.portfolio.balanceUsd(), []);
+  const agents = useAsync(() => repos.bot.listAgents(), []);
+  const sol = useAsync(() => repos.markets.quotes(['SOL']), []);
+  // The held quantity was hardcoded at 1,750.30 SOL. It comes from the position book now.
+  const positions = useAsync(() => repos.portfolio.positions(), []);
+  const staking = useAsync(() => repos.yield.staking(), []);
+
+  const total = balance.data ?? 0;
+  const solQuote = sol.data?.SOL;
+  const solHeld = (positions.data ?? []).find((p) => p.symbol === 'SOL');
+
+  // The entry gate — PLAN.md 2.7. "/" belongs to the tab shell; a user without a wallet is sent to
+  // onboarding from here rather than from a competing index route. Waiting for hydration first
+  // stops a returning user seeing the splash flash before their wallet loads from storage.
+  if (hydrated && !wallet) return <Redirect href="/welcome" />;
+
+  return (
+    <Screen tabbed>
+      <ScreenHeader
+        left={
+          <IconButton name="gear" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
+        }
+        right={<IconButton name="more" accessibilityLabel="More options" />}
+      />
+
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 22 }}>
+        <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Total value</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          <Text style={[type.heroBalance, { color: ink.full }]}>{money(total)}</Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
+          {([
+            { label: 'Send', route: '/send' },
+            { label: 'Swap', route: '/swap' },
+            { label: 'More', route: '/settings' },
+          ] as const).map((a) => (
+            <Pressable
+              key={a.label}
+              accessibilityRole="button"
+              accessibilityLabel={a.label}
+              onPress={() => router.push(a.route)}
+              // design.md: flex:1, never fixed-width.
+              style={({ pressed }) => ({
+                flex: 1,
+                height: 44,
+                borderRadius: radius.xl,
+                backgroundColor: surfaces.control,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: pressed ? 0.85 : 1,
+              })}
+            >
+              <Text style={[type.pill, { color: ink.full }]}>{a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Row
+          primary="Cash"
+          secondary="Available to trade"
+          value={money(total)}
+          height={58}
+          style={{ marginTop: 18 }}
+        />
+
+        <SectionHeader
+          title="Agents"
+          count={`${hiredCount(hired)} hired`}
+          onPress={() => router.push('/bot/roster')}
+        />
+
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          {(agents.data ?? []).slice(0, 2).map((a, idx) => {
+            const paused = idx === 1 && stocksPaused;
+            return (
+              <Pressable
+                key={a.id}
+                onPress={idx === 1 ? toggleStocksPaused : () => router.push('/bot')}
+                accessibilityRole="button"
+                accessibilityLabel={`${a.name}, ${paused ? 'paused' : 'active'}`}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  height: 106,
+                  borderRadius: radius.lg2,
+                  backgroundColor: surfaces.surface,
+                  padding: 14,
+                  justifyContent: 'space-between',
+                  opacity: pressed ? 0.85 : 1,
+                })}
+              >
+                <AgentOrb
+                  gradient={agentGradient(a.name)}
+                  size={34}
+                  face
+                  breathe={!paused}
+                />
+                <View style={{ gap: 3 }}>
+                  <Text style={{ fontSize: 12.5, fontWeight: '600', color: ink.full }}>
+                    {a.name}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: '600',
+                      color: paused ? ink.i40 : pnl.up,
+                    }}
+                  >
+                    {paused ? 'Paused' : 'Active'}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <SectionHeader title="Coins" onPress={() => router.push('/watchlist')} />
+
+        <Row
+          mark={<AssetMark gradient={{ c1: '#5B93FF', c2: '#49E39B' }} size={34} />}
+          primary="SOL"
+          secondary={solHeld ? `Solana · ${quantity(solHeld.units)}` : 'Solana · not held'}
+          value={solQuote ? money(solQuote.price) : '—'}
+          delta={solQuote ? percent(solQuote.change24h, { digits: 2 }) : undefined}
+          deltaColor={solQuote && solQuote.change24h >= 0 ? pnl.up : pnl.down}
+          onPress={() => router.push('/asset/SOL')}
+        />
+
+        <NoteStrip kind="acted" style={{ marginTop: 16, marginBottom: 20 }}>
+          {staking.data
+            ? `Your SOL can earn about ${percent(staking.data.estimatedApy).replace('+', '')} a year through staking. ${staking.data.note}`
+            : 'Staking rates are unavailable right now, so there is no figure to quote.'}
+        </NoteStrip>
+      </ScrollView>
+    </Screen>
+  );
+}
+
+function SectionHeader({
+  title,
+  count,
+  onPress,
+}: {
+  title: string;
+  count?: string;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 26,
+        marginBottom: 12,
+        borderTopWidth: hairlineWidth,
+        borderTopColor: borders.hairline,
+        paddingTop: 18,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={[type.cardTitleSm, { color: ink.full }]}>{title}</Text>
+        <Icon name="chevron" size={12} color={ink.i55} />
+      </View>
+      {count ? <Text style={[type.footnote, { color: ink.i28 }]}>{count}</Text> : null}
+    </Pressable>
+  );
+}

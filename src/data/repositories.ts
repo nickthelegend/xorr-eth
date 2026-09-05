@@ -1,0 +1,144 @@
+/**
+ * Repository interfaces — PLAN.md 3.2 / §3.8.
+ *
+ * "The whole client builds against typed repository interfaces with a fixture implementation.
+ * Phase 12 swaps implementations, not screens. Any screen calling `fetch` directly is a bug."
+ *
+ * Enforced by src/data/repositories.test.ts, which greps the screen layer for `fetch(`.
+ */
+import type {
+  ActivityEvent,
+  Agent,
+  Alert,
+  AssetClass,
+  BacktestResult,
+  Candles,
+  Delegation,
+  Instrument,
+  NewsItem,
+  Position,
+  Proposal,
+  Sleeve,
+  Strategy,
+  Timeframe,
+  Wallet,
+} from './types';
+
+export interface MarketRepository {
+  listClasses(): Promise<AssetClass[]>;
+  getInstrument(symbol: string): Promise<Instrument | null>;
+  /** Live quotes for the given symbols. Falls back to the fixture price with feed:'simulated'. */
+  quotes(symbols: string[]): Promise<Record<string, { price: number; change24h: number } | undefined>>;
+  candles(symbol: string, timeframe: Timeframe): Promise<Candles>;
+}
+
+export interface BotRepository {
+  listAgents(): Promise<Agent[]>;
+  currentProposal(): Promise<Proposal | null>;
+  /**
+   * Ask the agent to consider a trade — PLAN.md 12.18.
+   * Returns null when it declined, WITH the reason, because "what it chose not to do" is the
+   * product. The thread renders that decline rather than sitting empty.
+   */
+  generateProposal(): Promise<{ proposal: Proposal | null; declined?: string }>;
+  decideProposal(id: string, decision: 'approve' | 'skip'): Promise<{ message: string }>;
+  backtest(agentId: string, lookback: BacktestResult['lookback']): Promise<BacktestResult>;
+  leaderboard(): Promise<Agent[]>;
+  /**
+   * Ask the bot something — PLAN.md 11.7. Returns prose only: every figure on screen is rendered
+   * by the client from its own records, so the model cannot put a number in front of the user.
+   */
+  ask(params: {
+    agentId: string;
+    question: string;
+    tone: 'dry' | 'sharp' | 'flat';
+  }): Promise<{ text: string; source: 'model' | 'fallback' }>;
+}
+
+export interface StrategyRepository {
+  list(): Promise<Strategy[]>;
+  create(s: Omit<Strategy, 'id' | 'createdAt'>): Promise<Strategy>;
+  pause(id: string): Promise<Strategy>;
+  resume(id: string): Promise<Strategy>;
+  end(id: string): Promise<Strategy>;
+}
+
+export interface PortfolioRepository {
+  positions(): Promise<Position[]>;
+  position(id: string): Promise<Position | null>;
+  sleeves(): Promise<Sleeve[]>;
+  balanceUsd(): Promise<number>;
+}
+
+export interface ActivityRepository {
+  list(): Promise<ActivityEvent[]>;
+  /** PLAN.md 12.11: the audit trail is the compliance artifact, so export is a real feature. */
+  exportTrail(format: 'csv' | 'json'): Promise<string>;
+}
+
+export interface NewsRepository {
+  briefing(): Promise<NewsItem[]>;
+}
+
+/**
+ * Yield — PLAN.md 12.17 [G35].
+ *
+ * The handoff quotes 12.6% APY on Home, in Activity and in the Briefing. The live figure derived
+ * from Solana's own inflation schedule is materially lower. The app shows the LIVE number: an
+ * app that advertises a rate it cannot deliver is the thing copy.md's "never oversell" rule
+ * exists to prevent.
+ */
+/** Live perp metrics — PLAN.md 12.15 [G37]. Screen 25's 2x2 grid was static in the handoff. */
+export type PerpMetrics = {
+  symbol: string;
+  markPx: number;
+  oraclePx: number;
+  markVsIndex: number;
+  openInterestUsd: number;
+  dayVolumeUsd: number;
+  fundingRate: number;
+  maxLeverage: number;
+  nextFundingSeconds: number;
+  /** Absolute unix ms — the client counts down from this, purely. */
+  nextFundingAt: number;
+  feed: 'live';
+};
+
+export interface PerpRepository {
+  metrics(symbol: string): Promise<PerpMetrics | null>;
+}
+
+export interface YieldRepository {
+  staking(): Promise<{ estimatedApy: number; feed: 'live' | 'simulated'; note: string } | null>;
+}
+
+export interface AlertRepository {
+  list(): Promise<Alert[]>;
+  setEnabled(id: string, enabled: boolean): Promise<void>;
+}
+
+export interface WalletRepository {
+  current(): Promise<Wallet | null>;
+  createEmbedded(): Promise<Wallet>;
+  connect(address: string): Promise<Wallet>;
+  delegation(): Promise<Delegation | null>;
+  grantDelegation(params: {
+    dailyCapUsd: number;
+    durationMs: number;
+  }): Promise<Delegation>;
+  revokeDelegation(): Promise<Delegation>;
+  balance(): Promise<{ sol: number; usd: number }>;
+}
+
+export type Repositories = {
+  markets: MarketRepository;
+  bot: BotRepository;
+  strategies: StrategyRepository;
+  portfolio: PortfolioRepository;
+  activity: ActivityRepository;
+  news: NewsRepository;
+  yield: YieldRepository;
+  perps: PerpRepository;
+  alerts: AlertRepository;
+  wallet: WalletRepository;
+};

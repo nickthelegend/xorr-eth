@@ -1,0 +1,29 @@
+# PLAN.md 13.10 — the kill switch, and that it survives a relaunch.
+appId: finance.xorr.app
+---
+- launchApp
+- tapOn:
+    id: 'Home'
+- tapOn:
+    id: 'Settings'
+- tapOn: 'Status'
+
+- assertVisible: 'Agents are live'
+- assertVisible: 'Stops and take-profits'
+- assertVisible: 'Stay active — your risk is still covered'
+- assertVisible: 'Open positions'
+- assertVisible: 'Left exactly as they are'
+
+- tapOn: 'Stop all agents'
+- assertVisible: 'All agents stopped'
+- assertVisible: 'Open positions are untouched'
+- assertVisible: 'Resume agents'
+
+# The state is real, not a screen-local toggle.
+- launchApp
+- tapOn:
+    id: 'Home'
+- tapOn:
+    id: 'Settings'
+- tapOn: 'Status'
+- assertVisible: 'All agents stopped'

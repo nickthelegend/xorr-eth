@@ -1,0 +1,222 @@
+/**
+ * Domain types — PLAN.md 3.1. Derived from the real shape of ui/mobile-ui/data/markets.json
+ * plus the entities the pivot adds (wallet, delegation, strategy).
+ */
+
+/** design.md §1: every instrument carries its own mark gradient stops. */
+export type GradientStops = { c1: string; c2: string };
+
+export type AssetClassId = 'crypto' | 'stocks' | 'commodities' | 'indices' | 'preipo';
+
+export type Instrument = GradientStops & {
+  sym: string;
+  name: string;
+  /** "Perp · 100x", "Spot · Perp", "Perp · ICE feed" — rendered after the name in a market row. */
+  tag: string;
+  /** Display price string as designed. Live prices replace this via MarketRepository. */
+  px: string;
+  /** Display change string, e.g. "+0.67%" / "−1.08%" (U+2212). */
+  chg: string;
+  up: boolean;
+  classId: AssetClassId;
+  /**
+   * Whether a real feed backs this instrument. PLAN.md §1.3 item 8: "Every price on screen is
+   * real, or labelled." The UI renders a SIMULATED tag whenever this is false.
+   */
+  feed: 'live' | 'simulated';
+  /** On-chain mint/market id where one exists — used by the price service and the executor. */
+  mint?: string;
+};
+
+export type AssetClass = {
+  id: AssetClassId;
+  label: string;
+  /** The caption shown left of the count row on screen 24. */
+  note: string;
+  /** The "See all N …" footer link. */
+  more: string;
+  instruments: Instrument[];
+};
+
+/** [open, high, low, close] in price space. design.md §6: author OHLC, then project. */
+export type Bar = readonly [number, number, number, number];
+
+export type Timeframe = '15m' | '1H' | '4H' | '1D' | '1W';
+
+export type Candles = {
+  symbol: string;
+  timeframe: Timeframe;
+  bars: Bar[];
+  feed: 'live' | 'simulated';
+};
+
+export type Agent = GradientStops & {
+  id: string;
+  name: string;
+  role: string;
+  /** The headline metric on the roster card: "61% win rate", "12.6% APY", "Always on". */
+  metric: string;
+  pnl30d: number;
+  win: number;
+  trades: number;
+};
+
+export type ActivityKind = 'trade' | 'risk' | 'block' | 'yield';
+
+export type ActivityEvent = {
+  id: string;
+  t: string;
+  agent: string;
+  action: string;
+  detail: string;
+  /** Signed display string, or '' when the event moved no money. */
+  amount: string;
+  kind: ActivityKind;
+  /** On-chain signature when the event produced a transaction. */
+  signature?: string;
+};
+
+export type Alert = {
+  id: string;
+  name: string;
+  detail: string;
+  default: boolean;
+};
+
+export type NewsItem = {
+  id: string;
+  tag: string;
+  t: string;
+  headline: string;
+  take: string;
+  tagBg: string;
+  tagFg: string;
+};
+
+export type Sleeve = {
+  name: string;
+  weight: number;
+  note: string;
+  color: string;
+};
+
+export type BacktestResult = {
+  lookback: '30d' | '90d' | '6m' | '1y';
+  ret: number;
+  maxDd: number;
+  sharpe: number;
+  trades: number;
+  /** SVG polyline points in the 360x110 viewBox — design.md §6 "Area / equity curve". */
+  curve: string;
+};
+
+export type Position = {
+  id: string;
+  symbol: string;
+  side: 'long' | 'short';
+  leverage: number;
+  /** Average cost per unit, from real fills. */
+  entry: number;
+  mark: number;
+  /** 0 for spot — a spot position cannot be liquidated, and the screen hides the row. */
+  liquidation: number;
+  notional: number;
+  margin: number;
+  unrealised: number;
+  unrealisedPct: number;
+  units: number;
+  fundingPaid: number;
+  feed: 'live' | 'unavailable';
+};
+
+export type Proposal = {
+  id: string;
+  agent: string;
+  status: string;
+  opening: string;
+  action: string;
+  notional: string;
+  entry: string;
+  stop: string;
+  target: string;
+  rationale: string;
+  onApprove: string;
+  onSkip: string;
+  /** Unix ms. Screen 12's "expires 4:12" counts down to this — [G27]. */
+  expiresAt: number;
+};
+
+// ── Pivot entities ────────────────────────────────────────────────────────────
+
+export type Wallet = {
+  address: string;
+  /** 'embedded' = created in-app with passkey recovery; 'connected' = user brought their own. */
+  kind: 'embedded' | 'connected';
+  cluster: 'devnet' | 'mainnet-beta';
+};
+
+/**
+ * The delegation — PLAN.md §3.4. Trade-only, venue-allowlisted, capped, time-boxed, revocable.
+ * These four fields ARE screen 4's four controls.
+ */
+export type Delegation = {
+  /** The bot's trading authority pubkey. Never has withdraw rights. */
+  delegatePubkey: string;
+  ownerPubkey: string;
+  /** screen 4 "Daily Spend Cap", $200–$5,000 step $200. Enforced outside the client. */
+  dailyCapUsd: number;
+  /** screen 4 "Run For" -> a real expiry, unix ms. */
+  expiresAt: number;
+  /** Programs/venues the authority may touch. */
+  venueAllowlist: string[];
+  /** Withdrawals may only go here, after a cooling-off period. */
+  withdrawalAllowlist: string[];
+  revoked: boolean;
+  /** The signature that created it, so the grant is auditable. */
+  signature?: string;
+};
+
+export type StrategyKind =
+  | 'dca'
+  | 'rebalance'
+  | 'exit-rules'
+  | 'yield-rotation'
+  | 'grid'
+  | 'momentum'
+  | 'event-driven';
+
+export type StrategyState = 'draft' | 'watch' | 'live' | 'paused' | 'ended';
+
+export type Cadence = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+
+export type Strategy = {
+  id: string;
+  kind: StrategyKind;
+  state: StrategyState;
+  label: string;
+  symbol: string;
+  /** USD per run for DCA; target weights for rebalance; etc. */
+  params: Record<string, unknown>;
+  cadence?: Cadence;
+  /** Unix ms of the next scheduled run. */
+  nextRunAt?: number;
+  /** Slice of the delegation's daily cap this strategy may consume. PLAN.md 9.2. */
+  dailyAllocationUsd: number;
+  createdAt: number;
+};
+
+/** A 90x30 sparkline row on screen 5. G5 lifted these out of the prototype. */
+export type WatchlistRow = {
+  sym: string;
+  px: string;
+  chg: string;
+  up: boolean;
+  /** SVG polyline points in a 90x30 viewBox. design.md §6 "Sparkline". */
+  spark: string;
+};
+
+export type WatchlistGroup = {
+  label: string;
+  tab: string;
+  rows: WatchlistRow[];
+};

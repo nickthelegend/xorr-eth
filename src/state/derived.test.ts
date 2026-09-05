@@ -1,0 +1,281 @@
+/**
+ * PLAN.md 3.9 — "Assert against the handoff's stated outputs. These formulas ARE the business
+ * logic." Every expectation below is traceable to a line in state.md or screens.md.
+ */
+import { describe, expect, it } from 'vitest';
+import * as d from './derived';
+import { MINUS, money } from '../format';
+import { btcBars } from '../data/fixtures/series';
+import { agentFixtures } from '../data/fixtures/agents';
+import { activityFixtures } from '../data/fixtures/activity';
+
+describe('agent controls — screen 4', () => {
+  it('autoNote changes with the switch (design.md §5 requires the caption to change)', () => {
+    expect(d.autoNote(true)).toBe('Executes inside your limits without asking');
+    expect(d.autoNote(false)).toBe('Every trade waits for your approval');
+    expect(d.autoNote(true)).not.toBe(d.autoNote(false));
+  });
+
+  it('capLabel and the marker position', () => {
+    expect(d.capLabel(1600)).toBe('$1,600/day');
+    // state.md: capMarker = (cap - 200) / 4800 * 100
+    expect(d.capMarkerPct(1600)).toBeCloseTo(29.1667, 3);
+    expect(d.capMarkerPct(200)).toBe(0);
+    expect(d.capMarkerPct(5000)).toBe(100);
+  });
+
+  it('runLabel', () => {
+    expect(d.runLabel(true)).toBe('Run Agent');
+    expect(d.runLabel(false)).toBe('Save Settings');
+  });
+
+  it('Run For maps to a real delegation lifetime', () => {
+    expect(d.runForMs(0)).toBe(86_400_000);
+    expect(d.runForMs(3)).toBe(30 * 86_400_000);
+  });
+});
+
+describe('Auto Close — screen 6 (mid 66000, size $2500)', () => {
+  it('tp/sl prices', () => {
+    // state.md: tpPrice = mid * (1 + tp/100)
+    expect(d.tpPrice(1.0)).toBe(66660);
+    expect(d.slPrice(-1.0)).toBe(65340);
+    expect(d.tpPrice(3.0)).toBeCloseTo(67980, 6);
+  });
+
+  it('tp/sl P&L — the footnote "Make X at TP or lose Y at SL"', () => {
+    expect(d.tpPnl(1.0)).toBe(25);
+    expect(d.slPnl(-1.0)).toBe(25);
+    expect(money(d.tpPnl(1.0))).toBe('$25.00');
+    expect(d.tpPnl(3.0)).toBe(75);
+  });
+
+  it('ruler tick positions', () => {
+    // state.md: tpTick = 20 + tp*22, slTick = 80 + sl*22
+    expect(d.tpTickPct(1.0)).toBe(42);
+    expect(d.slTickPct(-1.0)).toBe(58);
+  });
+});
+
+describe('order ticket — screen 14', () => {
+  it('unit conversion is 4dp against $88.32', () => {
+    expect(d.orderUnits(250)).toBe('2.8306 SOL');
+  });
+
+  it('fee is 0.1%', () => {
+    expect(d.orderFee(250)).toBeCloseTo(0.25, 10);
+  });
+
+  it('CTA reads as designed', () => {
+    expect(d.orderCta('buy', '250')).toBe('Buy $250 of SOL');
+    expect(d.orderCta('sell', '1,000')).toBe('Sell $1,000 of SOL');
+  });
+
+  describe('keypad rules — state.md', () => {
+    it('a leading 0 is REPLACED by a digit, not appended to', () => {
+      expect(d.keypadPress('0', '5')).toBe('5');
+      expect(d.keypadPress('0', '.')).toBe('0.');
+    });
+    it('max 7 characters', () => {
+      expect(d.keypadPress('1234567', '8')).toBe('1234567');
+      expect(d.keypadPress('123456', '7')).toBe('1234567');
+    });
+    it('a single decimal point', () => {
+      expect(d.keypadPress('12.5', '.')).toBe('12.5');
+      expect(d.keypadPress('12', '.')).toBe('12.');
+    });
+    it('backspace pops the last character and floors at 0', () => {
+      expect(d.keypadPress('250', '⌫')).toBe('25');
+      expect(d.keypadPress('2', '⌫')).toBe('0');
+      expect(d.keypadPress('0', '⌫')).toBe('0');
+    });
+    it('a realistic sequence', () => {
+      const seq = ['1', '2', '5', '.', '5', '0'];
+      expect(seq.reduce(d.keypadPress, '0')).toBe('125.50');
+    });
+  });
+});
+
+describe('leverage — screen 25 (margin $800, gold $3412.10)', () => {
+  it('notional = 800 * lev', () => {
+    expect(d.notional(2)).toBe(1600);
+    expect(d.notional(5)).toBe(4000);
+    expect(d.notional(10)).toBe(8000);
+  });
+
+  it('liq = 3412.10 * (1 - 0.92/lev)', () => {
+    expect(d.liquidation(10)).toBeCloseTo(3412.1 * (1 - 0.092), 6);
+    expect(d.liquidation(5)).toBeCloseTo(3412.1 * (1 - 0.184), 6);
+    expect(d.liquidation(2)).toBeCloseTo(3412.1 * (1 - 0.46), 6);
+    // Higher leverage puts liquidation closer to the mark. That's the whole warning.
+    expect(d.liquidation(10)).toBeGreaterThan(d.liquidation(2));
+  });
+
+  it('the warning names the consequence, and its colour band escalates', () => {
+    expect(d.leverageWarning(2)).toBe('A 46% move against you wipes the margin.');
+    expect(d.leverageWarning(5)).toBe('A 18% move against you wipes the margin.');
+    expect(d.leverageWarning(10)).toBe('A 9% move against you wipes the margin.');
+    expect(d.leverageWarnBand(2)).toBe('calm');
+    expect(d.leverageWarnBand(5)).toBe('warn');
+    expect(d.leverageWarnBand(10)).toBe('danger');
+  });
+});
+
+describe('position close — screen 22 (unrealised $318.40, margin $3800)', () => {
+  it('realises and frees scale with the percentage', () => {
+    expect(d.closeRealise(50)).toBeCloseTo(159.2, 10);
+    expect(d.closeFree(50)).toBe(1900);
+    expect(d.closeRealise(100)).toBe(318.4);
+    expect(d.closeFree(25)).toBe(950);
+  });
+
+  it('the CTA switches wording at 100%', () => {
+    expect(d.closeCta(50)).toBe('Close 50%');
+    expect(d.closeCta(100)).toBe('Close position');
+  });
+
+  it('the summary line formats with separators', () => {
+    expect(d.closeSummary(50)).toEqual({ realises: '$159.20', frees: '$1,900.00' });
+  });
+});
+
+describe('swap — screen 19', () => {
+  it('out = amt * 88.32 * 0.9975 and fee is 0.25%', () => {
+    expect(d.swapOut(12)).toBeCloseTo(12 * 88.32 * 0.9975, 10);
+    expect(d.swapFee(12)).toBeCloseTo(12 * 88.32 * 0.0025, 10);
+  });
+
+  it('the fill percentage tracks the 1..1750 range', () => {
+    expect(d.swapPct(1750)).toBe(100);
+    expect(d.swapPct(875)).toBe(50);
+  });
+
+  it('a 4-figure swap keeps its thousands separator (the review finding)', () => {
+    // 1750 SOL x $88.32 = $154,560, less the 0.25% fee.
+    expect(money(d.swapOut(1750))).toBe('$154,173.60');
+    expect(money(d.swapOut(1750))).toContain(',');
+  });
+});
+
+describe('portfolio proposal — screen 10', () => {
+  it('defaults total 100 and can be approved', () => {
+    expect(d.weightTotal([55, 30, 15])).toBe(100);
+    expect(d.canApprove([55, 30, 15])).toBe(true);
+    expect(d.proposalCta([55, 30, 15], false)).toBe('Approve & fund');
+  });
+
+  it('an unbalanced total disables the CTA with the exact copy', () => {
+    expect(d.canApprove([60, 30, 15])).toBe(false);
+    expect(d.proposalCta([60, 30, 15], false)).toBe('Balance to 100% first');
+  });
+
+  it('once approved the CTA confirms', () => {
+    expect(d.proposalCta([55, 30, 15], true)).toBe('Portfolio approved ✓');
+  });
+
+  it('bars normalise to the total so the bar stays full mid-edit', () => {
+    expect(d.weightBarPct([55, 30, 15], 0)).toBeCloseTo(55, 10);
+    // Mid-edit at 105 total, the first sleeve is 60/105, not 60/100.
+    expect(d.weightBarPct([60, 30, 15], 0)).toBeCloseTo((60 / 105) * 100, 10);
+    const sum = [0, 1, 2].reduce((a, i) => a + d.weightBarPct([60, 30, 15], i), 0);
+    expect(sum).toBeCloseTo(100, 8);
+  });
+});
+
+describe('backtest — screen 17', () => {
+  it('end value and gain', () => {
+    expect(d.btEnd(5000, 11.8)).toBeCloseTo(5590, 6);
+    expect(d.btGain(5000, 11.8)).toBeCloseTo(590, 6);
+  });
+
+  it('max drawdown uses U+2212, not a hyphen — called out explicitly in state.md', () => {
+    expect(d.btDrawdown(-14.6)).toBe(`${MINUS}14.6%`);
+    expect(d.btDrawdown(-14.6)).not.toContain('-');
+  });
+
+  it('the summary formats every field', () => {
+    expect(d.backtestSummary(5000, 11.8, -5.4)).toEqual({
+      end: '$5,590.00',
+      gain: '+$590.00',
+      ret: '+11.8%',
+      dd: `${MINUS}5.4%`,
+    });
+  });
+});
+
+describe('leaderboard — screen 16', () => {
+  it('sorts by each metric', () => {
+    expect(d.sortLeaderboard(agentFixtures, 'pnl30d').map((a) => a.name)).toEqual([
+      'Earnings Desk',
+      'Momentum Scout',
+      'Yield Keeper',
+      'Drawdown Guard',
+    ]);
+    expect(d.sortLeaderboard(agentFixtures, 'win')[0]!.name).toBe('Yield Keeper');
+    expect(d.sortLeaderboard(agentFixtures, 'trades')[0]!.name).toBe('Momentum Scout');
+  });
+
+  it('bars normalise to the largest absolute P&L (1204)', () => {
+    expect(d.leaderboardBarPct(1204, agentFixtures)).toBe(100);
+    expect(d.leaderboardBarPct(842, agentFixtures)).toBeCloseTo((842 / 1204) * 100, 10);
+    // A negative P&L still draws a bar — magnitude, not sign.
+    expect(d.leaderboardBarPct(-96, agentFixtures)).toBeCloseTo((96 / 1204) * 100, 10);
+  });
+});
+
+describe('kill switch — screen 20', () => {
+  it('state-driven title, explanation and CTA', () => {
+    expect(d.killTitle(false)).toBe('Agents are live');
+    expect(d.killTitle(true)).toBe('All agents stopped');
+    expect(d.killCta(false)).toBe('Stop all agents');
+    expect(d.killCta(true)).toBe('Resume agents');
+    expect(d.killExplanation(false, 3)).toBe(
+      '3 agents can place orders inside your limits right now.',
+    );
+    expect(d.killExplanation(true, 3)).toContain('Open positions are untouched');
+  });
+});
+
+describe('activity — screen 15', () => {
+  it('All shows everything', () => {
+    expect(d.filterActivity(activityFixtures, 0)).toHaveLength(activityFixtures.length);
+  });
+
+  it('[G41] the yield row is reachable — it was orphaned by the original filter map', () => {
+    const trades = d.filterActivity(activityFixtures, 1);
+    expect(trades.map((r) => r.action)).toContain('Staked 120 SOL');
+    // Every fixture row is reachable from at least one non-All tab.
+    for (const row of activityFixtures) {
+      const reachable = [1, 2, 3].some((i) =>
+        d.filterActivity(activityFixtures, i).some((r) => r.id === row.id),
+      );
+      expect(reachable, `${row.action} is orphaned`).toBe(true);
+    }
+  });
+
+  it('risk and blocked filters select their own rows', () => {
+    expect(d.filterActivity(activityFixtures, 2).map((r) => r.action)).toEqual(['Stop loss moved']);
+    expect(d.filterActivity(activityFixtures, 3).map((r) => r.action)).toEqual(['Skipped NVDAx']);
+  });
+
+  it('dot colour class per kind', () => {
+    expect(d.activityDot('block')).toBe('blocked');
+    expect(d.activityDot('risk')).toBe('risk');
+    expect(d.activityDot('trade')).toBe('acted');
+    expect(d.activityDot('yield')).toBe('acted');
+  });
+
+  it('credits vs debits — a debit starts with U+2212', () => {
+    expect(d.activityAmountIsCredit('+$44.90')).toBe(true);
+    expect(d.activityAmountIsCredit(`${MINUS}$370.02`)).toBe(false);
+    expect(d.activityAmountIsCredit('')).toBe(false);
+  });
+});
+
+describe('bar helpers', () => {
+  it('read the BTC series correctly', () => {
+    expect(d.barHigh(btcBars)).toBe(66620);
+    expect(d.barLow(btcBars)).toBe(65180);
+    expect(d.lastClose(btcBars)).toBe(66560);
+  });
+});

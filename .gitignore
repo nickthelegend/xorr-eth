@@ -1,0 +1,21 @@
+# Secrets — never commit. Real keys live here only.
+.env
+.env.*
+!.env.example
+.keys/
+*.key
+
+node_modules/
+.expo/
+dist/
+web-build/
+out/
+cache/
+broadcast/
+artifacts/
+typechain/
+*.log
+.DS_Store
+*.tsbuildinfo
+subgraph/generated/
+subgraph/build/
