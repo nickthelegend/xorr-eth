@@ -40,6 +40,12 @@ export interface MarketRepository {
 }
 
 export interface BotRepository {
+  /** Hire a persona. Idempotent — hiring twice is the same agent. */
+  hire(personaId: string): Promise<Agent>;
+  /** Fire one. Its strategies are paused, never deleted. */
+  fire(agentId: string): Promise<{ pausedStrategies: number }>;
+  /** Tone and per-agent limits. */
+  updateAgent(agentId: string, patch: { tone?: string; riskLimits?: Record<string, unknown> }): Promise<Agent>;
   listAgents(): Promise<Agent[]>;
   currentProposal(): Promise<Proposal | null>;
   /**

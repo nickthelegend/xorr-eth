@@ -123,13 +123,29 @@ export const LocalRepositories: Repositories = {
 
   bot: {
     async listAgents(): Promise<Agent[]> {
-      // The same source the leaderboard uses. The roster previously showed fixture metrics
-      // ("61% win rate") beside a leaderboard reporting the real zeros — two numbers for the
-      // same fact, one of them invented.
-      const remote = await api.get<Agent[]>('/agents/leaderboard').catch(() => undefined);
+      // The persisted roster: who is hired, how they are configured, and their real metrics. The
+      // roster used to read hired-ness from browser state and metrics from a fixture, so the same
+      // fact had two answers and one of them was invented.
+      const remote = await api.get<Agent[]>('/agents').catch(() => undefined);
       if (remote && remote.length > 0) return remote;
       // With no server, show the roster WITHOUT performance claims rather than fabricated ones.
-      return agentFixtures.map((a) => ({ ...a, metric: 'No record yet', pnl30d: 0, win: 0, trades: 0 }));
+      return agentFixtures.map((a) => ({
+        ...a,
+        metric: 'No record yet',
+        pnl30d: 0,
+        win: 0,
+        trades: 0,
+        hired: false,
+      }));
+    },
+    async hire(personaId: string): Promise<Agent> {
+      return api.post<Agent>('/agents', { personaId });
+    },
+    async fire(agentId: string): Promise<{ pausedStrategies: number }> {
+      return api.del<{ pausedStrategies: number }>(`/agents/${agentId}`);
+    },
+    async updateAgent(agentId, patch): Promise<Agent> {
+      return api.patch<Agent>(`/agents/${agentId}`, patch);
     },
     async currentProposal(): Promise<Proposal | null> {
       // No fixture fallback: a proposal the user could approve must be a real one the server

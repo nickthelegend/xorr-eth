@@ -19,16 +19,21 @@ import { ink, pnl, surfaces } from '@/design/colors';
 import { radius } from '@/design/space';
 import { type } from '@/design/type';
 import { killCta, killExplanation, killTitle } from '@/state/derived';
-import { hiredCount, useStore } from '@/state/store';
+import { useStore } from '@/state/store';
 import { repos } from '@/data';
+import { useAsync } from '@/data/useAsync';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 
 export default function Safety() {
+  // How many agents can actually place an order right now, from the server. Counting a boolean in
+  // browser state would make the kill switch's own explanation a guess.
+  const roster = useAsync(() => repos.bot.listAgents(), []);
+  const hiredCount = (roster.data ?? []).filter((a) => a.hired).length;
   const router = useRouter();
   const killed = useStore((s) => s.killed);
   const setKilled = useStore((s) => s.setKilled);
   const setDelegation = useStore((s) => s.setDelegation);
-  const hired = useStore((s) => s.hired);
+
   const cap = useStore((s) => s.cap);
   const [localError, setLocalError] = useState<string>();
   // Signed by the user, on-chain. This is why "under a second across every device" is true
@@ -107,7 +112,7 @@ export default function Safety() {
         {killTitle(killed)}
       </Text>
       <Text style={[type.body, { color: ink.i40, marginTop: 8 }]}>
-        {killExplanation(killed, hiredCount(hired))}
+        {killExplanation(killed, hiredCount)}
       </Text>
 
       <Screen.Content style={{ marginTop: 20 }}>

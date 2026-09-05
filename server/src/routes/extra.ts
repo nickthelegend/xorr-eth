@@ -217,16 +217,7 @@ extra.post('/bot/say', async (c) => {
   });
 });
 
-extra.get('/agents', async (c) =>
-  c.json(
-    Object.values(PERSONAS).map((p) => ({
-      id: p.id,
-      name: p.name,
-      role: p.role,
-      voice: p.voice,
-    })),
-  ),
-);
+// GET /agents moved to server/src/agents/routes.ts, where it reads the persisted roster.
 
 extra.get('/briefing', async (c) => {
   const id = await walletId(c);

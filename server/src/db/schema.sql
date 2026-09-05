@@ -148,3 +148,36 @@ CREATE TABLE IF NOT EXISTS positions (
   UNIQUE (wallet_id, symbol, side)
 );
 CREATE INDEX IF NOT EXISTS positions_wallet_idx ON positions(wallet_id);
+
+/*
+ * Agents.
+ *
+ * Hiring an agent used to be a boolean in browser state — it survived a refresh and nothing else.
+ * Reinstall the app and your roster was gone, which is an odd property for the thing that is
+ * trading your money.
+ *
+ * An agent is a row: which persona it is, whether it is hired, how it talks, and the limits it
+ * runs inside. Strategies point at one, so "fire the laggard" has something to act on.
+ */
+CREATE TABLE IF NOT EXISTS agents (
+  id            TEXT PRIMARY KEY,
+  wallet_id     TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+  persona_id    TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  hired         BOOLEAN NOT NULL DEFAULT true,
+  tone          TEXT NOT NULL DEFAULT 'dry' CHECK (tone IN ('dry','sharp','flat')),
+  -- Per-agent limits, always inside the on-chain cap. The contract is still the authority; this
+  -- is the user dividing what the contract already allows between the agents they hired.
+  risk_limits   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  fired_at      TIMESTAMPTZ,
+  -- One row per persona per wallet: hiring twice is the same agent, not two of them.
+  UNIQUE (wallet_id, persona_id)
+);
+
+CREATE INDEX IF NOT EXISTS agents_wallet_idx ON agents (wallet_id) WHERE hired;
+
+-- Which agent owns a strategy. Nullable: strategies created before agents existed have none, and
+-- a strategy whose agent is fired keeps running under the user's own permission rather than
+-- vanishing with the agent.
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL;

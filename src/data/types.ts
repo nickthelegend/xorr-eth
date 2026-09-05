@@ -51,7 +51,9 @@ export type Candles = {
 };
 
 export type Agent = GradientStops & {
+  /** The row id once hired; the persona id before that. Use `personaId` to hire. */
   id: string;
+  personaId?: string;
   name: string;
   role: string;
   /** The headline metric on the roster card: "61% win rate", "12.6% APY", "Always on". */
@@ -59,6 +61,10 @@ export type Agent = GradientStops & {
   pnl30d: number;
   win: number;
   trades: number;
+  /** Persisted server-side, so a reinstall does not forget who you hired. */
+  hired?: boolean;
+  tone?: 'dry' | 'sharp' | 'flat';
+  riskLimits?: Record<string, unknown>;
 };
 
 export type ActivityKind = 'trade' | 'risk' | 'block' | 'yield';

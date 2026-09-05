@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import { routes } from './routes/index.js';
 import { extra } from './routes/extra.js';
 import { market, warmMarketCache } from './routes/market.js';
+import { agents } from './agents/routes.js';
 import { startScheduler } from './executor/scheduler.js';
 import { CHAIN_KEY, rpcUrl } from './evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
@@ -19,7 +20,7 @@ app.use('*', async (c, next) => {
   // The web client sends `Authorization: Bearer <privy token>`; without it here the browser's
   // preflight rejects every authenticated request and the whole app looks logged-out.
   c.header('access-control-allow-headers', 'content-type,authorization');
-  c.header('access-control-allow-methods', 'GET,POST,OPTIONS');
+  c.header('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS');
 });
 app.options('*', (c) => c.body(null, 204));
 
@@ -48,6 +49,7 @@ app.use('*', authMiddleware);
 app.route('/', routes);
 app.route('/', extra);
 app.route('/', market);
+app.route('/', agents);
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port });

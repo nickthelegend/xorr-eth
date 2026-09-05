@@ -261,6 +261,8 @@ const StrategyInput = z.object({
   cadence: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
   nextRunAt: z.number().optional(),
   dailyAllocationUsd: z.number().nonnegative(),
+  /** Which hired agent runs this. Optional: a user can set a strategy up themselves. */
+  agentId: z.string().uuid().optional(),
 });
 
 function toApi(r: StrategyRow) {
@@ -361,9 +363,28 @@ routes.post('/strategies', async (c) => {
       ? nextRuns(body.cadence as Cadence, 1)[0]!
       : null;
 
+  // An agent id from another wallet must not be attachable. Verified here rather than trusted,
+  // because the alternative is a strategy that reports to an agent its owner cannot see or fire.
+  let agentId: string | null = null;
+  let agentName = 'Yield Keeper';
+  if (body.agentId) {
+    const agent = await one<{ id: string; name: string }>(
+      `SELECT id, name FROM agents WHERE id = $1 AND wallet_id = $2 AND hired = true`,
+      [body.agentId, w.id],
+    );
+    if (!agent) {
+      return c.json(
+        { error: 'unknown_agent', message: 'That agent is not one you have hired.' },
+        400,
+      );
+    }
+    agentId = agent.id;
+    agentName = agent.name;
+  }
+
   const row = await one<StrategyRow>(
-    `INSERT INTO strategies (id, wallet_id, kind, state, label, symbol, params, cadence, next_run_at, daily_allocation_usd)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    `INSERT INTO strategies (id, wallet_id, kind, state, label, symbol, params, cadence, next_run_at, daily_allocation_usd, agent_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [
       randomUUID(),
       w.id,
@@ -375,12 +396,13 @@ routes.post('/strategies', async (c) => {
       body.cadence ?? null,
       nextRunAt,
       body.dailyAllocationUsd,
+      agentId,
     ],
   );
 
   await append({
     walletId: w.id,
-    agent: 'Yield Keeper',
+    agent: agentName,
     action: `Created ${body.label}`,
     detail: nextRunAt ? `First run ${nextRunAt.toDateString()}.` : 'Ready to run.',
     kind: 'risk',
