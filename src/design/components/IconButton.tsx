@@ -50,7 +50,7 @@ export function IconButton({
         style,
       ]}
     >
-      <View pointerEvents="none">
+      <View style={{ pointerEvents: 'none' }}>
         <Icon name={name} size={glyphSize} color={color} />
       </View>
     </Pressable>

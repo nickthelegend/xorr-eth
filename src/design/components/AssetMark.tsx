@@ -10,7 +10,13 @@ import { RADIAL, type GradientPair } from '../gradients';
 export function AssetMark({ gradient, size = 34 }: { gradient: GradientPair; size?: number }) {
   const id = `mk-${gradient.c1.slice(1)}${gradient.c2.slice(1)}`;
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityElementsHidden>
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      // Decorative: the symbol and price beside it carry the information.
+      aria-hidden
+    >
       <Defs>
         <RadialGradient id={id} cx="50%" cy="50%" r={RADIAL.r} fx={RADIAL.fx} fy={RADIAL.fy}>
           <Stop offset="0%" stopColor={gradient.c1} />

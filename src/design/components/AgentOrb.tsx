@@ -19,7 +19,7 @@ import Animated, {
   withTiming,
   cancelAnimation,
 } from 'react-native-reanimated';
-import { ink, pnl } from '../colors';
+import { alpha, ink, pnl } from '../colors';
 import { DURATION } from '../motion';
 import { RADIAL, type GradientPair } from '../gradients';
 import { type } from '../type';
@@ -83,10 +83,7 @@ export function AgentOrb({
         style={[
           { width: size, height: size, borderRadius: size / 2 },
           bloom && {
-            shadowColor: gradient.c1,
-            shadowOffset: { width: 0, height: 14 },
-            shadowOpacity: 0.4,
-            shadowRadius: 40,
+            boxShadow: `0px 14px 40px ${alpha(gradient.c1, 0.4)}`,
             elevation: 10,
           },
           animated,
@@ -108,7 +105,7 @@ export function AgentOrb({
         </Svg>
 
         {face ? (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
             {/* Two 9x13 round-rect eyes at ~40% height. */}
             <View
               style={{

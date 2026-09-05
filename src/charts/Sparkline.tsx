@@ -20,9 +20,10 @@ export function Sparkline({ points }: { points: string }) {
       height={SPARK_H}
       viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
       opacity={0.9}
-      // Decorative: the price and change text beside it carry the information.
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
+      // Decorative: the price and change text beside it carry the information. `aria-hidden` is
+      // the cross-platform spelling; the iOS/Android-only a11y props leak onto the DOM as unknown
+      // attributes on web and React logs an error for each one.
+      aria-hidden
     >
       <Polyline
         points={points}

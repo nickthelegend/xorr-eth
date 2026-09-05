@@ -101,8 +101,8 @@ function AndroidBloom({ color, top, height }: { color: string; top: number; heig
   const PAD = 10; // the 10px blur radius from the spec
   return (
     <View
-      pointerEvents="none"
       style={{
+        pointerEvents: 'none',
         position: 'absolute',
         left: -PAD,
         right: -PAD,

@@ -147,3 +147,18 @@ export const colors = {
 } as const;
 
 export type Colors = typeof colors;
+
+/**
+ * A palette hex at a given opacity, as an `rgba()` string.
+ *
+ * Needed because `boxShadow` — the only shadow API that keeps its tint on web now that the
+ * `shadow*` props are deprecated — takes a CSS color, and the design's shadows are all
+ * "this token at N%". Keeping the conversion here means a bloom still traces back to a token
+ * rather than becoming a raw hex at the call site.
+ */
+export function alpha(hex: string, opacity: number): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${opacity})`;
+}

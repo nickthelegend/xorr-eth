@@ -2,7 +2,6 @@
  * Space, radius, shadow — design.md §3.
  */
 import { StyleSheet, type ViewStyle } from 'react-native';
-import { pnl } from './colors';
 
 /** The 16-step spacing scale. design.md §3: nothing outside this list. */
 export const space = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 26, 30, 34, 38, 44] as const;
@@ -54,18 +53,12 @@ export const hairlineWidth = StyleSheet.hairlineWidth;
 export const shadows = {
   /** Switch knob: 0 1px 3px rgba(0,0,0,.4). */
   switchKnob: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.4,
-    shadowRadius: 3,
+    boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.4)',
     elevation: 2,
   } satisfies ViewStyle,
   /** Floating chat pill: 0 8px 24px rgba(0,0,0,.55). */
   floatingPill: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.55,
-    shadowRadius: 24,
+    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.55)',
     elevation: 8,
   } satisfies ViewStyle,
 } as const;
@@ -74,20 +67,14 @@ export const shadows = {
  * Candle bloom — design.md §3: "Candle bodies carry a bloom, not a shadow ... This is what makes
  * the charts read as premium — keep it." 0 0 10px rgba(22,192,96,.35) up / rgba(239,59,54,.32) down.
  *
- * On iOS this is a real shadow with zero offset. On Android `elevation` cannot tint, so
- * `Candlestick` layers an SVG feGaussianBlur copy instead — see src/charts/Candlestick.tsx.
+ * Expressed as `boxShadow` (RN 0.76+ / react-native-web), which is the only shadow API that can
+ * carry a tint on every platform — the legacy `shadow*` props are deprecated and drop the color on
+ * web. Android still cannot tint an `elevation`, so `Candlestick` layers an SVG feGaussianBlur copy
+ * instead — see src/charts/Candlestick.tsx.
  */
 export const candleBloom = {
-  up: {
-    shadowColor: pnl.candleUp,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-  } satisfies ViewStyle,
-  down: {
-    shadowColor: pnl.candleDown,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.32,
-    shadowRadius: 10,
-  } satisfies ViewStyle,
+  /** rgba(22,192,96,.35) — pnl.candleUp at 35%. */
+  up: { boxShadow: '0px 0px 10px rgba(22, 192, 96, 0.35)' } satisfies ViewStyle,
+  /** rgba(239,59,54,.32) — pnl.candleDown at 32%. */
+  down: { boxShadow: '0px 0px 10px rgba(239, 59, 54, 0.32)' } satisfies ViewStyle,
 } as const;
