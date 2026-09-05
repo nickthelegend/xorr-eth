@@ -12,10 +12,19 @@
  */
 import { createPublicClient, http, type Address } from 'viem';
 import { base } from 'viem/chains';
-import { ADDRESSES } from '../evm/chains.js';
 
 /** Aave v3 Pool on Base. */
 const AAVE_V3_POOL: Address = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5';
+
+/**
+ * USDC on Base MAINNET, written out rather than taken from ADDRESSES.
+ *
+ * ADDRESSES is chain-aware, and correctly so — but this module deliberately reads mainnet whatever
+ * chain the executor trades. Pulling the Sepolia USDC address into a mainnet call asked Aave about
+ * an asset it has never heard of, and Aave answers that with a zeroed reserve struct rather than a
+ * revert. The result was a confident "0.00% a year", which is worse than an error.
+ */
+const USDC_BASE_MAINNET: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 /** Aave stores rates in ray — 27 decimals — as a per-second rate annualised linearly. */
 const RAY = 10n ** 27n;
@@ -76,11 +85,16 @@ export async function usdcSupplyYield(): Promise<SupplyYield> {
     address: AAVE_V3_POOL,
     abi: POOL_ABI,
     functionName: 'getReserveData',
-    args: [ADDRESSES.usdcBase],
+    args: [USDC_BASE_MAINNET],
   });
 
   // currentLiquidityRate is an annualised per-second rate in ray. Aave's own UI compounds it per
   // second; the linear rate is the conservative of the two, so quote that.
+  // Aave returns a zeroed struct for an asset it does not list, so a zero rate means "no reserve",
+  // not "0% today". Treat it as missing data rather than quoting it.
+  if (data.lastUpdateTimestamp === 0 || data.aTokenAddress === '0x0000000000000000000000000000000000000000') {
+    throw new Error(`Aave has no USDC reserve at ${AAVE_V3_POOL}`);
+  }
   const rateRay = data.currentLiquidityRate;
   const apr = Number((rateRay * 1_000_000n) / RAY) / 1_000_000;
 
@@ -88,7 +102,7 @@ export async function usdcSupplyYield(): Promise<SupplyYield> {
   const perSecond = apr / SECONDS_PER_YEAR;
   const apy = (1 + perSecond) ** SECONDS_PER_YEAR - 1;
 
-  if (!Number.isFinite(apy) || apy < 0 || apy > 1) {
+  if (!Number.isFinite(apy) || apy <= 0 || apy > 1) {
     throw new Error(`Implausible Aave USDC rate: ${apy}`);
   }
 

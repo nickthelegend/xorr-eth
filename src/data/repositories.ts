@@ -116,6 +116,7 @@ export interface PerpRepository {
 }
 
 export interface YieldRepository {
+  /** `estimatedApy` is a FRACTION (0.0388 = 3.88%), not percentage points. */
   staking(): Promise<{ estimatedApy: number; feed: 'live' | 'simulated'; note: string } | null>;
 }
 

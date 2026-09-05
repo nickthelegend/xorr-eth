@@ -175,7 +175,8 @@ export default function Home() {
 
         <NoteStrip kind="acted" style={{ marginTop: 16, marginBottom: 20 }}>
           {staking.data
-            ? `Idle USDC can earn about ${percent(staking.data.estimatedApy).replace('+', '')} a year on Aave. ${staking.data.note}`
+            // `estimatedApy` is a fraction (0.0388); `percent` takes percentage points.
+            ? `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, { digits: 2 }).replace('+', '')} a year on Aave. ${staking.data.note}`
             : 'Supply rates are unavailable right now, so there is no figure to quote.'}
         </NoteStrip>
       </ScrollView>
