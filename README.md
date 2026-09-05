@@ -1,118 +1,179 @@
-# xorr — ETH Online 2026
+# xorr
 
-A bot that trades your capital while you get on with your life. Non-custodial: your wallet, your
-keys, and a **scoped on-chain permission** the bot trades inside — capped per day, venue-restricted,
-time-boxed, and revocable in one tap.
+**A bot that trades your capital while you get on with your life.**
 
-Chain: **Base**. This repo is also the Base Build Camp submission.
+Non-custodial. Your wallet, your keys, and a **scoped on-chain permission** the bot trades inside —
+capped per day, venue-restricted, time-boxed, and revocable in one tap without our cooperation.
+
+Chain: **Base**. ETH Online 2026 · Base Build Camp 2026.
+
+<p align="center">
+  <img src="docs/screens/07-home.png" width="240" alt="Home" />
+  <img src="docs/screens/18-chart.png" width="240" alt="Chart" />
+  <img src="docs/screens/05-delegate.png" width="240" alt="Delegate" />
+</p>
+
+---
+
+## The idea in one paragraph
+
+Handing a bot your money is a trust problem, not a trading problem. So the permission is the
+product: `XorrDelegation` is a contract you grant, that caps what the bot can spend per day,
+restricts it to venues you allowlisted, expires on its own, and **cannot move funds to an address
+of the bot's choosing**. Revoking needs one signature from you and nothing from us. Everything the
+bot does is then readable back off the chain through The Graph, so the history you check is not a
+history we hold.
 
 ## Live deployment
 
 | | |
 |---|---|
 | `XorrDelegation` | [`0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e`](https://sepolia.basescan.org/address/0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e) on Base Sepolia |
-| Subgraph | [studio](https://thegraph.com/studio/subgraph/xorr) · `https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2` |
-| Bot delegate | `0xe992FE56589d1111d0b7Bb7c4Ca3946d4d53E403` |
+| Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.2`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2) — synced, no indexing errors |
+| Aqua venue subgraph | built + pinned `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ` |
+| Bot delegate key | `0xe992FE56589d1111d0b7Bb7c4Ca3946d4d53E403` |
 
-The subgraph indexes the live contract and is synced — a real grant (400 USDC/day cap, 1inch
-router allowlisted, everything else denied) is queryable right now.
+A real grant signed by a real Privy embedded wallet is queryable right now:
+[`0x596f4c08…`](https://sepolia.basescan.org/tx/0x596f4c08eca02e0d4dd0928e7499c4cccad31461c35e5b98e2f5bf211595ee6d)
+— $1,600/day cap, 1inch router allowlisted, everything else denied.
+
+## Two environments, and why there are two
+
+Aqua, 1inch and the tokenized equities exist only on Base **mainnet**. `XorrDelegation` is deployed
+to Base **Sepolia**, where anyone can grant and revoke for real without spending money.
+
+- **Base Sepolia** proves the permission layer: a real embedded wallet signs a real `grant`, the cap
+  is enforced on-chain, revoke stops the bot, the subgraph indexes all of it. It **cannot fill a
+  trade** — there is no 1inch there — and the executor says so rather than trying.
+- **Base mainnet fork** proves settlement: real router, real USDC, real Aave, real equity tokens,
+  real fills. Everything genuine except that the chain is a local copy.
+
+Nothing in this repo is claimed to work in an environment where it was not run.
 
 ## Sponsor integrations
 
 | Sponsor | What it does here | Status |
 |---|---|---|
-| **Privy** | Auth + embedded wallets. The user identity and the wallet that signs are one object, so there is no second account system. Closes the app's largest security gap — the executor previously had no auth at all. | **server auth live** — every route 401s without a valid token, verified including a forged JWT |
-| **1inch** | Swap routing and execution. The Route row names the protocols actually routed through instead of a fixed string. | 9 live tests passing against real Base routes |
-| **The Graph** | Subgraph indexing delegation grants, revokes and spends, so the app reads its own history from the chain rather than trusting our database. | **DEPLOYED + SYNCED** — indexing the live contract, no indexing errors |
+| **Privy** | Auth + embedded wallets. The identity and the wallet that signs are one object, so there is no second account system — and the wallet Privy creates is the `owner` in the on-chain policy. | **Done.** Real login → real embedded wallet → real signed grant, revoke and approval |
+| **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. | **Done.** 22 fork tests against `0x1111113CCf…` with real ERC-20 movement |
+| **1inch — Aggregator** | Swap routing and execution. The Route row names the protocols actually routed through. | **Done.** Real fills on a Base mainnet fork |
+| **1inch — SwapVM** | — | **Not built.** The one deliberate gap |
+| **The Graph** | Two independent subgraphs, joined. One indexes our delegation contract (what you permitted); one indexes 1inch Aqua on Base mainnet (what liquidity exists). The **join picks the venue** — neither index can see the other's half. | Delegation index **deployed + synced**; Aqua index **built, awaiting a Studio slug** |
+| **Base** | Everything settles here. Tokenized equities, cbBTC, Aave, 1inch — all Base-native. | **Done** |
 
 ## The core primitive
 
-`contracts/src/XorrDelegation.sol` is the permission that makes autonomous trading safe to grant.
-Every constraint is enforced **by the contract**, not by our executor:
+`contracts/src/XorrDelegation.sol` — every constraint enforced **by the contract**, not by us:
 
 - daily cap, resetting on the UTC day boundary
-- expiry (screen 4's "Run For")
-- venue allowlist — the bot can trade at approved venues and **cannot send funds to an address it
-  chooses**
+- expiry (screen 5's "Run For")
+- venue allowlist — the bot trades at approved venues and **cannot send funds anywhere it chooses**
 - `revoke()` needs only the owner's signature: no server, no oracle, no cooperation from the bot
 
-The contract never custodies funds. It pulls exactly the approved amount at the moment of a trade
-and leaves no standing approval behind.
+It never custodies. It pulls exactly the approved amount at the moment of a trade, forwards it, and
+leaves no standing approval behind. Bought tokens go **straight to the user's wallet**, never to the
+contract.
 
-14 Foundry tests, including a 256-run fuzz proving the cap can never be exceeded.
+## What is actually real
 
-## Layout
+| | |
+|---|---|
+| Prices | CoinGecko for crypto; a live 1inch route for the tokenized equities, because what you pay is what routes — not the NYSE print |
+| Yield | `currentLiquidityRate` read from the Aave v3 Pool on Base |
+| Fills | 1inch Aggregation Router v6, and `XorrAquaBook` on official Aqua |
+| History | The Graph, indexed from the contract's own events |
+| Permission | On-chain, signed by the user's embedded wallet |
+| Markets | 17 of 44 instruments have a real feed. **The other 27 are tagged SIMULATED on screen.** |
 
-```
-app/          29 screens (Expo Router)
-src/          design system, charts, business logic — chain-agnostic
-server/       executor, rule engine, hash-chained audit log
-  src/evm/      viem clients + delegation adapter
-  src/venues/   1inch
-  src/auth/     Privy verification + middleware
-contracts/    XorrDelegation.sol + Foundry tests
-subgraph/     The Graph
-```
+**The rule that settles arguments:** every price on screen is real, or it is labelled. A confident
+wrong number is the worst outcome available — that rule has caught five bugs in this repo.
+
+## Every screen
+
+47 screens, captured at the design canvas (402×874) against a signed-in session.
+Regenerate with `node tools/shoot.mjs`.
+
+### Onboarding
+| | | | |
+|---|---|---|---|
+| **Welcome** `/welcome`<br/><img src="docs/screens/01-welcome.png" width="180"/> | **Goals** `/goals`<br/><img src="docs/screens/02-goals.png" width="180"/> | **Wallet** `/wallet`<br/><img src="docs/screens/03-wallet.png" width="180"/> | **Fund** `/fund`<br/><img src="docs/screens/04-fund.png" width="180"/> |
+| **Delegate** `/delegate`<br/><img src="docs/screens/05-delegate.png" width="180"/> | **Proposal** `/proposal`<br/><img src="docs/screens/06-proposal.png" width="180"/> | | |
+
+### Home and markets
+| | | | |
+|---|---|---|---|
+| **Home** `/`<br/><img src="docs/screens/07-home.png" width="180"/> | **Markets** `/markets`<br/><img src="docs/screens/08-markets.png" width="180"/> | **Crypto** `/markets/crypto`<br/><img src="docs/screens/09-markets-crypto.png" width="180"/> | **Stocks** `/markets/stocks`<br/><img src="docs/screens/10-markets-stocks.png" width="180"/> |
+| **Commodities**<br/><img src="docs/screens/11-markets-commodities.png" width="180"/> | **Indices**<br/><img src="docs/screens/12-markets-indices.png" width="180"/> | **Pre-IPO**<br/><img src="docs/screens/13-markets-preipo.png" width="180"/> | **Watchlist** `/watchlist`<br/><img src="docs/screens/14-watchlist.png" width="180"/> |
+| **Search** `/search`<br/><img src="docs/screens/15-search.png" width="180"/> | **Asset** `/asset/BTC`<br/><img src="docs/screens/16-asset.png" width="180"/> | **Asset — stock**<br/><img src="docs/screens/17-asset-stock.png" width="180"/> | **Chart** `/chart/BTC`<br/><img src="docs/screens/18-chart.png" width="180"/> |
+
+### Trading
+| | | | |
+|---|---|---|---|
+| **Order** `/order/WETH`<br/><img src="docs/screens/19-order.png" width="180"/> | **Order — stock**<br/><img src="docs/screens/20-order-stock.png" width="180"/> | **Swap** `/swap`<br/><img src="docs/screens/21-swap.png" width="180"/> | **Perp** `/perp/BTC`<br/><img src="docs/screens/22-perp.png" width="180"/> |
+| **Position** `/position/:id`<br/><img src="docs/screens/23-position.png" width="180"/> | **Auto Close**<br/><img src="docs/screens/24-auto-close.png" width="180"/> | | |
+
+### Agents
+| | | | |
+|---|---|---|---|
+| **Bot** `/bot`<br/><img src="docs/screens/25-bot.png" width="180"/> | **Roster** `/bot/roster`<br/><img src="docs/screens/26-bot-roster.png" width="180"/> | **Leaderboard**<br/><img src="docs/screens/27-bot-leaderboard.png" width="180"/> | **Agent intro**<br/><img src="docs/screens/28-bot-intro.png" width="180"/> |
+| **Agent settings**<br/><img src="docs/screens/29-bot-settings.png" width="180"/> | **Backtest**<br/><img src="docs/screens/30-bot-backtest.png" width="180"/> | | |
+
+### Strategies and portfolio
+| | | | |
+|---|---|---|---|
+| **Strategies** `/strategies`<br/><img src="docs/screens/31-strategies.png" width="180"/> | **Recurring buy**<br/><img src="docs/screens/32-strategy-dca.png" width="180"/> | **Assets** `/holdings`<br/><img src="docs/screens/33-holdings.png" width="180"/> | **Activity** `/activity`<br/><img src="docs/screens/34-activity.png" width="180"/> |
+| **History** `/history`<br/><img src="docs/screens/35-history.png" width="180"/> | **Briefing** `/briefing`<br/><img src="docs/screens/36-briefing.png" width="180"/> | **Inbox** `/inbox`<br/><img src="docs/screens/37-inbox.png" width="180"/> | |
+
+### Safety and settings
+| | | | |
+|---|---|---|---|
+| **Safety** `/safety`<br/><img src="docs/screens/38-safety.png" width="180"/> | **Settings** `/settings`<br/><img src="docs/screens/39-settings.png" width="180"/> | **Alerts** `/alerts`<br/><img src="docs/screens/40-alerts.png" width="180"/> | **New alert**<br/><img src="docs/screens/41-alerts-new.png" width="180"/> |
+| **Allowlist** `/allowlist`<br/><img src="docs/screens/42-allowlist.png" width="180"/> | **Send** `/send`<br/><img src="docs/screens/43-send.png" width="180"/> | **Recovery** `/recovery`<br/><img src="docs/screens/44-recovery.png" width="180"/> | **Legal** `/legal/:doc`<br/><img src="docs/screens/45-legal.png" width="180"/> |
+
+### Design harness
+| | |
+|---|---|
+| **Components** `/_dev/components`<br/><img src="docs/screens/46-dev-components.png" width="180"/> | **Fidelity** `/_dev/fidelity`<br/><img src="docs/screens/47-dev-fidelity.png" width="180"/> |
 
 ## Running it
 
 ```bash
-cp .env.example .env      # fill in Privy, 1inch and Graph keys
-anvil --fork-url https://sepolia.base.org
-cd contracts && forge test && forge script script/Deploy.s.sol --broadcast
-cd ../server && npm run migrate && npm run dev
-npm run web
+cp .env.example .env        # fill in Privy, 1inch, Graph keys
+createdb xorr_eth && psql xorr_eth -f server/src/db/schema.sql
+npm install && (cd server && npm install)
+
+npx tsx server/src/index.ts  # executor on :8788
+npx expo start --web         # app on :8082
 ```
 
-## 1inch — Aqua App
-
-`contracts/src/XorrAquaBook.sol` is an `AquaApp` built on the **official Aqua deployment on Base**
-(`0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a`). 14 tests run against it on a Base mainnet fork with
-real USDC and WETH.
-
-**Why Aqua fits this product exactly.** Aqua's thesis is *"earn yield on your tokens without
-depositing them into another contract."* XorrDelegation's is *"a bot trades your capital without you
-giving up custody."* Same idea, opposite sides of the book — so they compose rather than sit
-side by side.
-
-| Guarantee | How |
-|---|---|
-| Capital never leaves the maker's wallet | `test_ShipMovesNoTokens` asserts maker, app and Aqua balances after shipping |
-| Nobody can open a book in your name | Aqua keys strategies to `msg.sender`, so an operator physically cannot. `test_AnAttackerShippingOnlyEverOpensTheirOwnBook` |
-| You can always exit without us | `test_MakerCanDockEvenAfterRevokingTheBot` — dock needs no operator and no server |
-| The bot is bounded on the taker side too | `swapAsDelegate` checks XorrDelegation; revoke stops it mid-flight |
-| A 24/7 book on a 24/5 asset can't be drained overnight | `maxDeviationBps` oracle band, enforced on quote *and* swap |
-
-The band is the line that matters most for tokenised equities: the DEX trades continuously while
-the underlying prints 24/5, so an unbounded `x*y=k` book is a standing gift to whoever is awake
-when the underlying gaps.
+For fills, run against a Base mainnet fork — the only environment where every piece is real at once:
 
 ```bash
-cd contracts
-forge test --match-contract XorrAquaBookFork --fork-url https://mainnet.base.org
+anvil --fork-url https://mainnet.base.org --port 8545 --chain-id 8453
+XORR_CHAIN=base-fork FORK_RPC=http://127.0.0.1:8545 npx tsx server/src/fork-e2e.ts WETH
 ```
 
-## The Graph — load-bearing, not decorative
-
-The subgraph indexes `XorrDelegation` (grants, revokes, spends, per-UTC-day rollups matching the
-contract's own cap window) and is **deployed and synced** on Subgraph Studio.
-
-It is not a history feed. The agent queries it **before it acts**, and the answers change what it
-does (`server/src/graph/decide.ts`, called from the executor ahead of every spend):
-
-| The bot asks The Graph | And stands down when |
-|---|---|
-| Is the permission live? | It was revoked from another device — something our database cannot know |
-| How much of today's cap is left? | The chain shows it consumed, even by a trade we did not make |
-| Which way has settled flow run? | Nearly all one way, which is what being picked off looks like from outside |
-
-Sizing comes from indexed data too: never more than a quarter of the remaining on-chain cap.
-
-The Postgres audit log still exists and still matters — it records **decisions**, including the ones
-that never produced a transaction ("skipped, spread too wide"). The subgraph records **what
-settled**. They answer different questions, and reading our own database to decide whether we may
-spend would be circular.
+## Tests
 
 ```bash
-cd server && LIVE=1 npx vitest run src/graph/decide.live.test.ts
+npm test                              # 143 app
+(cd server && npm test)               # 42 executor
+(cd contracts && forge test)          # 36 contract, incl. 22 Aqua fork tests
+npm run test:live                     # real APIs, real chain
+```
+
+`docs/TESTPLAN.md` is the executed plan — every item PASS/FAIL with its evidence.
+`PLAN.md` is what is left to build, with every gap tied to the task it blocks.
+
+## Repo map
+
+```
+app/           41 expo-router screens
+src/           design system, charts, data layer, state
+server/        Hono executor — auth, scheduler, venues, Graph clients
+contracts/     XorrDelegation, XorrAquaBook (Foundry)
+subgraph/      delegation index      → deployed
+subgraph-aqua/ Aqua venue index      → built
+docs/          TESTPLAN, SECURITY, RUNBOOK, screens
+ui/            the original design handoff, kept as the reference
 ```
