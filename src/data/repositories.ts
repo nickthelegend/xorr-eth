@@ -28,7 +28,14 @@ export interface MarketRepository {
   listClasses(): Promise<AssetClass[]>;
   getInstrument(symbol: string): Promise<Instrument | null>;
   /** Live quotes for the given symbols. Falls back to the fixture price with feed:'simulated'. */
-  quotes(symbols: string[]): Promise<Record<string, { price: number; change24h: number } | undefined>>;
+  /**
+   * Spot price per symbol. `change24h` is optional on purpose: the tokenized equities are priced
+   * from a single swap quote, which has no 24h window behind it. Reporting 0 there would read as a
+   * measured "unchanged today".
+   */
+  quotes(
+    symbols: string[],
+  ): Promise<Record<string, { price: number; change24h?: number } | undefined>>;
   candles(symbol: string, timeframe: Timeframe): Promise<Candles>;
 }
 

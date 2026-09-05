@@ -45,6 +45,7 @@ import {
 import { voice } from '@/bot/message';
 import { useTone } from '@/bot/tone';
 import type { Proposal } from '@/data/types';
+import { DEFAULT_BUY } from '@/data/tradable';
 
 export default function BotChat() {
   const scroller = useRef<ScrollView>(null);
@@ -146,7 +147,7 @@ export default function BotChat() {
                             outcome: 'filled',
                             segments: [voice(res.message)],
                           }
-                        : declinedMessage(agentName, 'SOL'),
+                        : declinedMessage(agentName, DEFAULT_BUY),
                     );
                   }}
                   onExpire={() => {

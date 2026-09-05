@@ -70,13 +70,16 @@ export default function Watchlist() {
               mark={<AssetMark gradient={{ c1: '#5B93FF', c2: '#49E39B' }} size={32} />}
               primary={r.sym}
               middle={quotes[r.sym] ? <Sparkline points={r.spark} /> : <SimulatedTag />}
-              value={quotes[r.sym] ? fmtPrice(quotes[r.sym]!.price) : r.px}
+              // No live quote means no number. The fixture used to carry a price here, so a row
+              // tagged SIMULATED still showed a confident-looking figure nobody had measured.
+              value={quotes[r.sym] ? fmtPrice(quotes[r.sym]!.price) : '—'}
+              // A price with no 24h window behind it shows no delta at all.
               delta={
-                quotes[r.sym] ? percent(quotes[r.sym]!.change24h, { digits: 2 }) : r.chg
+                quotes[r.sym]?.change24h !== undefined
+                  ? percent(quotes[r.sym]!.change24h!, { digits: 2 })
+                  : undefined
               }
-              deltaColor={
-                (quotes[r.sym] ? quotes[r.sym]!.change24h >= 0 : r.up) ? pnl.up : pnl.down
-              }
+              deltaColor={(quotes[r.sym]?.change24h ?? 0) >= 0 ? pnl.up : pnl.down}
               height={64}
               onPress={() => router.push(`/asset/${r.sym}`)}
             />

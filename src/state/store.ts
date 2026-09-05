@@ -164,7 +164,7 @@ export const useStore = create<Store>()(
       side: 'buy',
       lev: 5,
       closePct: 50,
-      swapAmt: 12,
+      swapAmt: 0.1,
       bumpTp: (dir) => set((s) => ({ tp: round1(clamp(s.tp + dir * TPSL_STEP, TP_MIN, TP_MAX)) })),
       bumpSl: (dir) => set((s) => ({ sl: round1(clamp(s.sl + dir * TPSL_STEP, SL_MIN, SL_MAX)) })),
       pressKey: (key) => set((s) => ({ orderAmt: keypadPress(s.orderAmt, key) })),

@@ -15,7 +15,7 @@ import { useAsync } from '@/data/useAsync';
 export default function Search() {
   const router = useRouter();
   const [q, setQ] = useState('');
-  const { data } = useAsync(() => repos.markets.listClasses(), []);
+  const { data, loading } = useAsync(() => repos.markets.listClasses(), []);
 
   const results = useMemo(() => {
     const all = (data ?? []).flatMap((c) => c.instruments);
@@ -64,7 +64,10 @@ export default function Search() {
 
       <Screen.Content style={{ marginTop: 10 }}>
         {results.length === 0 ? (
-          <EmptyState text={`Nothing matches "${q}".`} />
+          // A blank query with nothing loaded yet is not "no matches" — it is "not yet".
+          <EmptyState
+            text={loading ? 'Loading markets…' : q.trim() ? `Nothing matches "${q}".` : 'No markets available right now.'}
+          />
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {results.map((i) => (

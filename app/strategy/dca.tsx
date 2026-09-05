@@ -4,7 +4,7 @@
  * White sheet, built from screen 14's ticket pattern (amount keypad + quick pills) plus a cadence
  * segmented control and a "next 3 runs" preview. One primary CTA.
  *
- * §1.2: "Buy $50 of SOL every Monday is verifiable by a user with no trading knowledge." The next-
+ * §1.2: "Buy $50 of WETH every Monday is verifiable by a user with no trading knowledge." The next-
  * runs preview exists so that verification is possible at the moment of setup, not after the fact.
  */
 import React, { useMemo, useState } from 'react';
@@ -24,7 +24,12 @@ import type { Cadence } from '@/data/types';
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 const CADENCES: Cadence[] = ['daily', 'weekly', 'biweekly', 'monthly'];
 const CADENCE_LABELS = ['Daily', 'Weekly', 'Every 2 wks', 'Monthly'];
-const SYMBOLS = ['SOL', 'BTC', 'ETH'];
+/**
+ * What a recurring buy can actually buy. These are the Base tokens the executor can route through
+ * 1inch and settle through XorrDelegation — offering SOL here would let a user schedule a strategy
+ * that can never execute.
+ */
+const SYMBOLS = ['WETH', 'CBBTC', 'USDC'];
 
 export default function DcaSetup() {
   const router = useRouter();

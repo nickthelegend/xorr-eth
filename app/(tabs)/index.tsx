@@ -29,6 +29,7 @@ import { money, percent, quantity } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { hiredCount, useHasHydrated, useStore } from '@/state/store';
+import { DEFAULT_BUY } from '@/data/tradable';
 
 export default function Home() {
   const router = useRouter();
@@ -40,14 +41,14 @@ export default function Home() {
 
   const balance = useAsync(() => repos.portfolio.balanceUsd(), []);
   const agents = useAsync(() => repos.bot.listAgents(), []);
-  const sol = useAsync(() => repos.markets.quotes(['SOL']), []);
-  // The held quantity was hardcoded at 1,750.30 SOL. It comes from the position book now.
+  const featured = useAsync(() => repos.markets.quotes([DEFAULT_BUY]), []);
+  // The held quantity was hardcoded at 1,750.30. It comes from the position book now.
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const staking = useAsync(() => repos.yield.staking(), []);
 
   const total = balance.data ?? 0;
-  const solQuote = sol.data?.SOL;
-  const solHeld = (positions.data ?? []).find((p) => p.symbol === 'SOL');
+  const featuredQuote = featured.data?.[DEFAULT_BUY];
+  const featuredHeld = (positions.data ?? []).find((p) => p.symbol === DEFAULT_BUY);
 
   // The entry gate — PLAN.md 2.7. "/" belongs to the tab shell; a user without a wallet is sent to
   // onboarding from here rather than from a competing index route. Waiting for hydration first
@@ -158,18 +159,24 @@ export default function Home() {
 
         <Row
           mark={<AssetMark gradient={{ c1: '#5B93FF', c2: '#49E39B' }} size={34} />}
-          primary="SOL"
-          secondary={solHeld ? `Solana · ${quantity(solHeld.units)}` : 'Solana · not held'}
-          value={solQuote ? money(solQuote.price) : '—'}
-          delta={solQuote ? percent(solQuote.change24h, { digits: 2 }) : undefined}
-          deltaColor={solQuote && solQuote.change24h >= 0 ? pnl.up : pnl.down}
-          onPress={() => router.push('/asset/SOL')}
+          primary={DEFAULT_BUY}
+          secondary={
+            featuredHeld ? `Wrapped Ether · ${quantity(featuredHeld.units)}` : 'Wrapped Ether · not held'
+          }
+          value={featuredQuote ? money(featuredQuote.price) : '—'}
+          delta={
+            featuredQuote?.change24h !== undefined
+              ? percent(featuredQuote.change24h, { digits: 2 })
+              : undefined
+          }
+          deltaColor={(featuredQuote?.change24h ?? 0) >= 0 ? pnl.up : pnl.down}
+          onPress={() => router.push(`/asset/${DEFAULT_BUY}`)}
         />
 
         <NoteStrip kind="acted" style={{ marginTop: 16, marginBottom: 20 }}>
           {staking.data
-            ? `Your SOL can earn about ${percent(staking.data.estimatedApy).replace('+', '')} a year through staking. ${staking.data.note}`
-            : 'Staking rates are unavailable right now, so there is no figure to quote.'}
+            ? `Idle USDC can earn about ${percent(staking.data.estimatedApy).replace('+', '')} a year on Aave. ${staking.data.note}`
+            : 'Supply rates are unavailable right now, so there is no figure to quote.'}
         </NoteStrip>
       </ScrollView>
     </Screen>

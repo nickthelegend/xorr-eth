@@ -7,6 +7,7 @@
  */
 import { MINUS, money, percent, price, signedMoney } from '../format';
 import type { Bar } from '../data/types';
+import { DEFAULT_BUY } from '@/data/tradable';
 
 // ── Agent controls (screen 4) ────────────────────────────────────────────────
 
@@ -77,16 +78,22 @@ export function slTickPct(sl: number): number {
 
 // ── Order ticket (screen 14) ─────────────────────────────────────────────────
 
-export const SOL_REF_PRICE = 88.32;
 export const ORDER_MAX_CHARS = 7;
 
-export function orderUnits(amount: number, unitPrice = SOL_REF_PRICE): string {
-  return `${(amount / unitPrice).toFixed(4)} SOL`;
+/**
+ * How many units a dollar amount buys.
+ *
+ * `unitPrice` and `symbol` are required on purpose. They used to default to SOL at $88.32 — the
+ * prototype's number, three years stale and the wrong chain — which meant a missed prop quoted a
+ * fictional price rather than failing.
+ */
+export function orderUnits(amount: number, unitPrice: number, symbol: string): string {
+  return `${(amount / unitPrice).toFixed(4)} ${symbol}`;
 }
 export function orderFee(amount: number): number {
   return amount * 0.001;
 }
-export function orderCta(side: 'buy' | 'sell', amountStr: string, symbol = 'SOL'): string {
+export function orderCta(side: 'buy' | 'sell', amountStr: string, symbol = DEFAULT_BUY): string {
   return `${side === 'buy' ? 'Buy' : 'Sell'} $${amountStr} of ${symbol}`;
 }
 
@@ -154,14 +161,20 @@ export function closeCta(pct: number): string {
 
 // ── Swap (screen 19) ─────────────────────────────────────────────────────────
 
-export const SWAP_MIN = 1;
-export const SWAP_MAX = 1750;
-export const SWAP_STEP = 4;
+/**
+ * Swap slider bounds, in units of the PAY token.
+ *
+ * The design's 1 / 1750 / 4 were "1750.30 SOL" from the prototype. The pay side on Base is WETH,
+ * where 12 units is ~$30,000 — a default nobody means to type. Sized for the asset instead.
+ */
+export const SWAP_MIN = 0.01;
+export const SWAP_MAX = 10;
+export const SWAP_STEP = 0.05;
 
-export function swapOut(amount: number, unitPrice = SOL_REF_PRICE): number {
+export function swapOut(amount: number, unitPrice: number): number {
   return amount * unitPrice * 0.9975;
 }
-export function swapFee(amount: number, unitPrice = SOL_REF_PRICE): number {
+export function swapFee(amount: number, unitPrice: number): number {
   return amount * unitPrice * 0.0025;
 }
 export function swapPct(amount: number): number {

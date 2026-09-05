@@ -8,13 +8,14 @@ import { Button, IconButton, Screen, ScreenHeader, Segmented } from '@/design/co
 import { borders, ink, surfaces } from '@/design/colors';
 import { hairlineWidth, radius } from '@/design/space';
 import { type } from '@/design/type';
+import { DEFAULT_BUY } from '@/data/tradable';
 
 const KINDS = ['Price', 'Agent', 'Risk'];
 
 export default function NewAlert() {
   const router = useRouter();
   const [kind, setKind] = useState(0);
-  const [symbol, setSymbol] = useState('SOL');
+  const [symbol, setSymbol] = useState<string>(DEFAULT_BUY);
   const [level, setLevel] = useState('95');
 
   return (

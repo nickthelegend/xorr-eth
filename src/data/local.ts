@@ -12,7 +12,13 @@ import { assetClasses } from './fixtures/markets';
 import { agentFixtures } from './fixtures/agents';
 import { alertFixtures } from './fixtures/alerts';
 import { sleeveFixtures } from './fixtures/sleeves';
-import { fetchCandles, fetchQuotes, type Quote } from './marketData';
+import {
+  fetchCandles,
+  fetchQuotes,
+  fetchStockQuotes,
+  type Quote,
+  type StockQuote,
+} from './marketData';
 import { api } from './api';
 import type {
   ActivityEvent,
@@ -36,16 +42,33 @@ import { percent, price as fmtPrice } from '../format';
 
 const allInstruments: Instrument[] = assetClasses.flatMap((c) => c.instruments);
 
+/** Which symbols are tokenized equities, and therefore priced by the venue rather than a feed. */
+const STOCK_SYMBOLS = new Set(
+  assetClasses.find((c) => c.id === 'stocks')?.instruments.map((i) => i.sym) ?? [],
+);
+
 export const LocalRepositories: Repositories = {
   markets: {
     async listClasses(): Promise<AssetClass[]> {
-      // Overlay live quotes onto the crypto class; other classes keep feed:'simulated'.
-      const live = await fetchQuotes(
-        assetClasses.find((c) => c.id === 'crypto')?.instruments.map((i) => i.sym) ?? [],
-      ).catch((): Record<string, Quote> => ({}));
+      // Crypto is priced off CoinGecko; the tokenized equities off a real 1inch route, because
+      // that is the venue that would actually fill them. Everything else stays labelled simulated.
+      const [live, stocks] = await Promise.all([
+        fetchQuotes(
+          assetClasses.find((c) => c.id === 'crypto')?.instruments.map((i) => i.sym) ?? [],
+        ).catch((): Record<string, Quote> => ({})),
+        fetchStockQuotes().catch((): Record<string, StockQuote> => ({})),
+      ]);
       return assetClasses.map((c) => ({
         ...c,
         instruments: c.instruments.map((i) => {
+          const s = stocks[i.sym];
+          if (s) {
+            // No 24h change: a swap quote is a spot price, and inventing a delta from one
+            // observation would be the same class of lie as a hardcoded price.
+            return s.price === null
+              ? { ...i, px: '—', chg: '', feed: 'simulated' as const }
+              : { ...i, px: fmtPrice(s.price), chg: '', feed: 'live' as const };
+          }
           const q = live[i.sym];
           if (!q) return { ...i, feed: i.feed === 'live' ? 'simulated' : i.feed };
           return {
@@ -64,9 +87,25 @@ export const LocalRepositories: Repositories = {
     },
 
     async quotes(symbols) {
-      const live = await fetchQuotes(symbols).catch((): Record<string, Quote> => ({}));
-      const out: Record<string, { price: number; change24h: number } | undefined> = {};
+      // Two feeds, one answer. Crypto is priced by CoinGecko; the tokenized equities have no
+      // CoinGecko listing and are priced off the 1inch route that would fill them. A screen asking
+      // for a price should not have to know which kind of asset it is holding.
+      const needsStocks = symbols.some((s) => STOCK_SYMBOLS.has(s));
+      const [live, stocks] = await Promise.all([
+        fetchQuotes(symbols).catch((): Record<string, Quote> => ({})),
+        needsStocks
+          ? fetchStockQuotes().catch((): Record<string, StockQuote> => ({}))
+          : Promise.resolve({} as Record<string, StockQuote>),
+      ]);
+      const out: Record<string, { price: number; change24h?: number } | undefined> = {};
       for (const s of symbols) {
+        const stock = stocks[s];
+        if (stock?.price != null) {
+          // A swap quote is one observation. No 24h delta exists, so none is reported — a 0 here
+          // would read as "unchanged today", which is a claim we have not measured.
+          out[s] = { price: stock.price };
+          continue;
+        }
         const q = live[s];
         out[s] = q ? { price: q.price, change24h: q.change24h } : undefined;
       }
@@ -207,11 +246,11 @@ export const LocalRepositories: Repositories = {
 
   yield: {
     async staking() {
+      // Reads the live USDC supply rate on Aave v3 (Base). No live rate means no rate — quoting
+      // the design's 12.6% would be advertising a yield nobody verified.
       const remote = await api
-        .get<{ estimatedApy: number; feed: 'live'; note: string }>('/staking/yield')
+        .get<{ symbol: string; estimatedApy: number; feed: 'live'; note: string }>('/yield/supply')
         .catch(() => undefined);
-      // No live rate means no rate. Quoting the design's number would be advertising a yield we
-      // have not verified.
       return remote ?? null;
     },
   },

@@ -12,7 +12,7 @@ import { useMemo } from 'react';
 import { repos } from './index';
 import { useAsync } from './useAsync';
 
-export type LivePrice = { price: number; change24h: number } | undefined;
+export type LivePrice = { price: number; change24h?: number } | undefined;
 
 export function usePrices(symbols: string[]) {
   const key = symbols.join(',');

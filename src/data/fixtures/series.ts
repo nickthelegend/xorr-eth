@@ -15,23 +15,23 @@ export const watchlistGroups: WatchlistGroup[] = [
     "tab": "Conviction List",
     "rows": [
       {
-        "sym": "TSLAx",
-        "px": "$389.82",
-        "chg": "+0.9%",
+        "sym": "TSLAc",
+        "px": "—",
+        "chg": "",
         "up": true,
         "spark": "0,22 12,18 24,20 36,12 48,15 60,8 72,11 90,4"
       },
       {
         "sym": "SOL",
-        "px": "$88.32",
-        "chg": "+2.4%",
+        "px": "—",
+        "chg": "",
         "up": true,
         "spark": "0,20 14,14 26,17 38,9 52,13 66,7 78,10 90,5"
       },
       {
         "sym": "HYPE",
-        "px": "$40.96",
-        "chg": "−1.2%",
+        "px": "—",
+        "chg": "",
         "up": false,
         "spark": "0,8 14,12 28,10 40,17 54,14 68,20 80,18 90,24"
       }
@@ -42,16 +42,16 @@ export const watchlistGroups: WatchlistGroup[] = [
     "tab": "Metals",
     "rows": [
       {
-        "sym": "XAUt",
-        "px": "$3,412.10",
-        "chg": "+0.4%",
+        "sym": "XAUT",
+        "px": "—",
+        "chg": "",
         "up": true,
         "spark": "0,20 16,17 30,18 44,12 58,14 74,9 90,7"
       },
       {
-        "sym": "XAGx",
-        "px": "$38.71",
-        "chg": "−0.6%",
+        "sym": "XAGT",
+        "px": "—",
+        "chg": "",
         "up": false,
         "spark": "0,10 16,13 30,11 46,16 60,15 74,19 90,21"
       }
@@ -62,23 +62,23 @@ export const watchlistGroups: WatchlistGroup[] = [
     "tab": "Stocks",
     "rows": [
       {
-        "sym": "NVDAx",
-        "px": "$182.44",
-        "chg": "+1.8%",
+        "sym": "NVDAc",
+        "px": "—",
+        "chg": "",
         "up": true,
         "spark": "0,24 14,19 28,21 42,13 56,15 72,8 90,5"
       },
       {
-        "sym": "AAPLx",
-        "px": "$241.09",
-        "chg": "+0.2%",
+        "sym": "AAPLc",
+        "px": "—",
+        "chg": "",
         "up": true,
         "spark": "0,17 16,15 32,16 48,13 64,14 78,11 90,12"
       },
       {
-        "sym": "COINx",
-        "px": "$318.55",
-        "chg": "−2.1%",
+        "sym": "MSTRc",
+        "px": "—",
+        "chg": "",
         "up": false,
         "spark": "0,7 16,11 30,9 44,15 60,17 76,16 90,23"
       }
@@ -90,15 +90,15 @@ export const watchlistGroups: WatchlistGroup[] = [
     "rows": [
       {
         "sym": "AAVE",
-        "px": "$291.03",
-        "chg": "+3.1%",
+        "px": "—",
+        "chg": "",
         "up": true,
         "spark": "0,25 14,20 30,22 46,12 62,14 78,7 90,4"
       },
       {
         "sym": "JUP",
-        "px": "$0.87",
-        "chg": "−0.4%",
+        "px": "—",
+        "chg": "",
         "up": false,
         "spark": "0,11 18,14 34,12 50,16 66,15 90,20"
       }
@@ -110,8 +110,8 @@ export const watchlistGroups: WatchlistGroup[] = [
     "rows": [
       {
         "sym": "Total",
-        "px": "$4,862.18",
-        "chg": "+0.3%",
+        "px": "—",
+        "chg": "",
         "up": true,
         "spark": "0,21 18,17 34,18 50,13 66,12 82,9 90,8"
       }

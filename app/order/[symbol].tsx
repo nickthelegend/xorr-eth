@@ -21,11 +21,12 @@ import { money, percent } from '@/format';
 import { orderCta, orderFee, slPnl, tpPnl } from '@/state/derived';
 import { unitsFor, usePrice } from '@/data/usePrices';
 import { useStore } from '@/state/store';
+import { DEFAULT_BUY } from '@/data/tradable';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
 export default function OrderTicket() {
-  const { symbol = 'SOL', side: sideParam } = useLocalSearchParams<{
+  const { symbol = DEFAULT_BUY, side: sideParam } = useLocalSearchParams<{
     symbol: string;
     side?: string;
   }>();

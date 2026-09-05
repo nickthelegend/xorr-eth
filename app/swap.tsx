@@ -25,17 +25,24 @@ import { useAsync } from '@/data/useAsync';
 import { useSwapQuote } from '@/data/useSwapQuote';
 import { useStore } from '@/state/store';
 
+/** The pair the swap card opens on. Both must exist in server/src/venues/oneinch.ts TOKENS. */
+const PAY = 'WETH';
+const RECEIVE = 'USDC';
+
 export default function Swap() {
   const router = useRouter();
   const swapAmt = useStore((s) => s.swapAmt);
   const bumpSwap = useStore((s) => s.bumpSwap);
   const reduced = useReducedMotion();
-  const { quote: solQuote } = usePrice('SOL');
+  // WETH, not SOL: this app settles on Base, and the pay side has to be a token the delegation
+  // can actually route. Quoting a chain we do not trade would put a number on screen that no
+  // signed transaction could ever match.
+  const { quote: payQuote } = usePrice(PAY);
   // A real route from the aggregator: venues, minimum received and price impact are all measured.
-  const swap = useSwapQuote('SOL', 'USDC', swapAmt);
+  const swap = useSwapQuote(PAY, RECEIVE, swapAmt);
   // The balance was hardcoded at 1,750.30. It is the real held quantity now.
   const positions = useAsync(() => repos.portfolio.positions(), []);
-  const solHeld = (positions.data ?? []).find((p) => p.symbol === 'SOL');
+  const payHeld = (positions.data ?? []).find((p) => p.symbol === PAY);
 
   const fill = useAnimatedStyle(() => ({
     width: withTiming(`${swapPct(swapAmt)}%`, {
@@ -74,17 +81,17 @@ export default function Swap() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={[type.eyebrowSm, { color: ink.i32 }]}>You pay</Text>
             <Text style={[type.footnote, { color: ink.i40 }]}>
-              Balance {solHeld ? quantity(solHeld.units) : '0.0000'}
+              Balance {payHeld ? quantity(payHeld.units) : '0.0000'}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View>
               <Text style={[type.amountMedium, { color: ink.full }]}>{quantity(swapAmt, 0)}</Text>
               <Text style={[type.secondary, { color: ink.i38, marginTop: 4 }]}>
-                {solQuote ? money(swapAmt * solQuote.price) : 'No live price'}
+                {payQuote ? money(swapAmt * payQuote.price) : 'No live price'}
               </Text>
             </View>
-            <TokenPill symbol="SOL" />
+            <TokenPill symbol={PAY} />
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <StepCircle glyph="minus" onPress={() => bumpSwap(-1)} label="Decrease amount" />
@@ -145,7 +152,7 @@ export default function Swap() {
                     : 'No route available'}
               </Text>
             </View>
-            <TokenPill symbol="USDC" />
+            <TokenPill symbol={RECEIVE} />
           </View>
         </View>
 

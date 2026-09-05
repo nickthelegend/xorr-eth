@@ -28,7 +28,7 @@ import { type } from '@/design/type';
 import { money, percent, price as fmtPrice, quantity, signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { areaSeries } from '@/data/fixtures/series';
+import { usePrice } from '@/data/usePrices';
 
 const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
 /** The timeframe each range pill maps to when asking for real candles. */
@@ -53,10 +53,18 @@ export default function AssetDetail() {
   const i = inst.data;
   const bars = candles.data?.bars ?? [];
   const closes = bars.map((b) => b[3]);
-  const points =
-    closes.length > 1 ? pointsFromPrices(closes) : (areaSeries[symbol ?? ''] ?? areaSeries.SOL!);
-  const changePct = closes.length > 1 ? ((closes.at(-1)! - closes[0]!) / closes[0]!) * 100 : 0;
+  // No real series means NO CHART. The fallback here used to be `areaSeries.SOL`, which drew
+  // Solana's shape under whatever symbol the user had opened — the repository refuses to invent
+  // bars and the screen was quietly undoing that.
+  const hasSeries = closes.length > 1;
+  const points = hasSeries ? pointsFromPrices(closes) : null;
+  const changePct = hasSeries ? ((closes.at(-1)! - closes[0]!) / closes[0]!) * 100 : 0;
   const up = changePct >= 0;
+
+  // Tokenized equities have a real spot price and no history: they are priced off the 1inch route
+  // that would fill them, not a candle feed. A real price with no chart is a true state to show.
+  const { quote } = usePrice(symbol);
+  const spot = hasSeries ? closes.at(-1)! : quote?.price;
 
   if (inst.error) {
     return (
@@ -96,22 +104,36 @@ export default function AssetDetail() {
       <View style={{ marginTop: 22, gap: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={[type.priceLarge, { color: ink.full }]}>
-            {closes.length ? fmtPrice(closes.at(-1)!) : (i?.px ?? '—')}
+            {spot !== undefined ? fmtPrice(spot) : '—'}
           </Text>
-          {candles.data?.feed === 'simulated' ? <SimulatedTag /> : null}
+          {spot === undefined ? <SimulatedTag /> : null}
         </View>
-        <Text style={[type.body, { color: up ? pnl.up : pnl.down }]}>
-          {up ? 'up' : 'down'} {percent(Math.abs(changePct)).replace('+', '')} today
-        </Text>
+        {hasSeries ? (
+          <Text style={[type.body, { color: up ? pnl.up : pnl.down }]}>
+            {up ? 'up' : 'down'} {percent(Math.abs(changePct)).replace('+', '')} today
+          </Text>
+        ) : (
+          <Text style={[type.body, { color: ink.i40 }]}>
+            {spot === undefined ? 'No live price for this market.' : 'Spot price. No price history for this market.'}
+          </Text>
+        )}
       </View>
 
-      <AreaChart
-        points={points}
-        height={170}
-        stroke={ink.full}
-        style={{ marginTop: 18 }}
-        accessibilityLabel={`${i?.name ?? symbol} price chart, ${RANGES[range]}`}
-      />
+      {points ? (
+        <AreaChart
+          points={points}
+          height={170}
+          stroke={ink.full}
+          style={{ marginTop: 18 }}
+          accessibilityLabel={`${i?.name ?? symbol} price chart, ${RANGES[range]}`}
+        />
+      ) : (
+        <View
+          style={{ height: 170, marginTop: 18, alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Text style={[type.body, { color: ink.i40 }]}>No chart for this market yet.</Text>
+        </View>
+      )}
 
       <PillRow style={{ marginTop: 16, flexGrow: 0 }}>
         {RANGES.map((r, idx) => (

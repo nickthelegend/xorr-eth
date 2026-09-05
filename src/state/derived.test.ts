@@ -59,7 +59,8 @@ describe('Auto Close — screen 6 (mid 66000, size $2500)', () => {
 
 describe('order ticket — screen 14', () => {
   it('unit conversion is 4dp against $88.32', () => {
-    expect(d.orderUnits(250)).toBe('2.8306 SOL');
+    expect(d.orderUnits(250, 88.32, 'SOL')).toBe('2.8306 SOL');
+    expect(d.orderUnits(250, 2500, 'WETH')).toBe('0.1000 WETH');
   });
 
   it('fee is 0.1%', () => {
@@ -67,8 +68,10 @@ describe('order ticket — screen 14', () => {
   });
 
   it('CTA reads as designed', () => {
-    expect(d.orderCta('buy', '250')).toBe('Buy $250 of SOL');
-    expect(d.orderCta('sell', '1,000')).toBe('Sell $1,000 of SOL');
+    // Defaults to the Base asset the executor can actually settle, not a chain we do not trade.
+    expect(d.orderCta('buy', '250')).toBe('Buy $250 of WETH');
+    expect(d.orderCta('sell', '1,000')).toBe('Sell $1,000 of WETH');
+    expect(d.orderCta('buy', '250', 'NVDAc')).toBe('Buy $250 of NVDAc');
   });
 
   describe('keypad rules — state.md', () => {
@@ -141,19 +144,20 @@ describe('position close — screen 22 (unrealised $318.40, margin $3800)', () =
 
 describe('swap — screen 19', () => {
   it('out = amt * 88.32 * 0.9975 and fee is 0.25%', () => {
-    expect(d.swapOut(12)).toBeCloseTo(12 * 88.32 * 0.9975, 10);
-    expect(d.swapFee(12)).toBeCloseTo(12 * 88.32 * 0.0025, 10);
+    expect(d.swapOut(12, 88.32)).toBeCloseTo(12 * 88.32 * 0.9975, 10);
+    expect(d.swapFee(12, 88.32)).toBeCloseTo(12 * 88.32 * 0.0025, 10);
   });
 
   it('the fill percentage tracks the 1..1750 range', () => {
-    expect(d.swapPct(1750)).toBe(100);
-    expect(d.swapPct(875)).toBe(50);
+    // Bounds are in units of the pay token (WETH on Base), not the prototype's SOL amounts.
+    expect(d.swapPct(d.SWAP_MAX)).toBe(100);
+    expect(d.swapPct(d.SWAP_MAX / 2)).toBe(50);
   });
 
   it('a 4-figure swap keeps its thousands separator (the review finding)', () => {
     // 1750 SOL x $88.32 = $154,560, less the 0.25% fee.
-    expect(money(d.swapOut(1750))).toBe('$154,173.60');
-    expect(money(d.swapOut(1750))).toContain(',');
+    expect(money(d.swapOut(1750, 88.32))).toBe('$154,173.60');
+    expect(money(d.swapOut(1750, 88.32))).toContain(',');
   });
 });
 
