@@ -19,15 +19,21 @@ import {
 } from '@/design/components';
 import { ink, pnl } from '@/design/colors';
 import { type } from '@/design/type';
-import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { spendsFor, unitsToUsd, SUBGRAPH_ENDPOINT } from '@/data/subgraph';
+import { useStore } from '@/state/store';
+import { money } from '@/format';
 
 export default function History() {
   const router = useRouter();
-  const { data, loading, error, reload } = useAsync(() => repos.activity.list(), []);
-
-  // Only events that produced a signature actually touched the chain.
-  const onChain = (data ?? []).filter((r) => r.signature);
+  const wallet = useStore((s) => s.wallet);
+  // Read from The Graph, not from our own database. A settlement history the user cannot verify
+  // independently is not a settlement history.
+  const { data, loading, error, reload } = useAsync(
+    () => (wallet?.address ? spendsFor(wallet.address) : Promise.resolve([])),
+    [wallet?.address],
+  );
+  const onChain = data ?? [];
 
   return (
     <Screen>
@@ -46,7 +52,8 @@ export default function History() {
         }
       />
       <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
-        Everything that settled on chain. Each row has a signature you can check yourself.
+        Everything that settled on chain, read from The Graph. Each row has a transaction you can
+        check yourself.
       </Text>
 
       <Screen.Content style={{ marginTop: 14 }}>
@@ -55,16 +62,17 @@ export default function History() {
         ) : error ? (
           <ErrorState error={error} onRetry={reload} />
         ) : onChain.length === 0 ? (
-          <EmptyState text="Nothing has settled yet." />
+          <EmptyState text="Nothing has settled on chain yet." />
         ) : (
           <ScrollView showsVerticalScrollIndicator={false}>
             {onChain.map((r) => (
               <Row
                 key={r.id}
-                primary={r.action}
-                secondary={`${r.signature!.slice(0, 10)}…${r.signature!.slice(-6)} · ${r.t}`}
-                value={r.amount || undefined}
-                valueColor={r.amount.startsWith('+') ? pnl.up : ink.i55}
+                primary={`Spent ${money(unitsToUsd(r.amount))}`}
+                secondary={`${r.txHash.slice(0, 10)}…${r.txHash.slice(-6)} · block ${r.blockNumber}`}
+                value={money(unitsToUsd(r.spentToday))}
+                delta="today"
+                valueColor={ink.i55}
                 height={66}
               />
             ))}

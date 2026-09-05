@@ -63,3 +63,31 @@ cd contracts && forge test && forge script script/Deploy.s.sol --broadcast
 cd ../server && npm run migrate && npm run dev
 npm run web
 ```
+
+## 1inch — Aqua App
+
+`contracts/src/XorrAquaBook.sol` is an `AquaApp` built on the **official Aqua deployment on Base**
+(`0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a`). 14 tests run against it on a Base mainnet fork with
+real USDC and WETH.
+
+**Why Aqua fits this product exactly.** Aqua's thesis is *"earn yield on your tokens without
+depositing them into another contract."* XorrDelegation's is *"a bot trades your capital without you
+giving up custody."* Same idea, opposite sides of the book — so they compose rather than sit
+side by side.
+
+| Guarantee | How |
+|---|---|
+| Capital never leaves the maker's wallet | `test_ShipMovesNoTokens` asserts maker, app and Aqua balances after shipping |
+| Nobody can open a book in your name | Aqua keys strategies to `msg.sender`, so an operator physically cannot. `test_AnAttackerShippingOnlyEverOpensTheirOwnBook` |
+| You can always exit without us | `test_MakerCanDockEvenAfterRevokingTheBot` — dock needs no operator and no server |
+| The bot is bounded on the taker side too | `swapAsDelegate` checks XorrDelegation; revoke stops it mid-flight |
+| A 24/7 book on a 24/5 asset can't be drained overnight | `maxDeviationBps` oracle band, enforced on quote *and* swap |
+
+The band is the line that matters most for tokenised equities: the DEX trades continuously while
+the underlying prints 24/5, so an unbounded `x*y=k` book is a standing gift to whoever is awake
+when the underlying gaps.
+
+```bash
+cd contracts
+forge test --match-contract XorrAquaBookFork --fork-url https://mainnet.base.org
+```
