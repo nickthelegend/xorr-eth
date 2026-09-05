@@ -19,6 +19,7 @@ import { evaluate, recordSpend } from '../rules/engine.js';
 import { readPolicy, spendAsDelegate } from '../evm/delegation.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
 import { buildSwap } from '../venues/oneinch.js';
+import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { priceOf } from '../market/prices.js';
@@ -166,7 +167,20 @@ export async function runStrategy(
     ))?.address as Address | undefined;
     if (!owner) throw new Error('This wallet has no address on file.');
 
-    // The CHAIN is the source of truth for what the bot may spend — never our own database.
+    /**
+     * Ask The Graph first. This is the agent reasoning over indexed chain data, and it can stop
+     * the run for reasons our own database cannot see — a permission revoked from another device,
+     * a cap already consumed by a trade we did not make, or realised flow that says the book is
+     * being picked off.
+     */
+    const graphCall = await decide({ owner, wantUsd: usd, token: ADDRESSES.usdcBase }).catch(
+      () => null,
+    );
+    if (graphCall && !graphCall.act) {
+      return finishBlocked(runId, walletId, strategy, graphCall.reason, graphCall.rationale);
+    }
+
+    // Then the contract itself, as the final authority.
     const policy = await readPolicy(owner);
     if (!policy) {
       return finishBlocked(runId, walletId, strategy, 'no_delegation', 'No trading permission is granted on-chain.');

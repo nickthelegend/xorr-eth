@@ -14,6 +14,8 @@ import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
 import { quote } from '../venues/oneinch.js';
 import { requireUser } from '../auth/middleware.js';
+import { decide } from '../graph/decide.js';
+import { health as graphHealth, dailySpendFor, spendsFor } from '../graph/client.js';
 
 export const extra = new Hono();
 
@@ -276,4 +278,43 @@ extra.get('/swap/quote', async (c) => {
     // No route is a real answer. The screen says so rather than showing a computed guess.
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
+});
+
+// ── The Graph — the agent's reasoning surface ────────────────────────────────
+
+/** What the bot would decide right now, and why. Read straight from indexed chain data. */
+extra.get('/agent/decision', async (c) => {
+  const id = await walletId(c);
+  if (!id) return c.json({ error: 'no_wallet' }, 400);
+  const w = await one<{ address: string }>(`SELECT address FROM wallets WHERE id=$1`, [id]);
+  if (!w) return c.json({ error: 'no_wallet' }, 400);
+  try {
+    return c.json(
+      await decide({
+        owner: w.address,
+        wantUsd: Number(c.req.query('usd') ?? 100),
+        token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      }),
+    );
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+extra.get('/graph/health', async (c) => {
+  requireUser(c);
+  try {
+    return c.json(await graphHealth());
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+extra.get('/graph/activity', async (c) => {
+  const id = await walletId(c);
+  if (!id) return c.json({ spends: [], daily: [] });
+  const w = await one<{ address: string }>(`SELECT address FROM wallets WHERE id=$1`, [id]);
+  if (!w) return c.json({ spends: [], daily: [] });
+  const [spends, daily] = await Promise.all([spendsFor(w.address), dailySpendFor(w.address)]);
+  return c.json({ spends, daily });
 });

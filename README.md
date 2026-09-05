@@ -91,3 +91,28 @@ when the underlying gaps.
 cd contracts
 forge test --match-contract XorrAquaBookFork --fork-url https://mainnet.base.org
 ```
+
+## The Graph — load-bearing, not decorative
+
+The subgraph indexes `XorrDelegation` (grants, revokes, spends, per-UTC-day rollups matching the
+contract's own cap window) and is **deployed and synced** on Subgraph Studio.
+
+It is not a history feed. The agent queries it **before it acts**, and the answers change what it
+does (`server/src/graph/decide.ts`, called from the executor ahead of every spend):
+
+| The bot asks The Graph | And stands down when |
+|---|---|
+| Is the permission live? | It was revoked from another device — something our database cannot know |
+| How much of today's cap is left? | The chain shows it consumed, even by a trade we did not make |
+| Which way has settled flow run? | Nearly all one way, which is what being picked off looks like from outside |
+
+Sizing comes from indexed data too: never more than a quarter of the remaining on-chain cap.
+
+The Postgres audit log still exists and still matters — it records **decisions**, including the ones
+that never produced a transaction ("skipped, spread too wide"). The subgraph records **what
+settled**. They answer different questions, and reading our own database to decide whether we may
+spend would be circular.
+
+```bash
+cd server && LIVE=1 npx vitest run src/graph/decide.live.test.ts
+```
