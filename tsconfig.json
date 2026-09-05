@@ -24,9 +24,13 @@
     "expo-env.d.ts"
   ],
   "exclude": [
+    ".expo",
+    ".scaffold",
+    "contracts",
+    "dist",
     "node_modules",
-    "server",
     "programs",
-    ".scaffold"
+    "server",
+    "subgraph"
   ]
 }

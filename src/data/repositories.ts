@@ -122,11 +122,13 @@ export interface WalletRepository {
   createEmbedded(): Promise<Wallet>;
   connect(address: string): Promise<Wallet>;
   delegation(): Promise<Delegation | null>;
-  grantDelegation(params: {
-    dailyCapUsd: number;
-    durationMs: number;
-  }): Promise<Delegation>;
-  revokeDelegation(): Promise<Delegation>;
+  /**
+   * NOTE: there is deliberately no grant/revoke here.
+   *
+   * Those are transactions the USER signs with their own Privy wallet (src/auth/useGrantDelegation).
+   * A repository method would imply the server could do it, and the whole safety claim rests on
+   * the fact that it cannot.
+   */
   balance(): Promise<{ sol: number; usd: number }>;
 }
 

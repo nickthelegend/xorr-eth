@@ -1,49 +1,77 @@
 /**
- * NEW — Create or connect wallet. PLAN.md 7.3, REPLACING screen 8 (Verify identity).
+ * Sign in and get a wallet — Privy.
  *
- * [G44] Screen 8 describes KYC for a custodial product that no longer exists. Its LAYOUT is
- * reused verbatim — the progress header and the four 66px status rows, with the same three circle
- * states (done = filled `up` with a check in upInk; current = 2px white ring; pending = 2px
- * rgba(255,255,255,.18) ring and dimmed text) — because that pattern reads correctly for any
- * sequential setup. Only the steps change.
+ * Replaces the handoff's KYC screen (screen 8). Its LAYOUT is reused verbatim — the progress
+ * header and four 66px status rows, with the same three circle states — because that pattern
+ * reads correctly for any sequential setup. Only the steps change.
+ *
+ * The product point: identity and wallet are one object. The user signs in with an email code and
+ * comes out the other side owning a wallet xorr cannot spend from. The bot's authority over it is
+ * a separate on-chain permission, granted on the next screen.
  */
-import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Icon } from '@/design/Icon';
-import { Button, ButtonRow, NoteStrip, Progress, Screen } from '@/design/components';
-import { borders, ink, pnl } from '@/design/colors';
+import { Button, NoteStrip, Progress, Screen } from '@/design/components';
+import { borders, ink, pnl, surfaces } from '@/design/colors';
+import { hairlineWidth, radius } from '@/design/space';
 import { type } from '@/design/type';
 import { repos } from '@/data';
 import { useStore } from '@/state/store';
+import { useAuth, useEmailLogin } from '@/auth/useAuth';
 
 const STEPS = [
-  { label: 'Wallet created', detail: 'Keys live on this device' },
-  { label: 'Recovery secured', detail: 'A passkey you already have' },
-  { label: 'Network ready', detail: 'Connected to Solana' },
+  { label: 'Signed in', detail: 'An email code, no password to lose' },
+  { label: 'Wallet created', detail: 'Keys are yours, held on your device' },
+  { label: 'Network ready', detail: 'Connected to Base' },
   { label: 'Ready to fund', detail: 'Nothing is deposited yet' },
 ] as const;
 
 export default function WalletSetup() {
   const router = useRouter();
-  const walletStep = useStore((s) => s.walletStep);
-  const advance = useStore((s) => s.advanceWalletStep);
+  const { ready, authenticated, address, createWallet } = useAuth();
+  const { sendCode, loginWithCode } = useEmailLogin();
   const setWallet = useStore((s) => s.setWallet);
+
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  const done = walletStep >= STEPS.length;
+  // How far through setup the user is — derived, never a counter we increment by hand.
+  const step = !authenticated ? 0 : !address ? 1 : 4;
+  const done = step >= STEPS.length;
 
-  async function create() {
+  // Once Privy has an address, register it with the executor so the bot knows whose wallet it is.
+  useEffect(() => {
+    if (!address) return;
+    repos.wallet
+      .connect(address)
+      .then((w) => setWallet(w))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, [address, setWallet]);
+
+  async function send() {
     setBusy(true);
     setError(undefined);
     try {
-      const w = await repos.wallet.createEmbedded();
-      setWallet(w);
-      advance();
-      advance();
-      advance();
-      advance();
+      await sendCode({ email: email.trim() });
+      setCodeSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verify() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await loginWithCode({ code: code.trim(), email: email.trim() });
+      await createWallet();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -63,14 +91,14 @@ export default function WalletSetup() {
         permission to trade inside it — which you can take back at any time.
       </Text>
 
-      <Screen.Content style={{ marginTop: 24 }}>
+      <Screen.Content style={{ marginTop: 22 }}>
         {STEPS.map((s, i) => {
-          const isDone = i < walletStep;
-          const isCurrent = i === walletStep;
+          const isDone = i < step;
+          const isCurrent = i === step;
           return (
             <View
               key={s.label}
-              style={{ height: 66, flexDirection: 'row', alignItems: 'center', gap: 14 }}
+              style={{ height: 62, flexDirection: 'row', alignItems: 'center', gap: 14 }}
             >
               <View
                 style={{
@@ -88,16 +116,11 @@ export default function WalletSetup() {
               </View>
               <View style={{ flex: 1, gap: 3 }}>
                 <Text
-                  style={[
-                    type.rowPrimary,
-                    { color: isDone || isCurrent ? ink.full : ink.i32 },
-                  ]}
+                  style={[type.rowPrimary, { color: isDone || isCurrent ? ink.full : ink.i32 }]}
                 >
                   {s.label}
                 </Text>
-                <Text
-                  style={[type.secondary, { color: isDone || isCurrent ? ink.i38 : ink.i28 }]}
-                >
+                <Text style={[type.secondary, { color: isDone || isCurrent ? ink.i38 : ink.i28 }]}>
                   {s.detail}
                 </Text>
               </View>
@@ -105,7 +128,23 @@ export default function WalletSetup() {
           );
         })}
 
-        <NoteStrip kind="acted" style={{ marginTop: 16 }}>
+        {!authenticated ? (
+          <View style={{ gap: 10, marginTop: 8 }}>
+            <Field
+              label="Email"
+              value={email}
+              onChange={setEmail}
+              placeholder="you@example.com"
+              editable={!codeSent}
+              keyboard="email-address"
+            />
+            {codeSent ? (
+              <Field label="Code" value={code} onChange={setCode} placeholder="6-digit code" keyboard="number-pad" />
+            ) : null}
+          </View>
+        ) : null}
+
+        <NoteStrip kind={authenticated ? 'acted' : 'risk'} style={{ marginTop: 16 }}>
           Losing this wallet means losing the funds in it. Back up the recovery method before you
           deposit anything.
         </NoteStrip>
@@ -117,19 +156,62 @@ export default function WalletSetup() {
 
       {done ? (
         <Button label="Continue — add funds" onPress={() => router.push('/fund')} />
-      ) : (
-        <ButtonRow
-          affirmativeFlex={1.3}
-          secondary={
-            <Button
-              label="Connect existing"
-              variant="secondary"
-              onPress={() => router.push('/fund')}
-            />
-          }
-          affirmative={<Button label="Create wallet" loading={busy} onPress={create} />}
+      ) : !authenticated ? (
+        <Button
+          label={codeSent ? 'Verify and create wallet' : 'Email me a code'}
+          loading={busy || !ready}
+          disabled={codeSent ? code.trim().length < 4 : !email.includes('@')}
+          onPress={codeSent ? verify : send}
         />
+      ) : (
+        <Button label="Create wallet" loading={busy} onPress={() => void createWallet()} />
       )}
     </Screen>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  editable = true,
+  keyboard = 'default',
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  editable?: boolean;
+  keyboard?: 'default' | 'email-address' | 'number-pad';
+}) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={[type.eyebrowSm, { color: ink.i32 }]}>{label}</Text>
+      <View
+        style={{
+          height: 48,
+          borderRadius: radius.md2,
+          backgroundColor: surfaces.inputBg,
+          borderWidth: hairlineWidth,
+          borderColor: borders.input,
+          paddingHorizontal: 14,
+          justifyContent: 'center',
+          opacity: editable ? 1 : 0.6,
+        }}
+      >
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder}
+          placeholderTextColor={ink.i35}
+          editable={editable}
+          autoCapitalize="none"
+          keyboardType={keyboard}
+          style={[type.body, { color: ink.full }]}
+          accessibilityLabel={label}
+        />
+      </View>
+    </View>
   );
 }

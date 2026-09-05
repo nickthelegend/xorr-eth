@@ -21,6 +21,7 @@ import { money } from '@/format';
 import { CAP_MAX, CAP_MIN, RUN_FOR, capLabel, runForMs } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
+import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { Pill } from '@/design/components/Pill';
 
 export default function GrantDelegation() {
@@ -30,12 +31,13 @@ export default function GrantDelegation() {
   const runFor = useStore((s) => s.runFor);
   const cycleRunFor = useStore((s) => s.cycleRunFor);
   const setDelegation = useStore((s) => s.setDelegation);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [localError, setLocalError] = useState<string>();
+  // The grant is signed by the user's own wallet. The executor cannot grant itself permission.
+  const { grant: signGrant, busy, error: grantError } = useGrantDelegation();
+  const error = localError ?? grantError;
 
   async function grant() {
-    setBusy(true);
-    setError(undefined);
+    setLocalError(undefined);
     try {
       const hasHw = await LocalAuthentication.hasHardwareAsync().catch(() => false);
       if (hasHw && (await LocalAuthentication.isEnrolledAsync().catch(() => false))) {
@@ -43,20 +45,16 @@ export default function GrantDelegation() {
           promptMessage: 'Let the bot trade inside your limits',
         });
         if (!res.success) {
-          setError('Not confirmed — no permission was granted.');
+          setLocalError('Not confirmed — no permission was granted.');
           return;
         }
       }
-      const d = await repos.wallet.grantDelegation({
-        dailyCapUsd: cap,
-        durationMs: runForMs(runFor),
-      });
+      await signGrant(cap, runForMs(runFor));
+      const d = await repos.wallet.delegation();
       setDelegation(d);
       router.replace('/proposal');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setLocalError(e instanceof Error ? e.message : String(e));
     }
   }
 

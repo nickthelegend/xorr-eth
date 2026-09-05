@@ -48,12 +48,15 @@ import {
 } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
+import { useGrantDelegation } from '@/auth/useGrantDelegation';
 
 export default function TradeSettings() {
   const router = useRouter();
   const reduced = useReducedMotion();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [localError, setLocalError] = useState<string>();
+  // These four controls ARE the delegation policy, so saving them is a signature, not a save.
+  const { grant: signGrant, busy, error: txError } = useGrantDelegation();
+  const error = localError ?? txError;
 
   const auto = useStore((s) => s.auto);
   const setAuto = useStore((s) => s.setAuto);
@@ -73,20 +76,15 @@ export default function TradeSettings() {
   }));
 
   async function commit() {
-    setBusy(true);
-    setError(undefined);
+    setLocalError(undefined);
     try {
-      // These controls ARE the policy. Changing them re-signs the on-chain authority.
-      const d = await repos.wallet.grantDelegation({
-        dailyCapUsd: cap,
-        durationMs: runForMs(runFor),
-      });
-      setDelegation(d);
+      // Re-signs the on-chain authority with the new limits. Nothing is "saved" server-side that
+      // the chain does not already enforce.
+      await signGrant(cap, runForMs(runFor));
+      setDelegation(await repos.wallet.delegation());
       router.back();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setLocalError(e instanceof Error ? e.message : String(e));
     }
   }
 

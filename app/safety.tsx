@@ -21,6 +21,7 @@ import { type } from '@/design/type';
 import { killCta, killExplanation, killTitle } from '@/state/derived';
 import { hiredCount, useStore } from '@/state/store';
 import { repos } from '@/data';
+import { useGrantDelegation } from '@/auth/useGrantDelegation';
 
 export default function Safety() {
   const router = useRouter();
@@ -29,12 +30,14 @@ export default function Safety() {
   const setDelegation = useStore((s) => s.setDelegation);
   const hired = useStore((s) => s.hired);
   const cap = useStore((s) => s.cap);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [localError, setLocalError] = useState<string>();
+  // Signed by the user, on-chain. This is why "under a second across every device" is true
+  // without any server needing to be reachable.
+  const { grant: signGrant, revoke: signRevoke, busy, error: txError } = useGrantDelegation();
+  const error = localError ?? txError;
 
   async function toggle() {
-    setBusy(true);
-    setError(undefined);
+    setLocalError(undefined);
     try {
       // Biometrics gate every change to what the bot may do. PLAN.md 12.20.
       const hasHw = await LocalAuthentication.hasHardwareAsync().catch(() => false);
@@ -44,19 +47,16 @@ export default function Safety() {
           promptMessage: killed ? 'Resume your agents' : 'Stop all agents',
         });
         if (!res.success) {
-          setError('Not confirmed — nothing changed.');
+          setLocalError('Not confirmed — nothing changed.');
           return;
         }
       }
-      const d = killed
-        ? await repos.wallet.grantDelegation({ dailyCapUsd: cap, durationMs: 86_400_000 })
-        : await repos.wallet.revokeDelegation();
-      setDelegation(d);
+      if (killed) await signGrant(cap, 86_400_000);
+      else await signRevoke();
+      setDelegation(await repos.wallet.delegation());
       setKilled(!killed);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setLocalError(e instanceof Error ? e.message : String(e));
     }
   }
 

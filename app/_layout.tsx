@@ -7,11 +7,13 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppPrivyProvider } from '@/auth/PrivyProvider';
 import { surfaces } from '@/design/colors';
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: surfaces.bg }}>
+      <AppPrivyProvider>
       <SafeAreaProvider>
         {/* The app is true-black by design; the OS theme never gets to change it. */}
         <StatusBar style="light" />
@@ -31,6 +33,7 @@ export default function RootLayout() {
           <Stack.Screen name="strategy/dca" options={{ presentation: 'modal' }} />
         </Stack>
       </SafeAreaProvider>
+      </AppPrivyProvider>
     </GestureHandlerRootView>
   );
 }

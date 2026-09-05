@@ -239,12 +239,7 @@ export const LocalRepositories: Repositories = {
     async delegation(): Promise<Delegation | null> {
       return (await api.get<Delegation | null>('/delegation').catch(() => undefined)) ?? null;
     },
-    async grantDelegation(params) {
-      return api.post<Delegation>('/delegation/grant', params);
-    },
-    async revokeDelegation() {
-      return api.post<Delegation>('/delegation/revoke', {});
-    },
+
     async balance() {
       return api.get<{ sol: number; usd: number }>('/wallet/balance');
     },

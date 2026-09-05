@@ -41,7 +41,10 @@
           "image": "./assets/splash.png",
           "imageWidth": 180
         }
-      ]
+      ],
+      "expo-web-browser",
+      "expo-image",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
