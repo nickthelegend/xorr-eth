@@ -91,6 +91,40 @@ contract XorrAquaBookForkTest is Test {
         return AQUA.ship(app, encoded, tokens, amounts);
     }
 
+    /**
+     * How the bot actually places a delegated fill: it asks the app for the terms, then calls
+     * XorrDelegation.spend(), which is where the cap, the expiry, the revocation flag and the
+     * venue allowlist are enforced. The bot never moves the principal's tokens itself.
+     */
+    function _fillArgs(address principal, bool zeroForOne, uint256 amountIn, uint256 amountOutMin)
+        internal
+        view
+        returns (address token, address venue, uint256 amount, bytes memory data)
+    {
+        return book.delegatedFillArgs(strat, principal, zeroForOne, amountIn, amountOutMin);
+    }
+
+    function _botFill(address principal, bool zeroForOne, uint256 amountIn, uint256 amountOutMin)
+        internal
+        returns (uint256)
+    {
+        (address token, address venue, uint256 amount, bytes memory data) =
+            _fillArgs(principal, zeroForOne, amountIn, amountOutMin);
+        vm.prank(bot);
+        // spend() hands back the venue's raw return data, which for fillForDelegation is a uint256.
+        return abi.decode(delegation.spend(principal, token, venue, amount, data), (uint256));
+    }
+
+    /// @dev Same call, but with `vm.expectRevert` landing on `spend` rather than on the view that
+    ///      prepares its arguments.
+    function _botFillExpectRevert(address principal, uint256 amountIn) internal {
+        (address token, address venue, uint256 amount, bytes memory data) =
+            _fillArgs(principal, false, amountIn, 0);
+        vm.prank(bot);
+        vm.expectRevert();
+        delegation.spend(principal, token, venue, amount, data);
+    }
+
     function _dock() internal {
         (address app, bytes32 hash, address[] memory tokens) = book.dockArgs(strat);
         vm.prank(maker);
@@ -240,12 +274,11 @@ contract XorrAquaBookForkTest is Test {
         venues[0] = address(book);
         vm.startPrank(principal);
         delegation.grant(bot, 5_000 * USD, uint64(block.timestamp + 1 days), venues);
-        IERC20(USDC).approve(address(book), type(uint256).max);
+        IERC20(USDC).approve(address(delegation), type(uint256).max);
         vm.stopPrank();
 
         uint256 before = IERC20(WETH).balanceOf(principal);
-        vm.prank(bot);
-        uint256 out = book.swapAsDelegate(strat, principal, false, 200 * USD, 0);
+        uint256 out = _botFill(principal, false, 200 * USD, 0);
 
         assertGt(out, 0);
         // The bot never touches either leg — the principal funds it and receives it.
@@ -256,11 +289,18 @@ contract XorrAquaBookForkTest is Test {
 
     function test_BotCannotTakeForSomeoneWhoDidNotDelegate() public {
         _ship();
+        _botFillExpectRevert(attacker, 100 * USD);
+    }
+
+    /// @dev The app must refuse a fill that did not come through the delegation, or the cap could
+    ///      be sidestepped by calling the app directly.
+    function test_AppRefusesAFillNotRoutedThroughTheDelegation() public {
+        _ship();
         vm.prank(bot);
         vm.expectRevert(
-            abi.encodeWithSelector(XorrAquaBook.NotAuthorisedOperator.selector, bot, attacker)
+            abi.encodeWithSelector(XorrAquaBook.NotAuthorisedOperator.selector, bot, taker)
         );
-        book.swapAsDelegate(strat, attacker, false, 100 * USD, 0);
+        book.fillForDelegation(strat, taker, false, 100 * USD, 0);
     }
 
     function test_BotCannotTakeAfterItsPrincipalRevokes() public {
@@ -272,15 +312,11 @@ contract XorrAquaBookForkTest is Test {
         venues[0] = address(book);
         vm.startPrank(principal);
         delegation.grant(bot, 5_000 * USD, uint64(block.timestamp + 1 days), venues);
-        IERC20(USDC).approve(address(book), type(uint256).max);
+        IERC20(USDC).approve(address(delegation), type(uint256).max);
         delegation.revoke();
         vm.stopPrank();
 
-        vm.prank(bot);
-        vm.expectRevert(
-            abi.encodeWithSelector(XorrAquaBook.NotAuthorisedOperator.selector, bot, principal)
-        );
-        book.swapAsDelegate(strat, principal, false, 100 * USD, 0);
+        _botFillExpectRevert(principal, 100 * USD);
     }
 
     // ── Exit: the maker never needs us ──────────────────────────────────────

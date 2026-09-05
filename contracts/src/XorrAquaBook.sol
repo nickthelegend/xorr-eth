@@ -324,22 +324,51 @@ contract XorrAquaBook is AquaApp {
      *   - the TAKER's bot trades inside a cap the taker signed and can revoke.
      *
      * Neither party has handed custody to anyone, and the bot is bounded on both counts.
+     *
+     * The bot does NOT call this directly. It calls `XorrDelegation.spend()` with the calldata
+     * from `delegatedFillArgs`, so the daily cap, the expiry, the revocation flag AND the venue
+     * allowlist are all enforced by the contract the user actually signed. An earlier version
+     * pulled the principal's tokens here after only re-reading the policy fields, which meant the
+     * cap the user set was not applied on this path at all — the limit existed and did nothing.
      */
-    function swapAsDelegate(
+    function fillForDelegation(
         Strategy calldata strategy,
         address principal,
         bool zeroForOne,
         uint256 amountIn,
         uint256 amountOutMin
     ) external returns (uint256 amountOut) {
-        (address delegate,, uint64 expiresAt, bool revoked) = DELEGATION.policyOf(principal);
-        bool ok = delegate == msg.sender && !revoked && block.timestamp < expiresAt;
-        if (!ok) revert NotAuthorisedOperator(msg.sender, principal);
+        if (msg.sender != address(DELEGATION)) revert NotAuthorisedOperator(msg.sender, principal);
 
-        // The principal funds the trade and receives the output. The bot never holds either leg.
+        // The delegation holds the pulled tokens and has approved this app for exactly amountIn.
+        // Output goes straight to the principal; neither contract keeps a balance.
         (address tokenIn,,,) = _sides(strategy, keccak256(abi.encode(strategy)), zeroForOne);
-        IERC20(tokenIn).transferFrom(principal, address(this), amountIn);
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
 
         return _swap(strategy, zeroForOne, amountIn, amountOutMin, principal, false);
+    }
+
+    /**
+     * @notice The exact arguments the bot passes to `XorrDelegation.spend()` for this fill.
+     *
+     * Same shape as `shipArgs`/`dockArgs`: this contract computes the terms, and the call that
+     * moves money is made by whoever holds the authority to make it.
+     */
+    function delegatedFillArgs(
+        Strategy calldata strategy,
+        address principal,
+        bool zeroForOne,
+        uint256 amountIn,
+        uint256 amountOutMin
+    ) external view returns (address token, address venue, uint256 amount, bytes memory data) {
+        (address tokenIn,,,) = _sides(strategy, keccak256(abi.encode(strategy)), zeroForOne);
+        return (
+            tokenIn,
+            address(this),
+            amountIn,
+            abi.encodeCall(
+                this.fillForDelegation, (strategy, principal, zeroForOne, amountIn, amountOutMin)
+            )
+        );
     }
 }
