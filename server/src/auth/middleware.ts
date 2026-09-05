@@ -8,8 +8,22 @@
 import type { Context, Next } from 'hono';
 import { UnauthorizedError, verifyToken, type AuthedUser } from './privy.js';
 
-/** Routes reachable without a token. Deliberately tiny. */
-const PUBLIC_PATHS = new Set(['/health']);
+/**
+ * Routes reachable without a token. Deliberately tiny.
+ *
+ * Market data is public on purpose: a spot price is not user data, and gating it behind a session
+ * means an unauthenticated visitor sees a market list of dashes. Nothing under these paths reads
+ * `requireUser`, so none of them can leak a wallet, a policy or a fill.
+ */
+const PUBLIC_PATHS = new Set([
+  '/health',
+  '/market/quotes',
+  '/market/ohlc',
+  '/market/symbols',
+  '/market/tradable',
+  '/market/stocks',
+  '/yield/supply',
+]);
 
 declare module 'hono' {
   interface ContextVariableMap {

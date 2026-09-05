@@ -1,13 +1,16 @@
 /**
- * LIVE integration test — hits the real CoinGecko and Jupiter APIs, no mocks.
+ * LIVE integration test — real prices, no mocks.
+ *
+ * These now go through the running executor's public /market routes, which is exactly what the app
+ * does on web: a direct browser call to CoinGecko dies in a CORS preflight. So this test also
+ * proves the proxy is up and the symbol map on both sides agrees.
+ *
  * Run with: npm run test:live   (excluded from the default suite so CI stays hermetic)
  */
 import { describe, expect, it } from 'vitest';
-import { COINGECKO_IDS, aggregateBars, fetchCandles, fetchJupiterPrice, fetchQuotes } from './marketData';
+import { COINGECKO_IDS, aggregateBars, fetchCandles, fetchQuotes } from './marketData';
 import { assetClasses } from './fixtures/markets';
 import type { Bar } from './types';
-
-const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 describe('live market data', () => {
   it('prices all 9 crypto instruments for real', async () => {
@@ -29,16 +32,20 @@ describe('live market data', () => {
     }
   }, 90_000);
 
-  it('prices SOL on-chain via the venue the executor trades against', async () => {
-    const jup = await fetchJupiterPrice(SOL_MINT);
-    expect(jup).not.toBeNull();
-    expect(jup!.price).toBeGreaterThan(0);
-    expect(jup!.source).toBe('jupiter');
-
-    // The venue price and the aggregate should agree within a few percent, or one of them is wrong.
-    const cg = await fetchQuotes(['SOL']);
-    const drift = Math.abs(jup!.price - cg.SOL!.price) / cg.SOL!.price;
-    expect(drift, `jupiter ${jup!.price} vs coingecko ${cg.SOL!.price}`).toBeLessThan(0.05);
+  it('prices the Base assets the delegation actually trades', async () => {
+    // WETH and cbBTC are what a Base strategy holds; if they have no feed the order ticket and the
+    // executor are pricing different things.
+    const quotes = await fetchQuotes(['WETH', 'CBBTC', 'USDC']);
+    for (const sym of ['WETH', 'CBBTC', 'USDC']) {
+      expect(quotes[sym], `${sym} has no live quote`).toBeDefined();
+      expect(quotes[sym]!.price).toBeGreaterThan(0);
+    }
+    // WETH must track ETH: same asset, one wrapped. Anything past a few percent is a broken map.
+    const eth = await fetchQuotes(['ETH']);
+    const drift = Math.abs(quotes.WETH!.price - eth.ETH!.price) / eth.ETH!.price;
+    expect(drift, `WETH ${quotes.WETH!.price} vs ETH ${eth.ETH!.price}`).toBeLessThan(0.05);
+    // A dollar stablecoin that is not within a cent of a dollar is a feed bug, not a market move.
+    expect(Math.abs(quotes.USDC!.price - 1)).toBeLessThan(0.01);
   }, 90_000);
 
   it('returns real 12-candle OHLC for every timeframe [G8]', async () => {
@@ -83,8 +90,8 @@ describe('bar aggregation', () => {
     expect(aggregateBars(raw, 12)).toEqual(raw);
   });
 
-  it('every mapped id is a non-empty string', () => {
-    expect(Object.keys(COINGECKO_IDS)).toHaveLength(9);
+  it('every mapped id is a non-empty string, and the Base assets are present', () => {
     for (const v of Object.values(COINGECKO_IDS)) expect(v.length).toBeGreaterThan(0);
+    for (const sym of ['WETH', 'USDC', 'CBBTC']) expect(COINGECKO_IDS[sym]).toBeTruthy();
   });
 });

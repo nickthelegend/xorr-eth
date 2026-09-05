@@ -1,20 +1,20 @@
 /**
- * Live market data — PLAN.md 12.12 / 12.14, closing part of [G22] and [G8].
+ * Live market data for the app — PLAN.md 12.12 / 12.14, closing part of [G22] and [G8].
  *
- * Two real, credential-free sources:
- *   - CoinGecko  — spot quotes + OHLC for the 9 crypto instruments.
- *   - Jupiter    — on-chain USD price for Solana mints (the venue the executor trades on),
- *                  so a quote and a fill are priced off the same book.
+ * Everything here goes through the executor's public `/market/*` routes rather than straight to
+ * CoinGecko. That is not indirection for its own sake: CoinGecko sends no
+ * `access-control-allow-origin`, so the direct call failed the CORS preflight on web and every
+ * quote and candle silently degraded to simulated. Behind the executor there is also one shared
+ * rate-limit queue instead of one per open tab, and a stale-value fallback that keeps a slightly
+ * old price on screen rather than a dash.
  *
  * PLAN.md §1.3 item 8: "Every price on screen is real, or labelled." Anything this module cannot
- * price comes back with `feed: 'simulated'` and the UI stamps a SIMULATED tag on it.
+ * price comes back absent and the UI stamps a SIMULATED tag on it.
  */
 import type { Bar, Candles, Timeframe } from './types';
+import { API_BASE } from './api';
 
-const COINGECKO = 'https://api.coingecko.com/api/v3';
-const JUPITER = 'https://lite-api.jup.ag/price/v3';
-
-/** The 9 crypto instruments, mapped to their CoinGecko ids. */
+/** The symbols with a real feed. Kept in sync with server/src/market/ids.ts, which is the source. */
 export const COINGECKO_IDS: Record<string, string> = {
   BTC: 'bitcoin',
   ETH: 'ethereum',
@@ -25,104 +25,62 @@ export const COINGECKO_IDS: Record<string, string> = {
   AAVE: 'aave',
   LINK: 'chainlink',
   TON: 'the-open-network',
+  WETH: 'weth',
+  USDC: 'usd-coin',
+  CBBTC: 'coinbase-wrapped-btc',
 };
 
-export type Quote = { price: number; change24h: number; source: 'coingecko' | 'jupiter' };
+export type Quote = { price: number; change24h: number; source: 'coingecko' };
 
 /**
- * The public CoinGecko tier rate-limits aggressively (HTTP 429). A trading UI that drops a price
- * because a chart refreshed is worse than a slightly stale price, so this layer:
- *   - serialises outbound requests with a minimum spacing,
- *   - caches responses for a short TTL (a quote is not worth re-fetching 3x a second),
- *   - retries 429 and 5xx with exponential backoff, honouring Retry-After when present.
+ * A short client-side cache on top of the server's own. Two components mounting on the same screen
+ * should not produce two round trips for the same symbol list.
  */
-const MIN_SPACING_MS = 1_100;
-const MAX_ATTEMPTS = 4;
-
-let queue: Promise<unknown> = Promise.resolve();
-let lastRequestAt = 0;
-
+const TTL_MS = 15_000;
 const cache = new Map<string, { at: number; value: unknown }>();
+const inflight = new Map<string, Promise<unknown>>();
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function getJson<T>(path: string, ttlMs = TTL_MS): Promise<T> {
+  const hit = cache.get(path);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
 
-async function rawGet<T>(url: string, timeoutMs: number): Promise<T> {
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const wait = MIN_SPACING_MS - (Date.now() - lastRequestAt);
-    if (wait > 0) await sleep(wait);
-    lastRequestAt = Date.now();
+  const pending = inflight.get(path);
+  if (pending) return pending as Promise<T>;
 
+  const run = (async () => {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const timer = setTimeout(() => ctrl.abort(), 15_000);
     try {
-      const res = await fetch(url, {
+      const res = await fetch(`${API_BASE}${path}`, {
         signal: ctrl.signal,
         headers: { accept: 'application/json' },
       });
-      if (res.status === 429 || res.status >= 500) {
-        const retryAfter = Number(res.headers.get('retry-after'));
-        const backoff = Number.isFinite(retryAfter) && retryAfter > 0
-          ? retryAfter * 1000
-          : 1_000 * 2 ** attempt;
-        if (attempt === MAX_ATTEMPTS) throw new Error(`${res.status} after ${attempt} attempts: ${url}`);
-        await sleep(backoff);
-        continue;
-      }
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
-      return (await res.json()) as T;
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${path}`);
+      const value = (await res.json()) as T;
+      cache.set(path, { at: Date.now(), value });
+      return value;
     } finally {
       clearTimeout(timer);
+      inflight.delete(path);
     }
-  }
-  throw new Error(`exhausted retries: ${url}`);
-}
-
-async function getJson<T>(url: string, timeoutMs = 12_000, ttlMs = 15_000): Promise<T> {
-  const hit = cache.get(url);
-  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
-
-  // Serialise: concurrent callers share one outbound stream so spacing actually holds.
-  const run = queue.then(() => rawGet<T>(url, timeoutMs));
-  queue = run.catch(() => undefined);
-  const value = await run;
-  cache.set(url, { at: Date.now(), value });
-  return value;
+  })();
+  inflight.set(path, run);
+  return run;
 }
 
 /** Testing/diagnostics only. */
 export function clearMarketDataCache(): void {
   cache.clear();
+  inflight.clear();
 }
 
-/** Spot quotes for any symbols we have a CoinGecko id for. Unknown symbols are omitted. */
+/** Spot quotes for any symbols we have a feed for. Unknown symbols are omitted. */
 export async function fetchQuotes(symbols: string[]): Promise<Record<string, Quote>> {
   const known = symbols.filter((s) => COINGECKO_IDS[s]);
   if (known.length === 0) return {};
-  const ids = known.map((s) => COINGECKO_IDS[s]).join(',');
-  const data = await getJson<Record<string, { usd: number; usd_24h_change: number }>>(
-    `${COINGECKO}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+  return getJson<Record<string, Quote>>(
+    `/market/quotes?symbols=${encodeURIComponent(known.join(','))}`,
   );
-  const out: Record<string, Quote> = {};
-  for (const sym of known) {
-    const row = data[COINGECKO_IDS[sym]!];
-    if (row && typeof row.usd === 'number') {
-      out[sym] = { price: row.usd, change24h: row.usd_24h_change ?? 0, source: 'coingecko' };
-    }
-  }
-  return out;
-}
-
-/**
- * On-chain price straight from the venue, by mint. This is the number the executor will actually
- * trade against, so the order ticket quotes it rather than a CEX aggregate.
- */
-export async function fetchJupiterPrice(mint: string): Promise<Quote | null> {
-  const data = await getJson<
-    Record<string, { usdPrice?: number; priceChange24h?: number } | undefined>
-  >(`${JUPITER}?ids=${mint}`);
-  const row = data[mint];
-  if (!row || typeof row.usdPrice !== 'number') return null;
-  return { price: row.usdPrice, change24h: row.priceChange24h ?? 0, source: 'jupiter' };
 }
 
 /**
@@ -163,16 +121,35 @@ export function aggregateBars(raw: Bar[], count = CANDLE_COUNT): Bar[] {
 
 /** Real OHLC for a symbol at a timeframe, folded to the 12 candles the design draws. */
 export async function fetchCandles(symbol: string, timeframe: Timeframe): Promise<Candles | null> {
-  const id = COINGECKO_IDS[symbol];
-  if (!id) return null;
+  if (!COINGECKO_IDS[symbol]) return null;
   const plan = TIMEFRAME_PLAN[timeframe];
-  const rows = await getJson<[number, number, number, number, number][]>(
-    `${COINGECKO}/coins/${id}/ohlc?vs_currency=usd&days=${plan.days}`,
-    12_000,
+  const { rows } = await getJson<{ rows: [number, number, number, number, number][] }>(
+    `/market/ohlc?symbol=${encodeURIComponent(symbol)}&days=${plan.days}`,
     60_000,
   );
   const raw: Bar[] = rows.map((r) => [r[1], r[2], r[3], r[4]] as Bar);
   const bars = aggregateBars(raw);
   if (bars.length === 0) return null;
   return { symbol, timeframe, bars, feed: 'live' };
+}
+
+export type StockQuote = {
+  symbol: string;
+  name: string;
+  address: string;
+  /** USD per share, derived from a real 1inch route. Null when nothing routes right now. */
+  price: number | null;
+  venues: string[];
+  feed: 'live' | 'simulated';
+};
+
+/**
+ * Tokenized equities, priced off the venue that would fill the trade.
+ *
+ * These have no CoinGecko feed, and the NYSE print would be the wrong number anyway: what a user
+ * pays is what 1inch routes on Base. The executor derives the price from a real quote.
+ */
+export async function fetchStockQuotes(): Promise<Record<string, StockQuote>> {
+  const rows = await getJson<StockQuote[]>('/market/stocks', 30_000);
+  return Object.fromEntries(rows.map((r) => [r.symbol, r]));
 }

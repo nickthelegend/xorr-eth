@@ -3,20 +3,11 @@
  * user and a fill recorded by the executor come from the same place.
  */
 import { getJson, staleValue } from '../http/get.js';
+import { COINGECKO_IDS } from './ids.js';
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';
 
-const IDS: Record<string, string> = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  XRP: 'ripple',
-  DOGE: 'dogecoin',
-  HYPE: 'hyperliquid',
-  AAVE: 'aave',
-  LINK: 'chainlink',
-  TON: 'the-open-network',
-};
+const IDS = COINGECKO_IDS;
 
 /** A price this old is still better than a missed scheduled buy. */
 const STALE_TOLERANCE_MS = 10 * 60_000;
