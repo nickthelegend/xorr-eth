@@ -75,10 +75,15 @@ deployments on a Base mainnet fork.
 
 **Not done, and why:** the Aqua subgraph slug (a Studio dashboard click — the subgraph builds and
 uploads to IPFS, then fails with "Subgraph not found", and it cannot be folded into the existing
-`xorr` subgraph because that one indexes `base-sepolia` and this one indexes `base`), the native iOS build
-(no Xcode on this machine), the deployed executor (billable), the LLM voice measurement (no funded
-model key), ladder tiers 4-7 (correctly marked unavailable in the UI), and the OKX and Monad repos
-(separate hackathons, deliberately deferred).
+`xorr` subgraph because that one indexes `base-sepolia` and this one indexes `base`), the native iOS
+build (no Xcode on this machine), the LLM voice measurement (no funded model key), ladder tiers 6-7
+(correctly marked unavailable in the UI), and the OKX and Monad repos (separate hackathons,
+deliberately deferred).
+
+**Since revised by measurement, 2026-09-06:** the executor IS deployed — two services on Railway,
+one on Base Sepolia and one on a Base mainnet fork, each with its own Postgres and the scoped
+agent-key surface. Ladder tiers 4 and 5 are not pending either: `server/src/live-ladder.ts` runs
+every rung marked `available` against a real chain and all five fill. See `docs/QA-PLAN.md`.
 
 ### The 21 defects this pass found
 
