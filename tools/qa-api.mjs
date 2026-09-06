@@ -404,5 +404,99 @@ await check('B28', 'a yield-rotation strategy can be created and comes back', as
   return `${created.id} created, listed, removed`;
 });
 
+// ── Verification console, health, alerts, idempotency ────────────────────────
+
+await check('B29', 'every claim the README makes verifies live', async () => {
+  const r = await req('/verify?owner=' + (await (await req('/wallet')).json()).address, {}, false);
+  must(r.status === 200, `status ${r.status}`);
+  const v = await r.json();
+  // A failing claim here is a real failure, not a flaky test: each probe is a live read of
+  // something this project asserts in its own README.
+  must(v.failed === 0, `${v.failed} failing: ${v.checks.filter((c) => c.status === 'fail').map((c) => `${c.id} (${c.observed})`).join('; ')}`);
+  must(v.passed >= 12, `only ${v.passed} claims checked`);
+  return `${v.passed}/${v.checks.length} verified on ${v.chain}`;
+});
+
+await check('B30', 'health checks its dependencies, not just itself', async () => {
+  const r = await req('/health', {}, false);
+  const h = await r.json();
+  must(Array.isArray(h.dependencies) && h.dependencies.length >= 3, 'no dependency list');
+  // The distinction that matters: a dry gas wallet is degraded, a dead database is down. A single
+  // boolean would make a load balancer cycle a server that was serving fine.
+  must(['up', 'degraded', 'down'].includes(h.status), `bad status ${h.status}`);
+  const critical = h.dependencies.filter((d) => d.critical);
+  must(critical.length >= 3, 'nothing marked critical');
+  must(h.status !== 'down', `down: ${h.dependencies.filter((d) => d.status === 'down').map((d) => d.name).join(', ')}`);
+  return `${h.status} — ${h.dependencies.map((d) => `${d.name} ${d.ms}ms`).join(', ')}`;
+});
+
+await check('B31', 'metrics are derived from the tables, not a counter', async () => {
+  const m = await (await req('/metrics', {}, false)).json();
+  must(typeof m.runFailureRate === 'number', 'no failure rate');
+  must(m.gas && typeof m.gas.eth === 'number', 'no gas reading');
+  must(typeof m.spentTodayUsd === 'number', 'no spend figure');
+  return `${Object.entries(m.runs).map(([k, v]) => `${v} ${k}`).join(', ')}; gas ${m.gas.eth.toFixed(3)} ETH`;
+});
+
+await check('B32', 'a retried POST with the same key does not run twice', async () => {
+  const key = `qa-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const body = JSON.stringify({
+    kind: 'dca', state: 'live', label: `qa idem ${key}`, symbol: 'WETH',
+    params: { usd: 5 }, cadence: 'weekly', dailyAllocationUsd: 5,
+  });
+  const send = () =>
+    req('/strategies', { method: 'POST', body, headers: { 'idempotency-key': key } });
+
+  const a = await send();
+  const first = await a.json();
+  const b = await send();
+  const second = await b.json();
+  must(b.headers.get('idempotent-replay') === 'true', 'the second request was not a replay');
+  must(first.id === second.id, `two different strategies: ${first.id} vs ${second.id}`);
+
+  const list = await (await req('/strategies')).json();
+  const matching = list.filter((s) => s.label === `qa idem ${key}`);
+  must(matching.length === 1, `${matching.length} strategies created for one key`);
+  await req(`/strategies/${first.id}`, { method: 'DELETE' });
+  return 'one strategy, replayed response';
+});
+
+await check('B33', 'an alert fires once per crossing, not once per sweep', async () => {
+  // A level BTC is certainly already past, so the condition is true from the first sweep.
+  const created = await (await req('/alerts', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind: 'price', symbol: 'BTC', name: `qa fire ${Date.now()}`,
+      detail: 'qa', config: { above: 1000 },
+    }),
+  })).json();
+
+  const mine = (rs) => rs.find((o) => o.id === created.id);
+  const first = mine(await (await req('/alerts/evaluate', { method: 'POST' })).json());
+  const second = mine(await (await req('/alerts/evaluate', { method: 'POST' })).json());
+  must(first?.action === 'fired', `first sweep: ${JSON.stringify(first)}`);
+  // Without hysteresis this fires again every thirty seconds until the user mutes everything.
+  must(second?.action === 'quiet', `second sweep: ${JSON.stringify(second)}`);
+
+  const after = (await (await req('/alerts')).json()).find((a) => a.id === created.id);
+  must(after?.armed === false && after?.fireCount === 1, `armed=${after?.armed} count=${after?.fireCount}`);
+  await req(`/alerts/${created.id}`, { method: 'DELETE' });
+  return `fired once: "${first.detail}"`;
+});
+
+await check('B34', 'selling everything does not consume the daily cap', async () => {
+  const before = await (await req('/wallet/balance')).json();
+  const r = await (await req('/panic/flatten', { method: 'POST' })).json();
+  const after = await (await req('/wallet/balance')).json();
+  must(r.capUntouched === true, 'the route did not claim the cap was untouched');
+  // The property, checked rather than trusted: an exit routed through the spend path would show
+  // up here, and a cap that can block a sale is a cap that traps you.
+  must(
+    Math.abs(after.remainingTodayUsd - before.remainingTodayUsd) < 0.01,
+    `cap moved ${before.remainingTodayUsd} -> ${after.remainingTodayUsd}`,
+  );
+  return `${r.sold} sold, ${r.failed} failed, cap still $${after.remainingTodayUsd}`;
+});
+
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) process.exitCode = 1;

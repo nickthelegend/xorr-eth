@@ -88,6 +88,26 @@ alerts.post('/alerts', async (c) => {
 });
 
 /** POST rather than PATCH: this is what the toggle on the alerts screen already calls. */
+/**
+ * Evaluate every alert now, instead of waiting for the next scheduler tick.
+ *
+ * The sweep is global, so this returns only the outcomes for the caller's own alerts — a user has
+ * no business seeing whether a stranger's price alert fired.
+ *
+ * Registered BEFORE `/alerts/:id`, and that is load-bearing: Hono matches in declaration order, so
+ * with the parameterised route first this resolved to `:id = "evaluate"` and ran the enable/disable
+ * handler, which rejected the body for a missing `enabled` field. A literal segment that could be
+ * read as a parameter has to be declared first.
+ */
+alerts.post('/alerts/evaluate', async (c) => {
+  const id = await walletId(c);
+  if (!id) return c.json({ error: 'no_wallet' }, 400);
+  const outcomes = await evaluateAlerts();
+  const mine = await query<{ id: string }>(`SELECT id FROM alerts WHERE wallet_id = $1`, [id]);
+  const ids = new Set(mine.map((r) => r.id));
+  return c.json(outcomes.filter((o) => ids.has(o.id)));
+});
+
 alerts.post('/alerts/:id', async (c) => {
   const body = z.object({ enabled: z.boolean() }).parse(await c.req.json());
   const id = await walletId(c);
@@ -99,21 +119,6 @@ alerts.post('/alerts/:id', async (c) => {
   );
   if (!row) return c.json({ error: 'not_found' }, 404);
   return c.json(toApi(row));
-});
-
-/**
- * Evaluate every alert now, instead of waiting for the next scheduler tick.
- *
- * The sweep is global, so this returns only the outcomes for the caller's own alerts — a user has
- * no business seeing whether a stranger's price alert fired.
- */
-alerts.post('/alerts/evaluate', async (c) => {
-  const id = await walletId(c);
-  if (!id) return c.json({ error: 'no_wallet' }, 400);
-  const outcomes = await evaluateAlerts();
-  const mine = await query<{ id: string }>(`SELECT id FROM alerts WHERE wallet_id = $1`, [id]);
-  const ids = new Set(mine.map((r) => r.id));
-  return c.json(outcomes.filter((o) => ids.has(o.id)));
 });
 
 alerts.delete('/alerts/:id', async (c) => {

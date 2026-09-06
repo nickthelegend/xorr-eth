@@ -34,6 +34,8 @@ const PUBLIC_PATHS = new Set([
   '/verify',
   /** A name on a public chain is public. Gating it would only make screens slower. */
   '/basename',
+  /** Operational, and read-only. A health check behind a session cannot be used by a load balancer. */
+  '/metrics',
 ]);
 
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */

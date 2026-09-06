@@ -18,6 +18,7 @@ import { evaluate, recordSpend } from '../rules/engine.js';
 import { closeAsDelegate, readPolicy, spendAsDelegate, waitForTx } from '../evm/delegation.js';
 import { erc20Abi, formatUnits } from 'viem';
 import { publicClient } from '../evm/client.js';
+import { gasStatus } from '../routes/ops.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
 import { buildSwap, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
 import { decide } from '../graph/decide.js';
@@ -303,6 +304,28 @@ export async function runStrategy(
     // there is no subgraph at all. The contract check below is the authority either way.
     if (graphCall && !graphCall.act && graphCall.reason !== 'index_is_for_another_deployment') {
       return finishBlocked(runId, walletId, strategy, graphCall.reason, graphCall.rationale);
+    }
+
+    /*
+     * Can the bot pay for the transaction at all?
+     *
+     * The delegate funds its own gas, and when that wallet runs dry every strategy fails inside
+     * the venue call. The user is then told "the venue rejected the order", which sends them to
+     * look at the market — for a problem that is entirely ours and has nothing to do with their
+     * trade. It is the most predictable outage this system has, and it was invisible.
+     *
+     * Checked before anything is signed, so the run is blocked with the true reason and the day's
+     * allowance is not consumed by an attempt that could never land.
+     */
+    const gas = await gasStatus().catch(() => null);
+    if (gas && !gas.enough) {
+      return finishBlocked(
+        runId,
+        walletId,
+        strategy,
+        'agent_out_of_gas',
+        `The agent's wallet is down to ${gas.eth.toFixed(4)} ETH and cannot pay for a transaction. Your funds are untouched and nothing was placed.`,
+      );
     }
 
     // Then the contract itself, as the final authority.

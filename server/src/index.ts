@@ -9,6 +9,8 @@ import { agents } from './agents/routes.js';
 import { alerts } from './routes/alerts.js';
 import { verifyRoutes } from './routes/verify.js';
 import { panic } from './routes/panic.js';
+import { ops } from './routes/ops.js';
+import { idempotency } from './http/idempotency.js';
 import { startScheduler } from './executor/scheduler.js';
 import { CHAIN_KEY, rpcUrl } from './evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
@@ -87,6 +89,12 @@ app.use('*', async (c, next) => {
 // Auth before ANY route. An unauthenticated trading server must not be a possible state.
 app.use('*', authMiddleware);
 
+/*
+ * Idempotency, after auth because a key is scoped to a user, and before every route so any
+ * state-changing request can opt in with a header rather than each handler reimplementing it.
+ */
+app.use('*', idempotency);
+
 app.route('/', routes);
 app.route('/', extra);
 app.route('/', market);
@@ -94,6 +102,7 @@ app.route('/', agents);
 app.route('/', alerts);
 app.route('/', verifyRoutes);
 app.route('/', panic);
+app.route('/', ops);
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port });

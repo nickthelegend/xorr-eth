@@ -48,10 +48,8 @@ async function requireWallet(c: Context) {
 
 export const routes = new Hono();
 
-routes.get('/health', async (c) => {
-  const rows = await query<{ now: Date }>('SELECT now()');
-  return c.json({ ok: true, db: rows[0]?.now, chain: CHAIN_KEY, delegation: DELEGATION_ADDRESS });
-});
+// `/health` moved to routes/ops.ts, where it checks the dependencies rather than only proving the
+// process can still answer a request.
 
 // ── Wallet ───────────────────────────────────────────────────────────────────
 
