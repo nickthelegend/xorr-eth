@@ -85,7 +85,19 @@ async function main() {
     outcomeFor(first, expiryQuiet)?.action === 'quiet', outcomeFor(first, expiryQuiet)?.detail);
   must('a misconfigured alert is reported, not thrown',
     outcomeFor(first, broken)?.action === 'unevaluable', outcomeFor(first, broken)?.detail);
-  must('one broken alert does not stop the sweep', first.length === 6, `${first.length} evaluated`);
+  /*
+ * All six of THIS test's alerts got an outcome — not "the sweep returned six results".
+ *
+ * The sweep is global by design: it evaluates every enabled alert for every wallet. Asserting a
+ * total made the test depend on whatever else happens to be in the database, and it started
+ * failing the moment the seed script added four more. What is actually being checked is that one
+ * unevaluable alert does not abort the others, and that is a statement about these six.
+ */
+must(
+  'one broken alert does not stop the sweep',
+  ids.every((id) => outcomeFor(first, id) !== undefined),
+  `${ids.filter((id) => outcomeFor(first, id) === undefined).length} of ${ids.length} were skipped`,
+);
 
   // ── Second sweep: the whole point. Nothing changed, so nothing should fire again. ──
   const second = await evaluateAlerts();
