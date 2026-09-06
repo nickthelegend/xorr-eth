@@ -41,8 +41,10 @@ const ROUTES = [
   ['20-order-stock', '/order/NVDAc'],
   ['21-swap', '/swap'],
   ['22-perp', '/perp/BTC'],
-  ['23-position', '/position/p1'],
-  ['24-auto-close', '/auto-close/p1'],
+  // A REAL position id, so these two screens are shot in their loaded state rather than their
+  // empty one. Override with QA_POSITION_ID when the database is reseeded.
+  ['23-position', `/position/${process.env.QA_POSITION_ID ?? '50ec6e5f-54d6-45c1-a1e5-cfd15c134b29'}`],
+  ['24-auto-close', `/auto-close/${process.env.QA_POSITION_ID ?? '50ec6e5f-54d6-45c1-a1e5-cfd15c134b29'}`],
   ['25-bot', '/bot'],
   ['26-bot-roster', '/bot/roster'],
   ['27-bot-leaderboard', '/bot/leaderboard'],
@@ -118,18 +120,48 @@ const main = async () => {
   await signIn(page);
 
   const errors = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 120)); });
+  const netFail = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 160)); });
+  page.on('pageerror', (e) => errors.push('UNCAUGHT ' + String(e.message).slice(0, 160)));
+  page.on('requestfailed', (r) => {
+    /*
+     * Expo's dev server probes each route with a HEAD it then aborts, so every navigation records
+     * one ERR_ABORTED against the app's own URL. Counting those would mark all 47 screens failed
+     * for a thing Metro does on purpose — so only genuinely failed requests are recorded, and the
+     * filter names exactly what it excuses rather than swallowing all failures.
+     */
+    const aborted = (r.failure()?.errorText ?? '').includes('ERR_ABORTED');
+    const isDevProbe = aborted && r.method() === 'HEAD' && r.url().startsWith(BASE);
+    if (!isDevProbe) netFail.push(`FAILED ${r.method()} ${r.url().slice(0, 110)}`);
+  });
+  page.on('response', (r) => {
+    // 503 is the documented warming handshake, not a failure — the client retries it.
+    if (r.status() >= 400 && r.status() !== 503) netFail.push(`${r.status()} ${r.url().slice(0, 110)}`);
+  });
 
+  const report = [];
   for (const [stem, route] of ROUTES) {
     errors.length = 0;
+    netFail.length = 0;
     await page.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => {});
     // Prices and charts settle after the first paint; the design bans entrance animations, so
     // there is nothing to wait out except the data itself.
     await page.waitForTimeout(3500);
     await page.screenshot({ path: path.join(OUT, `${stem}.png`) });
-    const bad = [...new Set(errors)].filter((e) => !/privy|isActive|balanceOf/i.test(e));
-    console.log(`${bad.length ? 'WARN' : ' ok '} ${stem.padEnd(24)} ${route}${bad.length ? '  ' + bad[0] : ''}`);
+    // Privy's own SDK logs two of these from its confirmation modal and balance reader. They are
+    // third-party and attributed rather than excused.
+    const bad = [...new Set(errors)].filter((e) => !/isActive|balanceOf|styled-components/i.test(e));
+    const net = [...new Set(netFail)];
+    const text = (await page.innerText('body').catch(() => '')).slice(0, 400);
+    const ok = bad.length === 0 && net.length === 0;
+    report.push({ stem, route, ok, errors: bad, network: net, text });
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'} ${stem.padEnd(24)} ${route}` +
+        (bad.length ? `\n       console: ${bad[0]}` : '') +
+        (net.length ? `\n       network: ${net.join(' | ')}` : ''),
+    );
   }
+  await fs.writeFile(path.join(OUT, 'qa-report.json'), JSON.stringify(report, null, 1));
 
   await browser.close();
   console.log(`\n${ROUTES.length} screens -> docs/screens/`);

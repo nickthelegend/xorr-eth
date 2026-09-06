@@ -298,6 +298,64 @@ routes.get('/strategies', async (c) => {
  * same `runStrategy` the scheduler runs, with the same period claim — so triggering it twice in a
  * period is a no-op rather than a double buy, which is the property that makes it safe to expose.
  */
+/**
+ * Pause, resume or retire a strategy.
+ *
+ * There was no way to stop one. A user could add strategies until they hit the cap and then had
+ * no route out — which also meant the cap, working correctly, read as the app being broken. The
+ * commitment total only counts `live` and `watch`, so pausing frees the allowance immediately.
+ */
+routes.patch('/strategies/:id', async (c) => {
+  const body = z
+    .object({ state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']) })
+    .parse(await c.req.json());
+  const w = await requireWallet(c);
+
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = $3 WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id, body.state],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `${body.state === 'paused' ? 'Paused' : body.state === 'live' ? 'Resumed' : 'Set'} ${row.label}`,
+    detail:
+      body.state === 'paused'
+        ? 'It will not run again until you resume it. Nothing was sold.'
+        : `Now ${body.state}.`,
+    kind: 'risk',
+    payload: { strategyId: row.id, state: body.state },
+  });
+  return c.json(toApi(row));
+});
+
+/**
+ * Retire a strategy.
+ *
+ * Marks it `ended` rather than deleting the row: the runs and audit entries that reference it are
+ * the user's own history, and a delete would take them with it.
+ */
+routes.delete('/strategies/:id', async (c) => {
+  const w = await requireWallet(c);
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = 'ended', next_run_at = NULL
+     WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `Ended ${row.label}`,
+    detail: 'It will not run again. Your history and any position it opened are untouched.',
+    kind: 'risk',
+    payload: { strategyId: row.id },
+  });
+  return c.json({ ok: true });
+});
+
 routes.post('/strategies/:id/run', async (c) => {
   const w = await requireWallet(c);
   const row = await one<StrategyRow>(
@@ -429,6 +487,64 @@ for (const [path, state] of [
 }
 
 /** Run a strategy now. Idempotent per period — a second call in the same period is a no-op. */
+/**
+ * Pause, resume or retire a strategy.
+ *
+ * There was no way to stop one. A user could add strategies until they hit the cap and then had
+ * no route out — which also meant the cap, working correctly, read as the app being broken. The
+ * commitment total only counts `live` and `watch`, so pausing frees the allowance immediately.
+ */
+routes.patch('/strategies/:id', async (c) => {
+  const body = z
+    .object({ state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']) })
+    .parse(await c.req.json());
+  const w = await requireWallet(c);
+
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = $3 WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id, body.state],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `${body.state === 'paused' ? 'Paused' : body.state === 'live' ? 'Resumed' : 'Set'} ${row.label}`,
+    detail:
+      body.state === 'paused'
+        ? 'It will not run again until you resume it. Nothing was sold.'
+        : `Now ${body.state}.`,
+    kind: 'risk',
+    payload: { strategyId: row.id, state: body.state },
+  });
+  return c.json(toApi(row));
+});
+
+/**
+ * Retire a strategy.
+ *
+ * Marks it `ended` rather than deleting the row: the runs and audit entries that reference it are
+ * the user's own history, and a delete would take them with it.
+ */
+routes.delete('/strategies/:id', async (c) => {
+  const w = await requireWallet(c);
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = 'ended', next_run_at = NULL
+     WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `Ended ${row.label}`,
+    detail: 'It will not run again. Your history and any position it opened are untouched.',
+    kind: 'risk',
+    payload: { strategyId: row.id },
+  });
+  return c.json({ ok: true });
+});
+
 routes.post('/strategies/:id/run', async (c) => {
   const row = await one<StrategyRow>(`SELECT * FROM strategies WHERE id=$1`, [c.req.param('id')]);
   if (!row) return c.json({ error: 'not_found' }, 404);
@@ -443,10 +559,20 @@ routes.get('/positions', async (c) => {
   return c.json(await listPositions(w.id));
 });
 
+/**
+ * One position, or null.
+ *
+ * `null` rather than 404, and the distinction matters. A position the user closed, or a deep link
+ * to one that no longer exists, is a legitimate STATE — the screen has a correct empty view for
+ * it. Answering 404 made the browser log "Failed to load resource" for a screen that was behaving
+ * perfectly, which trains everyone to ignore console errors. `/proposals/current` already answers
+ * the same shape of question the same way.
+ *
+ * A 404 is still the right answer when the caller is wrong about something. Here they are not.
+ */
 routes.get('/positions/:id', async (c) => {
   const w = await requireWallet(c);
-  const p = await getPosition(w.id, c.req.param('id'));
-  return p ? c.json(p) : c.json({ error: 'not_found' }, 404);
+  return c.json((await getPosition(w.id, c.req.param('id'))) ?? null);
 });
 
 routes.get('/activity', async (c) => {

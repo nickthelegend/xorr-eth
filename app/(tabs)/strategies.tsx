@@ -8,7 +8,7 @@
  * Built from Row / Pill / Segmented / SheetCard. No new visual language.
  */
 import React, { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Button,
@@ -22,7 +22,7 @@ import {
   SheetCard,
 } from '@/design/components';
 import { ink, pnl, surfaces } from '@/design/colors';
-import { radius } from '@/design/space';
+import { MIN_HIT, radius } from '@/design/space';
 import { type } from '@/design/type';
 import { money } from '@/format';
 import { repos } from '@/data';
@@ -34,7 +34,17 @@ export default function Strategies() {
   const router = useRouter();
   const [tab, setTab] = useState(0);
   const { data, loading, error, reload } = useAsync(() => repos.strategies.list(), []);
-  const live = (data ?? []).filter((s) => s.state === 'live' || s.state === 'watch');
+  const all = data ?? [];
+  const live = all.filter((s) => s.state === 'live' || s.state === 'watch');
+  /*
+   * Paused strategies stay on this list.
+   *
+   * Filtering to live-only meant pausing one made it disappear, taking its Resume button with it —
+   * a one-way door out of a state the user chose. The header count still says how many are
+   * RUNNING, which is the number that matters; the list says what exists.
+   */
+  const paused = all.filter((s) => s.state === 'paused');
+  const shown = [...live, ...paused];
 
   return (
     <Screen tabbed>
@@ -62,7 +72,7 @@ export default function Strategies() {
               <LoadingRows count={3} />
             ) : error ? (
               <ErrorState error={error} onRetry={reload} />
-            ) : live.length === 0 ? (
+            ) : shown.length === 0 ? (
               <View style={{ gap: 16, paddingTop: 10 }}>
                 <EmptyState text="Nothing running yet." />
                 <Text style={[type.noteBody, { color: ink.i45, textAlign: 'center' }]}>
@@ -72,7 +82,7 @@ export default function Strategies() {
                 <Button label="Set up a recurring buy" onPress={() => router.push('/strategy/dca')} />
               </View>
             ) : (
-              live.map((s) => <StrategyRow key={s.id} s={s} />)
+              shown.map((s) => <StrategyRow key={s.id} s={s} onChanged={reload} />)
             )
           ) : (
             <View style={{ gap: 12, paddingTop: 6 }}>
@@ -125,7 +135,18 @@ export default function Strategies() {
   );
 }
 
-function StrategyRow({ s }: { s: Strategy }) {
+/**
+ * A running strategy, with the two things a user needs to be able to do to it.
+ *
+ * There was no way to stop one: a user could add strategies until they hit the daily cap and then
+ * had no route out, which made the cap — working exactly as designed — read as the app being
+ * broken. "Run now" exists because a weekly cadence is the point of the product and useless for
+ * seeing that it works.
+ */
+function StrategyRow({ s, onChanged }: { s: Strategy; onChanged: () => void }) {
+  const [busy, setBusy] = useState<'run' | 'pause' | undefined>();
+  const [note, setNote] = useState<string>();
+
   const next = s.nextRunAt
     ? new Date(s.nextRunAt).toLocaleDateString('en-US', {
         weekday: 'short',
@@ -133,14 +154,94 @@ function StrategyRow({ s }: { s: Strategy }) {
         day: 'numeric',
       })
     : '—';
+
+  async function act(kind: 'run' | 'pause') {
+    setBusy(kind);
+    setNote(undefined);
+    try {
+      if (kind === 'pause') {
+        await repos.strategies.setState(s.id, s.state === 'paused' ? 'live' : 'paused');
+      } else {
+        const r = await repos.strategies.runNow(s.id);
+        // Say what happened. "Nothing to do" is a real and common outcome for a rebalance that has
+        // not drifted, and it must not read as a failure.
+        setNote(
+          r.status === 'filled'
+            ? `Filled ${r.units?.toFixed(4)} at ${money(r.price ?? 0)}`
+            : r.status === 'skipped'
+              ? r.reason === 'already_ran_this_period'
+                ? 'Already ran this period.'
+                : 'Checked — nothing to do.'
+              : (r.reason ?? r.status),
+        );
+      }
+      onChanged();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message.slice(0, 90) : String(e));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  const paused = s.state === 'paused';
   return (
-    <Row
-      primary={s.label}
-      secondary={`${s.state === 'watch' ? 'Watching · ' : ''}Next run ${next}`}
-      value={money(s.dailyAllocationUsd, { fractionDigits: 0 })}
-      delta={s.state === 'live' ? 'Live' : 'Watch'}
-      deltaColor={s.state === 'live' ? pnl.up : ink.i40}
-      height={64}
-    />
+    <View>
+      <Row
+        primary={s.label}
+        secondary={`${s.state === 'watch' ? 'Watching · ' : ''}Next run ${next}`}
+        value={money(s.dailyAllocationUsd, { fractionDigits: 0 })}
+        delta={paused ? 'Paused' : s.state === 'live' ? 'Live' : 'Watch'}
+        deltaColor={paused ? ink.i40 : s.state === 'live' ? pnl.up : ink.i40}
+        height={64}
+      />
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: -4, marginBottom: 10 }}>
+        <SmallAction
+          label={busy === 'run' ? 'Running…' : 'Run now'}
+          disabled={busy !== undefined || paused}
+          onPress={() => void act('run')}
+        />
+        <SmallAction
+          label={busy === 'pause' ? '…' : paused ? 'Resume' : 'Pause'}
+          disabled={busy !== undefined}
+          onPress={() => void act('pause')}
+        />
+      </View>
+      {note ? (
+        <Text style={[type.footnote, { color: ink.i45, marginTop: -6, marginBottom: 10 }]}>
+          {note}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function SmallAction({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => ({
+        // MIN_HIT keeps the target at the 44px the design mandates even though the pill is shorter.
+        minHeight: MIN_HIT,
+        justifyContent: 'center',
+        paddingHorizontal: 14,
+        borderRadius: radius.lg2,
+        backgroundColor: surfaces.control,
+        opacity: disabled ? 0.4 : pressed ? 0.8 : 1,
+      })}
+    >
+      <Text style={[type.pill, { color: ink.full }]}>{label}</Text>
+    </Pressable>
   );
 }

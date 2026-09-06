@@ -215,6 +215,15 @@ export const LocalRepositories: Repositories = {
   },
 
   strategies: {
+    async setState(id, state) {
+      return api.patch<Strategy>(`/strategies/${id}`, { state });
+    },
+    async runNow(id) {
+      return api.post<{ status: string; reason?: string; units?: number; price?: number }>(
+        `/strategies/${id}/run`,
+        {},
+      );
+    },
     async list(): Promise<Strategy[]> {
       return (await api.get<Strategy[]>('/strategies').catch(() => undefined)) ?? [];
     },

@@ -71,6 +71,10 @@ export interface BotRepository {
 }
 
 export interface StrategyRepository {
+  /** Pause or resume. A paused strategy stops running and frees its share of the daily cap. */
+  setState(id: string, state: 'live' | 'paused' | 'ended'): Promise<Strategy>;
+  /** Run one now, through the same period claim the scheduler uses. */
+  runNow(id: string): Promise<{ status: string; reason?: string; units?: number; price?: number }>;
   list(): Promise<Strategy[]>;
   create(s: Omit<Strategy, 'id' | 'createdAt'>): Promise<Strategy>;
   pause(id: string): Promise<Strategy>;
