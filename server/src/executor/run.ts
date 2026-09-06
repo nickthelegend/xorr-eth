@@ -26,7 +26,7 @@ import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { priceOf } from '../market/prices.js';
 import { send } from '../notifications/push.js';
-import { PLANNERS, type TradeIntent } from './kinds/index.js';
+import { PLANNERS, initialStateFor, type TradeIntent } from './kinds/index.js';
 import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 
 /**
@@ -371,6 +371,32 @@ export async function runStrategy(
     // "Nothing to do" is the right answer most of the time for a rebalance that has not drifted or
     // a stop that has not been hit. It is not a failure and must not read as one.
     if (!intent) {
+      /*
+       * A strategy that trades on crossings has to take its first reading somewhere.
+       *
+       * Without this a grid never acquires a `lastLevel`, so every run is a first run and it never
+       * trades — which looks exactly like being broken. Recording the reading IS the correct
+       * outcome of that run, and it is a state change, so it happens here rather than being
+       * silently skipped along with the trade.
+       */
+      const initial = await initialStateFor(strategy.kind, {
+        owner,
+        budgetUsd: usd,
+        params: strategy.params as Record<string, unknown>,
+        symbol: strategy.symbol,
+      }).catch(() => null);
+      if (initial) {
+        await query(`UPDATE strategies SET params = params || $2::jsonb WHERE id = $1`, [
+          strategy.id,
+          JSON.stringify(initial),
+        ]);
+        return finishNoop(
+          runId,
+          walletId,
+          strategy,
+          `Took the first reading: ${strategy.symbol} is on rung ${initial.lastLevel} of your range. Trades start on the next crossing.`,
+        );
+      }
       return finishNoop(
         runId,
         walletId,
@@ -583,6 +609,22 @@ export async function runStrategy(
         },
         client,
       );
+      /*
+       * Carry the strategy's state forward, in the SAME transaction as the fill.
+       *
+       * A grid that bought a rung and crashed before recording it would buy that rung again on
+       * the next tick — the classic double-fill this executor is built to make impossible. The
+       * period claim stops a repeat within one period; this stops a repeat across them.
+       *
+       * Merged rather than replaced, so a planner returning only the keys it changed cannot wipe
+       * the user's own configuration.
+       */
+      if (intent.stateAfter) {
+        await client.query(`UPDATE strategies SET params = params || $2::jsonb WHERE id = $1`, [
+          strategy.id,
+          JSON.stringify(intent.stateAfter),
+        ]);
+      }
       // Schedule the next one. Without this a strategy fills once and then sits there looking
       // live, which is indistinguishable from being broken.
       if (strategy.cadence) {

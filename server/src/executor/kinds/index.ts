@@ -36,6 +36,15 @@ export type TradeIntent = {
   /** Shown in the activity log, so a user can see WHY this trade happened. */
   because: string;
   /**
+   * State the strategy should carry into its next run, written with the fill.
+   *
+   * Most tiers are stateless: a rebalance re-reads the portfolio, a stop re-reads the price. A
+   * grid is not — it has to remember which rungs it already bought, or it buys the same rung on
+   * every tick. Persisting it in the SAME transaction as the fill is what stops the two from
+   * disagreeing after a crash: a lot that was bought but not recorded would be bought again.
+   */
+  stateAfter?: Record<string, unknown>;
+  /**
    * The exact on-chain amount, when the planner knows it.
    *
    * A whole-position close must move the balance the chain actually holds. `amountIn` is a float
@@ -179,6 +188,97 @@ export function planDca(ctx: PlanContext): TradeIntent {
 }
 
 /**
+ * Tier 5 — range accumulation.
+ *
+ * The user draws a band and the bot buys a rung lower and sells a rung higher inside it. Fifth on
+ * the ladder because it forecasts nothing — but it does ASSUME something, which is why it sits
+ * above the tiers that assume nothing at all: it assumes the range holds. A range that breaks
+ * leaves you holding everything you bought on the way down, and the honest thing is to say so
+ * rather than keep buying.
+ *
+ * Rungs are crossings, not levels. Acting on "the price is below rung 3" would buy rung 3 again
+ * on every tick for as long as the price stayed there; acting on "the price has CROSSED rung 3
+ * since we last looked" buys it once. That is what `lastLevel` is for, and it is why the first run
+ * of a grid deliberately trades nothing — there is no previous position to have crossed from, and
+ * inventing one would put on a position the user did not ask for at a price nobody chose.
+ */
+export async function planGrid(ctx: PlanContext): Promise<TradeIntent | null> {
+  const lower = Number(ctx.params.lower ?? NaN);
+  const upper = Number(ctx.params.upper ?? NaN);
+  const steps = Math.floor(Number(ctx.params.steps ?? 4));
+  const usdPerStep = Number(ctx.params.usdPerStep ?? ctx.budgetUsd);
+  if (!(lower > 0) || !(upper > lower) || !(steps >= 1) || !(usdPerStep >= MIN_TRADE_USD)) {
+    return null;
+  }
+
+  const price = await priceOf(ctx.symbol);
+  if (!(price > 0)) return null;
+
+  /*
+   * Outside the band, do nothing — and record that it left.
+   *
+   * A grid whose range has broken should stop, not keep averaging down past the floor its owner
+   * drew. The state flag is what lets the next run say "your range broke" instead of silently
+   * doing nothing forever, which looks identical to being switched off.
+   */
+  const openLots = Array.isArray(ctx.params.openLots) ? (ctx.params.openLots as number[]) : [];
+  if (price < lower || price > upper) {
+    return null;
+  }
+
+  // Rung prices, low to high. `steps` gaps means `steps + 1` rungs.
+  const rungs = Array.from({ length: steps + 1 }, (_, i) => lower + (i * (upper - lower)) / steps);
+  // How many rungs the price is at or above — the rung the price is currently standing on.
+  const level = rungs.filter((r) => price >= r).length - 1;
+
+  const lastLevel = Number.isFinite(Number(ctx.params.lastLevel))
+    ? Number(ctx.params.lastLevel)
+    : null;
+
+  // First sight of the price: take a reading, place nothing.
+  if (lastLevel === null) return null;
+  if (level === lastLevel) return null;
+
+  if (level < lastLevel) {
+    // Fell through a rung. Buy that rung, once, and remember we hold it.
+    if (openLots.includes(level)) return null;
+    const size = Math.min(usdPerStep, ctx.budgetUsd);
+    if (size < MIN_TRADE_USD) return null;
+    return {
+      inSymbol: 'USDC',
+      outSymbol: ctx.symbol === 'ETH' ? 'WETH' : ctx.symbol,
+      amountIn: size,
+      usd: size,
+      because: `${ctx.symbol} fell through ${rungs[level]!.toFixed(2)} inside your range.`,
+      stateAfter: { lastLevel: level, openLots: [...openLots, level] },
+    };
+  }
+
+  /*
+   * Rose through a rung. Sell the lowest lot we are holding — the one bought cheapest, which is
+   * the one this rung's rise has actually made a profit on. Selling the most recent instead would
+   * book the smallest gain available and leave the cheap lot exposed to the range breaking.
+   */
+  const lot = openLots.length ? Math.min(...openLots) : undefined;
+  if (lot === undefined) {
+    // Nothing held, so nothing to sell. Move the marker so the next fall is a real crossing.
+    return null;
+  }
+  const held = (await holdings(ctx.owner)).find((h) => h.symbol === ctx.symbol);
+  if (!held || held.usd < MIN_TRADE_USD) return null;
+
+  const size = Math.min(usdPerStep, held.usd);
+  return {
+    inSymbol: ctx.symbol,
+    outSymbol: 'USDC',
+    amountIn: size / price,
+    usd: size,
+    because: `${ctx.symbol} rose through ${rungs[level]!.toFixed(2)}, closing the lot bought at ${rungs[lot]!.toFixed(2)}.`,
+    stateAfter: { lastLevel: level, openLots: openLots.filter((l) => l !== lot) },
+  };
+}
+
+/**
  * Tier 4 — move idle cash to yield.
  *
  * Idle USDC earns nothing. This supplies it to Aave v3 and the user holds the aToken directly,
@@ -256,4 +356,31 @@ export const PLANNERS: Record<string, (ctx: PlanContext) => Promise<TradeIntent 
   rebalance: planRebalance,
   'exit-rules': planExitRules,
   'yield-rotation': planYieldRotation,
+  grid: planGrid,
 };
+
+/**
+ * Kinds that must take a reading before they can act.
+ *
+ * A grid trades on CROSSINGS, so its first run has nothing to have crossed from. Recording the
+ * level and placing nothing is the correct outcome, and `run.ts` needs to know that so it can
+ * persist the reading even though no trade happened.
+ */
+export async function initialStateFor(
+  kind: string,
+  ctx: PlanContext,
+): Promise<Record<string, unknown> | null> {
+  if (kind !== 'grid') return null;
+  if (Number.isFinite(Number(ctx.params.lastLevel))) return null;
+
+  const lower = Number(ctx.params.lower ?? NaN);
+  const upper = Number(ctx.params.upper ?? NaN);
+  const steps = Math.floor(Number(ctx.params.steps ?? 4));
+  if (!(lower > 0) || !(upper > lower) || !(steps >= 1)) return null;
+
+  const price = await priceOf(ctx.symbol).catch(() => 0);
+  if (!(price > 0)) return null;
+  const rungs = Array.from({ length: steps + 1 }, (_, i) => lower + (i * (upper - lower)) / steps);
+  const level = Math.max(rungs.filter((r) => price >= r).length - 1, 0);
+  return { lastLevel: level, openLots: [] };
+}

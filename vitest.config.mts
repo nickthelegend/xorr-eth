@@ -12,7 +12,15 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    /*
+     * The client AND the server.
+     *
+     * This was `src/**` only, so eight server test files — the rules engine, the audit chain, the
+     * planners, the failure translator, the Graph decision, the news feed, the backtest — existed
+     * on disk and had never been executed by `npm test`. Tests nobody runs are worse than no
+     * tests: they are read as coverage and they rot silently.
+     */
+    include: ['src/**/*.test.ts', 'server/src/**/*.test.ts'],
     exclude: process.env.LIVE ? [] : ['**/node_modules/**', '**/*.live.test.ts'],
   },
   resolve: {

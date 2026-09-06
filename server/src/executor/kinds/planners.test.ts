@@ -27,7 +27,9 @@ vi.mock('../../market/prices.js', () => ({ priceOf: vi.fn() }));
 
 const { cashUsd, holdings } = await import('../../evm/balances.js');
 const { priceOf } = await import('../../market/prices.js');
-const { planRebalance, planExitRules, planDca } = await import('./index.js');
+const { planRebalance, planExitRules, planDca, planGrid, initialStateFor } = await import(
+  './index.js'
+);
 
 const OWNER = '0x0000000000000000000000000000000000000001' as const;
 
@@ -178,5 +180,82 @@ describe('tier 3 — take profit and stop loss', () => {
       symbol: 'WETH',
     });
     expect(i).toBeNull();
+  });
+});
+
+describe('tier 5 — range accumulation', () => {
+  // rungs at 2000, 2250, 2500, 2750, 3000
+  const BASE = { lower: 2000, upper: 3000, steps: 4, usdPerStep: 50 };
+  const ctx = (params: Record<string, unknown>) => ({
+    owner: OWNER,
+    budgetUsd: 500,
+    params,
+    symbol: 'WETH',
+  });
+
+  beforeEach(() => {
+    vi.mocked(holdings).mockResolvedValue([holding('WETH', 0.04, 100)]);
+  });
+
+  it('places nothing on its first sight of the price', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_600);
+    // Nothing has been crossed yet, because there is no previous position to have crossed from.
+    // Inventing one would open a position at a price the user never chose.
+    expect(await planGrid(ctx({ ...BASE }))).toBeNull();
+  });
+
+  it('records where the price is, so the next move is a real crossing', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_600);
+    expect(await initialStateFor('grid', ctx({ ...BASE }))).toEqual({ lastLevel: 2, openLots: [] });
+  });
+
+  it('does nothing while the price drifts inside one rung', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_620);
+    expect(await planGrid(ctx({ ...BASE, lastLevel: 2, openLots: [] }))).toBeNull();
+  });
+
+  it('buys when the price falls through a rung', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_400);
+    const i = await planGrid(ctx({ ...BASE, lastLevel: 2, openLots: [] }));
+    expect(i?.outSymbol).toBe('WETH');
+    expect(i?.usd).toBe(50);
+    expect(i?.stateAfter).toEqual({ lastLevel: 1, openLots: [1] });
+  });
+
+  it('does not buy the same rung twice while the price sits below it', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_300);
+    // The crossing already happened. Acting on "is below" rather than "has crossed" would buy
+    // this rung on every single tick for as long as the price stayed there.
+    expect(await planGrid(ctx({ ...BASE, lastLevel: 1, openLots: [1] }))).toBeNull();
+  });
+
+  it('sells the CHEAPEST lot when the price rises through a rung', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_400);
+    const i = await planGrid(ctx({ ...BASE, lastLevel: 0, openLots: [0, 1] }));
+    expect(i?.outSymbol).toBe('USDC');
+    // Selling the newest lot instead would book the smallest gain available and leave the cheap
+    // lot exposed to the range breaking.
+    expect(i?.because).toContain('2000.00');
+    expect(i?.stateAfter).toEqual({ lastLevel: 1, openLots: [1] });
+  });
+
+  it('stops when the price leaves the range rather than chasing it', async () => {
+    vi.mocked(priceOf).mockResolvedValue(3_400);
+    expect(await planGrid(ctx({ ...BASE, lastLevel: 4, openLots: [] }))).toBeNull();
+    vi.mocked(priceOf).mockResolvedValue(1_500);
+    // The alternative is averaging down past the floor its owner drew, forever.
+    expect(await planGrid(ctx({ ...BASE, lastLevel: 0, openLots: [0] }))).toBeNull();
+  });
+
+  it('refuses an inverted or nonsensical range instead of guessing', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_500);
+    expect(await planGrid(ctx({ lower: 3_000, upper: 2_000, steps: 4, usdPerStep: 50, lastLevel: 1 }))).toBeNull();
+    vi.mocked(priceOf).mockResolvedValue(2_100);
+    expect(await planGrid(ctx({ ...BASE, usdPerStep: 0.5, lastLevel: 3, openLots: [] }))).toBeNull();
+  });
+
+  it('sells nothing when it is holding nothing', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_600);
+    expect(await planGrid(ctx({ ...BASE, lastLevel: 1, openLots: [] }))).toBeNull();
   });
 });
