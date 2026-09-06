@@ -12,19 +12,19 @@ export const sleeveFixtures: Sleeve[] = [
   {
     "name": "Blue-chip crypto",
     "weight": 55,
-    "note": "BTC, ETH, SOL — the liquid core the agent rebalances weekly.",
+    "note": "WETH and cbBTC — the liquid Base-native core the bot rebalances.",
     "color": "#5B93FF"
   },
   {
     "name": "Tokenized equities",
     "weight": 30,
-    "note": "NVDAx, AAPLx. Tracks earnings dates and gaps out before prints.",
+    "note": "NVDAc, AAPLc and six more, tokenized on Base and routed through 1inch.",
     "color": "#F0BE55"
   },
   {
     "name": "Stable yield",
     "weight": 15,
-    "note": "Staked SOL and T-bill tokens. Funds the agent's dry powder.",
+    "note": "Idle USDC supplied to Aave v3, at the rate the pool publishes.",
     "color": "#49E39B"
   }
 ];

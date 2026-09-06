@@ -1,91 +1,98 @@
 /**
  * Send / withdraw — PLAN.md 10.6 [G14].
  *
- * PLAN.md §3.4: withdrawals may go ONLY to a user-allowlisted destination. This screen cannot
- * enter a free-form address on purpose — that constraint is the product, not a limitation.
+ * PLAN.md §3.4: withdrawals may go ONLY to a user-allowlisted destination. This screen
+ * cannot enter a free-form address on purpose — that constraint is the product, not a
+ * limitation.
+ *
+ * What it also cannot do, in this build, is send: there is no withdrawal path in the
+ * executor, and the wallet is a devnet wallet whose key the executor holds. The screen
+ * previously implied otherwise — an "Amount $0.00" row that looked like an input but was a
+ * label, over a permanently disabled "Review withdrawal". A screen that looks like it
+ * takes an amount and silently does not is worse than one that says so, so it says so.
  */
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, IconButton, NoteStrip, Row, Screen, ScreenHeader } from '@/design/components';
-import { borders, ink, surfaces } from '@/design/colors';
-import { hairlineWidth, radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money } from '@/format';
+import {
+  Button,
+  Eyebrow,
+  Fill,
+  IconButton,
+  NoteStrip,
+  RadioCard,
+  Screen,
+  Text,
+  colors,
+  space,
+} from '@/ui';
 import { useAllowlist } from '@/wallet/allowlist';
 
 export default function Send() {
   const router = useRouter();
-  const { addresses } = useAllowlist();
+  const { addresses, pendingFor } = useAllowlist();
   const [selected, setSelected] = useState(0);
 
   return (
     <Screen>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <Text style={[type.screenTitle, { color: ink.full }]}>Send</Text>
-          </View>
-        }
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+        <IconButton
+          name="back"
+          accessibilityLabel="Back"
+          background="none"
+          onPress={() => router.back()}
+        />
+        <Text variant="screenTitle">Send</Text>
+      </View>
 
-      <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
-        Funds can only leave to an address you have already allowlisted. That is what stops a
-        compromised phone from draining the wallet.
+      <Text variant="secondary" style={{ marginTop: space.s10 }}>
+        Funds can only leave to an address you have already allowlisted. That is what stops
+        a compromised phone from draining the wallet.
       </Text>
 
-      <Screen.Content style={{ marginTop: 22 }}>
-        <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Destination</Text>
-        <View style={{ gap: 10, marginTop: 12 }}>
+      <Fill style={{ marginTop: space.s22 }}>
+        <Eyebrow small>Destination</Eyebrow>
+        <View style={{ gap: space.s10, marginTop: space.s12 }}>
           {addresses.map((a, i) => (
-            <Pressable
+            <RadioCard
               key={a.address}
+              title={a.label}
+              detail={a.address}
+              tag={pendingFor(a) ? 'Pending' : undefined}
+              selected={i === selected}
               onPress={() => setSelected(i)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: i === selected }}
-              accessibilityLabel={a.label}
-              style={{
-                backgroundColor: surfaces.surface,
-                borderRadius: radius.xl,
-                padding: 16,
-                borderWidth: i === selected ? 1 : hairlineWidth,
-                borderColor: i === selected ? borders.selected : borders.card,
-                gap: 4,
-              }}
-            >
-              <Text style={[type.rowPrimary, { color: ink.full }]}>{a.label}</Text>
-              <Text style={[type.secondary, { color: ink.i38 }]} numberOfLines={1}>
-                {a.address}
-              </Text>
-            </Pressable>
+              showRadio={false}
+            />
           ))}
         </View>
 
-        <View style={{ marginTop: 20 }}>
-          <Row primary="Amount" value={money(0)} height={54} />
-          <Row primary="Network fee" value="~$0.001" valueColor={ink.i55} height={54} divider={false} />
-        </View>
-
-        <NoteStrip kind="risk" style={{ marginTop: 16 }}>
-          A new address takes effect after a cooling-off period. Adding one now does not let you
-          send to it today.
+        <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
+          A new address takes effect after a cooling-off period. Adding one now does not let
+          you send to it today.
         </NoteStrip>
-      </Screen.Content>
+
+        <NoteStrip kind="blocked" style={{ marginTop: space.s10 }}>
+          Withdrawals are not enabled in this build. The wallet is on a test network and the
+          executor has no transfer-out path — by design, so that nothing in the app can move
+          funds off the venue account.
+        </NoteStrip>
+      </Fill>
 
       <Button
         label="Manage allowlist"
         variant="ghost"
         onPress={() => router.push('/allowlist')}
-        style={{ marginBottom: 10 }}
+        style={{ marginBottom: space.s10 }}
       />
-      <Button label="Review withdrawal" disabled />
+      <Button label="Withdrawals not enabled" disabled />
+      <Text
+        variant="footnote"
+        color={colors.ink28}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
+        The allowlist above is live, so it is ready the day this is.
+      </Text>
     </Screen>
   );
 }

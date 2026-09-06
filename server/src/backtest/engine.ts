@@ -29,8 +29,8 @@ export type Lookback = '30d' | '90d' | '6m' | '1y';
 const DAYS: Record<Lookback, number> = { '30d': 30, '90d': 90, '6m': 180, '1y': 365 };
 
 /** design.md §6 "Area / equity curve". */
-const VB_W = 360;
-const VB_H = 110;
+/** About this many points survive the downsample — see `curvePoints`. */
+const CURVE_POINTS = 40;
 
 export type BacktestResult = {
   lookback: Lookback;
@@ -38,7 +38,16 @@ export type BacktestResult = {
   maxDd: number;
   sharpe: number;
   trades: number;
-  curve: string;
+  /**
+   * The equity series, downsampled for drawing. NUMBERS, not an SVG polyline.
+   *
+   * This used to be `curve: string` — the executor projected the series into a 360×110
+   * viewBox and shipped that. Two things were wrong with it: the executor was doing the
+   * chart's job (and had to know the chart's dimensions to do it), and the real values were
+   * discarded, so the client could not label an axis, show a tooltip, or say what the line
+   * was worth at any point. The chart scales a series itself; give it the series.
+   */
+  equity: number[];
   /** Honesty fields the UI can surface — a backtest with no context is a sales pitch. */
   feed: 'live';
   source: string;
@@ -66,23 +75,21 @@ async function history(symbol: string, days: number): Promise<[number, number][]
   return prices;
 }
 
-/** Equity series -> the polyline design.md draws. */
-export function curveFrom(equity: readonly number[]): string {
-  if (equity.length === 0) return '';
-  const hi = Math.max(...equity);
-  const lo = Math.min(...equity);
-  const span = hi - lo || 1;
-  const step = equity.length > 1 ? VB_W / (equity.length - 1) : 0;
-  // Downsample to ~40 points: a 365-point polyline is unreadable at 360px wide.
-  const stride = Math.max(1, Math.floor(equity.length / 40));
-  const pts: string[] = [];
-  for (let i = 0; i < equity.length; i += stride) {
-    const y = ((hi - equity[i]!) / span) * (VB_H - 10) + 5;
-    pts.push(`${(i * step).toFixed(1)},${y.toFixed(1)}`);
-  }
-  const lastY = ((hi - equity[equity.length - 1]!) / span) * (VB_H - 10) + 5;
-  pts.push(`${VB_W},${lastY.toFixed(1)}`);
-  return pts.join(' ');
+/**
+ * Downsample an equity series for drawing, keeping the LAST point.
+ *
+ * A 365-point line is unreadable at phone width, so it thins to about 40 — but the final
+ * value is the one the screen quotes beside the chart, so it is always kept: a line that
+ * ends a stride short of the real close disagrees with the number next to it.
+ */
+export function curvePoints(equity: readonly number[], target = CURVE_POINTS): number[] {
+  if (equity.length === 0) return [];
+  const stride = Math.max(1, Math.floor(equity.length / target));
+  const out: number[] = [];
+  for (let i = 0; i < equity.length; i += stride) out.push(equity[i]!);
+  const last = equity[equity.length - 1]!;
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
 }
 
 export function maxDrawdown(equity: readonly number[]): number {
@@ -159,7 +166,7 @@ export async function backtestDca(params: {
     maxDd: Number(maxDrawdown(perUnit).toFixed(1)),
     sharpe: Number(sharpeRatio(dailyReturns).toFixed(1)),
     trades,
-    curve: curveFrom(equity),
+    equity: curvePoints(equity),
     feed: 'live',
     source: 'coingecko market_chart, daily closes',
     disclaimer: 'Nothing here is a promise.',
@@ -271,7 +278,7 @@ export async function backtestGrid(params: {
     trades: buys + sells,
     buys,
     sells,
-    curve: curveFrom(equity),
+    equity: curvePoints(equity),
     inRangePct: prices.length ? Number(((inRange / prices.length) * 100).toFixed(0)) : 0,
     unitsLeft: Number(unitsLeft.toFixed(6)),
     leftValue: Number(leftValue.toFixed(2)),

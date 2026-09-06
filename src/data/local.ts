@@ -367,7 +367,15 @@ export const LocalRepositories: Repositories = {
 
   wallet: {
     async current(): Promise<Wallet | null> {
-      return (await api.get<Wallet | null>('/wallet').catch(() => undefined)) ?? null;
+      /*
+       * `null` only when the server says so. A failed read THROWS.
+       *
+       * This swallowed every error into `null`, which is the same value the server returns for "no
+       * wallet" — so a moment's network trouble was indistinguishable from not having an account.
+       * The entry gate redirects to onboarding on a null wallet, so that ambiguity could bounce a
+       * signed-in user out of their own session to recover from a blip.
+       */
+      return await api.get<Wallet | null>('/wallet');
     },
     async createEmbedded(): Promise<Wallet> {
       return api.post<Wallet>('/wallet/create', {});

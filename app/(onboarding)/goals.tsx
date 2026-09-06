@@ -1,19 +1,29 @@
 /**
  * Screen 7 — Goals & risk. screens.md Group A.
  *
- * Back circle + 4px progress track + step counter. Title 26/700 two lines. Subtitle.
- * Wrapping chip row (gap 9, chips 40 tall, radius 22). A drawdown question with a 3-up segmented
- * (42px thumbs); the caption reacts to the pick. flex:1. Summary line above a white Continue.
+ * Back circle + 4pt progress track + step counter. Title 26/700 two lines. Subtitle.
+ * Wrapping chip row (gap 9, chips 40 tall, radius 22). A drawdown question with a 3-up
+ * segmented (42pt thumbs); the caption reacts to the pick. Summary line above Continue.
  */
 import React from 'react';
-import { Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, ChoiceChip, PillWrap, Screen, Segmented } from '@/design/components';
-import { ink } from '@/design/colors';
-import { type } from '@/design/type';
+import {
+  Button,
+  ChoiceChip,
+  Fill,
+  PillWrap,
+  Progress,
+  Screen,
+  Segmented,
+  Text,
+  colors,
+  size,
+  space,
+} from '@/ui';
 import { onboarding } from '@/data/fixtures/onboarding';
 import { useStore } from '@/state/store';
-import { Progress } from '@/design/components/Progress';
+
+const RISK_OPTIONS = onboarding.riskLevels.map((label, value) => ({ value, label }));
 
 export default function Goals() {
   const router = useRouter();
@@ -27,45 +37,42 @@ export default function Goals() {
     <Screen>
       <Progress step={1} total={3} onBack={() => router.back()} />
 
-      <Text style={[type.onboardingTitle, { color: ink.full, marginTop: 26 }]}>
+      <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         {'What should your\nbot optimise for?'}
       </Text>
-      <Text style={[type.body, { color: ink.i40, marginTop: 10 }]}>
-        Pick as many as apply. This sets the strategies you get offered, and the hard limits they
-        run inside.
+      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+        Pick as many as apply. This sets the strategies you get offered, and the hard limits
+        they run inside.
       </Text>
 
-      <View style={{ marginTop: 20 }}>
-        <PillWrap>
-          {onboarding.goals.map((g) => (
-            <ChoiceChip
-              key={g}
-              label={g}
-              selected={goals.includes(g)}
-              onPress={() => toggleGoal(g)}
-            />
-          ))}
-        </PillWrap>
-      </View>
+      <PillWrap style={{ marginTop: space.s20 }}>
+        {onboarding.goals.map((g) => (
+          <ChoiceChip
+            key={g}
+            label={g}
+            selected={goals.includes(g)}
+            onPress={() => toggleGoal(g)}
+          />
+        ))}
+      </PillWrap>
 
-      <Text style={[type.cardTitleSm, { color: ink.full, marginTop: 30 }]}>
+      <Text variant="cardTitle" style={{ marginTop: space.s30 }}>
         How much drawdown can you sit through?
       </Text>
       <Segmented
-        options={onboarding.riskLevels}
+        options={RISK_OPTIONS}
         value={riskQ}
         onChange={setRiskQ}
-        height={42}
-        style={{ marginTop: 14 }}
-        accessibilityLabel="Drawdown tolerance"
+        height={size.segThumbLg}
+        style={{ marginTop: space.s14 }}
       />
-      <Text style={[type.secondaryMd, { color: ink.i40, marginTop: 12 }]}>
+      <Text variant="secondary" style={{ marginTop: space.s12 }}>
         {risk} caps single-position size and how far a stop can sit from entry.
       </Text>
 
-      <Screen.Content />
+      <Fill />
 
-      <Text style={[type.footnote, { color: ink.i28, marginBottom: 12 }]}>
+      <Text variant="footnote" color={colors.ink28} style={{ marginBottom: space.s12 }}>
         {goals.length} selected · {risk}
       </Text>
       <Button

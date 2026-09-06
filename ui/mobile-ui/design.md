@@ -85,7 +85,23 @@ Asset marks reuse the same recipe — see `data/markets.json`, every instrument 
 
 ## 2. Type
 
-System sans (`-apple-system`). No custom font — a trading UI needs the platform's numeral metrics.
+**Inter, bundled with the app.** Weights 400/500/600/700/800 ship as assets and are loaded before
+the first paint.
+
+This section used to read "System sans (`-apple-system`). No custom font — a trading UI needs the
+platform's numeral metrics." That reasoning was sound and the conclusion was still wrong, because
+`-apple-system` is not one font. The reference in `reference/` was authored and reviewed in a
+browser on a Mac, so every screen in it renders in **SF Pro** — while on Android the same rule
+resolves to **Roboto**, whose letterforms and widths are visibly different, and the negative
+letter-spacing below (−2px on a 52px amount) was tuned against SF Pro. The app did not look like
+its own design on half the devices it runs on.
+
+Inter is the closest open-licensed face to SF Pro's metrics, and — the part that actually matters —
+it is identical on every platform. The design is now something the app carries rather than
+something it hopes to find.
+
+**Baloo 2 ExtraBold** is the display face, used for the wordmark and nothing else, exactly as
+`reference/Orbit Trading App.dc.html` uses it (`font-family:'Baloo 2'`, weight 800, 42px).
 
 | Role | Size | Weight | Extra |
 |---|---|---|---|

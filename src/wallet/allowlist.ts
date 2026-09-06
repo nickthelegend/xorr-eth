@@ -13,11 +13,30 @@ const KEY = 'xorr-allowlist';
 
 export type AllowlistEntry = { label: string; address: string; addedAt: number };
 
-/** Seeded with the two entries screen 20 already claims exist. */
-const SEED: AllowlistEntry[] = [
-  { label: 'My exchange account', address: '7xKXtg2CW3xN2b1a9pQe6nWZ5rY8vJ4kL1mD3sT6uH9c', addedAt: 0 },
-  { label: 'Cold storage', address: '4bQpZ8sV1nR7yT2wE5uL9kM3aC6dF0gH8jX4vB2nQ7rS', addedAt: 0 },
-];
+/**
+ * Empty until the user adds one.
+ *
+ * This was seeded with two addresses the design handoff had invented — and they were base58 Solana
+ * addresses, left over from before the pivot, on a screen that describes them as the only places
+ * funds may go. Two problems, either of which is disqualifying: they were fabricated, and on Base
+ * they are not addresses at all. A user reading "Cold storage · Active" would reasonably believe
+ * they had configured a destination they never chose.
+ *
+ * A new user's allowlist is empty. That is the honest state and the screen has an empty state for
+ * it, which is a great deal better than two fake entries marked Active.
+ */
+const SEED: AllowlistEntry[] = [];
+
+/**
+ * A destination has to be an address on this chain.
+ *
+ * The add flow accepted any string. An allowlist whose entries cannot receive anything is not a
+ * safety feature, it is a list — and the one moment it matters is the moment someone is trying to
+ * get their money out.
+ */
+export function isValidAddress(address: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(address.trim());
+}
 
 export function isUsable(entry: AllowlistEntry, now: number = Date.now()): boolean {
   return now - entry.addedAt >= COOLING_OFF_HOURS * 3600_000;
@@ -35,6 +54,9 @@ export function useAllowlist() {
   }, []);
 
   const add = useCallback((label: string, address: string) => {
+    if (!isValidAddress(address)) {
+      throw new Error('That is not a Base address. It should start 0x and be 42 characters.');
+    }
     setAddresses((prev) => {
       const next = [...prev, { label, address, addedAt: Date.now() }];
       void AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => undefined);

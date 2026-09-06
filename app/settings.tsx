@@ -1,121 +1,175 @@
 /**
  * Settings — PLAN.md 10.3 [G14]. The Home gear had no destination.
- * Wallet, delegation status + revoke, security, notifications, the TONE DIAL, legal, sign out.
+ * Wallet, delegation status + revoke, security, notifications, the TONE DIAL, legal.
  */
 import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { IconButton, Row, Screen, ScreenHeader, Segmented, SheetCard } from '@/design/components';
-import { ink, pnl } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
+import {
+  Eyebrow,
+  Fill,
+  IconButton,
+  Price,
+  Row,
+  Screen,
+  Segmented,
+  SheetCard,
+  Text,
+  colors,
+  radius,
+  size,
+  space,
+} from '@/ui';
 import { capLabel } from '@/state/derived';
 import { useStore } from '@/state/store';
+import { useAllowlist } from '@/wallet/allowlist';
+import { repos } from '@/data';
+import { useAsync } from '@/data/useAsync';
 import { TONES, useTone } from '@/bot/tone';
+
+const SETTING_ROW = 54;
+const TONE_OPTIONS = TONES.map((t) => ({ value: t.id, label: t.label }));
 
 export default function Settings() {
   const router = useRouter();
-  const wallet = useStore((s) => s.wallet);
+  // The store's `wallet` is only ever set by the onboarding screen, so deep-linking here —
+  // or opening Settings in a session that did not run onboarding — showed "Address: None"
+  // and "Network: —" for a user who has a wallet. Read the source of truth, like every
+  // other screen does, and fall back to the store only while that request is in flight.
+  const stored = useStore((s) => s.wallet);
+  const { data: fetched, error: walletError } = useAsync(() => repos.wallet.current(), []);
+  const wallet = fetched ?? stored;
+  // "None" and "—" are claims about the wallet. If we could not reach the executor we have
+  // no claim to make, so say that instead.
+  const unreachable = walletError !== undefined && !wallet;
   const delegation = useStore((s) => s.delegation);
   const cap = useStore((s) => s.cap);
   const killed = useStore((s) => s.killed);
+  const recoveryBackedUp = useStore((s) => s.recoveryBackedUp);
+  const { addresses } = useAllowlist();
   const { tone, setTone } = useTone();
+
+  const stopped = killed || delegation?.revoked;
 
   return (
     <Screen>
-      <ScreenHeader
-        left={<Text style={[type.screenTitle, { color: ink.full }]}>Settings</Text>}
-        right={
-          <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
-        }
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="screenTitle">Settings</Text>
+        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
+      </View>
 
-      <Screen.Content style={{ marginTop: 20 }}>
+      <Fill style={{ marginTop: space.s20 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Wallet</Text>
+          <Eyebrow small>Wallet</Eyebrow>
           <Row
-            primary="Address"
-            value={wallet ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}` : 'None'}
-            valueColor={ink.i55}
-            height={54}
+            title="Address"
+            value={
+              <Price color={colors.ink55}>
+                {wallet
+                  ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
+                  : unreachable
+                    ? 'Could not reach the executor'
+                    : 'None'}
+              </Price>
+            }
+            height={SETTING_ROW}
           />
           <Row
-            primary="Network"
-            value={wallet?.cluster ?? '—'}
-            valueColor={ink.i55}
-            height={54}
+            title="Network"
+            value={<Text variant="rowPrimary" color={colors.ink55}>{wallet?.cluster ?? '—'}</Text>}
+            height={SETTING_ROW}
           />
           <Row
-            primary="Recovery phrase"
-            value="Not backed up"
-            valueColor={pnl.warn}
-            height={54}
+            title="Recovery"
+            value={
+              <Text variant="rowPrimary" color={recoveryBackedUp ? colors.ink55 : colors.warn}>
+                {recoveryBackedUp ? 'Acknowledged' : 'Read this'}
+              </Text>
+            }
+            height={SETTING_ROW}
             onPress={() => router.push('/recovery')}
           />
 
-          <Text style={[type.eyebrowSm, { color: ink.i32, marginTop: 26 }]}>
+          <Eyebrow small style={{ marginTop: space.s26 }}>
             What the bot may do
-          </Text>
+          </Eyebrow>
           <Row
-            primary="Status"
-            value={killed || delegation?.revoked ? 'Stopped' : 'Live'}
-            valueColor={killed || delegation?.revoked ? ink.i55 : pnl.up}
-            height={54}
+            title="Status"
+            value={
+              <Text variant="rowPrimary" color={stopped ? colors.ink55 : colors.up}>
+                {stopped ? 'Stopped' : 'Live'}
+              </Text>
+            }
+            height={SETTING_ROW}
             onPress={() => router.push('/safety')}
           />
-          <Row primary="Daily cap" value={capLabel(cap)} valueColor={ink.i55} height={54} />
           <Row
-            primary="Withdrawal allowlist"
-            value="2 addresses"
-            valueColor={ink.i55}
-            height={54}
+            title="Daily cap"
+            value={<Price color={colors.ink55}>{capLabel(cap)}</Price>}
+            height={SETTING_ROW}
+          />
+          <Row
+            title="Withdrawal allowlist"
+            value={
+              <Text variant="rowPrimary" color={colors.ink55}>
+                {addresses.length === 1 ? '1 address' : `${addresses.length} addresses`}
+              </Text>
+            }
+            height={SETTING_ROW}
             onPress={() => router.push('/allowlist')}
           />
 
-          <Text style={[type.eyebrowSm, { color: ink.i32, marginTop: 26 }]}>How the bot talks</Text>
-          <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 10 }}>
+          <Eyebrow small style={{ marginTop: space.s26 }}>
+            How the bot talks
+          </Eyebrow>
+          <SheetCard
+            borderRadius={radius.panel}
+            padding={space.s16}
+            style={{ marginTop: space.s10 }}
+          >
             <Segmented
-              options={TONES.map((t) => t.label)}
-              value={TONES.findIndex((t) => t.id === tone)}
-              onChange={(i) => setTone(TONES[i]!.id)}
-              accessibilityLabel="Tone"
+              options={TONE_OPTIONS}
+              value={tone}
+              onChange={setTone}
+              height={size.segThumbSm}
             />
-            <Text style={[type.noteBody, { color: ink.i45, marginTop: 12 }]}>
+            <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s12 }}>
               {TONES.find((t) => t.id === tone)?.description}
             </Text>
-            <Text style={[type.footnote, { color: ink.i28, marginTop: 10 }]}>
-              This changes how the bot writes, never what it reports. Prices, sizes and limits read
-              the same on every setting.
+            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s10 }}>
+              This changes how the bot writes, never what it reports. Prices, sizes and
+              limits read the same on every setting.
             </Text>
           </SheetCard>
 
-          <Text style={[type.eyebrowSm, { color: ink.i32, marginTop: 26 }]}>Alerts</Text>
+          <Eyebrow small style={{ marginTop: space.s26 }}>
+            Alerts
+          </Eyebrow>
           <Row
-            primary="Notifications"
-            value="Manage"
-            valueColor={ink.i55}
-            height={54}
+            title="Notifications"
+            value={<Text variant="rowPrimary" color={colors.ink55}>Manage</Text>}
+            height={SETTING_ROW}
             onPress={() => router.push('/alerts')}
           />
 
-          <Text style={[type.eyebrowSm, { color: ink.i32, marginTop: 26 }]}>Legal</Text>
-          <Row primary="Terms" value="" height={54} onPress={() => router.push('/legal/terms')} />
+          <Eyebrow small style={{ marginTop: space.s26 }}>
+            Legal
+          </Eyebrow>
+          <Row title="Terms" height={SETTING_ROW} onPress={() => router.push('/legal/terms')} />
           <Row
-            primary="Privacy policy"
-            value=""
-            height={54}
+            title="Privacy policy"
+            height={SETTING_ROW}
             onPress={() => router.push('/legal/privacy')}
           />
           <Row
-            primary="Risk disclosure"
-            value=""
-            height={54}
+            title="Risk disclosure"
+            height={SETTING_ROW}
             divider={false}
             onPress={() => router.push('/legal/risk')}
           />
-          <View style={{ height: 30 }} />
+          <View style={{ height: space.s30 }} />
         </ScrollView>
-      </Screen.Content>
+      </Fill>
     </Screen>
   );
 }

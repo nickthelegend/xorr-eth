@@ -1,44 +1,62 @@
 /**
  * Screen 2 — Wallet home. screens.md Group B.
  *
- * Gear / "Wallets" / more header. Eyebrow "Total value", balance 46/700, up delta chip.
- * Three EQUAL action pills (Send / Swap / More) — flex:1, gutter-padded, never fixed-width.
- * Cash row. "Agents" header with count. Two 106px agent cards. "Coins" -> row + staking note.
+ * Rebuilt on `src/ui`, and re-checked against the prototype rather than against the previous
+ * build, which had drifted: the hero column is CENTRED (eyebrow, balance, delta chip), the
+ * action pills are 42pt at radius 24, and the agent cards hold a 74pt faced orb rather than
+ * a 34pt mark in a 106pt-tall card.
  *
- * [G16] The floating chat pill is gone: after the pivot the bot has a centre tab, and a second
- * entry point to the same place on the busiest screen is clutter. PLAN.md 8.2 called this.
+ * [G16] The floating chat pill is gone: after the pivot the bot has a centre tab, and a
+ * second entry point to the same place on the busiest screen is clutter. PLAN.md 8.2.
  */
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
-import { Icon } from '@/design/Icon';
+import { agentGradient, assetGradient } from '@/design/gradients';
 import {
   AgentOrb,
   AssetMark,
+  DeltaChip,
+  Eyebrow,
   IconButton,
   NoteStrip,
+  Press,
+  Price,
   Row,
   Screen,
-  ScreenHeader,
-} from '@/design/components';
-import { borders, ink, pnl, surfaces } from '@/design/colors';
-import { agentGradient } from '@/design/gradients';
-import { hairlineWidth, radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money, percent, quantity } from '@/format';
+  Text,
+  colors,
+  money,
+  percent,
+  pnlTone,
+  quantity,
+  radius,
+  size,
+  space,
+} from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { hiredCount, useHasHydrated, useStore } from '@/state/store';
+import { useHasHydrated, useStore } from '@/state/store';
 import { DEFAULT_BUY } from '@/data/tradable';
 import { CatchUp } from '@/home/CatchUp';
+
+/** The three equal actions. screens.md: `flex:1`, gutter-padded, never fixed-width. */
+const ACTIONS = [
+  { label: 'Send', route: '/send' },
+  { label: 'Swap', route: '/swap' },
+  { label: 'More', route: '/settings' },
+] as const;
+
+/** Prototype metrics that belong to this screen alone, named rather than inlined twice. */
+const ACTION_H = 42;
 
 export default function Home() {
   const router = useRouter();
   const hydrated = useHasHydrated();
   const wallet = useStore((s) => s.wallet);
+  const walletChecked = useStore((s) => s.walletChecked);
   const hired = useStore((s) => s.hired);
-  const stocksPaused = useStore((s) => s.stocksPaused);
-  const toggleStocksPaused = useStore((s) => s.toggleStocksPaused);
+  const toggleHire = useStore((s) => s.toggleHire);
 
   const balance = useAsync(() => repos.portfolio.balanceUsd(), []);
   const agents = useAsync(() => repos.bot.listAgents(), []);
@@ -47,196 +65,238 @@ export default function Home() {
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const staking = useAsync(() => repos.yield.staking(), []);
 
-  // null means the balance could not be read. A dash, never a confident $0.00 for a funded wallet.
+  // null means the balance could not be read. A dash, never a confident $0.00 for a funded
+  // wallet.
   const total = balance.data ?? null;
   const featuredQuote = featured.data?.[DEFAULT_BUY];
-  const featuredHeld = (positions.data ?? []).find((p) => p.symbol === DEFAULT_BUY);
+  const held = positions.data ?? [];
+  const featuredHeld = held.find((p) => p.symbol === DEFAULT_BUY);
 
-  // The entry gate — PLAN.md 2.7. "/" belongs to the tab shell; a user without a wallet is sent to
-  // onboarding from here rather than from a competing index route. Waiting for hydration first
-  // stops a returning user seeing the splash flash before their wallet loads from storage.
-  if (hydrated && !wallet) return <Redirect href="/welcome" />;
+  // Unrealised P&L across the book, as a percentage of what it cost. Both halves come from
+  // real fills; when nothing is held there is no percentage to show and the chip is absent.
+  const unrealised = held.reduce((sum, p) => sum + p.unrealised, 0);
+  const cost = held.reduce((sum, p) => sum + (p.notional - p.unrealised), 0);
+  const unrealisedPct = cost > 0 ? (unrealised / cost) * 100 : undefined;
+
+  /*
+   * The entry gate — PLAN.md 2.7.
+   *
+   * "/" belongs to the tab shell; a user without a wallet is sent to onboarding from here
+   * rather than from a competing index route.
+   *
+   * It waits for TWO things. `hydrated` means the persisted store has loaded from storage;
+   * `walletChecked` means the executor has been asked. Waiting only for the first sent every
+   * signed-in user whose local storage lacked a wallet — a new device, cleared site data, a
+   * deep link — back through sign-up, while the server knew perfectly well who they were.
+   */
+  if (hydrated && walletChecked && !wallet) return <Redirect href="/welcome" />;
 
   return (
-    <Screen tabbed>
-      <ScreenHeader
-        left={
-          <IconButton name="gear" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
-        }
-        right={<IconButton name="more" accessibilityLabel="More options" />}
-      />
+    <Screen tabBar gutter="none">
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: space.gutter,
+        }}
+      >
+        <IconButton name="gear" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
+        {/* One wallet, so no switcher chevron — the prototype's "Wallets ⌄" implies a
+            picker this build does not have. */}
+        <Text variant="cardTitle">Wallet</Text>
+        <IconButton name="more" accessibilityLabel="More options" onPress={() => router.push('/settings')} />
+      </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 22 }}>
-        <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Total value</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
-          <Text style={[type.heroBalance, { color: ink.full }]}>
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+        <View style={{ alignItems: 'center', marginTop: space.s22 }}>
+          <Eyebrow>Total value</Eyebrow>
+          <Price variant="heroBalance" style={{ marginTop: space.s6 }}>
             {total === null ? '—' : money(total)}
-          </Text>
+          </Price>
+          {unrealisedPct !== undefined ? (
+            <DeltaChip
+              label={`${unrealised >= 0 ? 'up' : 'down'} ${percent(Math.abs(unrealisedPct)).replace('+', '')} unrealised`}
+              tone={pnlTone(unrealised)}
+              style={{ alignSelf: 'center', marginTop: space.s8 }}
+            />
+          ) : null}
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
-          {([
-            { label: 'Send', route: '/send' },
-            { label: 'Swap', route: '/swap' },
-            { label: 'More', route: '/settings' },
-          ] as const).map((a) => (
-            <Pressable
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: space.s10,
+            marginTop: space.s22,
+            paddingHorizontal: space.gutter,
+          }}
+        >
+          {ACTIONS.map((a) => (
+            <Press
               key={a.label}
               accessibilityRole="button"
               accessibilityLabel={a.label}
               onPress={() => router.push(a.route)}
-              // design.md: flex:1, never fixed-width.
-              style={({ pressed }) => ({
+              style={{
                 flex: 1,
-                height: 44,
-                borderRadius: radius.xl,
-                backgroundColor: surfaces.control,
+                minWidth: 0,
+                height: ACTION_H,
+                borderRadius: radius.panelLg,
+                backgroundColor: colors.control,
                 alignItems: 'center',
                 justifyContent: 'center',
-                opacity: pressed ? 0.85 : 1,
-              })}
+              }}
             >
-              <Text style={[type.pill, { color: ink.full }]}>{a.label}</Text>
-            </Pressable>
+              <Text variant="rowPrimary">{a.label}</Text>
+            </Press>
           ))}
         </View>
 
-        <Row
-          primary="Cash"
-          secondary="Available to trade"
-          value={total === null ? '—' : money(total)}
-          height={58}
-          style={{ marginTop: 18 }}
-        />
+        <View style={{ paddingHorizontal: space.gutter, marginTop: space.s26, gap: space.s20 }}>
+          <Row
+            left={<AssetMark gradient={{ c1: '#B58CFF', c2: '#6E3ED8' }} size={size.markSm} />}
+            title="Cash"
+            secondary="Available to trade"
+            value={<Price>{total === null ? '—' : money(total)}</Price>}
+            height={size.hit}
+          />
 
-        {/*
-          The premise, closed. Renders nothing when nothing happened — a card that reports zero is
-          a card people stop reading, and the moment it matters is the moment they have stopped.
-        */}
-        <CatchUp />
+          {/*
+            The premise, closed. Renders nothing when nothing happened — a card that reports
+            zero is a card people stop reading, and the moment it matters is the moment they
+            have stopped.
+          */}
+          <CatchUp />
 
-        <SectionHeader
-          title="Agents"
-          count={`${hiredCount(hired)} hired`}
-          onPress={() => router.push('/bot/roster')}
-        />
-
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          {(agents.data ?? []).slice(0, 2).map((a, idx) => {
-            const paused = idx === 1 && stocksPaused;
-            return (
-              <Pressable
-                key={a.id}
-                onPress={idx === 1 ? toggleStocksPaused : () => router.push('/bot')}
-                accessibilityRole="button"
-                accessibilityLabel={`${a.name}, ${paused ? 'paused' : 'active'}`}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  height: 106,
-                  borderRadius: radius.lg2,
-                  backgroundColor: surfaces.surface,
-                  padding: 14,
-                  justifyContent: 'space-between',
-                  opacity: pressed ? 0.85 : 1,
+          <View>
+            <SectionHeader
+              title="Agents"
+              trailing={`${(agents.data ?? []).filter((a) => a.hired).length} hired`}
+              onPress={() => router.push('/bot/roster')}
+            />
+            <View style={{ flexDirection: 'row', gap: space.s10, marginTop: space.s14 }}>
+              {/* Hired agents first: the two cards on the busiest screen should be the two
+                  that are actually running, not the first two in roster order. */}
+              {[...(agents.data ?? [])]
+                .sort((a, b) => Number(!!b.hired) - Number(!!a.hired))
+                .slice(0, 2)
+                .map((a) => {
+                  // Was `idx === 1 && stocksPaused` — a prototype leftover that labelled the
+                  // second card from a global flag, so both cards read "Active" while the
+                  // header beside them said "1 hired". The hire record is the real state.
+                  const isHired = a.hired ?? !!hired[a.name];
+                  return (
+                    <Press
+                      key={a.id}
+                      onPress={() => toggleHire(a.name)}
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: isHired }}
+                      accessibilityLabel={`${a.name}, ${isHired ? 'hired' : 'not hired'}`}
+                      style={{
+                        // The prototype fixes these at 106pt, which reads as a scrollable
+                        // rail of many agents. This build shows exactly two, and at 106 the
+                        // pair sits in the left two-thirds with a lopsided gap beside it —
+                        // and real agent names wrap, dropping one card's status line below
+                        // the other's. `flex:1` fixes both.
+                        flex: 1,
+                        alignItems: 'center',
+                        gap: space.s8,
+                        paddingVertical: space.s12,
+                        paddingHorizontal: space.s4,
+                        borderRadius: radius.card,
+                        backgroundColor: colors.surface,
+                      }}
+                    >
+                      <AgentOrb
+                        gradient={agentGradient(a.name)}
+                        size={size.orb74}
+                        face
+                        name={a.name}
+                        status={isHired ? 'active' : 'paused'}
+                      />
+                    </Press>
+                  );
                 })}
-              >
-                <AgentOrb
-                  gradient={agentGradient(a.name)}
-                  size={34}
-                  face
-                  breathe={!paused}
-                />
-                <View style={{ gap: 3 }}>
-                  <Text style={{ fontSize: 12.5, fontWeight: '600', color: ink.full }}>
-                    {a.name}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 10.5,
-                      fontWeight: '600',
-                      color: paused ? ink.i40 : pnl.up,
-                    }}
-                  >
-                    {paused ? 'Paused' : 'Active'}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          })}
+            </View>
+          </View>
+
+          <View>
+            <SectionHeader title="Coins" onPress={() => router.push('/watchlist')} />
+            <Row
+              left={<AssetMark gradient={assetGradient(DEFAULT_BUY)} size={32} />}
+              title={DEFAULT_BUY}
+              secondary={
+                featuredHeld
+                  ? `Wrapped Ether · ${quantity(featuredHeld.units)}`
+                  : 'Wrapped Ether · not held'
+              }
+              value={<Price>{featuredQuote?.price !== undefined ? money(featuredQuote.price) : '—'}</Price>}
+              delta={
+                featuredQuote?.change24h !== undefined
+                  ? percent(featuredQuote.change24h, 2)
+                  : undefined
+              }
+              deltaTone={pnlTone(featuredQuote?.change24h ?? 0)}
+              height={size.rowSm}
+              divider={false}
+              onPress={() => router.push(`/asset/${DEFAULT_BUY}`)}
+            />
+
+            {/*
+              Tappable, because it stopped being only a fact. Once tier 4 can put money at
+              Aave, this strip is the only place on the home screen that mentions it — and a
+              user with a supplied balance needs somewhere to go to see it and take it back.
+              A statement about a rate you cannot act on is where the money goes to hide.
+            */}
+            <Press
+              onPress={() => router.push('/yield')}
+              accessibilityRole="button"
+              accessibilityLabel="See what you have earning at Aave"
+              style={{ marginTop: space.s6, marginBottom: space.s20 }}
+            >
+              <NoteStrip kind="acted">
+                {staking.data
+                  ? // `estimatedApy` is a fraction (0.0388); `percent` takes points.
+                    `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, 2).replace('+', '')} a year on Aave. ${staking.data.note}`
+                  : 'Supply rates are unavailable right now, so there is no figure to quote.'}
+              </NoteStrip>
+            </Press>
+          </View>
         </View>
-
-        <SectionHeader title="Coins" onPress={() => router.push('/watchlist')} />
-
-        <Row
-          mark={<AssetMark gradient={{ c1: '#5B93FF', c2: '#49E39B' }} size={34} />}
-          primary={DEFAULT_BUY}
-          secondary={
-            featuredHeld ? `Wrapped Ether · ${quantity(featuredHeld.units)}` : 'Wrapped Ether · not held'
-          }
-          value={featuredQuote ? money(featuredQuote.price) : '—'}
-          delta={
-            featuredQuote?.change24h !== undefined
-              ? percent(featuredQuote.change24h, { digits: 2 })
-              : undefined
-          }
-          deltaColor={(featuredQuote?.change24h ?? 0) >= 0 ? pnl.up : pnl.down}
-          onPress={() => router.push(`/asset/${DEFAULT_BUY}`)}
-        />
-
-        {/*
-          Tappable, because it stopped being only a fact.
-          Once tier 4 can put money at Aave, this strip is the only place on the home screen that
-          mentions it — and a user with a supplied balance needs somewhere to go to see it and take
-          it back. A statement about a rate you cannot act on is where the money goes to hide.
-        */}
-        <Pressable
-          onPress={() => router.push('/yield')}
-          accessibilityRole="button"
-          accessibilityLabel="See what you have earning at Aave"
-          style={{ marginTop: 16, marginBottom: 20 }}
-        >
-          <NoteStrip kind="acted">
-            {staking.data
-              // `estimatedApy` is a fraction (0.0388); `percent` takes percentage points.
-              ? `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, { digits: 2 }).replace('+', '')} a year on Aave. ${staking.data.note}`
-              : 'Supply rates are unavailable right now, so there is no figure to quote.'}
-          </NoteStrip>
-        </Pressable>
       </ScrollView>
     </Screen>
   );
 }
 
+/**
+ * A section break. The prototype writes it as a 14/600 ink55 label with a "›" and a quiet
+ * trailing count — no rule above it, which is why this is a plain row and not a `Row`.
+ */
 function SectionHeader({
   title,
-  count,
+  trailing,
   onPress,
 }: {
   title: string;
-  count?: string;
+  trailing?: string;
   onPress?: () => void;
 }) {
   return (
-    <Pressable
+    <Press
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={title}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: 26,
-        marginBottom: 12,
-        borderTopWidth: hairlineWidth,
-        borderTopColor: borders.hairline,
-        paddingTop: 18,
-      }}
+      hitHeight={size.hit}
+      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={[type.cardTitleSm, { color: ink.full }]}>{title}</Text>
-        <Icon name="chevron" size={12} color={ink.i55} />
-      </View>
-      {count ? <Text style={[type.footnote, { color: ink.i28 }]}>{count}</Text> : null}
-    </Pressable>
+      <Text variant="rowPrimary" color={colors.ink55}>
+        {title} ›
+      </Text>
+      {trailing ? (
+        <Text variant="secondary" color={colors.ink40}>
+          {trailing}
+        </Text>
+      ) : null}
+    </Press>
   );
 }

@@ -2,29 +2,39 @@
  * Assets tab — NEW. PLAN.md 10.2 / §3.5.
  *
  * The handoff's "Assets" tab was never designed [G13]. Built from parts that already exist:
- * the stacked proportion bar from screen 10, market rows with sparklines from screen 5, and the
- * wallet address. No new visual language.
+ * the stacked proportion bar from screen 10, holdings rows, the realised card, and the
+ * wallet. No new visual language — and no design values of its own; everything is `src/ui`.
  */
 import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { assetGradient } from '@/design/gradients';
 import {
   AssetMark,
   EmptyState,
+  Eyebrow,
   LoadingRows,
+  Price,
   Row,
   Screen,
-  ScreenHeader,
   SheetCard,
-} from '@/design/components';
-import { ink, pnl } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money, percent, quantity, signedMoney } from '@/format';
+  Text,
+  colors,
+  money,
+  percent,
+  pnlTone,
+  quantity,
+  radius,
+  size,
+  space,
+} from '@/ui';
+import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
 import { weightBarPct } from '@/state/derived';
+
+const BAR_H = 8;
 
 export default function Assets() {
   const router = useRouter();
@@ -40,61 +50,83 @@ export default function Assets() {
   const holdings = positions.data ?? [];
 
   return (
-    <Screen tabbed>
-      <ScreenHeader left={<Text style={[type.screenTitle, { color: ink.full }]}>Assets</Text>} />
+    <Screen tabBar>
+      <Text variant="screenTitle">Assets</Text>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 20 }}>
-        <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Portfolio value</Text>
-        <Text style={[type.heroBalance, { color: ink.full, marginTop: 8 }]}>
-          {balance.data === null || balance.data === undefined ? "—" : money(balance.data)}
-        </Text>
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: space.s20 }}>
+        <Eyebrow small>Portfolio value</Eyebrow>
+        {/* `money(balance.data ?? 0)` reported "$0.00" whenever the executor was
+            unreachable — a confident number for a question we never got to ask. An em dash
+            says the same thing the code actually knows. */}
+        <Price variant="heroBalance" style={{ marginTop: space.s8 }}>
+          {balance.data === null || balance.data === undefined ? '—' : money(balance.data)}
+        </Price>
+        {balance.error ? (
+          <Text variant="secondary" style={{ marginTop: space.s6 }}>
+            Could not reach the executor, so this is not your balance.
+          </Text>
+        ) : null}
 
-        <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 20 }}>
-          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Allocation</Text>
-          {/* The 8px stacked proportion bar from screen 10, reused verbatim. */}
-          <View style={{ flexDirection: 'row', gap: 2, height: 8, marginTop: 12 }}>
+        <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s20 }}>
+          <Eyebrow small>Allocation</Eyebrow>
+          {/* The 8pt stacked proportion bar from screen 10, reused verbatim. */}
+          <View style={{ flexDirection: 'row', gap: space.s2, height: BAR_H, marginTop: space.s12 }}>
             {(sleeves.data ?? []).map((s, i) => (
               <View
                 key={s.name}
                 style={{
                   width: `${weightBarPct(weights, i)}%`,
                   backgroundColor: s.color,
-                  borderRadius: 4,
+                  borderRadius: BAR_H / 2,
                 }}
               />
             ))}
           </View>
-          <View style={{ marginTop: 14, gap: 10 }}>
+          <View style={{ marginTop: space.s14, gap: space.s10 }}>
             {(sleeves.data ?? []).map((s) => (
-              <View key={s.name} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View
+                key={s.name}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}
+              >
                 <View
-                  style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }}
+                  style={{
+                    width: BAR_H,
+                    height: BAR_H,
+                    borderRadius: BAR_H / 2,
+                    backgroundColor: s.color,
+                  }}
                 />
-                <Text style={[type.body, { color: ink.full, flex: 1 }]}>{s.name}</Text>
-                <Text style={[type.rowValue, { color: ink.i55 }]}>{s.weight}%</Text>
+                <Text variant="body" style={{ flex: 1 }}>
+                  {s.name}
+                </Text>
+                <Price color={colors.ink55}>{s.weight}%</Price>
               </View>
             ))}
           </View>
         </SheetCard>
 
-        <Text style={[type.cardTitleSm, { color: ink.full, marginTop: 26, marginBottom: 6 }]}>
+        <Text variant="cardTitle" style={{ marginTop: space.s26, marginBottom: space.s6 }}>
           Holdings
         </Text>
         {positions.loading ? (
-          <LoadingRows count={2} height={64} />
+          <LoadingRows count={2} height={size.rowLg} />
         ) : holdings.length === 0 ? (
-          <EmptyState text="Nothing held yet. A recurring buy is the simplest way to start." />
+          <EmptyState
+            text="Nothing held yet. A recurring buy is the simplest way to start."
+            actionLabel="Set one up"
+            onAction={() => router.push('/strategy/dca')}
+          />
         ) : (
           holdings.map((h) => (
             <Row
               key={h.id}
-              mark={<AssetMark gradient={{ c1: '#5B93FF', c2: '#49E39B' }} size={32} />}
-              primary={h.symbol}
+              left={<AssetMark gradient={assetGradient(h.symbol)} size={32} />}
+              title={h.symbol}
               secondary={`${quantity(h.units)} · avg ${money(h.entry)}`}
-              value={money(h.notional)}
+              value={<Price>{money(h.notional)}</Price>}
               delta={percent(h.unrealisedPct)}
-              deltaColor={h.unrealised >= 0 ? pnl.up : pnl.down}
-              height={64}
+              deltaTone={pnlTone(h.unrealised)}
+              height={size.rowLg}
               onPress={() => router.push(`/asset/${h.symbol}`)}
             />
           ))
@@ -103,54 +135,66 @@ export default function Assets() {
         {/*
           Money actually taken, kept apart from money on paper.
           `Holdings` above shows what the open book is worth today, which is an opinion that
-          changes every minute. This is the other number — what selling has actually realised —
-          and it used to exist nowhere: a position that closed took its profit out of the app with
-          it, because the holdings query correctly filters to units > 0.
+          changes every minute. This is the other number — what selling has actually realised
+          — and it used to exist nowhere: a position that closed took its profit out of the
+          app with it, because the holdings query correctly filters to units > 0.
         */}
         {realised.data && realised.data.bySymbol.length > 0 ? (
-          <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 26 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <Text style={[type.eyebrowSm, { color: ink.i32 }]}>REALISED</Text>
-              <Text
-                style={[
-                  type.rowPrimary,
-                  { color: realised.data.total >= 0 ? pnl.up : pnl.down },
-                ]}
-              >
-                {signedMoney(realised.data.total)}
-              </Text>
+          <SheetCard
+            borderRadius={radius.panel}
+            padding={space.s16}
+            style={{ marginTop: space.s26 }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+              }}
+            >
+              <Eyebrow small>Realised</Eyebrow>
+              <Price tone={pnlTone(realised.data.total)}>{signedMoney(realised.data.total)}</Price>
             </View>
             {realised.data.bySymbol.map((r) => (
               <View
                 key={r.symbol}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}
+                style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  marginTop: space.s10,
+                }}
               >
-                <Text style={[type.body, { color: ink.i55 }]}>
+                <Text variant="body" color={colors.ink55}>
                   {r.symbol} · {quantity(r.unitsSold)} sold
-                  {/* Said inline, because a number that quietly understates is worse than one
-                      that admits it. */}
+                  {/* Said inline, because a number that quietly understates is worse than
+                      one that admits it. */}
                   {r.basisIncomplete ? ' · basis incomplete' : ''}
                 </Text>
-                <Text style={[type.body, { color: r.realised >= 0 ? pnl.up : pnl.down }]}>
+                <Price variant="body" tone={pnlTone(r.realised)}>
                   {signedMoney(r.realised)}
-                </Text>
+                </Price>
               </View>
             ))}
-            <Text style={[type.footnote, { color: ink.i28, marginTop: 12 }]}>
-              At average cost. Closed positions stay here even though they are no longer holdings.
+            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
+              At average cost. Closed positions stay here even though they are no longer
+              holdings.
             </Text>
           </SheetCard>
         ) : null}
 
-        <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 26, marginBottom: 24 }}>
-          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Wallet</Text>
-          <Text style={[type.body, { color: ink.full, marginTop: 8 }]} numberOfLines={1}>
+        <SheetCard
+          borderRadius={radius.panel}
+          padding={space.s16}
+          style={{ marginTop: space.s26, marginBottom: space.s26 }}
+        >
+          <Eyebrow small>Wallet</Eyebrow>
+          <Text variant="body" style={{ marginTop: space.s8 }} numberOfLines={1}>
             {wallet?.address ?? 'No wallet connected'}
           </Text>
-          <Text style={[type.footnote, { color: ink.i28, marginTop: 6 }]}>
+          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
             {wallet
-              // The live chain, not the one the wallet row was stamped with when it was created.
-              ? `${wallet.kind === 'embedded' ? 'Created in xorr' : 'Connected'} · ${wallet.chain ?? wallet.cluster}`
+              ? // The live chain, not the one the wallet row was stamped with at creation.
+                `${wallet.kind === 'embedded' ? 'Created in xorr' : 'Connected'} · ${wallet.chain ?? wallet.cluster}`
               : 'Create or connect one to let the bot trade.'}
           </Text>
         </SheetCard>

@@ -1,34 +1,38 @@
 /**
  * Transaction history — PLAN.md 10.7 [G14].
  *
- * Deliberately DISTINCT from Activity (screen 15). Activity answers "what did the bot decide";
- * this answers "what moved on chain". They differ: a blocked proposal is an activity event with no
- * transaction, and a fee is a transaction with no decision behind it.
+ * Deliberately DISTINCT from Activity (screen 15). Activity answers "what did the bot
+ * decide"; this answers "what settled on chain". They differ: a blocked proposal is an
+ * activity event with no transaction, and a fee is a transaction with no decision behind it.
+ *
+ * The rows come from **The Graph**, not from our own database. A settlement history the user
+ * cannot verify independently is not a settlement history — it is our word for it.
  */
 import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   EmptyState,
   ErrorState,
+  Fill,
   IconButton,
   LoadingRows,
+  Price,
   Row,
   Screen,
-  ScreenHeader,
-} from '@/design/components';
-import { ink } from '@/design/colors';
-import { type } from '@/design/type';
+  Text,
+  colors,
+  money,
+  size,
+  space,
+} from '@/ui';
 import { useAsync } from '@/data/useAsync';
 import { spendsFor, unitsToUsd } from '@/data/subgraph';
 import { useStore } from '@/state/store';
-import { money } from '@/format';
 
 export default function History() {
   const router = useRouter();
   const wallet = useStore((s) => s.wallet);
-  // Read from The Graph, not from our own database. A settlement history the user cannot verify
-  // independently is not a settlement history.
   const { data, loading, error, reload } = useAsync(
     () => (wallet?.address ? spendsFor(wallet.address) : Promise.resolve([])),
     [wallet?.address],
@@ -37,26 +41,21 @@ export default function History() {
 
   return (
     <Screen>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <Text style={[type.screenTitle, { color: ink.full }]}>History</Text>
-          </View>
-        }
-      />
-      <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
-        Everything that settled on chain, read from The Graph. Each row has a transaction you can
-        check yourself.
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+        <IconButton
+          name="back"
+          accessibilityLabel="Back"
+          background="none"
+          onPress={() => router.back()}
+        />
+        <Text variant="screenTitle">History</Text>
+      </View>
+      <Text variant="secondary" style={{ marginTop: space.s10 }}>
+        Everything that settled on chain, read from The Graph. Each row has a transaction you
+        can check yourself.
       </Text>
 
-      <Screen.Content style={{ marginTop: 14 }}>
+      <Fill style={{ marginTop: space.s14 }}>
         {loading && !data ? (
           <LoadingRows count={5} />
         ) : error ? (
@@ -72,17 +71,16 @@ export default function History() {
             {onChain.map((r) => (
               <Row
                 key={r.id}
-                primary={`Spent ${money(unitsToUsd(r.amount))}`}
+                title={`Spent ${money(unitsToUsd(r.amount))}`}
                 secondary={`${r.txHash.slice(0, 10)}…${r.txHash.slice(-6)} · block ${r.blockNumber}`}
-                value={money(unitsToUsd(r.spentToday))}
+                value={<Price color={colors.ink55}>{money(unitsToUsd(r.spentToday))}</Price>}
                 delta="today"
-                valueColor={ink.i55}
-                height={66}
+                height={size.rowLg}
               />
             ))}
           </ScrollView>
         )}
-      </Screen.Content>
+      </Fill>
     </Screen>
   );
 }

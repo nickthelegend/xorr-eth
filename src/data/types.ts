@@ -136,8 +136,21 @@ export type BacktestResult = {
   maxDd: number;
   sharpe: number;
   trades: number;
-  /** SVG polyline points in the 360x110 viewBox — design.md §6 "Area / equity curve". */
-  curve: string;
+  /**
+   * The equity series, downsampled for drawing. NUMBERS, not an SVG polyline — the chart
+   * scales a series itself, and the real values let the screen label what the line is worth.
+   */
+  equity: number[];
+  /**
+   * Where the numbers came from, and what they are not.
+   *
+   * The executor sends these and calls them honesty fields — a backtest with no context is
+   * a sales pitch. This type dropped them, so the screen showed a return with no provenance
+   * and no disclaimer.
+   */
+  feed?: 'live';
+  source?: string;
+  disclaimer?: string;
 };
 
 export type Position = {

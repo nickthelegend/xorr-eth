@@ -1,11 +1,11 @@
 import React from 'react';
 import { Stack } from 'expo-router';
-import { surfaces } from '@/design/colors';
+import { colors } from '@/ui';
 
 export default function OnboardingLayout() {
   return (
     <Stack
-      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: surfaces.bg } }}
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
     />
   );
 }
@@ -13,8 +13,7 @@ export default function OnboardingLayout() {
 /**
  * expo-router renders this instead of the segment when a screen throws.
  *
- * Scoped to the segment rather than the root on purpose: a failing screen inside the tabs keeps
- * the tab bar, so Safety — and the button that stops the bot — is still one tap away. A trading
- * app whose kill switch becomes unreachable because a chart threw is the worst version of this.
+ * Scoped to the segment: a failure inside onboarding must not take out the whole app, and
+ * the user needs a way back to a screen that works.
  */
 export { ScreenError as ErrorBoundary } from '@/errors/ErrorBoundary';

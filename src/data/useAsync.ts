@@ -16,9 +16,18 @@ export type AsyncState<T> = {
   loading: boolean;
   error: Error | undefined;
   reload: () => void;
+  /**
+   * `Date.now()` at the moment this data settled, or `undefined` before the first answer.
+   *
+   * Screens that report "when did I last hear from the executor" — the briefing header, a
+   * price staleness note — need the fetch time, and stamping it in a screen-level effect
+   * means setting state from an effect on every load. The hook already knows; it just
+   * never said.
+   */
+  settledAt: number | undefined;
 };
 
-type Settled<T> = { key: string; data?: T; error?: Error };
+type Settled<T> = { key: string; at?: number; data?: T; error?: Error };
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
   const [nonce, setNonce] = useState(0);
@@ -38,11 +47,15 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncSt
     let current = true;
     fn()
       .then((data) => {
-        if (current && alive.current) setSettled({ key, data });
+        if (current && alive.current) setSettled({ key, data, at: Date.now() });
       })
       .catch((e: unknown) => {
         if (current && alive.current) {
-          setSettled({ key, error: e instanceof Error ? e : new Error(String(e)) });
+          setSettled({
+            key,
+            at: Date.now(),
+            error: e instanceof Error ? e : new Error(String(e)),
+          });
         }
       });
     return () => {
@@ -60,5 +73,6 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncSt
     error: settled.key === key ? settled.error : undefined,
     loading: settled.key !== key,
     reload,
+    settledAt: settled.at,
   };
 }

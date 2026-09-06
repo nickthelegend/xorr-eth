@@ -121,8 +121,25 @@ type ViewsSlice = {
 // ── Wallet & delegation (the pivot) ──
 type WalletSlice = {
   wallet: Wallet | null;
+  /**
+   * The user has read the recovery screen and acknowledged what holds the key.
+   *
+   * Screen 20's row said "Not backed up" as a literal, so it said it forever — including to
+   * a user who had just been through recovery. This is the state behind that row.
+   */
+  recoveryBackedUp: boolean;
+  setRecoveryBackedUp: (v: boolean) => void;
   delegation: Delegation | null;
   setWallet: (w: Wallet | null) => void;
+  /**
+   * Has the executor been asked whether this user has a wallet yet?
+   *
+   * Distinct from `wallet === null`, which conflates "no account" with "not asked". The entry gate
+   * redirects to onboarding on a null wallet, so acting before the answer arrives sent signed-in
+   * users back through sign-up.
+   */
+  walletChecked: boolean;
+  setWalletChecked: (v: boolean) => void;
   setDelegation: (d: Delegation | null) => void;
 };
 
@@ -223,8 +240,12 @@ export const useStore = create<Store>()(
 
       // ── wallet & delegation ──
       wallet: null,
+      recoveryBackedUp: false,
+      setRecoveryBackedUp: (recoveryBackedUp) => set({ recoveryBackedUp }),
       delegation: null,
       setWallet: (wallet) => set({ wallet }),
+      walletChecked: false,
+      setWalletChecked: (walletChecked) => set({ walletChecked }),
       setDelegation: (delegation) => set({ delegation }),
     }),
     {
@@ -255,6 +276,7 @@ export const useStore = create<Store>()(
         alerts: s.alerts,
         killed: s.killed,
         wallet: s.wallet,
+        recoveryBackedUp: s.recoveryBackedUp,
       }),
     },
   ),

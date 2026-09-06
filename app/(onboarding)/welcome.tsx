@@ -16,11 +16,10 @@ import { Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { AgentOrb, Screen, SheetCard } from '@/design/components';
 import { brand } from '@/design/brand';
-import { ink, preAccount, pnl, surfaces } from '@/design/colors';
+import { ink, preAccount, surfaces } from '@/design/colors';
 import { agentGradients } from '@/design/gradients';
 import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money, percent } from '@/format';
+import { type, DISPLAY_FONT } from '@/design/type';
 
 const PREVIEW = ['Recurring buys', 'Stops that hold', 'One-tap stop'] as const;
 
@@ -29,7 +28,21 @@ export default function Splash() {
   return (
     <Screen>
       <View style={{ alignItems: 'center', marginTop: 18, gap: 10 }}>
-        <Text style={{ fontSize: 42, fontWeight: '800', color: ink.full, letterSpacing: 2 }}>
+        {/*
+          The wordmark is the one place the design uses a display face.
+          `ui/mobile-ui/reference` sets `font-family:'Baloo 2'` at weight 800 here and nowhere else;
+          design.md's "no custom font" note described the body text and missed it, so the wordmark
+          had been rendering in whatever the platform happened to supply.
+        */}
+        <Text
+          style={{
+            fontFamily: DISPLAY_FONT,
+            fontSize: 42,
+            fontWeight: '800',
+            color: ink.full,
+            letterSpacing: 2,
+          }}
+        >
           {brand.WORDMARK}
         </Text>
         <Text style={[type.body, { color: ink.i40, textAlign: 'center' }]}>{brand.TAGLINE}</Text>
@@ -37,22 +50,22 @@ export default function Splash() {
 
       <Screen.Content style={{ justifyContent: 'center' }}>
         <SheetCard radius={radius.xxl2} padding={22}>
-          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Total value</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
-            <Text style={[type.heroBalance, { color: ink.full }]}>{money(63.28)}</Text>
-            <View
-              style={{
-                backgroundColor: pnl.downBg,
-                borderRadius: 12,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-              }}
-            >
-              <Text style={[type.rowDelta, { color: pnl.down, fontWeight: '600' }]}>
-                {percent(-1.4)}
-              </Text>
-            </View>
-          </View>
+          {/*
+            No balance here, on purpose.
+
+            This card used to headline "Total value $63.28  −1.4%" — a number from the design
+            handoff, on the first screen a new user sees, before any account exists. Nothing was
+            labelling it, and this app's one rule that settles arguments is that every number on
+            screen is real or it is labelled. A fabricated balance is the exact failure that rule
+            exists to prevent, and it was in the most prominent position in the product.
+
+            What belongs here is what the bot actually does — which the three pills below already
+            say, and which needs no number to be true.
+          */}
+          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>What it does</Text>
+          <Text style={[type.cardTitle, { color: ink.full, marginTop: 8 }]}>
+            Trades inside a permission you sign, and can take back.
+          </Text>
 
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 18, flexWrap: 'wrap' }}>
             {PREVIEW.map((p) => (

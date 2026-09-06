@@ -1,47 +1,73 @@
 /**
- * DCA setup — PLAN.md 9.4. The headline feature of the pivot, and tier 1 of the strategy ladder.
+ * DCA setup — PLAN.md 9.4. The headline feature of the pivot, and tier 1 of the ladder.
  *
- * White sheet, built from screen 14's ticket pattern (amount keypad + quick pills) plus a cadence
- * segmented control and a "next 3 runs" preview. One primary CTA.
+ * White sheet, built from screen 14's ticket pattern (amount keypad + segmented controls)
+ * plus a "next 3 runs" preview. One primary CTA.
  *
- * §1.2: "Buy $50 of WETH every Monday is verifiable by a user with no trading knowledge." The next-
- * runs preview exists so that verification is possible at the moment of setup, not after the fact.
+ * §1.2: "Buy $50 of WETH every Monday is verifiable by a user with no trading knowledge."
+ * The next-runs preview exists so that verification is possible at the moment of setup,
+ * not after the fact.
  */
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Icon } from '@/design/Icon';
-import { Button, Screen, Segmented } from '@/design/components';
-import { pnl, sheet } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money } from '@/format';
+import {
+  Button,
+  Eyebrow,
+  Fill,
+  IconButton,
+  Keypad,
+  Price,
+  Screen,
+  Segmented,
+  Text,
+  colors,
+  money,
+  radius,
+  size,
+  space,
+} from '@/ui';
 import { keypadPress } from '@/state/derived';
 import { repos } from '@/data';
 import { nextRuns } from '@/strategies/schedule';
 import type { Cadence } from '@/data/types';
 
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
-const CADENCES: Cadence[] = ['daily', 'weekly', 'biweekly', 'monthly'];
-const CADENCE_LABELS = ['Daily', 'Weekly', 'Every 2 wks', 'Monthly'];
+const CADENCES = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Every 2 wks' },
+  { value: 'monthly', label: 'Monthly' },
+] as const satisfies readonly { value: Cadence; label: string }[];
+
 /**
- * What a recurring buy can actually buy. These are the Base tokens the executor can route through
- * 1inch and settle through XorrDelegation — offering SOL here would let a user schedule a strategy
- * that can never execute.
+ * What a recurring buy can actually buy. These are the Base tokens the executor can route
+ * through 1inch and settle through XorrDelegation — offering a symbol it cannot route would
+ * let a user schedule a strategy that can never execute.
  */
-const SYMBOLS = ['WETH', 'CBBTC', 'USDC'];
+const SYMBOLS = [
+  { value: 'WETH', label: 'WETH' },
+  { value: 'CBBTC', label: 'CBBTC' },
+  { value: 'USDC', label: 'USDC' },
+] as const;
+
+type Symbol = (typeof SYMBOLS)[number]['value'];
+
+/** The cadence in the sentence the CTA and the label both speak. */
+function phrase(c: Cadence): string {
+  return CADENCES.find((x) => x.value === c)!.label.toLowerCase();
+}
 
 export default function DcaSetup() {
   const router = useRouter();
   const [amount, setAmount] = useState('50');
-  const [cadence, setCadence] = useState(1);
-  const [symbolIdx, setSymbolIdx] = useState(0);
+  const [cadence, setCadence] = useState<Cadence>('weekly');
+  const [symbol, setSymbol] = useState<Symbol>('WETH');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
   const usd = parseFloat(amount || '0') || 0;
-  const symbol = SYMBOLS[symbolIdx]!;
-  const runs = useMemo(() => nextRuns(CADENCES[cadence]!, 3), [cadence]);
+  const runs = useMemo(() => nextRuns(cadence, 3), [cadence]);
+  const sentence = `${money(usd, { decimals: 0 })} of ${symbol}, ${phrase(cadence)}`;
 
   async function create() {
     if (usd <= 0) return;
@@ -51,10 +77,10 @@ export default function DcaSetup() {
       await repos.strategies.create({
         kind: 'dca',
         state: 'live',
-        label: `${money(usd, { fractionDigits: 0 })} of ${symbol}, ${CADENCE_LABELS[cadence]!.toLowerCase()}`,
+        label: sentence,
         symbol,
         params: { usd },
-        cadence: CADENCES[cadence],
+        cadence,
         nextRunAt: runs[0]!.getTime(),
         dailyAllocationUsd: usd,
       });
@@ -67,115 +93,107 @@ export default function DcaSetup() {
   }
 
   return (
-    <Screen background={sheet.bg} sheetEdge gutter={false}>
-      <View style={{ flex: 1, paddingHorizontal: 20 }}>
-        <View
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <Text style={[type.sheetTitle, { color: sheet.ink }]}>Recurring buy</Text>
-          <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12}>
-            <Icon name="close" size={20} color={sheet.ink} />
-          </Pressable>
-        </View>
-
-        <Segmented
-          options={SYMBOLS}
-          value={symbolIdx}
-          onChange={setSymbolIdx}
-          variant="sheet"
-          style={{ marginTop: 16 }}
-          accessibilityLabel="Asset"
+    <Screen light gutter="gutter">
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="sheetTitle" color={colors.sheet.ink}>
+          Recurring buy
+        </Text>
+        <IconButton
+          name="close"
+          accessibilityLabel="Close"
+          onPress={() => router.back()}
+          background="none"
+          color={colors.sheet.ink}
+          glyph={20}
         />
+      </View>
 
-        <View style={{ alignItems: 'center', marginTop: 22, gap: 6 }}>
-          <Text style={[type.heroAmount, { color: sheet.ink }]}>${amount}</Text>
-          <Text style={[type.body, { color: sheet.muted }]}>
-            of {symbol}, {CADENCE_LABELS[cadence]!.toLowerCase()}
-          </Text>
-        </View>
+      <Segmented
+        options={SYMBOLS}
+        value={symbol}
+        onChange={setSymbol}
+        light
+        style={{ marginTop: space.s16 }}
+      />
 
-        <Segmented
-          options={CADENCE_LABELS}
-          value={cadence}
-          onChange={setCadence}
-          variant="sheet"
-          height={36}
-          style={{ marginTop: 18 }}
-          accessibilityLabel="How often"
-        />
-
-        <Screen.Content style={{ marginTop: 8 }}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              {KEYS.map((k) => (
-                <Pressable
-                  key={k}
-                  onPress={() => setAmount((a) => keypadPress(a, k))}
-                  accessibilityRole="button"
-                  accessibilityLabel={k === '⌫' ? 'Delete' : k}
-                  style={({ pressed }) => ({
-                    width: '33.333%',
-                    height: 52,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: radius.md,
-                    backgroundColor: pressed ? sheet.fill : 'transparent',
-                  })}
-                >
-                  <Text style={{ fontSize: 24, fontWeight: '500', color: sheet.ink }}>{k}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {/* The whole point of tier 1: you can check the schedule before you agree to it. */}
-            <View
-              style={{
-                backgroundColor: sheet.fill,
-                borderRadius: radius.md2,
-                padding: 14,
-                marginTop: 12,
-                gap: 8,
-              }}
-            >
-              <Text style={[type.eyebrowSm, { color: sheet.muted }]}>Next three runs</Text>
-              {runs.map((d) => (
-                <View
-                  key={d.toISOString()}
-                  style={{ flexDirection: 'row', justifyContent: 'space-between' }}
-                >
-                  <Text style={[type.body, { color: sheet.ink }]}>
-                    {d.toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </Text>
-                  <Text style={[type.body, { color: sheet.muted }]}>
-                    {money(usd, { fractionDigits: 0 })}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            {error ? (
-              <Text style={[type.noteBody, { color: pnl.candleDown, marginTop: 12 }]}>{error}</Text>
-            ) : null}
-          </ScrollView>
-        </Screen.Content>
-
-        <Button
-          label={`Buy ${money(usd, { fractionDigits: 0 })} of ${symbol}, ${CADENCE_LABELS[cadence]!.toLowerCase()}`}
-          variant="sheetConfirm"
-          disabled={usd <= 0}
-          loading={busy}
-          onPress={create}
-        />
-        <Text
-          style={[type.footnote, { color: sheet.dim, textAlign: 'center', marginTop: 12 }]}
-        >
-          Runs on schedule inside your daily cap. Pause or cancel any time.
+      <View style={{ alignItems: 'center', marginTop: space.s22, gap: space.s6 }}>
+        <Price variant="heroAmount" color={colors.sheet.ink}>
+          ${amount}
+        </Price>
+        <Text variant="body" color={colors.sheet.muted}>
+          of {symbol}, {phrase(cadence)}
         </Text>
       </View>
+
+      <Segmented
+        options={CADENCES}
+        value={cadence}
+        onChange={setCadence}
+        light
+        height={size.segThumbSm}
+        style={{ marginTop: space.s18 }}
+      />
+
+      <Fill style={{ marginTop: space.s8 }}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <Keypad light onPress={(k) => setAmount((a) => keypadPress(a, k))} />
+
+          {/* The whole point of tier 1: you can check the schedule before you agree to it. */}
+          <View
+            style={{
+              backgroundColor: colors.sheet.fill,
+              borderRadius: radius.tile,
+              padding: space.s14,
+              marginTop: space.s12,
+              gap: space.s8,
+            }}
+          >
+            <Eyebrow small color={colors.sheet.muted}>
+              Next three runs
+            </Eyebrow>
+            {runs.map((d) => (
+              <View
+                key={d.toISOString()}
+                style={{ flexDirection: 'row', justifyContent: 'space-between' }}
+              >
+                <Text variant="body" color={colors.sheet.ink}>
+                  {d.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </Text>
+                <Price variant="body" color={colors.sheet.muted}>
+                  {money(usd, { decimals: 0 })}
+                </Price>
+              </View>
+            ))}
+          </View>
+
+          {error ? (
+            <Text variant="secondarySm" color={colors.candleDown} style={{ marginTop: space.s12 }}>
+              {error}
+            </Text>
+          ) : null}
+        </ScrollView>
+      </Fill>
+
+      <Button
+        label={`Buy ${sentence}`}
+        backgroundColor={colors.candleUp}
+        color={colors.ink}
+        disabled={usd <= 0}
+        loading={busy}
+        onPress={create}
+      />
+      <Text
+        variant="footnote"
+        color={colors.sheet.dim}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
+        Runs on schedule inside your daily cap. Pause or cancel any time.
+      </Text>
     </Screen>
   );
 }

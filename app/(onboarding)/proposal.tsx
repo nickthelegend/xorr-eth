@@ -1,33 +1,45 @@
 /**
  * Screen 10 — Portfolio proposal. screens.md Group A.
  *
- * Centred 56px strategist orb, title, subtitle. Card containing: an 8px stacked proportion bar
- * (three segments, 2px gaps, widths = normalised weights), three sleeve blocks (dot + name +
- * stepper, then an indented 11.5px rationale), an "Allocated" total row, then the CTA.
+ * Centred 56pt strategist orb, title, subtitle. Card containing: an 8pt stacked proportion
+ * bar (three segments, 2pt gaps, widths = normalised weights), three sleeve blocks (dot +
+ * name + stepper, then an indented rationale), an "Allocated" total row, then the CTA.
  *
- * weights default 55/30/15, +/-5 per tap. Total must equal 100 to approve — the CTA reads
+ * weights default 55/30/15, ±5 per tap. Total must equal 100 to approve — the CTA reads
  * "Balance to 100% first" (disabled), then "Approve & fund", then "Portfolio approved".
  * Total colour `up` at 100, `warn` otherwise. ANY WEIGHT EDIT CLEARS `approved`.
  *
  * After the pivot, approving this creates a real tier-2 rebalance strategy.
  */
-import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
-import { AgentOrb, Button, Screen, SheetCard, Stepper } from '@/design/components';
-import { ink, pnl } from '@/design/colors';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { agentGradients } from '@/design/gradients';
-import { DURATION } from '@/design/motion';
-import { EASING } from '@/design/easing';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { motionDuration, useReducedMotion } from '@/design/useReducedMotion';
+import {
+  AgentOrb,
+  Button,
+  Fill,
+  Price,
+  Screen,
+  SheetCard,
+  Stepper,
+  Text,
+  colors,
+  duration,
+  radius,
+  size,
+  space,
+  timing,
+  useReducedMotion,
+} from '@/ui';
 import { canApprove, proposalCta, weightBarPct, weightTotal } from '@/state/derived';
 import { sleeveFixtures } from '@/data/fixtures/sleeves';
 import { onboarding } from '@/data/fixtures/onboarding';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
+
+const BAR_H = 8;
 
 export default function Proposal() {
   const router = useRouter();
@@ -71,41 +83,55 @@ export default function Proposal() {
 
   return (
     <Screen>
-      <View style={{ alignItems: 'center', gap: 14 }}>
-        <AgentOrb gradient={agentGradients.Strategist} size={56} face specular bloom breathe />
-        <Text style={[type.onboardingTitle, { color: ink.full, textAlign: 'center' }]}>
+      <View style={{ alignItems: 'center', gap: space.s14 }}>
+        <AgentOrb gradient={agentGradients.Strategist} size={size.orb56} face specular bloom />
+        <Text variant="onboardingTitle" align="center">
           Your draft portfolio
         </Text>
-        <Text style={[type.body, { color: ink.i40, textAlign: 'center' }]}>
-          Built from your goals and a {risk} risk setting. Move the weights — nothing is placed
-          until you approve.
+        <Text variant="body" color={colors.ink40} align="center">
+          Built from your goals and a {risk} risk setting. Move the weights — nothing is
+          placed until you approve.
         </Text>
       </View>
 
-      <Screen.Content style={{ marginTop: 24 }}>
-        <SheetCard radius={radius.xl} padding={18}>
-          <View style={{ flexDirection: 'row', gap: 2, height: 8 }}>
+      <Fill style={{ marginTop: space.s26 }}>
+        <SheetCard borderRadius={radius.panel} padding={space.s18}>
+          <View style={{ flexDirection: 'row', gap: space.s2, height: BAR_H }}>
             {sleeveFixtures.map((s, i) => (
               <Bar key={s.name} pct={weightBarPct(weights, i)} color={s.color} />
             ))}
           </View>
 
-          <View style={{ marginTop: 20, gap: 20 }}>
+          <View style={{ marginTop: space.s20, gap: space.s20 }}>
             {sleeveFixtures.map((s, i) => (
-              <View key={s.name} style={{ gap: 8 }}>
+              <View key={s.name} style={{ gap: space.s8 }}>
                 <View
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    gap: 10,
+                    gap: space.s10,
                     justifyContent: 'space-between',
                   }}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: space.s10,
+                      flex: 1,
+                    }}
+                  >
                     <View
-                      style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: s.color }}
+                      style={{
+                        width: BAR_H,
+                        height: BAR_H,
+                        borderRadius: BAR_H / 2,
+                        backgroundColor: s.color,
+                      }}
                     />
-                    <Text style={[type.rowPrimary, { color: ink.full, flex: 1 }]}>{s.name}</Text>
+                    <Text variant="rowPrimary" style={{ flex: 1 }}>
+                      {s.name}
+                    </Text>
                   </View>
                   <Stepper
                     value={`${weights[i] ?? 0}%`}
@@ -113,11 +139,14 @@ export default function Proposal() {
                     onIncrement={() => bumpWeight(i, 1)}
                     canDecrement={(weights[i] ?? 0) > 0}
                     canIncrement={(weights[i] ?? 0) < 100}
-                    valueMinWidth={70}
-                    accessibilityLabel={s.name}
+                    valueMinWidth={size.stepperValueMinWSm}
                   />
                 </View>
-                <Text style={[type.noteBody, { color: ink.i45, paddingLeft: 18 }]}>{s.note}</Text>
+                {/* Indented to the dot's text column, so the rationale reads as belonging to
+                    the sleeve above it rather than to the card. */}
+                <Text variant="secondarySm" color={colors.ink45} style={{ paddingLeft: space.s18 }}>
+                  {s.note}
+                </Text>
               </View>
             ))}
           </View>
@@ -127,26 +156,26 @@ export default function Proposal() {
               flexDirection: 'row',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginTop: 22,
+              marginTop: space.s22,
             }}
           >
-            <Text style={[type.rowPrimary, { color: ink.full }]}>Allocated</Text>
-            <Text
-              style={[type.rowPrimaryLg, { color: ok ? pnl.up : pnl.warn, fontWeight: '700' }]}
-            >
+            <Text variant="rowPrimary">Allocated</Text>
+            <Price variant="value" color={ok ? colors.up : colors.warn}>
               {total}%
-            </Text>
+            </Price>
           </View>
         </SheetCard>
 
         {error ? (
-          <Text style={[type.noteBody, { color: pnl.down, marginTop: 14 }]}>{error}</Text>
+          <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s14 }}>
+            {error}
+          </Text>
         ) : null}
-      </Screen.Content>
+      </Fill>
 
       <Button
         label={proposalCta(weights, approved)}
-        variant={approved ? 'confirmed' : 'primary'}
+        variant={approved ? 'success' : 'primary'}
         disabled={!ok && !approved}
         loading={busy}
         onPress={approve}
@@ -155,14 +184,29 @@ export default function Proposal() {
   );
 }
 
+/**
+ * One segment of the proportion bar.
+ *
+ * The width is seeded at the current weight and advanced from a `useEffect`. Returning
+ * `withTiming` out of `useAnimatedStyle` — as this did — starts every segment at 0 and grows
+ * it on mount, which is an entrance animation, and animations.md §5 has none.
+ *
+ * animations.md's inventory lists 200ms here, contradicting its own "150 / 180 / 250 and
+ * nothing else" rule. The rule wins; `duration.base` is 180.
+ */
 function Bar({ pct, color }: { pct: number; color: string }) {
   const reduced = useReducedMotion();
-  // animations.md: allocation bars are a 200ms WIDTH transition; the three retract/extend together.
-  const style = useAnimatedStyle(() => ({
-    width: withTiming(`${pct}%`, {
-      duration: motionDuration(DURATION.bars, reduced),
-      easing: EASING,
-    }),
-  }));
-  return <Animated.View style={[{ height: 8, borderRadius: 4, backgroundColor: color }, style]} />;
+  const width = useSharedValue(pct);
+
+  useEffect(() => {
+    width.value = withTiming(pct, timing(duration.base, reduced));
+  }, [pct, reduced, width]);
+
+  const style = useAnimatedStyle(() => ({ width: `${width.value}%` }));
+
+  return (
+    <Animated.View
+      style={[{ height: BAR_H, borderRadius: BAR_H / 2, backgroundColor: color }, style]}
+    />
+  );
 }

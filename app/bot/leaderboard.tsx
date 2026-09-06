@@ -1,31 +1,35 @@
 /**
  * Screen 16 — Agent leaderboard. screens.md Group C.
  *
- * Sort circle. Segmented P&L / Win rate / Volume. Four cards: rank ("01" in #F0BE55 for first,
- * else ink30), 38px orb, name + "{win}% win · {n} trades", signed P&L 15/700, then a 4px bar
+ * Sort circle. Segmented P&L / Win rate / Volume. Four cards: rank ("01" in `rankFirst` for
+ * first, else ink30), 38pt orb, name + "{win}% win · {n} trades", signed P&L, then a 4pt bar
  * normalised to the max.
  *
- * animations.md: the bar is a 250ms WIDTH transition — the longest in the app, "because a re-sort
- * moves several bars at once and 250 lets the eye follow one".
+ * animations.md: the bar is a 250ms WIDTH transition — the longest in the app, "because a
+ * re-sort moves several bars at once and 250 lets the eye follow one".
  */
-import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { agentGradient } from '@/design/gradients';
 import {
-  AgentOrb,
+  AssetMark,
+  Fill,
   IconButton,
   LoadingRows,
+  Price,
   Screen,
-  ScreenHeader,
   Segmented,
-} from '@/design/components';
-import { ink, pnl, rank as rankColor, surfaces } from '@/design/colors';
-import { agentGradient } from '@/design/gradients';
-import { DURATION } from '@/design/motion';
-import { EASING } from '@/design/easing';
-import { type } from '@/design/type';
-import { motionDuration, useReducedMotion } from '@/design/useReducedMotion';
+  pnlTone,
+  Text,
+  colors,
+  duration,
+  radius,
+  space,
+  timing,
+  useReducedMotion,
+} from '@/ui';
 import { signedMoney } from '@/format';
 import {
   LEADERBOARD_KEYS,
@@ -38,6 +42,12 @@ import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
 import type { Agent } from '@/data/types';
 
+const BAR_H = 4;
+const RANK_W = 22;
+const ORB = 38;
+
+const SORTS = LEADERBOARD_LABELS.map((label, value) => ({ value, label }));
+
 export default function Leaderboard() {
   const router = useRouter();
   const lbSort = useStore((s) => s.lbSort);
@@ -48,47 +58,55 @@ export default function Leaderboard() {
 
   return (
     <Screen>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <Text style={[type.screenTitle, { color: ink.full }]}>Leaderboard</Text>
-          </View>
-        }
-        right={<IconButton name="sort" accessibilityLabel="Change sort" onPress={() => setLbSort((lbSort + 1) % 3)} />}
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+          <IconButton
+            name="back"
+            accessibilityLabel="Back"
+            background="none"
+            onPress={() => router.back()}
+          />
+          <Text variant="screenTitle">Leaderboard</Text>
+        </View>
+        <IconButton
+          name="sort"
+          accessibilityLabel="Change sort"
+          onPress={() => setLbSort((lbSort + 1) % SORTS.length)}
+        />
+      </View>
 
-      <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
+      <Text variant="secondary" style={{ marginTop: space.s10 }}>
         How your agents are actually doing against each other. Fire the laggards.
       </Text>
 
       <Segmented
-        options={LEADERBOARD_LABELS}
+        options={SORTS}
         value={lbSort}
         onChange={setLbSort}
-        style={{ marginTop: 18 }}
-        accessibilityLabel="Sort leaderboard"
+        style={{ marginTop: space.s18 }}
       />
 
-      <Screen.Content style={{ marginTop: 14 }}>
+      <Fill style={{ marginTop: space.s14 }}>
         {loading && !data ? (
           <LoadingRows count={4} height={78} />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ gap: space.s12 }}
+          >
             {rows.map((a, i) => (
               <LeaderRow key={a.id} agent={a} index={i} all={rows} />
             ))}
           </ScrollView>
         )}
-      </Screen.Content>
+      </Fill>
 
-      <Text style={[type.footnote, { color: ink.i28, textAlign: 'center', marginTop: 12 }]}>
+      <Text
+        variant="footnote"
+        color={colors.ink28}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
         Ranked by {LEADERBOARD_LABELS[lbSort]} · last 30 days
       </Text>
     </Screen>
@@ -99,47 +117,47 @@ function LeaderRow({ agent, index, all }: { agent: Agent; index: number; all: Ag
   const reduced = useReducedMotion();
   const pct = leaderboardBarPct(agent.pnl30d, all);
 
-  const bar = useAnimatedStyle(() => ({
-    width: withTiming(`${pct}%`, {
-      duration: motionDuration(DURATION.slow, reduced),
-      easing: EASING,
-    }),
-  }));
+  // Seeded at the current width and advanced on change — a `withTiming` inside
+  // `useAnimatedStyle` grows every bar from zero on mount, which animations.md forbids.
+  const width = useSharedValue(pct);
+  useEffect(() => {
+    width.value = withTiming(pct, timing(duration.slow, reduced));
+  }, [pct, reduced, width]);
+  const bar = useAnimatedStyle(() => ({ width: `${width.value}%` }));
+
+  // Green means profit and red means loss. A flat agent has made neither, so it takes
+  // neither colour — "+$0.00" in profit-green reads as a win that did not happen.
+  const tone = pnlTone(agent.pnl30d);
+  const barColor =
+    tone === 'up' ? colors.up : tone === 'down' ? colors.down : colors.ink30;
 
   return (
-    <View style={{ gap: 10 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Text
-          style={[
-            type.rowValue,
-            { color: index === 0 ? rankColor.first : ink.i30, width: 22 },
-          ]}
+    <View style={{ gap: space.s10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12 }}>
+        <Price
+          color={index === 0 ? colors.rankFirst : colors.ink30}
+          style={{ width: RANK_W }}
         >
           {String(index + 1).padStart(2, '0')}
-        </Text>
-        <AgentOrb gradient={agentGradient(agent.name)} size={38} face />
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={[type.rowPrimary, { color: ink.full }]}>{agent.name}</Text>
-          <Text style={[type.secondary, { color: ink.i38 }]}>
+        </Price>
+        <AssetMark gradient={agentGradient(agent.name)} size={ORB} />
+        <View style={{ flex: 1, gap: space.s2 }}>
+          <Text variant="rowPrimary">{agent.name}</Text>
+          <Text variant="secondarySm">
             {agent.win}% win · {agent.trades} trades
           </Text>
         </View>
-        <Text
-          style={[
-            type.rowPrimaryLg,
-            { color: agent.pnl30d >= 0 ? pnl.up : pnl.down, fontWeight: '700' },
-          ]}
-        >
+        <Price variant="rowPrimaryLg" tone={tone}>
           {signedMoney(agent.pnl30d)}
-        </Text>
+        </Price>
       </View>
-      <View style={{ height: 4, borderRadius: 2, backgroundColor: surfaces.control }}>
+      <View style={{ height: BAR_H, borderRadius: radius.full, backgroundColor: colors.control }}>
         <Animated.View
           style={[
             {
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: agent.pnl30d >= 0 ? pnl.up : pnl.down,
+              height: BAR_H,
+              borderRadius: radius.full,
+              backgroundColor: barColor,
             },
             bar,
           ]}

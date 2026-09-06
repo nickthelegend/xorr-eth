@@ -200,7 +200,15 @@ export async function applyFill(
  */
 export async function listPositions(walletId: string): Promise<Position[]> {
   const rows = await query<PositionRow>(
-    `SELECT * FROM positions WHERE wallet_id=$1 AND units > 0 ORDER BY updated_at DESC`,
+    /*
+     * Dust is not a holding.
+     *
+     * `units > 0` let a position that had been sold down to a few wei survive as a row, and the
+     * Assets screen listed it as "WETH · 0.0000 · avg $0.00 · $0.00" — a holding of nothing,
+     * priced at nothing, next to real ones. The threshold is in the token's own units and
+     * deliberately tiny: anything at or below a millionth of a unit cannot be worth a row.
+     */
+    `SELECT * FROM positions WHERE wallet_id=$1 AND units > 0.000001 ORDER BY updated_at DESC`,
     [walletId],
   );
 

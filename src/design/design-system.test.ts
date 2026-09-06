@@ -33,8 +33,16 @@ function stripComments(src: string): string {
 }
 
 /** Files allowed to declare raw color literals. Everything else must import a token. */
+/**
+ * The modules that are ALLOWED to name a colour. Everything else has to read one.
+ *
+ * `ui/tokens.ts` is the design system's own table — it is a token source in exactly the way
+ * `design/colors.ts` is, and the two coexist while the screens move across.
+ */
 const COLOR_SOURCES = new Set(
-  ['design/colors.ts', 'design/gradients.ts', 'data/fixtures'].map((p) => p.replace(/\//g, path.sep)),
+  ['design/colors.ts', 'design/gradients.ts', 'ui/tokens.ts', 'data/fixtures'].map((p) =>
+    p.replace(/\//g, path.sep),
+  ),
 );
 
 function isColorSource(file: string) {

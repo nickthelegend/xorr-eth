@@ -1,30 +1,35 @@
 /**
  * Screen 24 — Markets, all asset classes. screens.md Group B.
  *
- * "Markets" 22/700 + search circle. Horizontally scrolling class pills (default mkt:2,
- * Commodities). Two-part caption row: class note left (max 220, 11.5), "{n} shown · 24/7" right.
- * flex:1 list of 66px rows: 34px gradient mark, symbol + "{name} · {tag}", price + change.
- * Footer "See all {n} …". Tab bar.
+ * Rebuilt on `src/ui`. Every value here is a token: the row is `Row` at `size.rowLg`, the
+ * class chips are `Pill` in a `PillRow` (which scrolls rather than shrinking — design.md §5
+ * records that the market tabs shipped broken the other way once), and the mark is
+ * `AssetMark`, the same radial-gradient recipe the agent orbs use.
+ *
+ * Nothing on this screen carries a hardcoded colour, size or radius.
  */
 import React, { useMemo } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import { Icon } from '@/design/Icon';
 import {
   AssetMark,
-  ErrorState,
-  IconButton,
-  LoadingRows,
-  Pill,
-  PillRow,
+  Eyebrow,
+  Press,
+  Price,
   Row,
   Screen,
-  ScreenHeader,
-  SimulatedTag,
-} from '@/design/components';
-import { ink, pnl } from '@/design/colors';
-import { type } from '@/design/type';
+  Fill,
+  Pill,
+  PillRow,
+  Tag,
+  Text,
+  colors,
+  radius,
+  size,
+  space,
+} from '@/ui';
+import { Icon } from '@/design/Icon';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
@@ -40,19 +45,32 @@ export default function MarketsScreen() {
   const rows = useMemo(() => cls?.instruments ?? [], [cls]);
 
   return (
-    <Screen tabbed>
-      <ScreenHeader
-        left={<Text style={[type.screenTitle, { color: ink.full }]}>Markets</Text>}
-        right={
-          <IconButton
-            name="search"
+    <Screen tabBar gutter="none">
+      <View style={{ paddingHorizontal: space.gutter }}>
+        <Row divider={false} height={size.mark} style={{ justifyContent: 'space-between' }}>
+          <Text variant="screenTitle">Markets</Text>
+          <Press
+            accessibilityRole="button"
             accessibilityLabel="Search markets"
             onPress={() => router.push('/search')}
-          />
-        }
-      />
+            hitHeight={size.mark}
+            hitWidth={size.mark}
+            style={{
+              width: size.mark,
+              height: size.mark,
+              borderRadius: radius.full,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.surfaceAlt,
+            }}
+          >
+            <Icon name="search" size={15} color={colors.ink55} />
+          </Press>
+        </Row>
+      </View>
 
-      <PillRow style={{ marginTop: 16, flexGrow: 0 }} contentStyle={{ paddingRight: 20 }}>
+      {/* §5: pills never shrink to fit — the row scrolls. */}
+      <PillRow style={{ marginTop: space.s16 }} contentPadding={space.gutter}>
         {(data ?? []).map((c, i) => (
           <Pill key={c.id} label={c.label} selected={i === mkt} onPress={() => setMkt(i)} />
         ))}
@@ -62,69 +80,67 @@ export default function MarketsScreen() {
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          marginTop: 20,
-          gap: 12,
+          paddingHorizontal: space.gutter,
+          marginTop: space.s20,
+          gap: space.s12,
         }}
       >
-        <Text style={[type.secondary, { color: ink.i40, maxWidth: 220 }]}>{cls?.note ?? ''}</Text>
-        <Text style={[type.footnote, { color: ink.i28 }]}>{rows.length} shown · 24/7</Text>
+        <Text variant="secondarySm" color={colors.ink40} style={{ flex: 1, maxWidth: 220 }}>
+          {cls?.note ?? ''}
+        </Text>
+        <Text variant="footnote" color={colors.ink28} numberOfLines={1}>
+          {rows.length} shown · 24/7
+        </Text>
       </View>
 
-      <Screen.Content style={{ marginTop: 6 }}>
-        {loading && !data ? (
-          <LoadingRows count={8} />
-        ) : error ? (
-          <ErrorState error={error} onRetry={reload} />
-        ) : (
+      <Fill style={{ paddingHorizontal: space.gutter, marginTop: space.s6 }}>
+        {error ? (
+          <View style={{ paddingVertical: space.s30, alignItems: 'center', gap: space.s14 }}>
+            <Text variant="rowPrimary">That did not load.</Text>
+            <Text variant="secondary" align="center">
+              {error.message}
+            </Text>
+            <Press onPress={reload} accessibilityRole="button">
+              <Text variant="control" color={colors.ink65}>
+                Try again
+              </Text>
+            </Press>
+          </View>
+        ) : loading && !data ? null : (
           <FlashList
             data={rows}
-            keyExtractor={(i) => `${i.classId}-${i.sym}`}
+            keyExtractor={(i: Instrument) => i.sym}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <MarketRow item={item} onPress={() => router.push(`/asset/${item.sym}`)} />
+            renderItem={({ item }: { item: Instrument }) => (
+              <Row
+                height={size.rowLg}
+                onPress={() => router.push(`/asset/${item.sym}`)}
+                left={<AssetMark gradient={{ c1: item.c1, c2: item.c2 }} size={size.mark} />}
+                title={item.sym}
+                secondary={`${item.name} · ${item.tag}`}
+                value={
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s6 }}>
+                    {item.feed === 'simulated' ? <Tag label="Simulated" small tone="warn" /> : null}
+                    <Price variant="rowPrimary">{item.px}</Price>
+                  </View>
+                }
+                delta={item.chg}
+                deltaTone={item.up ? 'up' : 'down'}
+              />
             )}
             ListFooterComponent={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={cls?.more ?? 'See all'}
-                onPress={() => cls && router.push(`/markets/${cls.id}`)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 7,
-                  paddingTop: 16,
-                  paddingBottom: 10,
-                }}
-              >
-                <Text style={[type.secondaryMd, { color: ink.i45, fontWeight: '600' }]}>
-                  {cls?.more ?? ''}
-                </Text>
-                <Icon name="chevron" size={11} color={ink.i45} />
-              </Pressable>
+              cls ? (
+                <View style={{ alignItems: 'center', paddingVertical: space.s16 }}>
+                  <Eyebrow small color={colors.ink45}>
+                    {cls.more}
+                  </Eyebrow>
+                </View>
+              ) : null
             }
           />
         )}
-      </Screen.Content>
-    </Screen>
-  );
-}
+      </Fill>
 
-function MarketRow({ item, onPress }: { item: Instrument; onPress: () => void }) {
-  return (
-    <Row
-      onPress={onPress}
-      mark={<AssetMark gradient={{ c1: item.c1, c2: item.c2 }} size={34} />}
-      primary={item.sym}
-      secondary={`${item.name} · ${item.tag}`}
-      value={item.px}
-      delta={item.chg}
-      deltaColor={item.up ? pnl.up : pnl.down}
-      middle={
-        // PLAN.md §1.3 item 8 — a price without a feed is labelled, never passed off as live.
-        item.feed === 'simulated' ? <SimulatedTag /> : undefined
-      }
-    />
+    </Screen>
   );
 }

@@ -1,21 +1,32 @@
 /**
  * Screen 3 — Agent intro sheet. screens.md Group C.
  *
- * Full-bleed surface card, radius 34, close top-right. 104px orb, name, subtitle.
- * Three benefit blocks (22px outline glyph — circle, rounded square, rotated square) gap 26.
+ * Full-bleed surface card, radius 34, close top-right. 104pt orb, name, subtitle.
+ * Three benefit blocks (22pt outline glyph — circle, rounded square, rotated square) gap 26.
  * White "Get Started". Footnote "All agents can make mistakes. Markets are risky."
  */
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Circle, Rect } from 'react-native-svg';
-import { Icon } from '@/design/Icon';
-import { AgentOrb, Button, Screen } from '@/design/components';
-import { ink, surfaces } from '@/design/colors';
 import { agentGradient } from '@/design/gradients';
-import { type } from '@/design/type';
+import {
+  AgentOrb,
+  Button,
+  Fill,
+  IconButton,
+  Screen,
+  Text,
+  colors,
+  radius,
+  size,
+  space,
+} from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+
+const GLYPH = 22;
+const STROKE = 1.8;
 
 const BENEFITS = [
   {
@@ -38,70 +49,85 @@ const BENEFITS = [
 export default function AgentIntro() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data } = useAsync(() => repos.bot.listAgents(), []);
+  const { data, loading } = useAsync(() => repos.bot.listAgents(), []);
   const agent = (data ?? []).find((a) => a.id === id);
 
   return (
-    <Screen background={surfaces.surface} gutter={false}>
-      <View style={{ flex: 1, paddingHorizontal: 20 }}>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            hitSlop={12}
-          >
-            <Icon name="close" size={20} color={ink.i55} />
-          </Pressable>
-        </View>
+    // A sheet, not a screen: it sits on `surface` with the card radius, and the modal
+    // presentation in `app/_layout.tsx` is what puts black behind it.
+    <Screen style={{ backgroundColor: colors.surface, borderRadius: radius.sheetLg }}>
+      <View style={{ alignItems: 'flex-end' }}>
+        <IconButton
+          name="close"
+          accessibilityLabel="Close"
+          onPress={() => router.back()}
+          background="none"
+          glyph={20}
+        />
+      </View>
 
-        <View style={{ alignItems: 'center', marginTop: 10, gap: 14 }}>
-          <AgentOrb
-            gradient={agentGradient(agent?.name ?? 'Earnings Desk')}
-            size={104}
-            face
-            specular
-            bloom
-            breathe
-          />
-          <Text style={[type.onboardingTitle, { color: ink.full, textAlign: 'center' }]}>
-            {agent?.name ?? 'Stocks Trader'}
-          </Text>
-          <Text style={[type.body, { color: ink.i40, textAlign: 'center' }]}>
-            {agent?.role ?? 'Autonomous stock trading agent'}
-          </Text>
-        </View>
-
-        <Screen.Content style={{ marginTop: 34, gap: 26 }}>
-          {BENEFITS.map((b) => (
-            <View key={b.title} style={{ flexDirection: 'row', gap: 14 }}>
-              <BenefitGlyph kind={b.glyph} />
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={[type.cardTitleSm, { color: ink.full }]}>{b.title}</Text>
-                <Text style={[type.secondaryMd, { color: ink.i45, lineHeight: 12.5 * 1.5 }]}>
-                  {b.body}
-                </Text>
-              </View>
-            </View>
-          ))}
-        </Screen.Content>
-
-        <Button label="Get Started" onPress={() => router.replace(`/bot/${id}/settings`)} />
-        <Text style={[type.footnote, { color: ink.i28, textAlign: 'center', marginTop: 12 }]}>
-          All agents can make mistakes. Markets are risky.
+      <View style={{ alignItems: 'center', marginTop: space.s10, gap: space.s14 }}>
+        <AgentOrb
+          gradient={agentGradient(agent?.name ?? 'Earnings Desk')}
+          size={size.orb104}
+          face
+          specular
+          bloom
+        />
+        <Text variant="onboardingTitle" align="center">
+          {agent?.name ?? (loading ? 'Loading…' : 'No such agent')}
+        </Text>
+        <Text variant="body" color={colors.ink40} align="center">
+          {/* Not a different agent's description. These fell back to "Stocks Trader /
+              Autonomous stock trading agent" whenever the id did not resolve, so a bad
+              link introduced an agent that does not exist. */}
+          {agent?.role ?? (loading ? '' : 'This agent is not on the roster.')}
         </Text>
       </View>
+
+      <Fill style={{ marginTop: space.s34, gap: space.s26 }}>
+        {BENEFITS.map((b) => (
+          <View key={b.title} style={{ flexDirection: 'row', gap: space.s14 }}>
+            <BenefitGlyph kind={b.glyph} />
+            <View style={{ flex: 1, gap: space.s6 }}>
+              <Text variant="cardTitle">{b.title}</Text>
+              <Text variant="secondary" color={colors.ink45}>
+                {b.body}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </Fill>
+
+      <Button label="Get Started" onPress={() => router.replace(`/bot/${id}/settings`)} />
+      <Text
+        variant="footnote"
+        color={colors.ink28}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
+        All agents can make mistakes. Markets are risky.
+      </Text>
     </Screen>
   );
 }
 
 function BenefitGlyph({ kind }: { kind: 'circle' | 'square' | 'diamond' }) {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" style={{ marginTop: 2 }}>
+    <Svg width={GLYPH} height={GLYPH} viewBox="0 0 24 24" style={{ marginTop: space.s2 }}>
       {kind === 'circle' ? (
-        <Circle cx={12} cy={12} r={8.5} stroke={ink.i55} strokeWidth={1.8} fill="none" />
+        <Circle cx={12} cy={12} r={8.5} stroke={colors.ink55} strokeWidth={STROKE} fill="none" />
       ) : kind === 'square' ? (
-        <Rect x={4} y={4} width={16} height={16} rx={5} stroke={ink.i55} strokeWidth={1.8} fill="none" />
+        <Rect
+          x={4}
+          y={4}
+          width={16}
+          height={16}
+          rx={5}
+          stroke={colors.ink55}
+          strokeWidth={STROKE}
+          fill="none"
+        />
       ) : (
         <Rect
           x={5}
@@ -109,8 +135,8 @@ function BenefitGlyph({ kind }: { kind: 'circle' | 'square' | 'diamond' }) {
           width={14}
           height={14}
           rx={3}
-          stroke={ink.i55}
-          strokeWidth={1.8}
+          stroke={colors.ink55}
+          strokeWidth={STROKE}
           fill="none"
           transform="rotate(45 12 12)"
         />

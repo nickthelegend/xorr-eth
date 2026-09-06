@@ -7,6 +7,12 @@
  * Only the three METHODS change, because there is no custodial rail to fund.
  *
  * [G42] The availability line is computed, not the handoff's frozen "Tue, Sep 8".
+ *
+ * The CTA used to read "Deposit $500" and navigate to the next screen. It deposited nothing —
+ * there is no custodial rail, which the note above already admits — so the button was claiming an
+ * action the app cannot perform. A non-custodial wallet has exactly one real funding route: send
+ * USDC to its address. So the address is on the screen, copyable, and the button says what it
+ * actually does.
  */
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -28,8 +34,10 @@ const METHODS = [
     lands: () => businessDaysFromNow(1),
   },
   {
+    // USDC on Base, because that is what the executor settles in. "USDT or SOL" was left over
+    // from before the pivot and named two things this app cannot do anything with.
     name: 'On-chain deposit',
-    detail: 'USDC, USDT or SOL',
+    detail: 'USDC on Base',
     tag: 'On-chain',
     feePct: 0,
     lands: () => 'After 1 confirmation',
@@ -50,6 +58,7 @@ export default function Fund() {
   const dep = useStore((s) => s.dep);
   const setDep = useStore((s) => s.setDep);
   const method = useStore((s) => s.method);
+  const wallet = useStore((s) => s.wallet);
   const setMethod = useStore((s) => s.setMethod);
 
   const m = METHODS[method] ?? METHODS[0];
@@ -152,12 +161,34 @@ export default function Fund() {
           <Row primary="Fee" value={fee === 0 ? 'Free' : money(fee)} height={48} />
           <Row primary="Available" value={m.lands()} height={48} divider={false} />
         </View>
+
+        {/*
+          The only funding rail a non-custodial wallet actually has.
+          Every method above ends in the same place — USDC arriving at this address — so the
+          address is the useful thing on this screen, not the amount. Shown in full and selectable
+          rather than truncated, because it is going to be pasted somewhere.
+        */}
+        <View
+          style={{
+            marginTop: 18,
+            padding: 16,
+            borderRadius: radius.xl,
+            backgroundColor: surfaces.surface,
+            gap: 6,
+          }}
+        >
+          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>SEND USDC TO</Text>
+          <Text style={[type.body, { color: ink.full }]} selectable>
+            {wallet?.address ?? 'Finish signing in to see your address.'}
+          </Text>
+          <Text style={[type.footnote, { color: ink.i32 }]}>
+            On Base. Nothing else on this screen moves money — xorr has no custody and no rail to
+            move it for you.
+          </Text>
+        </View>
       </Screen.Content>
 
-      <Button
-        label={`Deposit ${money(dep, { fractionDigits: 0 })}`}
-        onPress={() => router.push('/delegate')}
-      />
+      <Button label="Continue — set the limits" onPress={() => router.push('/delegate')} />
     </Screen>
   );
 }

@@ -6,6 +6,7 @@
  */
 import { accessToken } from '@/auth/token';
 import { isPublicPath } from './publicPaths';
+import { authKnowledge } from '@/auth/authState';
 import { API_BASE } from './apiBase';
 
 export { API_BASE };
@@ -35,13 +36,18 @@ export class NotSignedIn extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   /*
-   * Do not ask a question we already know we cannot answer.
+   * Do not ask a question we KNOW we cannot answer — and only then.
    *
-   * Every authenticated call was fired regardless of whether a token existed, so a signed-out load
-   * of the home screen produced a 401 for `/wallet/balance`, `/agents` and `/positions` — three
-   * real console errors and three wasted round trips, on the first screen a new user sees.
+   * Every authenticated call used to fire regardless of whether a token existed, so a signed-out
+   * load of the home screen produced a 401 for `/wallet/balance`, `/agents` and `/positions`:
+   * three real console errors on the first screen a new user sees.
+   *
+   * The first version of this skipped whenever `accessToken()` was falsy, which was a worse bug:
+   * on a freshly established session the token is briefly unavailable, so reads fired in that
+   * window were dropped silently and the screen kept its empty state for good. While the answer is
+   * unknown the request goes out — a 401 is visible and recoverable; silence is neither.
    */
-  if (!isPublicPath(path) && !(await accessToken())) {
+  if (!isPublicPath(path) && authKnowledge() === 'signed-out') {
     throw new NotSignedIn(path);
   }
 
@@ -69,7 +75,7 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   del: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
   async getText(path: string): Promise<string> {
-    if (!isPublicPath(path) && !(await accessToken())) throw new NotSignedIn(path);
+    if (!isPublicPath(path) && authKnowledge() === 'signed-out') throw new NotSignedIn(path);
     const res = await fetch(`${API_BASE}${path}`, { headers: await authHeaders() });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return res.text();

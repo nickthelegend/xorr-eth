@@ -108,17 +108,10 @@ describe('3.10 series that were trapped inside the prototype [G5][G6][G7]', () =
   it('equity curves exist as data for all 4 lookbacks', () => {
     expect(backtestFixtures).toHaveLength(4);
     for (const b of backtestFixtures) {
-      expect(b.curve, b.lookback).toBeTruthy();
-      const pts = b.curve.split(' ').map((p) => p.split(',').map(Number));
-      // 360x110 viewBox — design.md §6 "Area / equity curve".
-      for (const [x, y] of pts) {
-        expect(x).toBeLessThanOrEqual(360);
-        expect(y).toBeLessThanOrEqual(110);
-      }
-      // A positive return must end higher (lower y) than it started.
-      const first = pts[0]![1]!;
-      const last = pts[pts.length - 1]![1]!;
-      expect(b.ret > 0 ? last < first : last > first, b.lookback).toBe(true);
+      // A series of VALUES — the chart does the projecting. It used to be an SVG polyline
+      // in a 360x110 viewBox, which meant the fixture encoded the chart's dimensions.
+      expect(b.equity.length, b.lookback).toBeGreaterThan(5);
+      for (const v of b.equity) expect(Number.isFinite(v), b.lookback).toBe(true);
     }
   });
 

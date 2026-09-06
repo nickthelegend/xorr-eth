@@ -20,7 +20,7 @@ describe('a backtest computed from REAL history, not hardcoded rows', () => {
     expect(r.trades).toBeLessThanOrEqual(15);
     expect(Number.isFinite(r.ret)).toBe(true);
     expect(r.maxDd).toBeLessThanOrEqual(0);
-    expect(r.curve.split(' ').length).toBeGreaterThan(5);
+    expect(r.equity.length).toBeGreaterThan(5);
   }, 90_000);
 
   it('honours the daily cap — screen 17 promises "at your current limits"', async () => {
@@ -46,6 +46,6 @@ describe('a backtest computed from REAL history, not hardcoded rows', () => {
     const a = await backtestDca({ symbol: 'BTC', lookback: '30d', perRunUsd: 50, dailyCapUsd: 1600, everyNDays: 7 });
     const b = await backtestDca({ symbol: 'BTC', lookback: '1y', perRunUsd: 50, dailyCapUsd: 1600, everyNDays: 7 });
     expect(b.trades).toBeGreaterThan(a.trades);
-    expect(a.curve).not.toBe(b.curve);
+    expect(a.equity).not.toEqual(b.equity);
   }, 120_000);
 });

@@ -3,14 +3,29 @@
  * Symbol search across all 5 classes, using the same Row the market list uses.
  */
 import React, { useMemo, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { AssetMark, EmptyState, IconButton, Row, Screen, ScreenHeader } from '@/design/components';
-import { borders, ink, pnl, surfaces } from '@/design/colors';
-import { hairlineWidth, radius } from '@/design/space';
-import { type } from '@/design/type';
+import {
+  AssetMark,
+  EmptyState,
+  Fill,
+  IconButton,
+  Price,
+  Row,
+  Screen,
+  Text,
+  border,
+  colors,
+  radius,
+  space,
+  typeScale,
+} from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+
+const FIELD_H = 46;
+/** With no query, show a sample rather than all 45 — the list is a starting point. */
+const PREVIEW = 12;
 
 export default function Search() {
   const router = useRouter();
@@ -19,7 +34,7 @@ export default function Search() {
 
   const results = useMemo(() => {
     const all = (data ?? []).flatMap((c) => c.instruments);
-    if (!q.trim()) return all.slice(0, 12);
+    if (!q.trim()) return all.slice(0, PREVIEW);
     const needle = q.trim().toLowerCase();
     return all.filter(
       (i) => i.sym.toLowerCase().includes(needle) || i.name.toLowerCase().includes(needle),
@@ -28,64 +43,67 @@ export default function Search() {
 
   return (
     <Screen>
-      <ScreenHeader
-        left={<Text style={[type.screenTitle, { color: ink.full }]}>Search</Text>}
-        right={
-          <IconButton
-            name="close"
-            accessibilityLabel="Close search"
-            onPress={() => router.back()}
-          />
-        }
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="screenTitle">Search</Text>
+        <IconButton name="close" accessibilityLabel="Close search" onPress={() => router.back()} />
+      </View>
 
       <View
-        style={{
-          marginTop: 18,
-          height: 46,
-          borderRadius: radius.xl,
-          backgroundColor: surfaces.inputBg,
-          borderWidth: hairlineWidth,
-          borderColor: borders.input,
-          paddingHorizontal: 16,
-          justifyContent: 'center',
-        }}
+        style={[
+          {
+            marginTop: space.s18,
+            height: FIELD_H,
+            borderRadius: radius.panel,
+            backgroundColor: colors.inputBg,
+            paddingHorizontal: space.s16,
+            justifyContent: 'center',
+          },
+          border.input,
+        ]}
       >
         <TextInput
           value={q}
           onChangeText={setQ}
           autoFocus
+          autoCapitalize="characters"
+          autoCorrect={false}
           placeholder="Symbol or name"
-          placeholderTextColor={ink.i35}
-          style={[type.body, { color: ink.full }]}
+          placeholderTextColor={colors.ink35}
+          style={[typeScale.body, { color: colors.ink }]}
           accessibilityLabel="Search markets"
         />
       </View>
 
-      <Screen.Content style={{ marginTop: 10 }}>
+      <Fill style={{ marginTop: space.s10 }}>
         {results.length === 0 ? (
           // A blank query with nothing loaded yet is not "no matches" — it is "not yet".
           <EmptyState
-            text={loading ? 'Loading markets…' : q.trim() ? `Nothing matches "${q}".` : 'No markets available right now.'}
+            text={
+              loading
+                ? 'Loading markets…'
+                : q.trim()
+                  ? `Nothing matches "${q}".`
+                  : 'No markets available right now.'
+            }
           />
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {results.map((i) => (
               <Row
                 key={`${i.classId}-${i.sym}`}
-                mark={<AssetMark gradient={{ c1: i.c1, c2: i.c2 }} size={32} />}
-                primary={i.sym}
+                left={<AssetMark gradient={{ c1: i.c1, c2: i.c2 }} size={32} />}
+                title={i.sym}
                 secondary={`${i.name} · ${i.tag}`}
-                value={i.px}
+                value={<Price>{i.px}</Price>}
                 delta={i.chg}
-                deltaColor={i.up ? pnl.up : pnl.down}
+                deltaTone={i.up ? 'up' : 'down'}
                 height={62}
                 onPress={() => router.replace(`/asset/${i.sym}`)}
               />
             ))}
           </ScrollView>
         )}
-      </Screen.Content>
+      </Fill>
     </Screen>
   );
 }

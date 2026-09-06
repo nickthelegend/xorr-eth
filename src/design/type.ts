@@ -1,17 +1,53 @@
 /**
  * Type scale — design.md §2. All 15 roles, exact size / weight / letter-spacing.
  *
- * System sans only. design.md: "No custom font — a trading UI needs the platform's numeral
- * metrics." Nothing below 9.5px. Tabular numerals on every price column and every stepper value.
+ * **Inter, shipped with the app.** This used to be `Platform.select({ ios: undefined, default:
+ * 'sans-serif' })` — the platform's own face — on the reasoning that a trading UI wants the
+ * platform's numeral metrics. That was wrong in practice for one simple reason: the reference this
+ * design was drawn against renders in SF Pro, because it was authored and reviewed in a browser on
+ * a Mac. On Android `sans-serif` is Roboto, whose letterforms and widths are visibly different,
+ * and the scale's tight negative letter-spacing (−2px on a 52px amount) was tuned against SF Pro.
+ * The result was an app that did not look like its own design on half the devices it runs on.
+ *
+ * Inter is the closest widely-available face to SF Pro's metrics, it is open-licensed, and above
+ * all it is the SAME on every platform — which is the property that actually matters here. The
+ * design is now something the app carries rather than something it hopes to find.
+ *
+ * Nothing below 9.5px. Tabular numerals on every price column and every stepper value.
  */
-import { Platform, type TextStyle } from 'react-native';
+import { type TextStyle } from 'react-native';
 
 /** design.md §2: "Tabular numerals on every price column and every stepper value." */
 export const tabular: TextStyle = { fontVariant: ['tabular-nums'] };
 
-const sys = Platform.select({ ios: undefined, default: 'sans-serif' });
+/**
+ * The five Inter faces the scale uses, by weight.
+ *
+ * React Native does not synthesise weights for a custom family on Android — asking for
+ * `fontFamily: 'Inter'` with `fontWeight: '700'` silently renders Regular. Each weight has to name
+ * its own registered family, which is why this map exists rather than a single family name.
+ */
+export const FONTS = {
+  '400': 'Inter-Regular',
+  '500': 'Inter-Medium',
+  '600': 'Inter-SemiBold',
+  '700': 'Inter-Bold',
+  '800': 'Inter-ExtraBold',
+} as const;
 
-const t = (s: TextStyle): TextStyle => ({ fontFamily: sys, ...s });
+/** The display face, used for the wordmark only — exactly as the design reference does. */
+export const DISPLAY_FONT = 'Baloo2-ExtraBold';
+
+const t = (s: TextStyle): TextStyle => {
+  const weight = String(s.fontWeight ?? '400') as keyof typeof FONTS;
+  return {
+    fontFamily: FONTS[weight] ?? FONTS['400'],
+    ...s,
+    // Kept for web, where the browser matches on family + weight, and harmless on native where
+    // the family already encodes it.
+    fontWeight: s.fontWeight,
+  };
+};
 
 export const type = {
   /** Hero balance — screen 2. 46/700, -1.4px. */

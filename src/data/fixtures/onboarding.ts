@@ -87,19 +87,3 @@ export const agentControls = {
     "default": 1600
   }
 } as const;
-
-export const chatProposal = {
-  "agent": "Momentum Scout",
-  "status": "Watching 14 markets",
-  "opening": "SOL just cleared its 20-day high on twice the usual volume. Funding is still flat, so this isn't a crowded long yet.",
-  "eyebrow": "PROPOSED TRADE",
-  "expires": "expires 4:12",
-  "action": "Buy 12.4 SOL",
-  "notional": "$1,095",
-  "entry": "$88.32",
-  "stop": "$87.44",
-  "target": "$91.20",
-  "rationale": "Risking $10.90 to make $35.70. Within your $1,600 daily cap.",
-  "onApprove": "Filled 12.4 SOL at $88.32. Stop set at $87.44.",
-  "onSkip": "Skipped. I will not re-propose SOL today."
-} as const;

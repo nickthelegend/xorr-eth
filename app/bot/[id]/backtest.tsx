@@ -1,31 +1,38 @@
 /**
  * Screen 17 — Backtest. screens.md Group C.
  *
- * Lookback pills 30d / 90d (default) / 6m / 1y. 150px equity curve with 3 grid lines.
+ * Lookback pills 30d / 90d (default) / 6m / 1y. A 150pt equity curve with grid lines.
  * Four stat tiles: Return (up) / Max DD (down, U+2212) / Sharpe / Trades.
- * Card: "If you'd started with" + a capital stepper ($1k-$50k by $1k), then the projected end
- * value 30/700 and the gain in `up`.
- * Disclaimer: "Nothing here is a promise."
+ * Card: "If you'd started with" + a capital stepper ($1k–$50k by $1k), then the projected
+ * end value and the gain in `up`. Disclaimer: "Nothing here is a promise."
+ *
+ * The curve arrives as an equity SERIES now, not as an SVG polyline the executor drew —
+ * see `server/src/backtest/engine.ts`. The chart projects it, which is the chart's job.
  */
 import React from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { AreaChart } from '@/charts';
 import {
+  AreaChart,
   Button,
+  Fill,
   IconButton,
   LoadingRows,
   Pill,
   PillRow,
+  Price,
   Screen,
-  ScreenHeader,
   SheetCard,
+  StatGrid,
   Stepper,
-} from '@/design/components';
-import { borders, ink, pnl, surfaces } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money } from '@/format';
+  Text,
+  colors,
+  pnlTone,
+  money,
+  radius,
+  size,
+  space,
+} from '@/ui';
 import { BT_CAPITAL_MAX, BT_CAPITAL_MIN, backtestSummary } from '@/state/derived';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -33,6 +40,7 @@ import { useStore } from '@/state/store';
 import type { BacktestResult } from '@/data/types';
 
 const LOOKBACKS: BacktestResult['lookback'][] = ['30d', '90d', '6m', '1y'];
+const CHART_H = 150;
 
 export default function Backtest() {
   const { id = 'momentum-scout' } = useLocalSearchParams<{ id: string }>();
@@ -48,64 +56,65 @@ export default function Backtest() {
   );
 
   const summary = data ? backtestSummary(btCapital, data.ret, data.maxDd) : null;
+  const tone = pnlTone(data?.ret ?? 0);
 
   return (
     <Screen>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <Text style={[type.screenTitle, { color: ink.full }]}>Backtest</Text>
-          </View>
-        }
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+        <IconButton
+          name="back"
+          accessibilityLabel="Back"
+          background="none"
+          onPress={() => router.back()}
+        />
+        <Text variant="screenTitle">Backtest</Text>
+      </View>
 
-      <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
-        Momentum Scout, run against real history at your current limits. Nothing here is a promise.
+      <Text variant="secondary" style={{ marginTop: space.s10 }}>
+        Momentum Scout, run against real history at your current limits. Nothing here is a
+        promise.
       </Text>
 
-      <PillRow style={{ marginTop: 18, flexGrow: 0 }}>
+      <PillRow style={{ marginTop: space.s18, flexGrow: 0 }}>
         {LOOKBACKS.map((l, i) => (
           <Pill key={l} label={l} selected={i === btLook} onPress={() => setBtLook(i)} />
         ))}
       </PillRow>
 
-      <Screen.Content style={{ marginTop: 18 }}>
+      <Fill style={{ marginTop: space.s18 }}>
         {loading && !data ? (
-          <LoadingRows count={3} height={60} />
+          <LoadingRows count={3} height={size.row} />
         ) : data && summary ? (
           <>
-            <AreaChart
-              points={data.curve}
-              height={150}
-              stroke={pnl.up}
-              accessibilityLabel={`Equity curve, ${data.lookback}`}
+            {data.equity.length > 1 ? (
+              <AreaChart
+                data={data.equity}
+                height={CHART_H}
+                color={tone === 'down' ? colors.down : colors.up}
+                grid
+                endDot
+              />
+            ) : (
+              <View style={{ height: CHART_H, justifyContent: 'center' }}>
+                <Text variant="secondary">No equity series came back for this range.</Text>
+              </View>
+            )}
+
+            <StatGrid
+              style={{ marginTop: space.s20 }}
+              items={[
+                { label: 'Return', value: summary.ret, color: colors.up },
+                { label: 'Max DD', value: summary.dd, color: colors.down },
+                { label: 'Sharpe', value: data.sharpe.toFixed(1) },
+                { label: 'Trades', value: String(data.trades) },
+              ]}
             />
 
-            <View
-              style={{
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                marginTop: 20,
-                backgroundColor: borders.card,
-                gap: 1,
-                borderRadius: radius.md2,
-                overflow: 'hidden',
-              }}
+            <SheetCard
+              borderRadius={radius.panel}
+              padding={space.s16}
+              style={{ marginTop: space.s16 }}
             >
-              <Tile label="Return" value={summary.ret} color={pnl.up} />
-              <Tile label="Max DD" value={summary.dd} color={pnl.down} />
-              <Tile label="Sharpe" value={data.sharpe.toFixed(1)} color={ink.full} />
-              <Tile label="Trades" value={String(data.trades)} color={ink.full} />
-            </View>
-
-            <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 16 }}>
               <View
                 style={{
                   flexDirection: 'row',
@@ -113,44 +122,34 @@ export default function Backtest() {
                   justifyContent: 'space-between',
                 }}
               >
-                <Text style={[type.rowPrimary, { color: ink.full }]}>{`If you'd started with`}</Text>
+                <Text variant="rowPrimary">{`If you'd started with`}</Text>
                 <Stepper
-                  value={money(btCapital, { fractionDigits: 0 })}
+                  value={money(btCapital, { decimals: 0 })}
                   onDecrement={() => bumpBtCapital(-1)}
                   onIncrement={() => bumpBtCapital(1)}
                   canDecrement={btCapital > BT_CAPITAL_MIN}
                   canIncrement={btCapital < BT_CAPITAL_MAX}
                   valueMinWidth={84}
-                  accessibilityLabel="Starting capital"
                 />
               </View>
-              <Text style={[type.valueLarge, { color: ink.full, marginTop: 16 }]}>
+              <Price variant="amountMd" style={{ marginTop: space.s16 }}>
                 {summary.end}
-              </Text>
-              <Text style={[type.body, { color: pnl.up, marginTop: 4 }]}>{summary.gain}</Text>
+              </Price>
+              <Price variant="body" tone={tone} style={{ marginTop: space.s4 }}>
+                {summary.gain}
+              </Price>
             </SheetCard>
+
+            {/* Provenance and the disclaimer, both from the executor. A backtest without
+                them is a sales pitch. */}
+            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s14 }}>
+              {[data.source, data.disclaimer].filter(Boolean).join(' · ')}
+            </Text>
           </>
         ) : null}
-      </Screen.Content>
+      </Fill>
 
       <Button label="Run this strategy live" onPress={() => router.push('/strategies')} />
     </Screen>
-  );
-}
-
-function Tile({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <View
-      style={{
-        width: '49.9%',
-        backgroundColor: surfaces.bg,
-        paddingVertical: 14,
-        paddingHorizontal: 14,
-        gap: 6,
-      }}
-    >
-      <Text style={[type.footnoteSm, { color: ink.i32 }]}>{label}</Text>
-      <Text style={[type.rowPrimaryLg, { color, fontWeight: '700' }]}>{value}</Text>
-    </View>
   );
 }

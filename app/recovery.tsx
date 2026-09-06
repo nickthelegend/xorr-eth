@@ -1,84 +1,99 @@
 /**
- * Recovery backup — PLAN.md 10.8 [G31].
+ * Recovery — PLAN.md 10.8 [G31].
  *
- * Screen 20 shows "Not backed up" in `warn` with nowhere to go. After the pivot this is not a
- * nicety: NON-CUSTODIAL MEANS LOSING THE KEY LOSES THE FUNDS. The screen says so in those words.
+ * Screen 20 shows "Not backed up" in `warn` with nowhere to go. After the pivot this is not
+ * a nicety: NON-CUSTODIAL MEANS LOSING THE KEY LOSES THE FUNDS.
+ *
+ * What this screen used to do was worse than nothing. It offered a "Reveal phrase" button
+ * over a panel that revealed no phrase — because in this build there is no user-held
+ * phrase to reveal. The wallet is the devnet owner keypair, and `server/src/solana/keys.ts`
+ * says so outright: *"In production the OWNER key lives on the user's device, never here.
+ * For devnet development the owner keypair is generated locally."*
+ *
+ * So the screen states that, in those terms. A user cannot make a good decision about a
+ * risk we have described inaccurately, and a fake reveal button on a recovery screen is the
+ * single most dangerous placeholder this app could ship.
  */
-import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import React from 'react';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, IconButton, NoteStrip, Screen, ScreenHeader, SheetCard } from '@/design/components';
-import { ink, pnl, surfaces } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
+import {
+  Button,
+  Fill,
+  IconButton,
+  NoteStrip,
+  Screen,
+  SheetCard,
+  Text,
+  colors,
+  radius,
+  space,
+} from '@/ui';
+import { useStore } from '@/state/store';
 
 export default function Recovery() {
   const router = useRouter();
-  const [revealed, setRevealed] = useState(false);
+  const wallet = useStore((s) => s.wallet);
+  const setRecoveryBackedUp = useStore((s) => s.setRecoveryBackedUp);
+  const acknowledged = useStore((s) => s.recoveryBackedUp);
 
   return (
     <Screen>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <Text style={[type.screenTitle, { color: ink.full }]}>Recovery</Text>
-          </View>
-        }
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+        <IconButton
+          name="back"
+          accessibilityLabel="Back"
+          background="none"
+          onPress={() => router.back()}
+        />
+        <Text variant="screenTitle">Recovery</Text>
+      </View>
 
-      <Text style={[type.onboardingTitle, { color: ink.full, marginTop: 20 }]}>
-        Back this up now
+      <Text variant="onboardingTitle" style={{ marginTop: space.s20 }}>
+        Where the key actually is
       </Text>
-      <Text style={[type.body, { color: ink.i40, marginTop: 10 }]}>
-        xorr does not hold your keys, which means xorr cannot recover them. If you lose this device
-        and have no backup, the funds in this wallet are gone. There is no support line for that.
+      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+        This is a {wallet?.cluster ?? 'development'} wallet. Its key is held by the executor
+        so the whole trading flow can run end to end without a device signature on every
+        step. That means there is no recovery phrase for you to write down yet — and it
+        also means this wallet is not yours alone.
       </Text>
 
-      <Screen.Content style={{ marginTop: 22 }}>
-        <SheetCard radius={radius.xl} padding={18}>
-          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Recovery phrase</Text>
-          <View
-            style={{
-              marginTop: 14,
-              minHeight: 120,
-              borderRadius: radius.md2,
-              backgroundColor: surfaces.surfaceAlt,
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
-            }}
-          >
-            <Text style={[type.body, { color: ink.i40, textAlign: 'center' }]}>
-              {revealed
-                ? 'Your phrase is shown on the device only. Write it down on paper; do not screenshot it.'
-                : 'Hidden. Reveal it somewhere nobody can see your screen.'}
-            </Text>
-          </View>
-          <Button
-            label={revealed ? 'Hide' : 'Reveal phrase'}
-            variant="secondary"
-            height={46}
-            style={{ marginTop: 14 }}
-            onPress={() => setRevealed((r) => !r)}
-          />
+      <Fill style={{ marginTop: space.s22 }}>
+        <SheetCard borderRadius={radius.panel} padding={space.s18}>
+          <Text variant="cardTitle">What changes on mainnet</Text>
+          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s10 }}>
+            The key is generated on your device and never leaves it. xorr does not hold it,
+            which means xorr cannot recover it: if you lose the device and have no backup,
+            the funds in that wallet are gone, and there is no support line for that. You
+            will be given a phrase at that point, and this screen is where you will read it.
+          </Text>
+          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s12 }}>
+            The bot never gets that key. It gets a separate on-chain permission that can
+            trade and cannot withdraw, and you can revoke it from Safety at any time.
+          </Text>
         </SheetCard>
 
-        <NoteStrip kind="blocked" style={{ marginTop: 16 }}>
-          Anyone who reads this phrase can take everything in the wallet. Never type it into a
-          website, a message, or a support chat.
+        <NoteStrip kind="blocked" style={{ marginTop: space.s16 }}>
+          Do not put real money in this wallet. It is on a test network, and the key is not
+          exclusively yours.
         </NoteStrip>
-      </Screen.Content>
+      </Fill>
 
-      <Button label="I have written it down" onPress={() => router.back()} />
-      <Text style={[type.footnote, { color: pnl.warn, textAlign: 'center', marginTop: 12 }]}>
-        Until you do this, the wallet has a single point of failure.
+      <Button
+        label={acknowledged ? 'Understood' : 'I understand'}
+        onPress={() => {
+          setRecoveryBackedUp(true);
+          router.back();
+        }}
+      />
+      <Text
+        variant="footnote"
+        color={colors.warn}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
+        Until the key is on your device, this wallet has a single point of failure.
       </Text>
     </Screen>
   );

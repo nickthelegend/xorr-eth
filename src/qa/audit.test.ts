@@ -230,7 +230,11 @@ describe('13.1 layout law — design.md §4', () => {
     const offenders: string[] = [];
     for (const f of screenFiles) {
       const src = fs.readFileSync(f, 'utf8');
-      if (!/from '@\/design\/components'|from '@\/design/.test(src)) offenders.push(rel(f));
+      // `src/ui` is the design system; `src/design` is the layer it replaces and still holds
+      // the icon set and the identity gradients. A screen importing from NEITHER has rolled
+      // its own shell, which is the thing worth catching. This tightens to `@/ui` alone once
+      // nothing imports the old component set.
+      if (!/from '@\/ui'|from '@\/design/.test(src)) offenders.push(rel(f));
     }
     expect(offenders, offenders.join('\n')).toEqual([]);
   });

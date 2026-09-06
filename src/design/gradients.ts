@@ -8,6 +8,8 @@
  * <RadialGradient> using exactly these numbers: fx/fy = 32%/26%, the c2 stop at 74%.
  */
 
+import { assetClasses } from '../data/fixtures/markets';
+
 export type GradientPair = { c1: string; c2: string };
 
 /** The five agent gradients. design.md §1. */
@@ -40,4 +42,23 @@ export function agentGradient(name: string): GradientPair {
     (agentGradients as Record<string, GradientPair | undefined>)[name] ??
     agentGradients['Momentum Scout']
   );
+}
+
+/**
+ * The gradient for a tradable symbol.
+ *
+ * Every instrument in the catalogue carries its own `c1`/`c2`, and screens were typing a
+ * pair in by hand at the call site — which meant one asset's identity got drawn over all of
+ * them. This is that lookup, done once.
+ *
+ * A symbol not in the catalogue falls back to a neutral grey rather than borrowing another
+ * asset's identity: an unknown mark should not claim to be something it is not.
+ */
+export function assetGradient(symbol: string): GradientPair {
+  for (const cls of assetClasses) {
+    for (const i of cls.instruments) {
+      if (i.sym === symbol) return { c1: i.c1, c2: i.c2 };
+    }
+  }
+  return { c1: '#9AA3AD', c2: '#5C636B' };
 }

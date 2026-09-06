@@ -1,104 +1,121 @@
 /**
  * Screen 23 — News, with agent takes. screens.md Group D.
  *
- * "Briefing" + "Updated Nm ago". Three cards: a class tag chip + relative time, headline 15/600,
- * then a hairline-separated agent take (8px `up` dot + 11.5/1.5 body).
- * Ghost "Ask for the full rundown" -> routes into Bot chat.
+ * "Briefing" + when it was fetched. Three cards: a class tag chip + relative time, headline
+ * 15.5/600, then a hairline-separated agent take (8pt `up` dot + secondary body).
+ * Ghost "Ask for the full rundown" → routes into Bot chat.
  *
- * PLAN.md 8.6: this is the "trades while you chill" payoff surface — what the user reads when
- * they come back after a week. Treated as a headline feature, not a leaf screen.
+ * PLAN.md 8.6: this is the "trades while you chill" payoff surface — what the user reads
+ * when they come back after a week. Treated as a headline feature, not a leaf screen.
+ *
+ * The header said "Updated 18m ago" as a literal, forever. The feed carries no timestamp,
+ * so the honest fact is when THIS screen last got an answer — which is what it now reports.
  */
 import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Button,
   ErrorState,
+  Fill,
   LoadingRows,
   Screen,
-  ScreenHeader,
   SheetCard,
-} from '@/design/components';
-import { borders, ink, pnl } from '@/design/colors';
-import { hairlineWidth, radius } from '@/design/space';
-import { type } from '@/design/type';
+  Tag,
+  Text,
+  colors,
+  divider,
+  radius,
+  space,
+} from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 
+const DOT = 8;
 export default function Briefing() {
   const router = useRouter();
-  const { data, loading, error, reload } = useAsync(() => repos.news.briefing(), []);
+  const { data, loading, error, reload, settledAt } = useAsync(() => repos.news.briefing(), []);
+
+  // An ABSOLUTE time, not "4m ago": a relative age needs a ticking clock to stay true, and
+  // a stale "4m ago" is the same lie as the hardcoded "18m ago" this replaced, just slower.
+  const loadedAt =
+    settledAt === undefined
+      ? undefined
+      : new Date(settledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   return (
     <Screen>
-      <ScreenHeader
-        left={<Text style={[type.screenTitle, { color: ink.full }]}>Briefing</Text>}
-        right={<Text style={[type.footnote, { color: ink.i28 }]}>Updated 18m ago</Text>}
-      />
-      <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="screenTitle">Briefing</Text>
+        <Text variant="footnote" color={colors.ink28}>
+          {loadedAt === undefined ? '' : `Loaded ${loadedAt}`}
+        </Text>
+      </View>
+      <Text variant="secondary" style={{ marginTop: space.s10 }}>
         Only what moved your book, and what each agent did about it.
       </Text>
 
-      <Screen.Content style={{ marginTop: 18 }}>
+      <Fill style={{ marginTop: space.s18 }}>
         {loading && !data ? (
           <LoadingRows count={3} height={110} />
         ) : error ? (
           <ErrorState error={error} onRetry={reload} />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ gap: space.s12 }}
+          >
             {(data ?? []).map((n) => (
-              <SheetCard key={n.id} radius={radius.xl} padding={16}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View
-                    style={{
-                      backgroundColor: n.tagBg,
-                      borderRadius: radius.xs2,
-                      paddingHorizontal: 7,
-                      paddingVertical: 3,
-                    }}
-                  >
-                    <Text style={[type.tagSm, { color: n.tagFg }]}>{n.tag}</Text>
-                  </View>
-                  <Text style={[type.footnote, { color: ink.i28 }]}>{n.t}</Text>
+              <SheetCard key={n.id} borderRadius={radius.panel} padding={space.s16}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+                  <Tag label={n.tag} small colors={{ bg: n.tagBg, fg: n.tagFg }} />
+                  <Text variant="footnote" color={colors.ink28}>
+                    {n.t}
+                  </Text>
                 </View>
 
-                <Text style={[type.rowPrimaryLg, { color: ink.full, marginTop: 12 }]}>
+                <Text variant="rowPrimaryLg" style={{ marginTop: space.s12 }}>
                   {n.headline}
                 </Text>
 
                 <View
-                  style={{
-                    flexDirection: 'row',
-                    gap: 10,
-                    marginTop: 14,
-                    paddingTop: 14,
-                    borderTopWidth: hairlineWidth,
-                    borderTopColor: borders.hairline,
-                  }}
+                  style={[
+                    {
+                      flexDirection: 'row',
+                      gap: space.s10,
+                      marginTop: space.s14,
+                      paddingTop: space.s14,
+                      borderTopWidth: divider.borderBottomWidth,
+                      borderTopColor: divider.borderBottomColor,
+                    },
+                  ]}
                 >
                   <View
                     style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: pnl.up,
-                      marginTop: 4,
+                      width: DOT,
+                      height: DOT,
+                      borderRadius: radius.full,
+                      backgroundColor: colors.up,
+                      marginTop: space.s4,
                     }}
                   />
-                  <Text style={[type.noteBody, { color: ink.i45, flex: 1 }]}>{n.take}</Text>
+                  <Text variant="secondarySm" color={colors.ink45} style={{ flex: 1 }}>
+                    {n.take}
+                  </Text>
                 </View>
               </SheetCard>
             ))}
           </ScrollView>
         )}
-      </Screen.Content>
+      </Fill>
 
       <Button
         label="Ask for the full rundown"
         variant="ghost"
         onPress={() => router.push('/bot')}
-        style={{ marginTop: 14 }}
+        style={{ marginTop: space.s14 }}
       />
     </Screen>
   );
 }
+
