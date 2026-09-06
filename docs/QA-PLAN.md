@@ -229,3 +229,46 @@ Nothing is stubbed to work around it, and nothing is marked PASS on its account.
 
 The one thing deliberately not done: **nothing was executed on Base mainnet.** That is the only
 action here that spends real money, and it was out of scope by instruction.
+
+
+---
+
+# Re-audit, 2026-09-07 — after the sponsor review
+
+Reading the actual ETHOnline prize criteria invalidated an item this plan had marked verified, so
+the number came down before it went up. Four more defects surfaced, two of them serious.
+
+| # | Defect | Now |
+|---|---|---|
+| 12 | **`decide()` computed a venue and `runStrategy` discarded it.** It read `.act`, `.reason` and `.rationale` and never `.route`, so every fill went to the aggregation router and `XorrAquaBook` was a deployed contract the product never called — while the README claimed "the join picks the venue". | `venues/aqua.ts` discovers books from Aqua's own logs, quotes them, and fills via `delegatedFillArgs`. Proved by `live-aqua.ts`, 12/12: the receipt carries the book's `Swapped` event, the router appears nowhere, and real WETH leaves the maker's own wallet. |
+| 13 | **The kill switch was up to four seconds late.** A close succeeded on a permission that had just been revoked. viem caches the block number for 4s and resolves every `readContract` against it, so `readPolicy` kept reporting a revoked policy as live. | `cacheTime: 0` on the executor's client. Nothing it reads is worth being stale. |
+| 14 | **`/positions/close` reported `closed` before the transaction was mined** — writing the position row and telling the user "Sold" on a broadcast that could still revert. `runStrategy` waits for its receipt; this path was written separately and never got it. | Both close paths wait. |
+| 15 | Both live scripts leaked their strategies, so a later run hit `over_cap` on a wallet that was fine. | They retire what they create, and grant headroom over the day's spend. |
+
+## Final measurement
+
+| | |
+|---|---|
+| unit (app + executor) | **245 passed** |
+| live — real APIs, real chain | **83 passed**, 1 skipped |
+| server live (fork env) | **59 passed**, 6 skipped |
+| contracts | **22** unit + **32** fork (15 Aqua, 10 SwapVM, 7 equities) |
+| screens | **54 pass · 0 fail** |
+| `live-agents.ts` on Railway | **20/20** |
+| `live-ladder.ts` — every available rung | **11/11** |
+| `live-aqua.ts` — the Aqua path | **12/12**, on Railway and locally |
+| `/verify` — fork deployment | **15 pass · 0 fail · 0 skip** |
+| `/verify` — Sepolia | 9 pass · 0 fail · 6 skip |
+| tsc, eslint | clean |
+
+## Still open — two, both external
+
+1. **The Aqua venue subgraph has no Studio slug.** Built and pinned to IPFS; `graph deploy` returns
+   `Subgraph not found` because creating a slug is a wallet-signed action in the Studio dashboard
+   that no API exposes. Settlement through Aqua no longer depends on it — discovery is a chain read
+   — so this now only costs the composability track, not the feature.
+2. **No Privy *control* is used** — policies, session signers, key quorums. The project built its
+   own on-chain equivalents instead. Session signers would also remove the one hot key in the
+   system (`DELEGATE_PRIVATE_KEY`). See [SPONSOR-AUDIT.md](SPONSOR-AUDIT.md).
+
+Neither is a mock, a stub or a broken flow. Both are work not yet done, named as such.
