@@ -35,7 +35,51 @@ export async function devicesFor(walletId: string): Promise<string[]> {
 
 export type PushResult = { sent: number; skipped: number; errors: string[] };
 
+/**
+ * The interruptions this app can produce, and what each one is for.
+ *
+ * Listed here rather than inferred from whatever `send()` happens to have been called with, so the
+ * settings screen can offer them all — including the ones that have not fired yet for this user.
+ */
+export const PUSH_KINDS = [
+  { kind: 'dca-executed', label: 'A trade went through', detail: 'Every fill the bot places.' },
+  {
+    kind: 'strategy-blocked',
+    label: 'A trade was stopped',
+    detail: 'Your cap, expiry or allowlist refused something. This is the one worth keeping on.',
+  },
+  { kind: 'alert-fired', label: 'An alert you set', detail: 'Price levels and risk thresholds.' },
+  { kind: 'panic-flatten', label: 'Everything sold', detail: 'When you ask to be flattened.' },
+] as const;
+
+/**
+ * Has this user muted this kind?
+ *
+ * Absent means allowed. A missing row must never mean silence — someone who has never opened
+ * settings expects to hear from the bot, and defaulting to muted would make the whole feature look
+ * broken for every user who has not configured it.
+ */
+export async function allowsKind(walletId: string, kind: string | undefined): Promise<boolean> {
+  if (!kind) return true;
+  const rows = await query<{ enabled: boolean }>(
+    `SELECT enabled FROM notification_prefs WHERE wallet_id = $1 AND kind = $2`,
+    [walletId, kind],
+  );
+  return rows[0]?.enabled ?? true;
+}
+
 export async function send(walletId: string, msg: PushMessage): Promise<PushResult> {
+  /*
+   * Check the mute before looking for devices.
+   *
+   * Cheaper, and it keeps the log honest: "muted" and "no devices registered" are different
+   * reasons for silence and the second one is a bug while the first is a preference.
+   */
+  if (!(await allowsKind(walletId, msg.kind))) {
+    console.log(`[push] ${msg.kind}: muted by the user`);
+    return { sent: 0, skipped: 0, errors: ['muted'] };
+  }
+
   const tokens = await devicesFor(walletId);
   if (tokens.length === 0) {
     // Worth saying out loud. A trade that settled and told nobody looks identical, from the logs,

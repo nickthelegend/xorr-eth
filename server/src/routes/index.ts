@@ -25,6 +25,7 @@ import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
 import { TOKENS } from '../venues/oneinch.js';
 import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
+import { PUSH_KINDS } from '../notifications/push.js';
 
 /**
  * Every wallet lookup is scoped to the AUTHENTICATED Privy user.
@@ -698,6 +699,36 @@ routes.get('/pnl/disposals.csv', async (c) => {
     'content-type': 'text/csv; charset=utf-8',
     'content-disposition': 'attachment; filename="xorr-disposals.csv"',
   });
+});
+
+/**
+ * Which interruptions this user wants, with every kind listed whether or not they have configured
+ * it — a settings screen that only shows what has already happened is a settings screen you cannot
+ * use until after the thing you wanted to turn off.
+ */
+routes.get('/notifications/prefs', async (c) => {
+  const w = await requireWallet(c);
+  const rows = await query<{ kind: string; enabled: boolean }>(
+    `SELECT kind, enabled FROM notification_prefs WHERE wallet_id = $1`,
+    [w.id],
+  );
+  const set = new Map(rows.map((r) => [r.kind, r.enabled]));
+  return c.json(
+    PUSH_KINDS.map((k) => ({ ...k, enabled: set.get(k.kind) ?? true })),
+  );
+});
+
+routes.post('/notifications/prefs', async (c) => {
+  const body = z
+    .object({ kind: z.enum(PUSH_KINDS.map((k) => k.kind) as [string, ...string[]]), enabled: z.boolean() })
+    .parse(await c.req.json());
+  const w = await requireWallet(c);
+  await query(
+    `INSERT INTO notification_prefs (wallet_id, kind, enabled) VALUES ($1,$2,$3)
+     ON CONFLICT (wallet_id, kind) DO UPDATE SET enabled = EXCLUDED.enabled`,
+    [w.id, body.kind, body.enabled],
+  );
+  return c.json({ ok: true, kind: body.kind, enabled: body.enabled });
 });
 
 routes.get('/pnl/realised', async (c) => {

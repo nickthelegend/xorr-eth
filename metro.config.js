@@ -9,19 +9,42 @@
  *
  * `jose` publishes a `browser` export that uses WebCrypto and a `node` one that imports `zlib` and
  * `util`. Metro's default export conditions are `require` and `import`, so it picked the Node build
- * — a build that cannot exist in React Native — and there is no `zlib` to give it. Adding the
- * browser condition makes the resolver take the entry the package intends for a WebCrypto runtime,
- * which is what React Native is.
+ * — a build that cannot exist in React Native — and there is no `zlib` to give it.
  *
- * `react-native` is listed first so a package that ships an explicit React Native entry still wins
- * over its browser one; conditions are matched in the order the package declares them, and this
- * set only decides which of those declarations we are willing to accept.
+ * The first fix was to add `browser` to `unstable_conditionNames` globally. That fixed Android and
+ * silently broke WEB: with those conditions, `tslib` resolves to a build whose default export is
+ * undefined, and every route in the app died with
+ *
+ *   Cannot destructure property '__extends' of 'tslib.default' as it is undefined
+ *
+ * It went unnoticed for hours because the running Metro still had its pre-config state, so the
+ * screen sweep kept passing against a bundler that was no longer what the repo described.
+ *
+ * So the override is scoped to the one package that needs it, on the platforms that need it.
+ * Changing resolution for every package to fix one is how a bundler config becomes load-bearing in
+ * ways nobody can explain.
  */
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = true;
-config.resolver.unstable_conditionNames = ['react-native', 'browser', 'require', 'import'];
+
+const defaultResolveRequest = config.resolver.resolveRequest;
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolve = defaultResolveRequest ?? context.resolveRequest;
+
+  // React Native is a WebCrypto runtime, not a Node one — but only `jose` is told so.
+  if (platform !== 'web' && (moduleName === 'jose' || moduleName.startsWith('jose/'))) {
+    return resolve(
+      { ...context, unstable_conditionNames: ['browser', 'require', 'import'] },
+      moduleName,
+      platform,
+    );
+  }
+
+  return resolve(context, moduleName, platform);
+};
 
 module.exports = config;

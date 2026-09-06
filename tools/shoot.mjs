@@ -73,6 +73,7 @@ const ROUTES = [
   ['45-legal', '/legal/terms'],
   ['46-dev-components', '/_dev/components'],
   ['47-dev-fidelity', '/_dev/fidelity'],
+  ['48-dev-boom', '/_dev/boom'],
 ];
 
 /**

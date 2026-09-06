@@ -5,7 +5,7 @@
  * "Circuit breakers stay on even when notifications are muted. They stop trading, not just your
  * phone." Ghost "Add custom alert".
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -21,6 +21,7 @@ import { type } from '@/design/type';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
+import { api } from '@/data/api';
 import type { Alert } from '@/data/types';
 
 /**
@@ -56,6 +57,15 @@ export default function Alerts() {
   const alerts = useStore((s) => s.alerts);
   const toggleAlert = useStore((s) => s.toggleAlert);
   const { data, loading } = useAsync(() => repos.alerts.list(), []);
+  const prefs = useAsync(
+    () =>
+      api.get<{ kind: string; label: string; detail: string; enabled: boolean }[]>(
+        '/notifications/prefs',
+      ),
+    [],
+  );
+  /** Optimistic local state, reverted if the server disagrees. */
+  const [pushOn, setPushOn] = useState<Record<string, boolean>>({});
 
   /*
    * Count the alerts that EXIST, not the toggle map.
@@ -105,6 +115,36 @@ export default function Alerts() {
                 />
               );
             })}
+
+            {/*
+              What the BOT interrupts you for, as opposed to what you asked it to watch.
+              The switches above are alerts you set. These are the app's own notifications, and
+              `send()` has carried a kind since it was written with nothing reading it — so muting
+              the app meant losing "your cap stopped a trade" along with the routine fills. Those
+              are not the same thing and should not share one switch.
+            */}
+            <Text style={[type.cardTitleSm, { color: ink.full, marginTop: 26, marginBottom: 4 }]}>
+              What the bot tells you
+            </Text>
+            {(prefs.data ?? []).map((p) => (
+              <SwitchRow
+                key={p.kind}
+                label={p.label}
+                caption={p.detail}
+                value={pushOn[p.kind] ?? p.enabled}
+                onValueChange={() => {
+                  const next = !(pushOn[p.kind] ?? p.enabled);
+                  setPushOn((m) => ({ ...m, [p.kind]: next }));
+                  void api.post('/notifications/prefs', { kind: p.kind, enabled: next }).catch(() => {
+                    // Put it back. A switch that stays where you left it while the server never
+                    // agreed is the failure this whole screen used to be.
+                    setPushOn((m) => ({ ...m, [p.kind]: !next }));
+                  });
+                }}
+                height={70}
+                size="alerts"
+              />
+            ))}
 
             <NoteStrip kind="risk" style={{ marginTop: 16 }}>
               Circuit breakers stay on even when notifications are muted. They stop trading, not
