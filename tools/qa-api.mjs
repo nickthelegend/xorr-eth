@@ -267,11 +267,19 @@ await check('B21', 'the audit hash chain verifies', async () => {
   return JSON.stringify(j).slice(0, 60);
 });
 
-await check('B22', 'the public market surface is rate limited', async () => {
-  // 260 requests inside the window; the ceiling is 240.
+await check('B22', 'the public market surface is rate limited, per caller', async () => {
+  /*
+   * A distinct caller identity, for two reasons.
+   *
+   * It stops this check from spending the default bucket and 429ing every check that runs after it
+   * — which it did, and which made five unrelated items look broken. And it proves the limiter
+   * keys by CALLER rather than globally: a bucket shared by everyone would mean one script could
+   * lock out every real user, which is worse than having no limiter at all.
+   */
+  const mine = { 'x-forwarded-for': `10.99.0.${Math.floor(Math.random() * 250) + 1}` };
   let limited = 0;
   for (let i = 0; i < 260; i++) {
-    const r = await fetch(`${B}/market/symbols`);
+    const r = await fetch(`${B}/market/symbols`, { headers: mine });
     if (r.status === 429) {
       limited++;
       must(r.headers.get('retry-after'), '429 without a Retry-After');
@@ -279,7 +287,12 @@ await check('B22', 'the public market surface is rate limited', async () => {
     }
   }
   must(limited > 0, 'never rate limited after 260 requests');
-  return '429 with Retry-After';
+  // And a different caller is unaffected — the whole point of keying by identity.
+  const other = await fetch(`${B}/market/symbols`, {
+    headers: { 'x-forwarded-for': '10.99.250.250' },
+  });
+  must(other.status === 200, `a different caller was also limited (${other.status})`);
+  return '429 with Retry-After; other callers unaffected';
 });
 
 console.log(`\n${pass} passed, ${failures.length} failed`);
