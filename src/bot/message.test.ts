@@ -32,7 +32,7 @@ describe('a number can never live in a voice segment', () => {
 
   it('a fact must name where its number came from', () => {
     expect(() => fact(88.32, 'price', '')).toThrow();
-    expect(fact(88.32, 'price', 'jupiter:SOL').source).toBe('jupiter:SOL');
+    expect(fact(2481.11, 'price', '1inch:WETH').source).toBe('1inch:WETH');
   });
 });
 

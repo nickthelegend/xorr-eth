@@ -44,6 +44,44 @@ app.onError((err, c) => {
   return c.json({ error: err.message }, 500);
 });
 
+/**
+ * A ceiling on the unauthenticated surface.
+ *
+ * The /market/* routes are public on purpose — a spot price is not user data — but public and
+ * unlimited are different things: they proxy a rate-limited upstream on our key, so one script can
+ * exhaust the quota for every real user. Everything served from cache is cheap; this only bites a
+ * caller asking faster than a human could.
+ *
+ * Deliberately per-process and in memory. A distributed limiter is the right answer behind a load
+ * balancer and the wrong answer to reach for before there is one.
+ */
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 240;
+const hits = new Map<string, { count: number; resetAt: number }>();
+
+app.use('*', async (c, next) => {
+  if (!c.req.path.startsWith('/market/') && c.req.path !== '/yield/supply') return next();
+
+  const who =
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
+    c.req.header('x-real-ip') ??
+    'local';
+  const now = Date.now();
+  const row = hits.get(who);
+  if (!row || now > row.resetAt) {
+    hits.set(who, { count: 1, resetAt: now + RATE_WINDOW_MS });
+  } else if (++row.count > RATE_MAX) {
+    c.header('retry-after', String(Math.ceil((row.resetAt - now) / 1000)));
+    return c.json({ error: 'rate_limited', detail: 'Too many market requests.' }, 429);
+  }
+
+  // Keep the map from growing without bound on a long-running process.
+  if (hits.size > 10_000) {
+    for (const [k, v] of hits) if (now > v.resetAt) hits.delete(k);
+  }
+  return next();
+});
+
 // Auth before ANY route. An unauthenticated trading server must not be a possible state.
 app.use('*', authMiddleware);
 

@@ -1,7 +1,8 @@
 /**
  * Local repository implementation.
  *
- * Not a mock: market data is REAL (CoinGecko + Jupiter, src/data/marketData.ts). What is local is
+ * Not a mock: market data is REAL — CoinGecko for crypto and a live 1inch route for the
+ * tokenized equities, both through the executor (src/data/marketData.ts). What is local is
  * the *account* — positions, strategies, the audit trail — which lives in the executor's Postgres
  * once the server is reachable, and falls back to the on-device store when it is not.
  *

@@ -126,3 +126,36 @@ HSM** — a file on a host is adequate for a testnet demo and is not adequate be
 
 `CHAIN` was renamed to `XORR_CHAIN` because Foundry auto-loads `.env` from the working directory and
 interprets `CHAIN` as its own `--chain` flag, which broke every `cast`/`forge` command in the repo.
+
+## The delegate key
+
+`server/src/evm/client.ts` loads the bot's signing key from `DELEGATE_PRIVATE_KEY`, or generates
+one into `server/.keys/delegate.key` (mode 600, gitignored) when that is unset.
+
+**A file on a host is adequate for a local fork and is not adequate beyond one.** Anyone who reads
+that file can sign as the delegate. What they *cannot* do is the point of the whole design:
+
+- they cannot exceed the daily cap, which the contract enforces
+- they cannot trade anywhere the user has not allowlisted
+- they cannot send funds to an address of their choosing — there is no code path for it
+- they cannot stop the user revoking, which needs one signature and no cooperation from us
+
+So the blast radius of a stolen delegate key is "the bot trades badly inside limits the user set,
+until the user revokes". That is a real incident and a bounded one. It is bounded by the contract,
+not by our operational hygiene, which is why the contract is where the enforcement lives.
+
+### Before any mainnet deployment
+
+1. Move the key to a KMS or HSM — AWS KMS, GCP KMS, or a Turnkey/Fireblocks signer. The executor
+   only needs `signTransaction`, so the key never has to be in process memory.
+2. Give it its own IAM principal with signing permission and nothing else.
+3. Alert on any `Spent` or `Closed` event whose transaction the executor did not initiate. The
+   subgraph already indexes both, so this is a query rather than new infrastructure.
+4. Rotate by granting a new delegate and revoking the old one. `grant()` overwrites the delegate
+   for that owner, so rotation is one user signature and does not require our cooperation either.
+
+### What is deliberately NOT protected
+
+The owner key. Privy holds it on the user's device and xorr never sees it. That is why the
+executor cannot grant itself permission, cannot move funds out, and cannot prevent a revoke — and
+it is why a compromise of everything in this repository still cannot take a user's money.
