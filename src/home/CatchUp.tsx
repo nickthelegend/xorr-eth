@@ -9,12 +9,9 @@
  * is a card people learn to ignore, and the moment it matters is the moment they stop reading it.
  */
 import React, { useCallback, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SheetCard } from '@/design/components';
-import { ink, pnl } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
+import { Eyebrow, Press, SheetCard, Text, colors, radius, size, space } from '@/ui';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
 
@@ -54,45 +51,55 @@ export function CatchUp() {
     .join(' · ');
 
   return (
-    <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 18 }}>
+    <SheetCard borderRadius={radius.panel} padding={space.s16}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={[type.eyebrowSm, { color: ink.i32 }]}>
-          {d.isFirstVisit ? 'IN THE LAST DAY' : 'SINCE YOU WERE LAST HERE'}
-        </Text>
-        <Pressable
+        <Eyebrow small>
+          {d.isFirstVisit ? 'In the last day' : 'Since you were last here'}
+        </Eyebrow>
+        <Press
           onPress={acknowledge}
           accessibilityRole="button"
           accessibilityLabel="Mark as read"
-          hitSlop={10}
+          hitHeight={size.hit}
         >
-          <Text style={[type.pill, { color: ink.i45 }]}>Got it</Text>
-        </Pressable>
+          <Text variant="control" color={colors.ink45}>
+            Got it
+          </Text>
+        </Press>
       </View>
 
-      <Text style={[type.rowPrimaryLg, { color: ink.full, marginTop: 8 }]}>{summary}</Text>
+      <Text variant="rowPrimaryLg" style={{ marginTop: space.s8 }}>
+        {summary}
+      </Text>
 
       {/* Three, not fifty. The rest is one tap away and the point here is a glance. */}
       {d.entries.slice(0, 3).map((e) => (
-        <View key={`${e.at}${e.action}`} style={{ marginTop: 10 }}>
-          <Text style={[type.body, { color: e.kind === 'block' ? pnl.warn : ink.full }]}>
+        <View key={`${e.at}${e.action}`} style={{ marginTop: space.s10 }}>
+          <Text variant="body" color={e.kind === 'block' ? colors.warn : colors.ink}>
             {e.action}
           </Text>
-          <Text style={[type.footnote, { color: ink.i38, marginTop: 2 }]} numberOfLines={2}>
+          <Text
+            variant="footnote"
+            color={colors.ink38}
+            style={{ marginTop: space.s2 }}
+            numberOfLines={2}
+          >
             {e.detail}
           </Text>
         </View>
       ))}
 
       {d.entries.length > 3 ? (
-        <Pressable
+        <Press
           onPress={() => router.push('/activity')}
           accessibilityRole="button"
           accessibilityLabel={`See all ${d.entries.length} things that happened`}
+          hitHeight={size.hit}
         >
-          <Text style={[type.footnote, { color: ink.i45, marginTop: 12 }]}>
+          <Text variant="footnote" color={colors.ink45} style={{ marginTop: space.s12 }}>
             and {d.entries.length - 3} more ›
           </Text>
-        </Pressable>
+        </Press>
       ) : null}
     </SheetCard>
   );

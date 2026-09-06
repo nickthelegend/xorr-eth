@@ -10,14 +10,25 @@
  * going to stay and you cannot judge one without seeing where it is now.
  */
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ScrollView, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Icon } from '@/design/Icon';
-import { Button, Screen, Segmented } from '@/design/components';
-import { pnl, sheet } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money } from '@/format';
+import {
+  Button,
+  Eyebrow,
+  Fill,
+  IconButton,
+  Press,
+  Price,
+  Screen,
+  Segmented,
+  Text,
+  colors,
+  money,
+  radius,
+  size,
+  space,
+  typeScale,
+} from '@/ui';
 import { repos } from '@/data';
 import { usePrices } from '@/data/usePrices';
 import { useAsync } from '@/data/useAsync';
@@ -36,31 +47,40 @@ type GridBacktest = {
   disclaimer: string;
 };
 
-const SYMBOLS = ['WETH', 'CBBTC'];
-const STEP_OPTIONS = [2, 4, 6, 8];
-const CADENCES: Cadence[] = ['daily', 'weekly'];
-const CADENCE_LABELS = ['Check daily', 'Check weekly'];
+const SYMBOLS = [
+  { value: 'WETH', label: 'WETH' },
+  { value: 'CBBTC', label: 'CBBTC' },
+] as const;
+type Symbol = (typeof SYMBOLS)[number]['value'];
+
+const STEP_OPTIONS = [2, 4, 6, 8] as const;
+const STEPS = STEP_OPTIONS.map((n) => ({ value: n as number, label: String(n) }));
+
+const CADENCES = [
+  { value: 'daily', label: 'Check daily' },
+  { value: 'weekly', label: 'Check weekly' },
+] as const satisfies readonly { value: Cadence; label: string }[];
+
+const FIELD_H = 46;
 
 export default function GridSetup() {
   const router = useRouter();
-  const [symbolIdx, setSymbolIdx] = useState(0);
-  const symbol = SYMBOLS[symbolIdx]!;
+  const [symbol, setSymbol] = useState<Symbol>('WETH');
   const { quotes } = usePrices([symbol]);
   const mark = quotes[symbol]?.price;
 
   const [lower, setLower] = useState('');
   const [upper, setUpper] = useState('');
-  const [stepIdx, setStepIdx] = useState(1);
+  const [steps, setSteps] = useState<number>(4);
   const [perRung, setPerRung] = useState('50');
-  const [cadence, setCadence] = useState(0);
+  const [cadence, setCadence] = useState<Cadence>('daily');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  const steps = STEP_OPTIONS[stepIdx]!;
   const lo = parseFloat(lower) || 0;
   const hi = parseFloat(upper) || 0;
   const usdPerStep = parseFloat(perRung) || 0;
-  const runs = useMemo(() => nextRuns(CADENCES[cadence]!, 3), [cadence]);
+  const runs = useMemo(() => nextRuns(cadence, 3), [cadence]);
 
   /*
    * The backtest is on demand, not automatic.
@@ -111,10 +131,10 @@ export default function GridSetup() {
       await repos.strategies.create({
         kind: 'grid',
         state: 'live',
-        label: `${symbol} ${money(lo, { fractionDigits: 0 })}–${money(hi, { fractionDigits: 0 })}`,
+        label: `${symbol} ${money(lo, { decimals: 0 })}–${money(hi, { decimals: 0 })}`,
         symbol,
         params: { lower: lo, upper: hi, steps, usdPerStep },
-        cadence: CADENCES[cadence],
+        cadence,
         nextRunAt: runs[0]!.getTime(),
         // The most it can ever have at work: one rung per level, and never more than that.
         dailyAllocationUsd: maxCommitted,
@@ -128,64 +148,77 @@ export default function GridSetup() {
   }
 
   return (
-    <Screen background={sheet.bg} sheetEdge gutter={false}>
-      <View style={{ flex: 1, paddingHorizontal: 20 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={[type.sheetTitle, { color: sheet.ink }]}>Range accumulation</Text>
-          <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12}>
-            <Icon name="close" size={20} color={sheet.ink} />
-          </Pressable>
-        </View>
-
-        <Segmented
-          options={SYMBOLS}
-          value={symbolIdx}
-          onChange={setSymbolIdx}
-          variant="sheet"
-          style={{ marginTop: 16 }}
-          accessibilityLabel="Asset"
+    <Screen light>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="sheetTitle" color={colors.sheet.ink}>
+          Range accumulation
+        </Text>
+        <IconButton
+          name="close"
+          accessibilityLabel="Close"
+          onPress={() => router.back()}
+          background="none"
+          color={colors.sheet.ink}
+          glyph={20}
         />
+      </View>
 
-        <View
-          style={{
-            marginTop: 16,
-            padding: 14,
-            borderRadius: radius.md2,
-            backgroundColor: sheet.fill,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <Text style={[type.body, { color: sheet.muted }]}>{symbol} right now</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Text style={[type.rowPrimary, { color: sheet.ink }]}>
-              {mark === undefined ? '—' : money(mark)}
-            </Text>
-            {mark !== undefined ? (
-              <Pressable onPress={suggest} accessibilityRole="button" accessibilityLabel="Suggest a range around the current price">
-                <Text style={[type.pill, { color: pnl.cancelInk }]}>Suggest</Text>
-              </Pressable>
-            ) : null}
-          </View>
+      <Segmented
+        options={SYMBOLS}
+        value={symbol}
+        onChange={setSymbol}
+        light
+        style={{ marginTop: space.s16 }}
+      />
+
+      <View
+        style={{
+          marginTop: space.s16,
+          padding: space.s14,
+          borderRadius: radius.tile,
+          backgroundColor: colors.sheet.fill,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Text variant="body" color={colors.sheet.muted}>
+          {symbol} right now
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12 }}>
+          <Price color={colors.sheet.ink}>{mark === undefined ? '—' : money(mark)}</Price>
+          {mark !== undefined ? (
+            <Press
+              onPress={suggest}
+              accessibilityRole="button"
+              accessibilityLabel="Suggest a range around the current price"
+              hitHeight={size.hit}
+            >
+              <Text variant="control" color={colors.cancelInk}>
+                Suggest
+              </Text>
+            </Press>
+          ) : null}
         </View>
+      </View>
 
-        <Screen.Content style={{ marginTop: 14 }}>
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+      <Fill style={{ marginTop: space.s14 }}>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <View style={{ flexDirection: 'row', gap: space.s10 }}>
               <Field label="Bottom of range" value={lower} onChange={setLower} />
               <Field label="Top of range" value={upper} onChange={setUpper} />
             </View>
 
-            <Text style={[type.eyebrowSm, { color: sheet.muted, marginTop: 18 }]}>RUNGS</Text>
+            <Eyebrow small color={colors.sheet.muted} style={{ marginTop: space.s18 }}>
+              Rungs
+            </Eyebrow>
             <Segmented
-              options={STEP_OPTIONS.map(String)}
-              value={stepIdx}
-              onChange={setStepIdx}
-              variant="sheet"
-              height={36}
-              style={{ marginTop: 8 }}
-              accessibilityLabel="How many rungs"
+              options={STEPS}
+              value={steps}
+              onChange={setSteps}
+              light
+              height={size.segThumbSm}
+              style={{ marginTop: space.s8 }}
             />
 
             <View style={{ marginTop: 16 }}>
@@ -196,14 +229,14 @@ export default function GridSetup() {
             {rungs.length > 0 ? (
               <View
                 style={{
-                  backgroundColor: sheet.fill,
-                  borderRadius: radius.md2,
-                  padding: 14,
-                  marginTop: 18,
-                  gap: 7,
+                  backgroundColor: colors.sheet.fill,
+                  borderRadius: radius.tile,
+                  padding: space.s14,
+                  marginTop: space.s18,
+                  gap: space.s6,
                 }}
               >
-                <Text style={[type.eyebrowSm, { color: sheet.muted }]}>THE LADDER</Text>
+                <Eyebrow small color={colors.sheet.muted}>The ladder</Eyebrow>
                 {[...rungs].reverse().map((r, idx) => {
                   const isNearest =
                     mark !== undefined &&
@@ -214,15 +247,13 @@ export default function GridSetup() {
                       style={{ flexDirection: 'row', justifyContent: 'space-between' }}
                     >
                       <Text
-                        style={[
-                          type.body,
-                          { color: isNearest ? sheet.ink : sheet.muted },
-                        ]}
+                        variant="body"
+                        color={isNearest ? colors.sheet.ink : colors.sheet.muted}
                       >
                         {money(r)}
                         {isNearest ? '  ← price is here' : ''}
                       </Text>
-                      <Text style={[type.body, { color: sheet.muted }]}>
+                      <Text variant="body" color={colors.sheet.muted}>
                         {idx === 0 ? 'sell' : idx === rungs.length - 1 ? 'buy' : ''}
                       </Text>
                     </View>
@@ -240,47 +271,54 @@ export default function GridSetup() {
             {rungs.length > 0 ? (
               <View
                 style={{
-                  backgroundColor: sheet.fill,
-                  borderRadius: radius.md2,
-                  padding: 14,
-                  marginTop: 16,
-                  gap: 8,
+                  backgroundColor: colors.sheet.fill,
+                  borderRadius: radius.tile,
+                  padding: space.s14,
+                  marginTop: space.s16,
+                  gap: space.s8,
                 }}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={[type.eyebrowSm, { color: sheet.muted }]}>OVER THE LAST 90 DAYS</Text>
+                  <Eyebrow small color={colors.sheet.muted}>Over the last 90 days</Eyebrow>
                   {!back.data && !back.loading ? (
-                    <Pressable onPress={runBacktest} accessibilityRole="button" accessibilityLabel="Test this range against real history">
-                      <Text style={[type.pill, { color: pnl.cancelInk }]}>Test it</Text>
-                    </Pressable>
+                    <Press
+                      onPress={runBacktest}
+                      accessibilityRole="button"
+                      accessibilityLabel="Test this range against real history"
+                      hitHeight={size.hit}
+                    >
+                      <Text variant="control" color={colors.cancelInk}>
+                        Test it
+                      </Text>
+                    </Press>
                   ) : null}
                 </View>
                 {back.loading ? (
-                  <Text style={[type.body, { color: sheet.muted }]}>Replaying real prices…</Text>
+                  <Text variant="body" color={colors.sheet.muted}>Replaying real prices…</Text>
                 ) : back.error ? (
-                  <Text style={[type.noteBody, { color: pnl.candleDown }]}>
+                  <Text variant="secondarySm" color={colors.candleDown}>
                     No price history for {symbol}, so there is nothing to test against.
                   </Text>
                 ) : back.data ? (
                   <>
-                    <Text style={[type.rowPrimaryLg, { color: sheet.ink }]}>
+                    <Text variant="rowPrimaryLg" color={colors.sheet.ink}>
                       In range {back.data.inRangePct}% of the time
                     </Text>
-                    <Text style={[type.noteBody, { color: sheet.muted }]}>
+                    <Text variant="secondarySm" color={colors.sheet.muted}>
                       {back.data.buys} buys and {back.data.sells} sells, {back.data.ret >= 0 ? 'up' : 'down'}{' '}
                       {Math.abs(back.data.ret)}% on what it put to work.
                     </Text>
                     {back.data.leftCost > 0 ? (
-                      <Text style={[type.noteBody, { color: pnl.candleDown }]}>
+                      <Text variant="secondarySm" color={colors.candleDown}>
                         It would have ended still holding {money(back.data.leftValue)} of {symbol}
                         {' '}that cost {money(back.data.leftCost)} — that is what a broken range
                         looks like.
                       </Text>
                     ) : null}
-                    <Text style={[type.footnote, { color: sheet.dim }]}>{back.data.disclaimer}</Text>
+                    <Text variant="footnote" color={colors.sheet.dim}>{back.data.disclaimer}</Text>
                   </>
                 ) : (
-                  <Text style={[type.noteBody, { color: sheet.muted }]}>
+                  <Text variant="secondarySm" color={colors.sheet.muted}>
                     Replay this exact range over real daily closes before you commit to it.
                   </Text>
                 )}
@@ -288,49 +326,53 @@ export default function GridSetup() {
             ) : null}
 
             {/* The two things that decide whether this is a good idea. Neither is a footnote. */}
-            <View style={{ marginTop: 16, gap: 8 }}>
-              <Text style={[type.noteBody, { color: sheet.muted }]}>
+            <View style={{ marginTop: space.s16, gap: 8 }}>
+              <Text variant="secondarySm" color={colors.sheet.muted}>
                 At most {money(maxCommitted)} at work — one rung each, and it never buys the same
                 rung twice.
               </Text>
-              <Text style={[type.noteBody, { color: sheet.muted }]}>
+              <Text variant="secondarySm" color={colors.sheet.muted}>
                 If {symbol} leaves the range it stops rather than chasing. You keep whatever it
                 bought on the way down, which is the risk you are taking.
               </Text>
               {rungs.length > 0 && !inRange && mark !== undefined ? (
-                <Text style={[type.noteBody, { color: pnl.candleDown }]}>
+                <Text variant="secondarySm" color={colors.candleDown}>
                   {money(mark)} is outside this range, so nothing would happen until it comes back.
                 </Text>
               ) : null}
             </View>
 
             <Segmented
-              options={CADENCE_LABELS}
+              options={CADENCES}
               value={cadence}
               onChange={setCadence}
-              variant="sheet"
-              height={36}
-              style={{ marginTop: 18, marginBottom: 8 }}
-              accessibilityLabel="How often to check"
+              light
+              height={size.segThumbSm}
+              style={{ marginTop: space.s18, marginBottom: space.s8 }}
             />
 
             {error ? (
-              <Text style={[type.noteBody, { color: pnl.candleDown, marginTop: 12 }]}>{error}</Text>
+              <Text variant="secondarySm" color={colors.candleDown} style={{ marginTop: space.s12 }}>{error}</Text>
             ) : null}
-          </ScrollView>
-        </Screen.Content>
+        </ScrollView>
+      </Fill>
 
-        <Button
-          label={valid ? `Run this range on ${symbol}` : 'Set a range and a rung size'}
-          variant="sheetConfirm"
-          disabled={!valid}
-          loading={busy}
-          onPress={create}
-        />
-        <Text style={[type.footnote, { color: sheet.dim, textAlign: 'center', marginTop: 12 }]}>
-          The first run takes a reading. Trades start on the first crossing after that.
-        </Text>
-      </View>
+      <Button
+        label={valid ? `Run this range on ${symbol}` : 'Set a range and a rung size'}
+        backgroundColor={colors.candleUp}
+        color={colors.ink}
+        disabled={!valid}
+        loading={busy}
+        onPress={create}
+      />
+      <Text
+        variant="footnote"
+        color={colors.sheet.dim}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
+        The first run takes a reading. Trades start on the first crossing after that.
+      </Text>
     </Screen>
   );
 }
@@ -346,27 +388,28 @@ function Field({
 }) {
   return (
     <View style={{ flex: 1 }}>
-      <Text style={[type.eyebrowSm, { color: sheet.muted }]}>{label.toUpperCase()}</Text>
-      <View
-        style={{
-          marginTop: 8,
-          height: 46,
-          borderRadius: radius.md2,
-          backgroundColor: sheet.fill,
-          paddingHorizontal: 12,
-          justifyContent: 'center',
-        }}
-      >
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          keyboardType="decimal-pad"
-          placeholder="0"
-          placeholderTextColor={sheet.dim}
-          accessibilityLabel={label}
-          style={[type.rowPrimary, { color: sheet.ink }]}
-        />
-      </View>
+      <Eyebrow small color={colors.sheet.muted}>
+        {label}
+      </Eyebrow>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        keyboardType="decimal-pad"
+        placeholder="0"
+        placeholderTextColor={colors.sheet.dim}
+        accessibilityLabel={label}
+        style={[
+          typeScale.rowPrimary,
+          {
+            marginTop: space.s8,
+            height: FIELD_H,
+            borderRadius: radius.tile,
+            backgroundColor: colors.sheet.fill,
+            paddingHorizontal: space.s12,
+            color: colors.sheet.ink,
+          },
+        ]}
+      />
     </View>
   );
 }

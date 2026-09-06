@@ -20,57 +20,47 @@
  * "Something went wrong" cannot.
  */
 import React from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { ink, pnl, surfaces } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
+import { ScrollView } from 'react-native';
+import { Button, Screen, SheetCard, Text, colors, radius, space } from '@/ui';
 
 /**
  * The shape expo-router hands a layout's `ErrorBoundary` export.
  *
- * Exporting this from a `_layout.tsx` scopes the boundary to that segment — which is the whole
- * point: a failing tab screen keeps the tab bar, so the user can still reach Safety and stop the
- * bot. A boundary at the root would catch the same error and take the navigation down with it.
+ * Exporting this from a `_layout.tsx` scopes the boundary to that segment — which is the
+ * whole point: a failing tab screen keeps the tab bar, so the user can still reach Safety
+ * and stop the bot. A boundary at the root would catch the same error and take the
+ * navigation down with it.
  */
 export function ScreenError({ error, retry }: { error: Error; retry: () => void }) {
   return (
-    <View style={{ flex: 1, backgroundColor: surfaces.bg, padding: 20, justifyContent: 'center' }}>
-      <View
-        style={{ backgroundColor: surfaces.surface, borderRadius: radius.xl, padding: 18, gap: 10 }}
-      >
-        <Text style={[type.cardTitle, { color: pnl.down }]}>This screen could not render.</Text>
-        <Text style={[type.body, { color: ink.i45 }]}>
-          The rest of the app is unaffected — your balance, your permission and the stop button all
-          still work.
+    <Screen style={{ justifyContent: 'center' }}>
+      <SheetCard borderRadius={radius.panel} padding={space.s18} style={{ gap: space.s10 }}>
+        <Text variant="cardTitleLg" color={colors.down}>
+          This screen could not render.
+        </Text>
+        <Text variant="body" color={colors.ink45}>
+          The rest of the app is unaffected — your balance, your permission and the stop
+          button all still work.
         </Text>
         <ScrollView style={{ maxHeight: 140 }}>
           {/*
             The real message, not a friendly nothing.
-            This codebase's standing position is that a server which hides its errors is worse than
-            one that fails, and it applies here too: someone who can read "Cannot read properties
-            of null" can tell us what happened, and someone looking at "Something went wrong"
-            cannot.
+            This codebase's standing position is that a server which hides its errors is
+            worse than one that fails, and it applies here too: someone who can read "Cannot
+            read properties of null" can tell us what happened, and someone looking at
+            "Something went wrong" cannot.
           */}
-          <Text style={[type.footnote, { color: ink.i32 }]} selectable>
+          <Text variant="footnote" color={colors.ink32} selectable>
             {error.message}
           </Text>
         </ScrollView>
-        <Pressable
+        <Button
+          label="Try again"
+          height={44}
+          style={{ marginTop: space.s4 }}
           onPress={retry}
-          accessibilityRole="button"
-          accessibilityLabel="Try this screen again"
-          style={({ pressed }) => ({
-            marginTop: 4,
-            height: 44,
-            borderRadius: radius.xl,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: pressed ? 'rgba(255,255,255,0.88)' : ink.full,
-          })}
-        >
-          <Text style={[type.buttonLabel, { color: '#0B0B0B' }]}>Try again</Text>
-        </Pressable>
-      </View>
-    </View>
+        />
+      </SheetCard>
+    </Screen>
   );
 }

@@ -1,28 +1,41 @@
 /**
  * Your money at Aave, and the way out.
  *
- * Tier 4 can put cash here and deliberately cannot take it back. That is the design, not a gap:
- * burning your own aTokens needs nobody's permission, so the delegation was never given the
- * receipt token — and a permission that cannot be used to trap you is the whole argument this app
- * makes. But a design nobody can act on is indistinguishable from a trap, so the exit needs a
- * screen, and it has to be obvious.
+ * Tier 4 can put cash here and deliberately cannot take it back. That is the design, not a
+ * gap: burning your own aTokens needs nobody's permission, so the delegation was never given
+ * the receipt token — and a permission that cannot be used to trap you is the whole argument
+ * this app makes. But a design nobody can act on is indistinguishable from a trap, so the
+ * exit needs a screen, and it has to be obvious.
  *
- * The transaction is signed by the user's own wallet and does not touch the delegation at all.
+ * The transaction is signed by the user's own wallet and does not touch the delegation.
  */
 import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Button, IconButton, Screen, ScreenHeader, SheetCard } from '@/design/components';
-import { ink, pnl, surfaces } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { money, percent } from '@/format';
+import {
+  Button,
+  Eyebrow,
+  Fill,
+  IconButton,
+  Press,
+  Price,
+  Screen,
+  SheetCard,
+  Text,
+  colors,
+  money,
+  percent,
+  radius,
+  size,
+  space,
+} from '@/ui';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
 import { useAaveWithdraw, type YieldPosition } from '@/defi/useAaveWithdraw';
 
 /** Quick fractions of the position, plus everything. */
 const PORTIONS = [0.25, 0.5, 1] as const;
+const PORTION_H = 42;
 
 export default function Yield() {
   const router = useRouter();
@@ -37,8 +50,8 @@ export default function Yield() {
   const amount = supplied * portion;
 
   const submit = useCallback(async () => {
-    // A full withdrawal asks for "all of it" rather than a number: aUSDC accrues every second, so
-    // any figure read a moment ago already leaves dust behind.
+    // A full withdrawal asks for "all of it" rather than a number: aUSDC accrues every
+    // second, so any figure read a moment ago already leaves dust behind.
     const hash = await withdraw(portion === 1 ? (null as unknown as number) : amount).catch(
       () => undefined,
     );
@@ -50,60 +63,64 @@ export default function Yield() {
 
   return (
     <Screen>
-      <ScreenHeader
-        left={<Text style={[type.screenTitle, { color: ink.full }]}>Earning at Aave</Text>}
-        right={<IconButton name="close" onPress={() => router.back()} accessibilityLabel="Close" />}
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="screenTitle">Earning at Aave</Text>
+        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
+      </View>
 
-      <Screen.Content style={{ marginTop: 16 }}>
+      <Fill style={{ marginTop: space.s16 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {pos.loading && !p ? (
-            <Text style={[type.body, { color: ink.i40 }]}>Reading the pool…</Text>
+            <Text variant="body" color={colors.ink40}>
+              Reading the pool…
+            </Text>
           ) : pos.error ? (
-            <SheetCard radius={radius.lg} padding={16}>
-              <Text style={[type.rowPrimary, { color: pnl.down }]}>Could not read the pool.</Text>
-              <Text style={[type.noteBody, { color: ink.i45, marginTop: 6 }]}>
+            <SheetCard borderRadius={radius.note} padding={space.s16}>
+              <Text variant="rowPrimary" color={colors.down}>
+                Could not read the pool.
+              </Text>
+              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
                 {pos.error.message}
               </Text>
             </SheetCard>
           ) : p && !p.available ? (
-            <SheetCard radius={radius.lg} padding={16}>
-              <Text style={[type.rowPrimary, { color: ink.full }]}>No lending pool here.</Text>
-              <Text style={[type.noteBody, { color: ink.i45, marginTop: 6 }]}>
+            <SheetCard borderRadius={radius.note} padding={space.s16}>
+              <Text variant="rowPrimary">No lending pool here.</Text>
+              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
                 {p.reason ?? 'Aave v3 is not deployed on this network.'}
               </Text>
-              {/* "Nothing supplied" and "nowhere to supply" are different, and the difference
-                  matters — the second one is not something the user did. */}
-              <Text style={[type.footnote, { color: ink.i32, marginTop: 10 }]}>
+              {/* "Nothing supplied" and "nowhere to supply" are different, and the
+                  difference matters — the second one is not something the user did. */}
+              <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s10 }}>
                 This is about the network, not your balance.
               </Text>
             </SheetCard>
           ) : p ? (
             <>
-              <SheetCard radius={radius.lg} padding={18}>
-                <Text style={[type.eyebrowSm, { color: ink.i32 }]}>SUPPLIED</Text>
-                <Text style={[type.heroAmount, { color: ink.full, marginTop: 6 }]}>
+              <SheetCard borderRadius={radius.note} padding={space.s18}>
+                <Eyebrow small>Supplied</Eyebrow>
+                <Price variant="heroAmount" style={{ marginTop: space.s6 }}>
                   {money(supplied)}
-                </Text>
-                <Text style={[type.noteBody, { color: ink.i45, marginTop: 8 }]}>
-                  Earning {percent(p.apy * 100, { digits: 2 }).replace('+', '')} a year. The balance
-                  itself grows — there is no claim step and nothing to harvest.
+                </Price>
+                <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s8 }}>
+                  Earning {percent(p.apy * 100, 2).replace('+', '')} a year. The balance itself
+                  grows — there is no claim step and nothing to harvest.
                 </Text>
               </SheetCard>
 
               {supplied <= 0 ? (
-                <Text style={[type.noteBody, { color: ink.i45, marginTop: 16 }]}>
-                  Nothing supplied yet. A &ldquo;move idle cash to yield&rdquo; strategy puts spare
-                  USDC here automatically, inside your daily cap.
+                <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s16 }}>
+                  Nothing supplied yet. A &ldquo;move idle cash to yield&rdquo; strategy puts
+                  spare USDC here automatically, inside your daily cap.
                 </Text>
               ) : (
                 <>
-                  <Text style={[type.eyebrowSm, { color: ink.i32, marginTop: 20 }]}>
-                    WITHDRAW
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                  <Eyebrow small style={{ marginTop: space.s20 }}>
+                    Withdraw
+                  </Eyebrow>
+                  <View style={{ flexDirection: 'row', gap: space.s8, marginTop: space.s10 }}>
                     {PORTIONS.map((f) => (
-                      <Pressable
+                      <Press
                         key={f}
                         onPress={() => setPortion(f)}
                         accessibilityRole="button"
@@ -111,23 +128,26 @@ export default function Yield() {
                         accessibilityLabel={f === 1 ? 'All of it' : `${f * 100} percent`}
                         style={{
                           flex: 1,
-                          height: 42,
-                          borderRadius: radius.xl,
+                          height: PORTION_H,
+                          borderRadius: radius.panel,
                           alignItems: 'center',
                           justifyContent: 'center',
-                          backgroundColor: portion === f ? ink.full : surfaces.control,
+                          // Selection is white-on-dark. Never green: this is a choice, not a
+                          // profit.
+                          backgroundColor: portion === f ? colors.ink : colors.control,
                         }}
                       >
                         <Text
-                          style={[type.pill, { color: portion === f ? '#0B0B0B' : ink.i50 }]}
+                          variant="control"
+                          color={portion === f ? colors.sheet.ink : colors.ink50}
                         >
                           {f === 1 ? 'All' : `${f * 100}%`}
                         </Text>
-                      </Pressable>
+                      </Press>
                     ))}
                   </View>
 
-                  <Text style={[type.noteBody, { color: ink.i45, marginTop: 14 }]}>
+                  <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
                     {portion === 1
                       ? 'Withdraws the whole position, including the interest earned between now and the moment it lands.'
                       : `Withdraws about ${money(amount)}, leaving ${money(supplied - amount)} earning.`}
@@ -138,37 +158,50 @@ export default function Yield() {
               {txHash ? (
                 <View
                   style={{
-                    marginTop: 16,
-                    padding: 14,
-                    borderRadius: radius.md2,
-                    backgroundColor: surfaces.surface,
+                    marginTop: space.s16,
+                    padding: space.s14,
+                    borderRadius: radius.tile,
+                    backgroundColor: colors.surface,
                   }}
                 >
-                  <Text style={[type.rowPrimary, { color: pnl.up }]}>Withdrawal sent.</Text>
-                  <Text style={[type.footnote, { color: ink.i32, marginTop: 6 }]}>{txHash}</Text>
+                  <Text variant="rowPrimary" color={colors.up}>
+                    Withdrawal sent.
+                  </Text>
+                  <Text
+                    variant="footnote"
+                    color={colors.ink32}
+                    style={{ marginTop: space.s6 }}
+                    selectable
+                  >
+                    {txHash}
+                  </Text>
                 </View>
               ) : null}
 
               {error ? (
-                <Text style={[type.noteBody, { color: pnl.down, marginTop: 14 }]}>{error}</Text>
+                <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s14 }}>
+                  {error}
+                </Text>
               ) : null}
             </>
           ) : null}
         </ScrollView>
-      </Screen.Content>
+      </Fill>
 
       <Button
         label={portion === 1 ? 'Withdraw all of it' : `Withdraw ${money(amount)}`}
-        variant="primary"
-        height={56}
+        height={size.buttonLg}
         disabled={!p?.available || supplied <= 0}
         loading={busy}
         onPress={submit}
       />
-      {/*
-        The claim that makes tier 4 safe to hand someone, restated where it is being relied on.
-      */}
-      <Text style={[type.footnote, { color: ink.i28, textAlign: 'center', marginTop: 12 }]}>
+      {/* The claim that makes tier 4 safe to hand someone, restated where it is relied on. */}
+      <Text
+        variant="footnote"
+        color={colors.ink28}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
         You sign this, not the bot. It was never given the power to take this back out.
       </Text>
     </Screen>

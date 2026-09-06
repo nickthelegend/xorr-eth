@@ -11,14 +11,18 @@ import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const APP = path.join(ROOT, 'app');
-const DESIGN = path.join(ROOT, 'src/design');
+/** The design system. `src/design` was the layer it replaced; only the icon set and the
+ *  identity gradients survive there, and neither is a component or a token. */
+const UI = path.join(ROOT, 'src/ui');
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!fs.existsSync(dir)) return out;
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) walk(p, out);
-    else if (/\.tsx?$/.test(e.name)) out.push(p);
+    // Test files are excluded: they QUOTE the patterns these rules forbid, in assertion
+    // strings and comments, so scanning them makes every rule report itself as a violation.
+    else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) out.push(p);
   }
   return out;
 }
@@ -34,7 +38,7 @@ function stripComments(src: string): string {
  * sees; they are not loosened for anything a user can reach.
  */
 const screenFiles = walk(APP).filter((f) => !f.includes('_layout') && !f.includes(`${path.sep}_dev${path.sep}`));
-const allFiles = [...screenFiles, ...walk(DESIGN)];
+const allFiles = [...screenFiles, ...walk(UI)];
 const rel = (f: string) => path.relative(ROOT, f);
 
 /**
@@ -133,7 +137,7 @@ describe('13.6 motion audit — animations.md', () => {
   });
 
   it('the status dot never pulses — animations.md is explicit', () => {
-    const tabBar = fs.readFileSync(path.join(DESIGN, 'components/TabBar.tsx'), 'utf8');
+    const tabBar = fs.readFileSync(path.join(UI, 'TabBar.tsx'), 'utf8');
     expect(stripComments(tabBar)).not.toMatch(/withRepeat|withTiming|Animated/);
   });
 });
@@ -178,6 +182,9 @@ describe('13.2 / 13.3 accessibility', () => {
   it('every Pressable declares a role and a label', () => {
     const offenders: string[] = [];
     for (const f of allFiles) {
+      // `Press` is the ONE place RN's `Pressable` is allowed bare: it is the primitive that
+      // wraps it, and it forwards whatever accessibility props its caller passes.
+      if (rel(f) === path.join('src', 'ui', 'Press.tsx')) continue;
       const src = fs.readFileSync(f, 'utf8');
       for (const p of openingTags(src, 'Pressable')) {
         if (!/accessibilityRole/.test(p) || !/accessibilityLabel|accessibilityState/.test(p)) {
@@ -201,10 +208,16 @@ describe('13.2 / 13.3 accessibility', () => {
 
   it('small controls expand their touch area rather than growing', () => {
     // design.md §7: "Steppers are 26px visually — expand the touch area, don't grow the circle."
-    const stepper = fs.readFileSync(path.join(DESIGN, 'components/Stepper.tsx'), 'utf8');
-    expect(stepper).toContain('hitSlop');
-    expect(stepper).toContain('MIN_HIT');
-    expect(stepper).toMatch(/CIRCLE\s*=\s*26/);
+    // `Press` is where the growth happens, so the stepper only has to declare its drawn
+    // size and let the primitive do it — which is the point of having the primitive.
+    const stepper = fs.readFileSync(path.join(UI, 'Stepper.tsx'), 'utf8');
+    expect(stepper).toMatch(/hitHeight|hitWidth/);
+    const press = fs.readFileSync(path.join(UI, 'Press.tsx'), 'utf8');
+    expect(press).toContain('hitSlop');
+    expect(press).toMatch(/size\.hit/);
+    const tokens = fs.readFileSync(path.join(UI, 'tokens.ts'), 'utf8');
+    expect(tokens).toMatch(/hit:\s*44/);
+    expect(tokens).toMatch(/stepperCircle:\s*26/);
   });
 
   it('P&L colour is always paired with a sign or a word', () => {
@@ -310,6 +323,9 @@ describe('the dev surfaces are developer-only', () => {
 
   it('but they exist, because PLAN.md 1.16 and 2.8 require them', () => {
     expect(fs.existsSync(path.join(APP, '_dev/fidelity.tsx'))).toBe(true);
-    expect(fs.existsSync(path.join(APP, '_dev/components.tsx'))).toBe(true);
+    // The gallery is `_dev/ui.tsx` — every `src/ui` primitive in every state. It replaced
+    // `_dev/components.tsx`, which showed the component set that no longer exists.
+    expect(fs.existsSync(path.join(APP, '_dev/ui.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(APP, '_dev/ui-edge.tsx'))).toBe(true);
   });
 });

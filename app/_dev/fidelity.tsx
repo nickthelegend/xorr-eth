@@ -6,14 +6,24 @@
  * for the screen-by-screen pass and the one store screenshots come from.
  */
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from '@/design/responsive';
-import { borders, ink, pnl, surfaces } from '@/design/colors';
-import { GUTTER, SCREEN_TOP, hairlineWidth, radius } from '@/design/space';
-import { DURATION } from '@/design/motion';
-import { type } from '@/design/type';
-import { Button, Screen, ScreenHeader } from '@/design/components';
+import {
+  Button,
+  DESIGN_HEIGHT,
+  DESIGN_WIDTH,
+  Eyebrow,
+  Fill,
+  Press,
+  Screen,
+  Text,
+  colors,
+  divider,
+  duration,
+  radius,
+  size,
+  space,
+} from '@/ui';
 
 /** Every route worth checking against the reference, in the handoff's own numbering. */
 const SCREENS: { n: string; label: string; route: string }[] = [
@@ -54,53 +64,59 @@ export default function Fidelity() {
 
   return (
     <Screen>
-      <ScreenHeader
-        left={<Text style={[type.screenTitle, { color: ink.full }]}>Fidelity</Text>}
-        right={
-          <Button
-            label={overlay ? 'Hide grid' : 'Show grid'}
-            variant="ghost"
-            height={34}
-            onPress={() => setOverlay((o) => !o)}
-          />
-        }
-      />
-      <Text style={[type.secondary, { color: ink.i40, marginTop: 10 }]}>
+      <View
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+      >
+        <Text variant="screenTitle">Fidelity</Text>
+        <Button
+          label={overlay ? 'Hide grid' : 'Show grid'}
+          variant="ghost"
+          height={size.mark}
+          onPress={() => setOverlay((o) => !o)}
+        />
+      </View>
+      <Text variant="secondary" style={{ marginTop: space.s10 }}>
         Design canvas {DESIGN_WIDTH} × {DESIGN_HEIGHT}. Open a screen and compare it against
         ui/mobile-ui/reference/.
       </Text>
 
-      <Screen.Content style={{ marginTop: 16 }}>
+      <Fill style={{ marginTop: space.s16 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {overlay ? <TokenOverlay /> : null}
 
-          <Text style={[type.eyebrowSm, { color: ink.i32, marginTop: 20, marginBottom: 8 }]}>
+          <Eyebrow small style={{ marginTop: space.s20, marginBottom: space.s8 }}>
             Screens
-          </Text>
+          </Eyebrow>
           {SCREENS.map((s) => (
-            <Pressable
+            <Press
               key={s.route + s.label}
               accessibilityRole="button"
               accessibilityLabel={`Open ${s.label}`}
               onPress={() => router.push(s.route as never)}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
-                height: 48,
-                borderBottomWidth: hairlineWidth,
-                borderBottomColor: borders.hairline,
-                opacity: pressed ? 0.85 : 1,
-              })}
+              style={[
+                {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: space.s12,
+                  height: size.rowSm,
+                },
+                divider,
+              ]}
             >
-              <Text style={[type.footnote, { color: ink.i32, width: 26 }]}>{s.n}</Text>
-              <Text style={[type.rowPrimary, { color: ink.full, flex: 1 }]}>{s.label}</Text>
-              <Text style={[type.footnote, { color: ink.i28 }]}>{s.route}</Text>
-            </Pressable>
+              <Text variant="footnote" color={colors.ink32} style={{ width: 26 }}>
+                {s.n}
+              </Text>
+              <Text variant="rowPrimary" style={{ flex: 1 }}>
+                {s.label}
+              </Text>
+              <Text variant="footnote" color={colors.ink28}>
+                {s.route}
+              </Text>
+            </Press>
           ))}
-          <View style={{ height: 30 }} />
+          <View style={{ height: space.s30 }} />
         </ScrollView>
-      </Screen.Content>
+      </Fill>
     </Screen>
   );
 }
@@ -110,38 +126,42 @@ function TokenOverlay() {
   return (
     <View
       style={{
-        backgroundColor: surfaces.surface,
-        borderRadius: radius.xl,
-        padding: 16,
-        gap: 12,
+        backgroundColor: colors.surface,
+        borderRadius: radius.panel,
+        padding: space.s16,
+        gap: space.s12,
       }}
     >
-      <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Tokens in play</Text>
-      <Row label="Gutter" value={`${GUTTER}px`} />
-      <Row label="Top padding" value={`${SCREEN_TOP}px`} />
-      <Row label="Hairline" value={`${hairlineWidth.toFixed(3)}px @ ${borders.hairline}`} />
-      <Row label="Durations" value={Object.values(DURATION).join(' / ')} />
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-        {[
-          ['bg', surfaces.bg],
-          ['surface', surfaces.surface],
-          ['control', surfaces.control],
-          ['up', pnl.up],
-          ['down', pnl.down],
-          ['warn', pnl.warn],
-        ].map(([name, color]) => (
-          <View key={name} style={{ alignItems: 'center', gap: 4 }}>
+      <Eyebrow small>Tokens in play</Eyebrow>
+      <TokenRow label="Gutter" value={`${space.gutter}px`} />
+      <TokenRow label="Row heights" value={`${size.rowSm} / ${size.row} / ${size.rowLg}`} />
+      <TokenRow label="Hairline" value={colors.hairline} />
+      <TokenRow label="Durations" value={Object.values(duration).join(' / ')} />
+      <View style={{ flexDirection: 'row', gap: space.s8, marginTop: space.s4 }}>
+        {(
+          [
+            ['bg', colors.bg],
+            ['surface', colors.surface],
+            ['control', colors.control],
+            ['up', colors.up],
+            ['down', colors.down],
+            ['warn', colors.warn],
+          ] as const
+        ).map(([name, color]) => (
+          <View key={name} style={{ alignItems: 'center', gap: space.s4 }}>
             <View
               style={{
                 width: 30,
                 height: 30,
-                borderRadius: radius.xs2,
+                borderRadius: radius.glyph,
                 backgroundColor: color,
-                borderWidth: hairlineWidth,
-                borderColor: borders.card,
+                borderWidth: 1,
+                borderColor: colors.cardBorder,
               }}
             />
-            <Text style={[type.footnoteSm, { color: ink.i28 }]}>{name}</Text>
+            <Text variant="footnoteSm" color={colors.ink28}>
+              {name}
+            </Text>
           </View>
         ))}
       </View>
@@ -149,11 +169,13 @@ function TokenOverlay() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function TokenRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-      <Text style={[type.secondary, { color: ink.i40 }]}>{label}</Text>
-      <Text style={[type.secondary, { color: ink.full }]}>{value}</Text>
+      <Text variant="secondary">{label}</Text>
+      <Text variant="secondary" color={colors.ink}>
+        {value}
+      </Text>
     </View>
   );
 }

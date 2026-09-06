@@ -9,7 +9,7 @@
 import React from 'react';
 import { PrivyProvider as WebProvider } from '@privy-io/react-auth';
 import { baseSepolia, base } from 'viem/chains';
-import { ink, surfaces } from '@/design/colors';
+import { colors } from '@/ui';
 
 const APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
 
@@ -30,7 +30,7 @@ export function AppPrivyProvider({ children }: { children: React.ReactNode }) {
         supportedChains: [baseSepolia, base],
         appearance: {
           theme: 'dark',
-          accentColor: ink.full,
+          accentColor: colors.ink,
           showWalletLoginFirst: false,
         },
       }}
@@ -41,4 +41,4 @@ export function AppPrivyProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const PRIVY_APP_ID = APP_ID;
-export const SURFACE = surfaces.bg;
+export const SURFACE = colors.bg;

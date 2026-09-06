@@ -10,7 +10,7 @@ import React from 'react';
 import { PrivyProvider as Provider } from '@privy-io/expo';
 // PrivyElements ships from the /ui subpath, not the package root.
 import { PrivyElements } from '@privy-io/expo/ui';
-import { surfaces, ink } from '@/design/colors';
+import { colors } from '@/ui';
 
 const APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
 
@@ -26,10 +26,10 @@ export function AppPrivyProvider({ children }: { children: React.ReactNode }) {
     <Provider appId={APP_ID!} config={{ embedded: { ethereum: { createOnLogin: 'users-without-wallets' } } }}>
       {children}
       {/* Privy's own login sheet, themed to match the app's true-black surface. */}
-      <PrivyElements config={{ appearance: { colorScheme: 'dark', accentColor: ink.full } }} />
+      <PrivyElements config={{ appearance: { colorScheme: 'dark', accentColor: colors.ink } }} />
     </Provider>
   );
 }
 
 export const PRIVY_APP_ID = APP_ID;
-export const SURFACE = surfaces.bg;
+export const SURFACE = colors.bg;
