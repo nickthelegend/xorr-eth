@@ -14,6 +14,17 @@ export const COINGECKO_IDS: Record<string, string> = {
   AAVE: 'aave',
   LINK: 'chainlink',
   TON: 'the-open-network',
+  /*
+   * Gold, priced as gold.
+   *
+   * The contract screen used to map XAUT to BITCOIN to get a number out of a feed that had
+   * no entry for it — so it read "XAUT/USDT $79,900" while gold traded near $4,400. Nothing
+   * about Bitcoin's price, funding or open interest says anything about gold, and a "proxy
+   * feed" label does not make another asset's number true. Both of these are one-ounce
+   * gold-backed tokens and both have their own feed.
+   */
+  XAUT: 'tether-gold',
+  PAXG: 'pax-gold',
   // Base-native assets the delegation actually trades.
   WETH: 'weth',
   USDC: 'usd-coin',

@@ -1,35 +1,61 @@
 /**
  * Screen 25 — Commodity perpetual contract. screens.md Group B.
  *
- * Tag chips PERPETUAL (amber-tinted) / NO EXPIRY / SPOT FEED. 132px area chart.
- * Leverage card: "Leverage / on $800 margin" + 22/700 multiplier, 2x/5x/10x segmented, then
- * Position size / Liquidation / Funding rows and a warning line that changes colour with leverage.
- * 2x2 stat grid built from 1px gaps over rgba(255,255,255,.06) so the gutters READ AS HAIRLINES.
- * Short (control) / Long (#F5CE5F on #1A1204).
+ * Tag chips PERPETUAL (amber-tinted) / NO EXPIRY / max leverage. A 132pt area chart.
+ * Leverage card: "Leverage / on ${margin} margin" + 22/700 multiplier, 2x/5x/10x segmented,
+ * then Position size / Liquidation / Funding rows and a warning line that changes colour
+ * with leverage. A 2×2 stat grid whose 1pt gutters read as hairlines. Short / Long.
+ *
+ * Short and Long had no `onPress`; they open the order ticket now.
  */
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
+  AreaChart,
   Button,
-  ButtonRow,
+  ButtonPair,
+  Fill,
   IconButton,
+  Price,
   Row,
   Screen,
-  ScreenHeader,
   Segmented,
   SheetCard,
-  SimulatedTag,
-} from '@/design/components';
-import { borders, commodity, ink, pnl, surfaces } from '@/design/colors';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { compactMoney, countdown, money, percent, price as fmtPrice } from '@/format';
-import { LEVERAGE_OPTIONS, leverageSummary } from '@/state/derived';
+  StatGrid,
+  Tag,
+  Text,
+  colors,
+  money,
+  percent,
+  price as fmtPrice,
+  radius,
+  size,
+  space,
+} from '@/ui';
+import { compactMoney, countdown } from '@/format';
+import { LEVERAGE_OPTIONS, PERP_MARGIN, leverageSummary } from '@/state/derived';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
-import { Candlestick, projectCandles, tight } from '@/charts';
+
+/**
+ * No proxy table, on purpose.
+ *
+ * This screen used to map XAUT to **BTC** so that a symbol with no feed entry would still
+ * produce a number — and it read "XAUT/USDT $79,900" while gold traded near $4,400. Nothing
+ * about Bitcoin's price, funding or open interest says anything about gold, and the
+ * liquidation price and margin warning on this screen were computed off it. A "Proxy feed"
+ * label does not make another asset's number true; PLAN.md §1.3.8 says every price on screen
+ * is real, or labelled, and that was neither.
+ *
+ * The fix belongs in the feed, not here: `server/src/market/ids.ts` now carries XAUT's own
+ * CoinGecko id. A symbol with no feed gets no number and the screen says "No feed", which is
+ * the honest answer.
+ */
+
+const CHART_H = 132;
+const LEV_OPTIONS = LEVERAGE_OPTIONS.map((l) => ({ value: l as number, label: `${l}x` }));
 
 export default function PerpContract() {
   const { symbol = 'XAUT' } = useLocalSearchParams<{ symbol: string }>();
@@ -38,200 +64,168 @@ export default function PerpContract() {
   const setLev = useStore((s) => s.setLev);
 
   // Everything on this screen comes from the venue. PLAN.md 12.15 [G37].
-  // The handoff's gold contract has no perp market of its own, so the metrics are read for the
-  // liquid proxy the venue actually lists; the screen labels the feed either way.
-  const feedSymbol = symbol === 'XAUT' ? 'BTC' : symbol;
+  const feedSymbol = symbol;
   const { data: m, loading } = useAsync(() => repos.perps.metrics(feedSymbol), [feedSymbol]);
-  // Real OHLC for THIS contract. A perp with no spot feed gets no chart, and says so.
-  const candles = useAsync(() => repos.markets.candles(feedSymbol, '1H'), [feedSymbol]);
-  const perpCandles = candles.data?.bars ?? [];
-  const isProxy = feedSymbol !== symbol;
+  // The venue's own recent marks, for the same contract the metrics above describe.
+  const series = useAsync(() => repos.markets.candles(feedSymbol, '1H'), [feedSymbol]);
+  const closes = (series.data?.bars ?? []).map((b) => b[3]);
   const summary = leverageSummary(lev, m?.markPx);
 
-  // The countdown is DERIVED from the venue's next-funding time plus a ticking clock, rather than
-  // seeded into state by an effect — seeding causes a cascading render on every data change.
+  // The countdown is DERIVED from the venue's next-funding time plus a ticking clock,
+  // rather than seeded into state by an effect — seeding causes a cascading render on
+  // every data change.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const tick = () => setNow(Date.now());
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
-  // Purely derived: the venue returns an ABSOLUTE next-funding time, so the countdown is just
-  // that minus the ticking clock. No anchoring effect, no drift for time spent in flight.
   const fundingIn = m ? Math.max(0, Math.round((m.nextFundingAt - now) / 1000)) : 0;
 
   const warnColor =
-    summary.band === 'danger' ? pnl.down : summary.band === 'warn' ? pnl.warn : ink.i40;
+    summary.band === 'danger' ? colors.down : summary.band === 'warn' ? colors.warn : colors.ink40;
 
   return (
-    <Screen tabbed>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <Text style={[type.cardTitleSm, { color: ink.full }]}>{symbol}/USDT</Text>
-          </View>
-        }
-        right={m && !isProxy ? null : <SimulatedTag label={isProxy ? 'Proxy feed' : 'Simulated'} />}
-      />
+    <Screen>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8, flex: 1 }}>
+          <IconButton
+            name="back"
+            accessibilityLabel="Back"
+            background="none"
+            onPress={() => router.back()}
+          />
+          <Text variant="cardTitle">{symbol}/USDT</Text>
+        </View>
+        {m ? null : <Tag label="Simulated" small tone="warn" />}
+      </View>
 
-      <View style={{ marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <Text style={[type.priceMedium, { color: ink.full }]}>
-          {m ? fmtPrice(m.markPx) : loading ? '—' : 'No feed'}
-        </Text>
+      <View
+        style={{
+          marginTop: space.s18,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: space.s10,
+        }}
+      >
+        <Price variant="priceMd">{m ? fmtPrice(m.markPx) : loading ? '—' : 'No feed'}</Price>
         {m ? (
-          <Text
-            style={[
-              type.rowDelta,
-              { color: m.markVsIndex >= 0 ? pnl.up : pnl.down, fontWeight: '600' },
-            ]}
-          >
-            {money(m.markVsIndex, { explicitSign: true })} vs index
-          </Text>
+          <Price variant="delta" tone={m.markVsIndex >= 0 ? 'up' : 'down'}>
+            {money(m.markVsIndex, { signed: true })} vs index
+          </Price>
         ) : null}
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 6, marginTop: 12 }}>
-        <TagChip label="Perpetual" tint />
-        <TagChip label="No expiry" />
-        <TagChip label={m ? `Max ${m.maxLeverage}x` : 'Spot feed'} />
+      <View style={{ flexDirection: 'row', gap: space.s6, marginTop: space.s12 }}>
+        <Tag label="Perpetual" small colors={{ bg: colors.goldBg, fg: colors.goldFill }} />
+        <Tag label="No expiry" small colors={{ bg: colors.surfaceAlt, fg: colors.ink55 }} />
+        <Tag
+          label={m ? `Max ${m.maxLeverage}x` : 'Spot feed'}
+          small
+          colors={{ bg: colors.surfaceAlt, fg: colors.ink55 }}
+        />
       </View>
 
-      {/*
-        Real candles for this symbol, or none.
-        This drew `areaSeries.XAUT` — gold's shape — under every perp regardless of which contract
-        was open. The repository already refuses to invent bars; the screen was undoing that.
-      */}
-      {perpCandles.length > 1 ? (
-        <Candlestick
-          candles={projectCandles(perpCandles, tight(perpCandles))}
-          height={132}
-          style={{ marginTop: 16 }}
+      {/* This drew `areaSeries.XAUT` — one hand-authored curve, rendered under EVERY perp
+          symbol regardless of which one you opened, and regardless of whether a feed
+          existed. It was a picture of a price history that never happened. The chart is
+          the venue's own recent marks or it is nothing. */}
+      {closes.length > 1 ? (
+        <AreaChart
+          data={closes}
+          height={CHART_H}
+          color={colors.goldFill}
+          style={{ marginTop: space.s16 }}
         />
       ) : (
-        <View style={{ height: 132, marginTop: 16, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={[type.body, { color: ink.i40 }]}>
-            {candles.data?.feed === 'warming'
-              ? 'Fetching price history…'
-              : 'No price history for this contract.'}
-          </Text>
+        <View style={{ height: CHART_H, marginTop: space.s16, justifyContent: 'center' }}>
+          <Text variant="secondary">No price history for {symbol}.</Text>
         </View>
       )}
 
-      <Screen.Content style={{ marginTop: 16 }}>
-        <SheetCard radius={radius.xl} padding={16}>
+      <Fill style={{ marginTop: space.s16 }}>
+        <SheetCard borderRadius={radius.panel} padding={space.s16}>
           <View
-            style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-end',
+              justifyContent: 'space-between',
+            }}
           >
-            <View style={{ gap: 2 }}>
-              <Text style={[type.cardTitleSm, { color: ink.full }]}>Leverage</Text>
-              <Text style={[type.secondary, { color: ink.i38 }]}>on $800 margin</Text>
+            <View style={{ gap: space.s2 }}>
+              <Text variant="cardTitle">Leverage</Text>
+              <Text variant="secondarySm">
+                on {money(PERP_MARGIN, { decimals: 0 })} margin
+              </Text>
             </View>
-            <Text style={[type.statLarge, { color: ink.full }]}>{lev}x</Text>
+            <Price variant="screenTitle">{lev}x</Price>
           </View>
 
           <Segmented
-            options={LEVERAGE_OPTIONS.map((l) => `${l}x`)}
-            value={LEVERAGE_OPTIONS.indexOf(lev as 2 | 5 | 10)}
-            onChange={(i) => setLev(LEVERAGE_OPTIONS[i]!)}
-            style={{ marginTop: 14 }}
-            accessibilityLabel="Leverage"
+            options={LEV_OPTIONS}
+            value={lev}
+            onChange={setLev}
+            style={{ marginTop: space.s14 }}
           />
 
-          <View style={{ marginTop: 6 }}>
-            <Row primary="Position size" value={summary.notional} height={48} />
+          <View style={{ marginTop: space.s6 }}>
+            <Row title="Position size" value={<Price>{summary.notional}</Price>} height={size.rowSm} />
             <Row
-              primary="Liquidation"
-              value={summary.liquidation}
-              valueColor={pnl.down}
-              height={48}
+              title="Liquidation"
+              value={<Price tone="down">{summary.liquidation}</Price>}
+              height={size.rowSm}
             />
             <Row
-              primary="Funding"
-              // Null means we cannot know it, not that it is zero. A funding rate of "0.0000%"
-              // that nobody measured is exactly the number a perp trader would act on.
+              title="Funding"
               value={
-                m?.fundingRate != null ? `${percent(m.fundingRate * 100, { digits: 4 })} / 1h` : '—'
+                <Price>
+                  {m?.fundingRate != null ? `${percent(m.fundingRate * 100, 4)} / 1h` : '—'}
+                </Price>
               }
-              height={48}
+              height={size.rowSm}
               divider={false}
             />
           </View>
 
-          <Text style={[type.noteBody, { color: warnColor, marginTop: 8 }]}>{summary.warning}</Text>
+          <Text variant="secondarySm" color={warnColor} style={{ marginTop: space.s8 }}>
+            {summary.warning}
+          </Text>
         </SheetCard>
 
-        {/* 2x2 stat grid: 1px gaps over the card border colour, so the gutters read as hairlines. */}
-        <View
-          style={{
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            marginTop: 16,
-            backgroundColor: borders.card,
-            gap: 1,
-            borderRadius: radius.md2,
-            overflow: 'hidden',
-          }}
-        >
-          <StatCell
-            label="Open interest"
-            value={m?.openInterestUsd != null ? compactMoney(m.openInterestUsd) : '—'}
-          />
-          <StatCell
-            label="24h volume"
-            value={m?.dayVolumeUsd != null ? compactMoney(m.dayVolumeUsd) : '—'}
-          />
-          <StatCell
-            label="Mark vs index"
-            value={m ? money(m.markVsIndex, { explicitSign: true }) : '—'}
-          />
-          <StatCell label="Next funding" value={m ? countdown(fundingIn) : '—'} />
-        </View>
-      </Screen.Content>
+        <StatGrid
+          style={{ marginTop: space.s16 }}
+          items={[
+            // Null where the venue's own order book would be needed. `compactMoney(null)`
+            // would print "$0.0" and read as "no interest" rather than "not knowable".
+            {
+              label: 'Open interest',
+              value: m?.openInterestUsd != null ? compactMoney(m.openInterestUsd) : '—',
+            },
+            { label: '24h volume', value: m?.dayVolumeUsd != null ? compactMoney(m.dayVolumeUsd) : '—' },
+            { label: 'Mark vs index', value: m ? money(m.markVsIndex, { signed: true }) : '—' },
+            { label: 'Next funding', value: m ? countdown(fundingIn) : '—' },
+          ]}
+        />
+      </Fill>
 
-      <ButtonRow
-        style={{ marginTop: 14 }}
-        affirmativeFlex={1}
-        secondary={<Button label="Short" variant="secondary" />}
-        affirmative={<Button label="Long" variant="gold" />}
+      <ButtonPair
+        style={{ marginTop: space.s14 }}
+        left={
+          <Button
+            label="Short"
+            variant="secondary"
+            onPress={() => router.push(`/order/${symbol}?side=sell`)}
+          />
+        }
+        right={
+          <Button
+            label="Long"
+            backgroundColor={colors.goldFill}
+            color={colors.goldInk}
+            onPress={() => router.push(`/order/${symbol}?side=buy`)}
+          />
+        }
       />
     </Screen>
-  );
-}
-
-function TagChip({ label, tint = false }: { label: string; tint?: boolean }) {
-  return (
-    <View
-      style={{
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: radius.xs2,
-        backgroundColor: tint ? 'rgba(245,206,95,0.14)' : surfaces.surfaceAlt,
-      }}
-    >
-      <Text style={[type.tagSm, { color: tint ? commodity.goldFill : ink.i55 }]}>{label}</Text>
-    </View>
-  );
-}
-
-function StatCell({ label, value }: { label: string; value: string }) {
-  return (
-    <View
-      style={{
-        width: '49.9%',
-        backgroundColor: surfaces.bg,
-        paddingVertical: 14,
-        paddingHorizontal: 14,
-        gap: 6,
-      }}
-    >
-      <Text style={[type.footnoteSm, { color: ink.i32 }]}>{label}</Text>
-      <Text style={[type.rowValue, { color: ink.full }]}>{value}</Text>
-    </View>
   );
 }

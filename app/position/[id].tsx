@@ -1,41 +1,59 @@
 /**
  * Screen 22 — Position & close. screens.md Group B.
  *
- * Mark + "BTC long" + "2x lev" chip. Eyebrow + P&L 46/700 in `up`, "+4.2% on $7,600 notional".
- * Stat card: Entry / Mark / Liquidation (down) / Funding paid (U+2212).
- * Close card: percentage + a 6px fill bar + 25/50/75/100 pills + "Realises X and frees Y of margin."
+ * Mark + "{symbol} {side}" + leverage chip. Eyebrow + P&L 46/700, "{pct} on {notional} held".
+ * Stat card: Entry / Mark / Size / Liquidation (down) / Funding paid (U+2212).
+ * Close card: percentage + a 6pt fill bar + 25/50/75/100 pills + "Realises X and frees Y."
  * Edit TP/SL (flex:1) / "Close {n}%" (flex:1.3, white).
+ *
+ * The close button used to have no `onPress` at all: the primary action on the screen whose
+ * entire job is closing a position did nothing. It now calls the executor, which picks the
+ * price, splits the cost basis and signs the transfer — see `POST /positions/:id/close`.
  */
-import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { assetGradient } from '@/design/gradients';
 import {
   AssetMark,
   Button,
   ButtonRow,
   EmptyState,
   ErrorState,
+  Fill,
   IconButton,
   LoadingRows,
+  NoteStrip,
   Pill,
+  Price,
   Row,
   Screen,
-  ScreenHeader,
   SheetCard,
-  SimulatedTag,
-} from '@/design/components';
-import { ink, pnl, surfaces } from '@/design/colors';
-import { DURATION } from '@/design/motion';
-import { EASING } from '@/design/easing';
-import { radius } from '@/design/space';
-import { type } from '@/design/type';
-import { motionDuration, useReducedMotion } from '@/design/useReducedMotion';
-import { money, percent, price as fmtPrice, quantity, signedMoney } from '@/format';
+  Tag,
+  Text,
+  colors,
+  duration,
+  money,
+  percent,
+  pnlTone,
+  price as fmtPrice,
+  quantity,
+  radius,
+  size,
+  space,
+  timing,
+  useReducedMotion,
+} from '@/ui';
+import { signedMoney } from '@/format';
 import { CLOSE_STEPS, closeCta } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+
+/** The close bar. 6pt — a readout, not a control; the pills below it do the setting. */
+const BAR_H = 6;
+const STAT_ROW = 46;
 
 export default function PositionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,30 +62,86 @@ export default function PositionScreen() {
   const setClosePct = useStore((s) => s.setClosePct);
   const reduced = useReducedMotion();
 
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string>();
+  const [closed, setClosed] = useState<{ proceeds: number; units: number } | undefined>();
+
   // Every figure below comes from the position book, valued at the live mark. The handoff's
-  // entry $63,880 / mark $66,560 / liquidation $58,110 were design values with nothing behind them.
+  // entry $63,880 / mark $66,560 / liquidation $58,110 were design values with nothing
+  // behind them.
   const { data: p, loading, error, reload } = useAsync(() => repos.portfolio.position(id!), [id]);
 
   const realise = p ? (p.unrealised * closePct) / 100 : 0;
   const free = p ? (p.margin * closePct) / 100 : 0;
 
-  const fill = useAnimatedStyle(() => ({
-    width: withTiming(`${closePct}%`, {
-      duration: motionDuration(DURATION.base, reduced),
-      easing: EASING,
-    }),
-  }));
+  const pct = useSharedValue(closePct / 100);
+  useEffect(() => {
+    pct.value = withTiming(closePct / 100, timing(duration.base, reduced));
+  }, [closePct, reduced, pct]);
+  const fill = useAnimatedStyle(() => ({ width: `${pct.value * 100}%` }));
+
+  const close = useCallback(async () => {
+    if (!p || closing) return;
+    setClosing(true);
+    setCloseError(undefined);
+    try {
+      const res = await repos.portfolio.close({ symbol: p.symbol, fraction: closePct / 100 });
+      if (res.status === 'closed') {
+        setClosed({ proceeds: res.usd ?? 0, units: res.units ?? 0 });
+        reload();
+      } else {
+        // A blocked or failed close is not a success. Say which, in the server's own words.
+        setCloseError(res.detail ?? res.error ?? `The close came back "${res.status}".`);
+      }
+    } catch (e) {
+      setCloseError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setClosing(false);
+    }
+  }, [p, closePct, closing, reload]);
+
+  const header = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: space.s10,
+        justifyContent: 'space-between',
+      }}
+    >
+      {/* The identity group carries the flex, so the feed tag sits at the right edge
+          without a bare spacer between them — design.md §4. */}
+      <View
+        style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10, flex: 1, minWidth: 0 }}
+      >
+        <IconButton
+          name="back"
+          accessibilityLabel="Back"
+          background="none"
+          onPress={() => router.back()}
+        />
+        {p ? <AssetMark gradient={assetGradient(p.symbol)} size={26} /> : null}
+        <Text variant="cardTitle" numberOfLines={1}>
+          {p ? `${p.symbol} ${p.side}` : 'Position'}
+        </Text>
+        {p && p.leverage > 1 ? <Tag label={`${p.leverage}x lev`} small /> : null}
+      </View>
+      {p?.feed === 'unavailable' ? <Tag label="No feed" small tone="warn" /> : null}
+    </View>
+  );
 
   if (loading && !p) {
     return (
       <Screen>
-        <LoadingRows count={4} height={60} />
+        {header}
+        <LoadingRows count={4} height={size.row} />
       </Screen>
     );
   }
   if (error) {
     return (
       <Screen>
+        {header}
         <ErrorState error={error} onRetry={reload} />
       </Screen>
     );
@@ -75,142 +149,146 @@ export default function PositionScreen() {
   if (!p) {
     return (
       <Screen>
-        <ScreenHeader
-          left={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <IconButton
-                name="back"
-                accessibilityLabel="Back"
-                background="transparent"
-                color={ink.i55}
-                onPress={() => router.back()}
-              />
-              <Text style={[type.screenTitle, { color: ink.full }]}>Position</Text>
-            </View>
-          }
-        />
-        <EmptyState
-          text="You have no open positions."
-          actionLabel="Start a recurring buy"
-          onAction={() => router.push('/strategy/dca')}
-        />
+        {header}
+        {/* copy.md: plain and specific. This screen is reached with an id; the honest
+            statement is that *this* position is gone, not that the book is empty — the
+            user may well hold others. */}
+        <EmptyState text="This position is no longer open." />
       </Screen>
     );
   }
 
+  const flat = p.units <= 0;
+
   return (
     <Screen>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <AssetMark gradient={{ c1: '#F7931A', c2: '#B96908' }} size={26} />
-            <Text style={[type.cardTitleSm, { color: ink.full }]}>
-              {p.symbol} {p.side}
-            </Text>
-            {p.leverage > 1 ? (
-              <View
-                style={{
-                  backgroundColor: surfaces.surfaceAlt,
-                  borderRadius: radius.xs2,
-                  paddingHorizontal: 7,
-                  paddingVertical: 3,
-                }}
-              >
-                <Text style={[type.tagSm, { color: ink.i55 }]}>{p.leverage}x lev</Text>
-              </View>
-            ) : null}
-          </View>
-        }
-        right={p.feed === 'unavailable' ? <SimulatedTag label="No feed" /> : undefined}
-      />
+      {header}
 
-      <View style={{ marginTop: 24, gap: 6 }}>
-        <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Unrealised</Text>
-        <Text style={[type.pnlHero, { color: p.unrealised >= 0 ? pnl.up : pnl.down }]}>
+      <View style={{ marginTop: space.s26, gap: space.s6 }}>
+        <Text variant="eyebrowSm">Unrealised</Text>
+        <Price variant="pnlHero" tone={pnlTone(p.unrealised)}>
           {signedMoney(p.unrealised)}
-        </Text>
-        <Text style={[type.body, { color: ink.i40 }]}>
+        </Price>
+        <Text variant="body" color={colors.ink40}>
           {percent(p.unrealisedPct)} on {money(p.notional)} held
         </Text>
       </View>
 
-      <Screen.Content style={{ marginTop: 20 }}>
+      <Fill style={{ marginTop: space.s20 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
-        <SheetCard radius={radius.xl} padding={16}>
-          <Row primary="Entry" value={fmtPrice(p.entry)} height={46} />
-          <Row primary="Mark" value={fmtPrice(p.mark)} height={46} />
-          <Row primary="Size" value={`${quantity(p.units)} ${p.symbol}`} height={46} />
-          {p.liquidation > 0 ? (
+          <SheetCard borderRadius={radius.panel} padding={space.s16}>
+            <Row title="Entry" value={fmtPrice(p.entry)} height={STAT_ROW} />
+            <Row title="Mark" value={fmtPrice(p.mark)} height={STAT_ROW} />
+            <Row title="Size" value={`${quantity(p.units)} ${p.symbol}`} height={STAT_ROW} />
+            {p.liquidation > 0 ? (
+              <Row
+                title="Liquidation"
+                value={<Price tone="down">{fmtPrice(p.liquidation)}</Price>}
+                height={STAT_ROW}
+              />
+            ) : null}
             <Row
-              primary="Liquidation"
-              value={fmtPrice(p.liquidation)}
-              valueColor={pnl.down}
-              height={46}
+              title="Funding paid"
+              value={
+                <Price color={colors.ink55}>
+                  {p.fundingPaid === 0 ? 'None — spot' : signedMoney(-p.fundingPaid)}
+                </Price>
+              }
+              height={STAT_ROW}
+              divider={false}
             />
+          </SheetCard>
+
+          {closed ? (
+            <NoteStrip kind="acted" style={{ marginTop: space.s14 }}>
+              {`Sold ${quantity(closed.units)} ${p.symbol} for ${money(closed.proceeds)}.`}
+            </NoteStrip>
           ) : null}
-          <Row
-            primary="Funding paid"
-            value={p.fundingPaid === 0 ? 'None — spot' : signedMoney(-p.fundingPaid)}
-            valueColor={ink.i55}
-            height={46}
-            divider={false}
-          />
-        </SheetCard>
 
-        <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 14 }}>
-          <View
-            style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}
-          >
-            <Text style={[type.cardTitleSm, { color: ink.full }]}>Close</Text>
-            <Text style={[type.statLarge, { color: ink.full }]}>{closePct}%</Text>
-          </View>
-
-          <View
-            style={{
-              height: 6,
-              borderRadius: 3,
-              backgroundColor: surfaces.control,
-              marginTop: 12,
-              overflow: 'hidden',
-            }}
-          >
-            <Animated.View style={[{ height: 6, borderRadius: 3, backgroundColor: ink.full }, fill]} />
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-            {CLOSE_STEPS.map((step) => (
-              <View key={step} style={{ flex: 1 }}>
-                <Pill label={`${step}%`} selected={step === closePct} onPress={() => setClosePct(step)} />
+          {flat ? null : (
+            <SheetCard
+              borderRadius={radius.panel}
+              padding={space.s16}
+              style={{ marginTop: space.s14 }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Text variant="cardTitle">Close</Text>
+                <Price variant="screenTitle">{closePct}%</Price>
               </View>
-            ))}
-          </View>
 
-          <Text style={[type.noteBody, { color: ink.i45, marginTop: 14 }]}>
-            Realises <Text style={{ color: ink.full, fontWeight: '600' }}>{signedMoney(realise)}</Text>{' '}
-            and frees <Text style={{ color: ink.full, fontWeight: '600' }}>{money(free)}</Text>.
-          </Text>
-        </SheetCard>
+              <View
+                style={{
+                  height: BAR_H,
+                  borderRadius: BAR_H / 2,
+                  backgroundColor: colors.control,
+                  marginTop: space.s12,
+                  overflow: 'hidden',
+                }}
+              >
+                <Animated.View
+                  style={[
+                    { height: BAR_H, borderRadius: BAR_H / 2, backgroundColor: colors.ink },
+                    fill,
+                  ]}
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: space.s8, marginTop: space.s14 }}>
+                {CLOSE_STEPS.map((step) => (
+                  <View key={step} style={{ flex: 1 }}>
+                    <Pill
+                      label={`${step}%`}
+                      selected={step === closePct}
+                      onPress={() => setClosePct(step)}
+                      style={{ flexGrow: 1 }}
+                    />
+                  </View>
+                ))}
+              </View>
+
+              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
+                Realises{' '}
+                <Text variant="secondarySm" color={colors.ink}>
+                  {signedMoney(realise)}
+                </Text>{' '}
+                and frees{' '}
+                <Text variant="secondarySm" color={colors.ink}>
+                  {money(free)}
+                </Text>
+                .
+              </Text>
+
+              {closeError ? (
+                <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s10 }}>
+                  {closeError}
+                </Text>
+              ) : null}
+            </SheetCard>
+          )}
         </ScrollView>
-      </Screen.Content>
+      </Fill>
 
-      <ButtonRow
-        style={{ marginTop: 14 }}
-        secondary={
-          <Button
-            label="Edit TP/SL"
-            variant="secondary"
-            onPress={() => router.push(`/auto-close/${p.id}`)}
-          />
-        }
-        affirmative={<Button label={closeCta(closePct)} />}
-      />
+      {flat ? (
+        <Button label="Done" onPress={() => router.back()} />
+      ) : (
+        <ButtonRow
+          style={{ marginTop: space.s14 }}
+          secondary={
+            <Button
+              label="Edit TP/SL"
+              variant="secondary"
+              onPress={() => router.push(`/auto-close/${p.id}`)}
+            />
+          }
+          primary={<Button label={closeCta(closePct)} loading={closing} onPress={close} />}
+        />
+      )}
     </Screen>
   );
 }

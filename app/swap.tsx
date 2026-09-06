@@ -1,23 +1,37 @@
 /**
  * Screen 19 — Swap. screens.md Group B.
  *
- * Pay card (surface, radius 26): eyebrow + balance, 32/700 amount + USD line, token selector pill,
- * then a -/track/+ row. A 40px swap circle with a 3px solid #000 ring OVERLAPS THE SEAM
- * (margin -14 0, zIndex 2). Receive card mirrors it. Rows: Route / Fee / Max slippage 0.30%.
+ * Pay card (surface, radius 26): eyebrow + balance, 32/700 amount + USD line, token
+ * selector pill, then a −/track/+ row. A 40pt swap circle with a 3pt solid black ring
+ * OVERLAPS THE SEAM (margin −14, zIndex 2). Receive card mirrors it. Rows: Route / Fee /
+ * Price impact / Max slippage.
  */
-import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Icon } from '@/design/Icon';
-import { Button, IconButton, Row, Screen, ScreenHeader } from '@/design/components';
-import { ink, surfaces } from '@/design/colors';
-import { DURATION } from '@/design/motion';
-import { EASING } from '@/design/easing';
-import { radius, MIN_HIT } from '@/design/space';
-import { type } from '@/design/type';
-import { motionDuration, useReducedMotion } from '@/design/useReducedMotion';
-import { money, percent, quantity } from '@/format';
+import {
+  Button,
+  Eyebrow,
+  Fill,
+  IconButton,
+  Press,
+  Price,
+  Row,
+  Screen,
+  Text,
+  colors,
+  duration,
+  money,
+  quantity,
+  radius,
+  size,
+  space,
+  timing,
+  useReducedMotion,
+} from '@/ui';
+import { percent } from '@/format';
 import { swapPct } from '@/state/derived';
 import { usePrice } from '@/data/usePrices';
 import { repos } from '@/data';
@@ -29,122 +43,145 @@ import { useStore } from '@/state/store';
 const PAY = 'WETH';
 const RECEIVE = 'USDC';
 
+const CARD_PAD = space.s18;
+const TRACK_H = 6;
+/** The seam circle. 40pt with a 3pt ring in the screen background, pulled −14 into both cards. */
+const SEAM = 40;
+const SEAM_RING = 3;
+const SEAM_PULL = -14;
+
 export default function Swap() {
   const router = useRouter();
   const swapAmt = useStore((s) => s.swapAmt);
   const bumpSwap = useStore((s) => s.bumpSwap);
   const reduced = useReducedMotion();
-  // WETH, not SOL: this app settles on Base, and the pay side has to be a token the delegation
-  // can actually route. Quoting a chain we do not trade would put a number on screen that no
-  // signed transaction could ever match.
+  // WETH, not SOL: this app settles on Base, and the pay side has to be a token the
+  // delegation can actually route. Quoting a chain we do not trade would put a number on
+  // screen that no signed transaction could ever match.
   const { quote: payQuote } = usePrice(PAY);
-  // A real route from the aggregator: venues, minimum received and price impact are all measured.
+  // A real route from the aggregator: venues, minimum received and price impact are all
+  // measured.
   const swap = useSwapQuote(PAY, RECEIVE, swapAmt);
   // The balance was hardcoded at 1,750.30. It is the real held quantity now.
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const payHeld = (positions.data ?? []).find((p) => p.symbol === PAY);
+  // You cannot swap what you do not hold. Without this the screen quoted 32 SOL against a
+  // 0.2344 SOL balance with "Review swap" enabled — a route the venue would refuse, priced
+  // and presented as if it were ready.
+  const heldUnits = payHeld?.units;
+  const overBalance = heldUnits !== undefined && swapAmt > heldUnits;
 
-  const fill = useAnimatedStyle(() => ({
-    width: withTiming(`${swapPct(swapAmt)}%`, {
-      duration: motionDuration(DURATION.base, reduced),
-      easing: EASING,
-    }),
-  }));
+  const target = swapPct(swapAmt);
+  const pct = useSharedValue(target);
+  useEffect(() => {
+    pct.value = withTiming(target, timing(duration.base, reduced));
+  }, [target, reduced, pct]);
+  const fill = useAnimatedStyle(() => ({ width: `${pct.value}%` }));
 
   return (
     <Screen>
-      <ScreenHeader
-        left={
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <IconButton
-              name="back"
-              accessibilityLabel="Back"
-              background="transparent"
-              color={ink.i55}
-              onPress={() => router.back()}
-            />
-            <Text style={[type.cardTitleSm, { color: ink.full }]}>Swap</Text>
-          </View>
-        }
-        right={<IconButton name="gear" accessibilityLabel="Swap settings" />}
-      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+          <IconButton
+            name="back"
+            accessibilityLabel="Back"
+            background="none"
+            onPress={() => router.back()}
+          />
+          <Text variant="cardTitle">Swap</Text>
+        </View>
+        <IconButton name="gear" accessibilityLabel="Swap settings" />
+      </View>
 
-      <Screen.Content style={{ marginTop: 22 }}>
+      <Fill style={{ marginTop: space.s22 }}>
         <View
           style={{
-            backgroundColor: surfaces.surface,
-            borderRadius: radius.xl3,
-            padding: 18,
-            gap: 12,
+            backgroundColor: colors.surface,
+            borderRadius: radius.panelXl,
+            padding: CARD_PAD,
+            gap: space.s12,
           }}
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={[type.eyebrowSm, { color: ink.i32 }]}>You pay</Text>
-            <Text style={[type.footnote, { color: ink.i40 }]}>
+            <Eyebrow small>You pay</Eyebrow>
+            <Text variant="footnote" color={colors.ink40}>
               Balance {payHeld ? quantity(payHeld.units) : '0.0000'}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
             <View>
-              <Text style={[type.amountMedium, { color: ink.full }]}>{quantity(swapAmt, 0)}</Text>
-              <Text style={[type.secondary, { color: ink.i38, marginTop: 4 }]}>
-                {payQuote ? money(swapAmt * payQuote.price) : 'No live price'}
+              <Price variant="amountLg">{quantity(swapAmt, 0)}</Price>
+              <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
+                {payQuote?.price !== undefined ? money(swapAmt * payQuote.price) : 'No live price'}
               </Text>
             </View>
             <TokenPill symbol={PAY} />
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12 }}>
             <StepCircle glyph="minus" onPress={() => bumpSwap(-1)} label="Decrease amount" />
             <View
               style={{
                 flex: 1,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: surfaces.control,
+                height: TRACK_H,
+                borderRadius: radius.full,
+                backgroundColor: colors.control,
                 overflow: 'hidden',
               }}
             >
               <Animated.View
-                style={[{ height: 6, borderRadius: 3, backgroundColor: ink.full }, fill]}
+                style={[
+                  { height: TRACK_H, borderRadius: radius.full, backgroundColor: colors.ink },
+                  fill,
+                ]}
               />
             </View>
             <StepCircle glyph="plus" onPress={() => bumpSwap(1)} label="Increase amount" />
           </View>
         </View>
 
-        {/* The 40px circle overlapping the seam — margin -14 pulls both cards together. */}
-        <View style={{ alignItems: 'center', marginVertical: -14, zIndex: 2 }}>
+        {/* The circle overlapping the seam — the negative margin pulls both cards together. */}
+        <View style={{ alignItems: 'center', marginVertical: SEAM_PULL, zIndex: 2 }}>
           <View
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: surfaces.control,
-              borderWidth: 3,
-              borderColor: surfaces.bg,
+              width: SEAM,
+              height: SEAM,
+              borderRadius: radius.full,
+              backgroundColor: colors.control,
+              borderWidth: SEAM_RING,
+              borderColor: colors.bg,
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Icon name="swap" size={18} color={ink.full} />
+            <Icon name="swap" size={18} color={colors.ink} />
           </View>
         </View>
 
         <View
           style={{
-            backgroundColor: surfaces.surface,
-            borderRadius: radius.xl3,
-            padding: 18,
-            gap: 12,
+            backgroundColor: colors.surface,
+            borderRadius: radius.panelXl,
+            padding: CARD_PAD,
+            gap: space.s12,
           }}
         >
-          <Text style={[type.eyebrowSm, { color: ink.i32 }]}>You receive</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Eyebrow small>You receive</Eyebrow>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
             <View>
-              <Text style={[type.amountMedium, { color: ink.full }]}>
-                {swap.data ? money(swap.data.outAmount) : '—'}
-              </Text>
-              <Text style={[type.secondary, { color: ink.i38, marginTop: 4 }]}>
+              <Price variant="amountLg">{swap.data ? money(swap.data.outAmount) : '—'}</Price>
+              <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
                 {swap.data
                   ? `at least ${money(swap.data.minimumOut)} after slippage`
                   : swap.loading
@@ -156,33 +193,64 @@ export default function Swap() {
           </View>
         </View>
 
-        <View style={{ marginTop: 18 }}>
+        <View style={{ marginTop: space.s18 }}>
           <Row
-            primary="Route"
-            value={swap.data?.route ?? (swap.loading ? 'Finding…' : 'Unavailable')}
-            valueColor={ink.i55}
+            title="Route"
+            value={
+              <Text variant="rowPrimary" color={colors.ink55}>
+                {swap.data?.route ?? (swap.loading ? 'Finding…' : 'Unavailable')}
+              </Text>
+            }
             height={50}
           />
           <Row
-            primary="Fee (0.25%)"
-            value={swap.data ? money(swap.data.feeUsd) : '—'}
+            title="Fee (0.25%)"
+            value={<Price>{swap.data ? money(swap.data.feeUsd) : '—'}</Price>}
             height={50}
           />
           <Row
-            primary="Price impact"
-            value={swap.data ? percent(swap.data.priceImpactPct, { digits: 3, explicitSign: false }) : '—'}
+            title="Price impact"
+            value={
+              <Price>
+                {swap.data
+                  ? percent(swap.data.priceImpactPct, { digits: 3, explicitSign: false })
+                  : '—'}
+              </Price>
+            }
             height={50}
           />
           <Row
-            primary="Max slippage"
-            value={percent((swap.data?.slippageBps ?? 30) / 100, { digits: 2, explicitSign: false })}
+            title="Max slippage"
+            value={
+              <Price>
+                {percent((swap.data?.slippageBps ?? 30) / 100, {
+                  digits: 2,
+                  explicitSign: false,
+                })}
+              </Price>
+            }
             height={50}
             divider={false}
           />
         </View>
-      </Screen.Content>
+      </Fill>
 
-      <Button label="Review swap" style={{ marginTop: 14 }} onPress={() => router.back()} />
+      <Button
+        label="Review swap"
+        style={{ marginTop: space.s14 }}
+        disabled={overBalance}
+        onPress={() => router.back()}
+      />
+      {overBalance ? (
+        <Text
+          variant="footnote"
+          color={colors.down}
+          align="center"
+          style={{ marginTop: space.s10 }}
+        >
+          {`You hold ${quantity(heldUnits ?? 0)} ${PAY}.`}
+        </Text>
+      ) : null}
     </Screen>
   );
 }
@@ -193,19 +261,20 @@ function TokenPill({ symbol }: { symbol: string }) {
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: space.s6,
         height: 36,
-        paddingHorizontal: 12,
-        borderRadius: radius.lg2,
-        backgroundColor: surfaces.control,
+        paddingHorizontal: space.s12,
+        borderRadius: radius.card,
+        backgroundColor: colors.control,
       }}
     >
-      <Text style={[type.pill, { color: ink.full }]}>{symbol}</Text>
-      <Icon name="chevron" size={11} color={ink.i55} />
+      <Text variant="control">{symbol}</Text>
+      <Icon name="chevron" size={11} color={colors.ink55} />
     </View>
   );
 }
 
+/** §7: a 26pt control grows its TOUCH area to 44, not its circle. `Press` does that. */
 function StepCircle({
   glyph,
   onPress,
@@ -216,22 +285,22 @@ function StepCircle({
   label: string;
 }) {
   return (
-    <Pressable
+    <Press
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={(MIN_HIT - 26) / 2}
-      style={({ pressed }) => ({
-        width: 26,
-        height: 26,
-        borderRadius: 13,
-        backgroundColor: surfaces.control,
+      hitHeight={size.stepperCircle}
+      hitWidth={size.stepperCircle}
+      style={{
+        width: size.stepperCircle,
+        height: size.stepperCircle,
+        borderRadius: radius.full,
+        backgroundColor: colors.control,
         alignItems: 'center',
         justifyContent: 'center',
-        opacity: pressed ? 0.85 : 1,
-      })}
+      }}
     >
-      <Icon name={glyph} size={14} color={ink.full} />
-    </Pressable>
+      <Icon name={glyph} size={14} color={colors.ink} />
+    </Press>
   );
 }

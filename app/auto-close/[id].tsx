@@ -1,22 +1,47 @@
 /**
  * Screen 6 — Auto Close. screens.md Group B. WHITE SHEET.
  *
- * "Chart region flex:1; min-height:230px — THE CHART TAKES THE LEFTOVER HEIGHT, NOT A SPACER."
- * TP wash from the top, SL wash from the bottom, 12 candles on the WIDE projection, a
- * "Mark $66,560" chip at left, TP/SL marker rows at their projected prices.
- * Two control blocks (stepper with a coloured value pill, then a 22px ruler), gap 26.
- * Cancel (#E4F7EC on #16A254) / Set (#16C060).
- * Footnote "Make {tpPnl} at TP or lose {slPnl} at SL".
+ * "Chart region flex:1; min-height:230px — THE CHART TAKES THE LEFTOVER HEIGHT, NOT A
+ * SPACER." TP wash from the top, SL wash from the bottom, candles on the WIDE projection,
+ * a mark chip, and TP/SL marker rows at their projected prices. Two control blocks
+ * (stepper with a coloured value chip, then a ruler), gap 26. Cancel / Set.
+ *
+ * "Set" used to call `router.back()` and nothing else — the screen that exists to arm a stop
+ * did not arm one, and the numbers lived in app state only, so the "stop" vanished when the
+ * phone slept. It now creates a real **`exit-rules` strategy**, which is the executor's own
+ * tier-3 mechanism: `planExitRules` reads `entryPrice`, `takeProfitPct`, `stopLossPct` and
+ * `trailPct` from its params on every scheduler tick, maintains the trailing high-water mark
+ * on the runs where nothing fires, and can only ever CLOSE. That is what makes screen 20's
+ * promise ("stops and take-profits stay active") literally true.
  */
-import React, { useState } from 'react';
-import { LayoutChangeEvent, Pressable, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { LayoutChangeEvent, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Candlestick, MarkLine, Ruler, projectCandles, tpSlBands, wide } from '@/charts';
-import { Button, ButtonRow, Screen, Stepper , EmptyState, LoadingRows } from '@/design/components';
-import { Icon } from '@/design/Icon';
-import { pnl, sheet } from '@/design/colors';
-import { type } from '@/design/type';
-import { money, percent, price as fmtPrice } from '@/format';
+import {
+  Button,
+  ButtonRow,
+  Candlestick,
+  EmptyState,
+  Fill,
+  IconButton,
+  LoadingRows,
+  NoteStrip,
+  Ruler,
+  Screen,
+  Stepper,
+  Tag,
+  Text,
+  colors,
+  money,
+  percent,
+  price as fmtPrice,
+  radius,
+  size,
+  space,
+  toCandles,
+  toPct,
+  wideProjection,
+} from '@/ui';
 import {
   lastClose,
   slPnl,
@@ -30,55 +55,131 @@ import { useStore } from '@/state/store';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 
+/** screens.md: the chart region never goes below this, and takes every spare point above it. */
+const CHART_MIN = 230;
+/** Half a marker chip, so the row centres on its price rather than hanging under it. */
+const MARKER_OFFSET = 11;
+
 export default function AutoClose() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  // TP/SL are set against the position's OWN market, on live candles. The handoff's static BTC
-  // series meant a user editing a stop on an ETH position was reading a BTC chart.
+  // TP/SL are set against the position's OWN market, on live candles. The handoff's static
+  // BTC series meant a user editing a stop on an ETH position was reading a BTC chart.
   const position = useAsync(() => repos.portfolio.position(id!), [id]);
   const symbol = position.data?.symbol ?? 'BTC';
   const candles = useAsync(() => repos.markets.candles(symbol, '1H'), [symbol]);
-  const bars = candles.data?.bars ?? [];
+  // `[o,h,l,c]` on the wire, named fields in the chart set. Memoised off `candles.data`
+  // rather than off a `?? []` default, which is a fresh array on every render.
+  const bars = candles.data?.bars;
+  const series = useMemo(() => toCandles(bars ?? []), [bars]);
+
   const tp = useStore((s) => s.tp);
   const sl = useStore((s) => s.sl);
   const bumpTp = useStore((s) => s.bumpTp);
   const bumpSl = useStore((s) => s.bumpSl);
-  const [chartH, setChartH] = useState(230);
+  const setTp = useStore((s) => s.setTp);
+  const setSl = useStore((s) => s.setSl);
+
+  const [chartH, setChartH] = useState(CHART_MIN);
   const [rulerW, setRulerW] = useState(300);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
+
+  // Show what is already armed rather than the app's last local guess. An exit rule is a
+  // live strategy of kind `exit-rules` on this symbol.
+  const strategies = useAsync(() => repos.strategies.list(), []);
+  const armed = (strategies.data ?? []).find(
+    (st) => st.kind === 'exit-rules' && st.symbol === symbol && st.state === 'live',
+  );
+  const armedParams = (armed?.params ?? {}) as {
+    takeProfitPct?: number;
+    stopLossPct?: number;
+  };
+  const armedTp = armedParams.takeProfitPct;
+  const armedSl = armedParams.stopLossPct == null ? undefined : -Math.abs(armedParams.stopLossPct);
+
+  useEffect(() => {
+    if (armedTp !== undefined && Number.isFinite(armedTp)) setTp(armedTp);
+    if (armedSl !== undefined && Number.isFinite(armedSl)) setSl(armedSl);
+  }, [armedTp, armedSl, setTp, setSl]);
+
+  /**
+   * The steppers edit inside state.md's manual range (TP 0.5–3.0, SL −3.0 to −0.5). A rule
+   * the ENTRY agent armed is derived from its own proposed stop and target, so it can sit
+   * outside that range — and `setTp`/`setSl` clamp it on the way in.
+   *
+   * Which means the steppers can show a number that is not the rule that is running. That
+   * is exactly the kind of quiet misstatement this screen must not make, so when the two
+   * disagree the armed rule is stated in full, and the CTA says it will replace it.
+   */
+  const clamped =
+    (armedTp !== undefined && Math.abs(armedTp - tp) > 0.001) ||
+    (armedSl !== undefined && Math.abs(armedSl - sl) > 0.001);
 
   // Everything is anchored to the live mark, not to the handoff's mid of 66,000.
-  const mark = bars.length ? lastClose(bars) : 0;
+  const mark = bars && bars.length ? lastClose(bars) : 0;
   const tpP = tpPrice(tp, mark);
   const slP = slPrice(sl, mark);
-  // The WIDE projection — its bounds follow TP/SL so both markers stay in frame at any setting.
-  const proj = bars.length ? wide(bars, tpP, slP) : null;
-  const projected = proj ? projectCandles(bars, proj) : [];
-  const bands = proj ? tpSlBands(proj, tpP, slP) : null;
+  // The WIDE projection — its bounds follow TP/SL so both markers stay in frame.
+  const proj = series.length ? wideProjection(series, tpP, slP) : null;
   // Size the P&L off the real position, not a fixed $2,500 notional.
-  const size = position.data?.notional ?? 0;
+  const notional = position.data?.notional ?? 0;
+
+  async function save() {
+    if (!id) return;
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      if (armed) await repos.strategies.end(armed.id);
+      await repos.strategies.create({
+        kind: 'exit-rules',
+        state: 'live',
+        label: `Exit ${symbol} at ${percent(tp)} / ${percent(sl)}`,
+        symbol,
+        // `planExitRules` sizes itself by looking at the holding, so it commits no daily
+        // allowance — a stop that ate into the cap would be a stop the cap could silence.
+        params: {
+          entryPrice: position.data?.entry ?? mark,
+          takeProfitPct: tp,
+          stopLossPct: Math.abs(sl),
+        },
+        cadence: 'daily',
+        dailyAllocationUsd: 0,
+      });
+      router.back();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <Screen background={sheet.bg} sheetEdge gutter={false}>
-      <View style={{ flex: 1, paddingHorizontal: 16 }}>
-        <View
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <Text style={[type.sheetTitle, { color: sheet.ink }]}>Auto Close</Text>
-          <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={12}>
-            <Icon name="close" size={20} color={sheet.ink} />
-          </Pressable>
-        </View>
+    <Screen light gutter="sheet">
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="sheetTitle" color={colors.sheet.ink}>
+          Auto Close
+        </Text>
+        <IconButton
+          name="close"
+          accessibilityLabel="Close"
+          onPress={() => router.back()}
+          background="none"
+          color={colors.sheet.ink}
+          glyph={20}
+        />
+      </View>
 
-        {/* THE LAYOUT LAW: flex:1 goes to the chart, never to a spacer. */}
-        <Screen.Content style={{ minHeight: 230, marginTop: 18 }}>
-          {!bars.length ? (
-            candles.loading || position.loading ? (
-              <LoadingRows count={3} height={62} />
-            ) : (
-              <EmptyState text={`No live ${symbol} series, so there is nothing to set against.`} />
-            )
+      {/* THE LAYOUT LAW: flex:1 goes to the chart, never to a spacer. */}
+      <Fill style={{ minHeight: CHART_MIN, marginTop: space.s18 }}>
+        {!series.length ? (
+          candles.loading || position.loading ? (
+            <LoadingRows count={3} height={size.row} />
           ) : (
+            <EmptyState text={`No live ${symbol} series, so there is nothing to set against.`} />
+          )
+        ) : (
           <View
             style={{ flex: 1, position: 'relative' }}
             onLayout={(e: LayoutChangeEvent) => setChartH(e.nativeEvent.layout.height)}
@@ -90,8 +191,8 @@ export default function AutoClose() {
                 left: 0,
                 right: 0,
                 top: 0,
-                height: `${bands!.tpZoneH}%`,
-                backgroundColor: pnl.tpZone,
+                height: `${toPct(proj!, tpP)}%`,
+                backgroundColor: colors.tpZone,
               }}
             />
             {/* SL wash from SL down to the bottom. */}
@@ -101,75 +202,122 @@ export default function AutoClose() {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                height: `${bands!.slZoneH}%`,
-                backgroundColor: pnl.slZone,
+                height: `${100 - toPct(proj!, slP)}%`,
+                backgroundColor: colors.slZone,
               }}
             />
-            <Candlestick candles={projected} height={chartH} />
-
-            <MarkLine
-              topPct={proj!.y(mark)}
+            <Candlestick
+              series={series}
+              projection={proj!}
               height={chartH}
-              label={fmtPrice(mark)}
-              variant="sheet"
-              prefixed
+              light
+              lastPrice={{ value: mark, label: fmtPrice(mark) }}
+              lastPriceSide="left"
             />
-            <MarkerRow topPct={bands!.tpLineTop} height={chartH} label="Take Profit" price={fmtPrice(tpP)} color={pnl.candleUp} />
-            <MarkerRow topPct={bands!.slLineTop} height={chartH} label="Stop Loss" price={fmtPrice(slP)} color={pnl.candleDown} />
+
+            <MarkerRow
+              topPct={toPct(proj!, tpP)}
+              height={chartH}
+              label="Take Profit"
+              price={fmtPrice(tpP)}
+              color={colors.candleUp}
+            />
+            <MarkerRow
+              topPct={toPct(proj!, slP)}
+              height={chartH}
+              label="Stop Loss"
+              price={fmtPrice(slP)}
+              color={colors.candleDown}
+            />
           </View>
-          )}
+        )}
+      </Fill>
 
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-            {['1:30 PM', '5:30 PM', '10:00 PM'].map((t) => (
-              <Text key={t} style={[type.footnoteSm, { color: sheet.dim }]}>
-                {t}
-              </Text>
-            ))}
-          </View>
-        </Screen.Content>
-
-        <View style={{ gap: 26, marginTop: 20 }} onLayout={(e) => setRulerW(e.nativeEvent.layout.width)}>
-          <ControlBlock
-            label="Take Profit"
-            value={percent(tp)}
-            pillColor={pnl.candleUp}
-            onDec={() => bumpTp(-1)}
-            onInc={() => bumpTp(1)}
-            tickPct={tpTickPct(tp)}
-            tickColor={pnl.candleUp}
-            rulerW={rulerW}
-          />
-          <ControlBlock
-            label="Stop Loss"
-            value={percent(sl)}
-            pillColor={pnl.candleDown}
-            onDec={() => bumpSl(-1)}
-            onInc={() => bumpSl(1)}
-            tickPct={slTickPct(sl)}
-            tickColor={pnl.candleDown}
-            rulerW={rulerW}
-          />
-        </View>
-
-        <ButtonRow
-          style={{ marginTop: 22 }}
-          affirmativeFlex={1}
-          secondary={<Button label="Cancel" variant="sheetCancel" onPress={() => router.back()} />}
-          affirmative={<Button label="Set" variant="sheetConfirm" onPress={() => router.back()} />}
+      <View
+        style={{ gap: space.s26, marginTop: space.s20 }}
+        onLayout={(e) => setRulerW(e.nativeEvent.layout.width)}
+      >
+        <ControlBlock
+          label="Take Profit"
+          value={percent(tp)}
+          tone="tp"
+          chipColor={colors.candleUp}
+          onDec={() => bumpTp(-1)}
+          onInc={() => bumpTp(1)}
+          tickPct={tpTickPct(tp)}
+          rulerW={rulerW}
         />
-
-        <Text style={[type.footnote, { color: sheet.dim, textAlign: 'center', marginTop: 12 }]}>
-          Make{' '}
-          <Text style={{ color: pnl.candleUp, fontWeight: '600' }}>{money(tpPnl(tp, size))}</Text> at
-          TP or lose{' '}
-          <Text style={{ color: pnl.candleDown, fontWeight: '600' }}>{money(slPnl(sl, size))}</Text>{' '}
-          at SL
-        </Text>
+        <ControlBlock
+          label="Stop Loss"
+          value={percent(sl)}
+          tone="sl"
+          chipColor={colors.candleDown}
+          onDec={() => bumpSl(-1)}
+          onInc={() => bumpSl(1)}
+          tickPct={slTickPct(sl)}
+          rulerW={rulerW}
+        />
       </View>
+
+      {clamped ? (
+        <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
+          {`An agent armed this position at ${armedTp !== undefined ? percent(armedTp) : 'no take profit'} / ${armedSl !== undefined ? percent(armedSl) : 'no stop'}, which is outside the range you can set by hand. Setting yours replaces it.`}
+        </NoteStrip>
+      ) : null}
+
+      {saveError ? (
+        <Text
+          variant="footnote"
+          color={colors.candleDown}
+          align="center"
+          style={{ marginTop: space.s12 }}
+        >
+          {saveError}
+        </Text>
+      ) : null}
+
+      <ButtonRow
+        style={{ marginTop: space.s22 }}
+        secondary={
+          <Button
+            label="Cancel"
+            backgroundColor={colors.cancelBg}
+            color={colors.cancelInk}
+            onPress={() => router.back()}
+          />
+        }
+        primary={
+          <Button
+            label={clamped ? 'Replace' : 'Set'}
+            backgroundColor={colors.candleUp}
+            color={colors.ink}
+            loading={saving}
+            onPress={save}
+          />
+        }
+      />
+
+      <Text
+        variant="footnote"
+        color={colors.sheet.dim}
+        align="center"
+        style={{ marginTop: space.s12 }}
+      >
+        Make{' '}
+        <Text variant="footnote" color={colors.candleUp}>
+          {money(tpPnl(tp, notional))}
+        </Text>{' '}
+        at TP or lose{' '}
+        <Text variant="footnote" color={colors.candleDown}>
+          {money(slPnl(sl, notional))}
+        </Text>{' '}
+        at SL
+      </Text>
     </Screen>
   );
 }
 
+/** A label chip on the left and its price on the right, both centred on the marker's price. */
 function MarkerRow({
   topPct,
   height,
@@ -183,44 +331,22 @@ function MarkerRow({
   price: string;
   color: string;
 }) {
+  const chip = { bg: color, fg: colors.ink };
   return (
     <View
+      pointerEvents="none"
       style={{
-        pointerEvents: 'none',
         position: 'absolute',
         left: 0,
         right: 0,
-        top: (topPct / 100) * height,
-        transform: [{ translateY: -11 }],
+        top: (topPct / 100) * height - MARKER_OFFSET,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
       }}
     >
-      <View
-        style={{
-          backgroundColor: color,
-          borderRadius: 16,
-          paddingHorizontal: 10,
-          paddingVertical: 4,
-        }}
-      >
-        <Text style={[type.tagSm, { color: '#FFFFFF', letterSpacing: 0, textTransform: 'none' }]}>
-          {label}
-        </Text>
-      </View>
-      <View
-        style={{
-          backgroundColor: color,
-          borderRadius: 16,
-          paddingHorizontal: 10,
-          paddingVertical: 4,
-        }}
-      >
-        <Text style={[type.tagSm, { color: '#FFFFFF', letterSpacing: 0, textTransform: 'none' }]}>
-          {price}
-        </Text>
-      </View>
+      <Tag label={label} small sentence colors={chip} radius={radius.tile} />
+      <Tag label={price} small sentence colors={chip} radius={radius.tile} />
     </View>
   );
 }
@@ -228,40 +354,39 @@ function MarkerRow({
 function ControlBlock({
   label,
   value,
-  pillColor,
+  tone,
+  chipColor,
   onDec,
   onInc,
   tickPct,
-  tickColor,
   rulerW,
 }: {
   label: string;
   value: string;
-  pillColor: string;
+  tone: 'tp' | 'sl';
+  chipColor: string;
   onDec: () => void;
   onInc: () => void;
   tickPct: number;
-  tickColor: string;
   rulerW: number;
 }) {
   return (
-    <View style={{ gap: 10 }}>
-      <View
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-      >
-        <Text style={[type.rowPrimary, { color: sheet.ink }]}>{label}</Text>
+    <View style={{ gap: space.s10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="rowPrimary" color={colors.sheet.ink}>
+          {label}
+        </Text>
         <Stepper
           value={value}
           onDecrement={onDec}
           onIncrement={onInc}
-          variant="sheet"
-          valuePillColor={pillColor}
-          valueInkColor="#FFFFFF"
+          light
+          chip={{ bg: chipColor, fg: colors.ink }}
           valueMinWidth={72}
-          accessibilityLabel={label}
         />
       </View>
-      <Ruler markerPct={tickPct} color={tickColor} width={rulerW} accessibilityLabel={`${label} position`} />
+      {/* `tickPct` is state.md's 0–100 derivation; `Ruler` takes 0–1. */}
+      <Ruler position={tickPct / 100} tone={tone} style={{ width: rulerW }} />
     </View>
   );
 }

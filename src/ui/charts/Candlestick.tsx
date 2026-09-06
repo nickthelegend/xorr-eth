@@ -19,11 +19,12 @@
  * chart is data; it renders complete, and a live update mutates the last candle in place.
  */
 import React from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, FeDropShadow, Filter, G, Line, Rect } from 'react-native-svg';
 import { Value } from '../Text';
 import { type as typeScale } from '../type';
 import { chart, colors, radius, space } from '../tokens';
+import { Press } from '../Press';
 import { columns, useMeasuredBox } from './useMeasuredBox';
 import { axisLabels, projectSeries, toPct, type Candle, type Projection } from './projection';
 
@@ -37,6 +38,9 @@ const FILTER_MARGIN = '-50%';
 const FILTER_SPAN = '200%';
 /** The axis gutter on the right of the plot, from the prototype. */
 const AXIS_WIDTH = chart.axisWidth;
+
+/** How far an unselected candle steps back. Enough to recede, not enough to vanish. */
+const DIMMED = 0.35;
 /** The last-price chip's own height, derived from its variant rather than measured. */
 const CHIP_HEIGHT = typeScale.chip.lineHeight + space.s2 * 2;
 
@@ -62,6 +66,17 @@ export interface CandlestickProps {
   lastPriceSide?: 'left' | 'right';
   /** Renders in the light sheet: the rule and chip invert. */
   light?: boolean;
+  /**
+   * Which bar the user has tapped, if any — and how to tell the screen it changed.
+   *
+   * The chart was read-only: you could see the shape and never the open, high, low or close
+   * of a single candle, even though the data was already loaded. Selecting dims the rest, so
+   * the chosen bar is unmistakable, and the screen shows its numbers.
+   *
+   * Omit `onSelect` and the chart stays inert — no touch targets, no dimming.
+   */
+  selected?: number | null;
+  onSelect?: (index: number | null) => void;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -76,6 +91,8 @@ export function Candlestick({
   lastPrice,
   lastPriceSide = 'right',
   light = false,
+  selected = null,
+  onSelect,
   style,
   testID,
 }: CandlestickProps) {
@@ -91,6 +108,8 @@ export function Candlestick({
      worse than an empty box. */
   const hasData = series.length > 0;
   const plotWidth = Math.max(0, box.width - (showAxis ? AXIS_WIDTH : 0));
+  /** Everything except the chosen candle steps back, so the selection is unmistakable. */
+  const dimmed = (i: number) => selected !== null && selected !== i;
   const geometry = projectSeries(projection, series);
   const { columnWidth, xOf } = columns(plotWidth, series.length, chart.candle.gap);
   const pxOf = (pct: number) => (pct / 100) * height;
@@ -101,6 +120,12 @@ export function Candlestick({
 
   return (
     <View testID={testID} style={[{ height }, style]} onLayout={onLayout}>
+      {/*
+        The touch layer sits ABOVE the SVG rather than inside it: react-native-svg's press
+        handling differs between native and web, and a chart the user cannot tap on the web
+        demo is a chart with no readout. One transparent target per column, sized and placed
+        from the same `columns()` geometry the candles use, so they cannot drift apart.
+      */}
       {box.width > 0 && hasData && (
         <>
           <Svg width={box.width} height={height}>
@@ -157,7 +182,7 @@ export function Candlestick({
               const centre = x + columnWidth / 2;
 
               return (
-                <G key={i}>
+                <G key={i} opacity={dimmed(i) ? DIMMED : 1}>
                   <Rect
                     x={centre - chart.candle.wickWidth / 2}
                     y={pxOf(g.wickTopPct)}
@@ -192,6 +217,27 @@ export function Candlestick({
               />
             )}
           </Svg>
+
+          {onSelect && box.width > 0 && hasData ? (
+            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+              {geometry.map((_, i) => (
+                <Press
+                  key={`hit-${i}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Candle ${i + 1} of ${geometry.length}`}
+                  accessibilityState={{ selected: selected === i }}
+                  onPress={() => onSelect(selected === i ? null : i)}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    height,
+                    left: xOf(i),
+                    width: columnWidth + chart.candle.gap,
+                  }}
+                />
+              ))}
+            </View>
+          ) : null}
 
           {showAxis && (
             <View

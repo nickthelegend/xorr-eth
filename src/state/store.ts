@@ -67,6 +67,8 @@ type OrderSlice = {
   closePct: number;
   swapAmt: number;
   bumpTp: (dir: 1 | -1) => void;
+  setTp: (v: number) => void;
+  setSl: (v: number) => void;
   bumpSl: (dir: 1 | -1) => void;
   pressKey: (key: string) => void;
   setOrderAmt: (v: string) => void;
@@ -184,6 +186,16 @@ export const useStore = create<Store>()(
       swapAmt: 0.1,
       bumpTp: (dir) => set((s) => ({ tp: round1(clamp(s.tp + dir * TPSL_STEP, TP_MIN, TP_MAX)) })),
       bumpSl: (dir) => set((s) => ({ sl: round1(clamp(s.sl + dir * TPSL_STEP, SL_MIN, SL_MAX)) })),
+
+      // Screen 6 reads the rule that is actually armed on the executor and seeds the steppers
+
+      // from it. The same clamp as the bumps: a rule stored before the bounds changed must not
+
+      // put the ruler marker off the end of its track.
+
+      setTp: (v) => set({ tp: round1(clamp(v, TP_MIN, TP_MAX)) }),
+
+      setSl: (v) => set({ sl: round1(clamp(v, SL_MIN, SL_MAX)) }),
       pressKey: (key) => set((s) => ({ orderAmt: keypadPress(s.orderAmt, key) })),
       setOrderAmt: (v) => set({ orderAmt: v }),
       setSide: (side) => set({ side }),
