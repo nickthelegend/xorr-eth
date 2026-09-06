@@ -281,7 +281,3 @@ export function hiredCount(hired: Record<string, boolean>): number {
   return Object.values(hired).filter(Boolean).length;
 }
 
-/** Number of alerts on — drives "n of 5 on". */
-export function alertsOnCount(alerts: Record<string, boolean>): number {
-  return Object.values(alerts).filter(Boolean).length;
-}

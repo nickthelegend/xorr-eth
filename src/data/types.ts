@@ -94,6 +94,16 @@ export type Alert = {
   name: string;
   detail: string;
   default: boolean;
+  /**
+   * Watching, or already fired and waiting for the condition to clear.
+   *
+   * "On" cannot express this. An alert that has fired is still on, and telling the user it is
+   * simply "on" hides the one fact they would want — that it already went off and will not go off
+   * again until the price comes back. Optional because an older executor will not send it.
+   */
+  armed?: boolean;
+  lastFiredAt?: string | null;
+  fireCount?: number;
 };
 
 export type NewsItem = {

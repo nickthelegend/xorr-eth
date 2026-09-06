@@ -7,6 +7,18 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+/**
+ * A holding with a raw balance that actually matches its unit count.
+ *
+ * `Holding.raw` exists because a float cannot represent a wei count, and closing a whole position
+ * has to use the chain's own number. A fixture that made one up would defeat the point, so this
+ * derives it the same way `holdings()` does — from the units and the token's decimals.
+ */
+function holding(symbol: string, units: number, usd: number, decimals = 18) {
+  return { symbol, units, usd, raw: BigInt(Math.round(units * 10 ** decimals)) };
+}
+
+
 vi.mock('../../evm/balances.js', () => ({
   cashUsd: vi.fn(),
   holdings: vi.fn(),
@@ -39,7 +51,7 @@ describe('tier 1 — recurring buy', () => {
 describe('tier 2 — rebalance', () => {
   it('does nothing when the portfolio is already on target', async () => {
     vi.mocked(cashUsd).mockResolvedValue(400);
-    vi.mocked(holdings).mockResolvedValue([{ symbol: 'WETH', units: 0.24, usd: 600 }]);
+    vi.mocked(holdings).mockResolvedValue([holding('WETH', 0.24, 600)]);
     // 600 of 1000 is exactly the 60% target.
     const i = await planRebalance({
       owner: OWNER,
@@ -66,7 +78,7 @@ describe('tier 2 — rebalance', () => {
 
   it('SELLS the sleeve that is over weight, sized in coins not dollars', async () => {
     vi.mocked(cashUsd).mockResolvedValue(0);
-    vi.mocked(holdings).mockResolvedValue([{ symbol: 'WETH', units: 0.4, usd: 1_000 }]);
+    vi.mocked(holdings).mockResolvedValue([holding('WETH', 0.4, 1_000)]);
     const i = await planRebalance({
       owner: OWNER,
       budgetUsd: 1_000,
@@ -81,7 +93,7 @@ describe('tier 2 — rebalance', () => {
 
   it('never trades below the point where gas costs more than the drift', async () => {
     vi.mocked(cashUsd).mockResolvedValue(1_000);
-    vi.mocked(holdings).mockResolvedValue([{ symbol: 'WETH', units: 0.6, usd: 1_499 }]);
+    vi.mocked(holdings).mockResolvedValue([holding('WETH', 0.6, 1_499)]);
     const i = await planRebalance({
       owner: OWNER,
       budgetUsd: 1_000,
@@ -105,7 +117,7 @@ describe('tier 2 — rebalance', () => {
 });
 
 describe('tier 3 — take profit and stop loss', () => {
-  const held = [{ symbol: 'WETH', units: 0.4, usd: 1_000 }];
+  const held = [holding('WETH', 0.4, 1_000)];
 
   it('does nothing while the price is between the bands', async () => {
     vi.mocked(holdings).mockResolvedValue(held);

@@ -10,6 +10,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
 import { requireUser } from '../auth/middleware.js';
+import { evaluateAlerts } from '../alerts/evaluate.js';
 
 export const alerts = new Hono();
 
@@ -21,6 +22,9 @@ type AlertRow = {
   detail: string;
   enabled: boolean;
   config: Record<string, unknown>;
+  armed: boolean;
+  last_fired_at: Date | null;
+  fire_count: number;
 };
 
 async function walletId(c: Context): Promise<string | undefined> {
@@ -37,6 +41,16 @@ const toApi = (r: AlertRow) => ({
   detail: r.detail,
   enabled: r.enabled,
   config: r.config,
+  /*
+   * Whether it is armed, and when it last fired.
+   *
+   * An alert list that shows only "on" cannot distinguish one that is watching from one that has
+   * already fired and is waiting for the condition to clear. Those are different states and the
+   * user is entitled to both.
+   */
+  armed: r.armed,
+  lastFiredAt: r.last_fired_at ? r.last_fired_at.toISOString() : null,
+  fireCount: r.fire_count,
   // The UI's `default` field means "on when you first see it". For a persisted alert the enabled
   // flag IS the answer, so they are the same thing rather than two sources for one fact.
   default: r.enabled,
@@ -85,6 +99,21 @@ alerts.post('/alerts/:id', async (c) => {
   );
   if (!row) return c.json({ error: 'not_found' }, 404);
   return c.json(toApi(row));
+});
+
+/**
+ * Evaluate every alert now, instead of waiting for the next scheduler tick.
+ *
+ * The sweep is global, so this returns only the outcomes for the caller's own alerts — a user has
+ * no business seeing whether a stranger's price alert fired.
+ */
+alerts.post('/alerts/evaluate', async (c) => {
+  const id = await walletId(c);
+  if (!id) return c.json({ error: 'no_wallet' }, 400);
+  const outcomes = await evaluateAlerts();
+  const mine = await query<{ id: string }>(`SELECT id FROM alerts WHERE wallet_id = $1`, [id]);
+  const ids = new Set(mine.map((r) => r.id));
+  return c.json(outcomes.filter((o) => ids.has(o.id)));
 });
 
 alerts.delete('/alerts/:id', async (c) => {

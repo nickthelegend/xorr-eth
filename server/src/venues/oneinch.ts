@@ -57,6 +57,29 @@ export type SwapQuote = {
 
 /** Screen 19: "Max slippage 0.30%". */
 export const DEFAULT_SLIPPAGE_PCT = 0.3;
+
+/**
+ * How much slippage each kind of trade accepts, and why they differ.
+ *
+ * The tolerance is not a constant, because the cost of NOT trading is not a constant.
+ *
+ *   - A scheduled buy can wait. If the price moved past 0.3% it will run again tomorrow, and
+ *     paying up for a purchase nobody is in a hurry to make is a straight loss.
+ *   - A stop-loss cannot wait. A stop that refuses to execute because the market moved is not a
+ *     stop; it is a stop-shaped thing that fails exactly when it is needed, since the market
+ *     moving is the entire reason it fired.
+ *   - A panic exit can wait least of all. Someone who has pressed "sell everything" has already
+ *     decided the price is not the thing they are optimising for, and a 0.3% limit that leaves
+ *     them holding the position is the same failure as a spending cap that blocks a sale.
+ *
+ * These are ceilings, not targets: the router still fills at the best price it finds, and the
+ * number only decides when it refuses.
+ */
+export const SLIPPAGE = {
+  scheduled: DEFAULT_SLIPPAGE_PCT,
+  stop: 1,
+  panic: 2,
+} as const;
 /** Screen 19's stated app fee. */
 export const SWAP_FEE_PCT = 0.0025;
 
@@ -200,6 +223,16 @@ export async function buildSwap(params: {
   inSymbol: string;
   outSymbol: string;
   amount: number;
+  /**
+   * The exact input amount in the token's own units, when the caller has it.
+   *
+   * The router pulls precisely what the calldata says. Closing a whole position from `amount`
+   * alone means scaling a float back to wei, which overshot a real WETH balance by 8 wei — the
+   * delegation's `transferFrom` succeeded for the corrected amount and then the ROUTER reverted,
+   * because the calldata was still asking for the eight it could not have. Both numbers have to
+   * come from the same place, and that place is the chain.
+   */
+  amountRaw?: bigint;
   from: Address;
   receiver: Address;
   slippagePct?: number;
@@ -218,7 +251,7 @@ export async function buildSwap(params: {
   const dst = TOKENS[params.outSymbol];
   if (!src || !dst) throw new Error(`No route for ${params.inSymbol} -> ${params.outSymbol}`);
 
-  const raw = scale(params.amount, src.decimals);
+  const raw = params.amountRaw ?? scale(params.amount, src.decimals);
   const res = await getJson<{ tx: { to: Address; data: Hex; value: string } }>(
     `${BASE}/${ONEINCH_CHAIN_ID}/swap?src=${src.address}&dst=${dst.address}&amount=${raw}` +
       `&from=${params.from}&origin=${params.from}&receiver=${params.receiver}` +

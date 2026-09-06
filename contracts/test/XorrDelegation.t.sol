@@ -46,6 +46,28 @@ contract MockVenue {
     }
 }
 
+
+/**
+ * A venue that fails the way a real router fails: with its own custom error carrying the number
+ * that explains it. 1inch's `ReturnAmountIsNotEnough(uint256)` is the case that mattered — a fill
+ * blocked by slippage came back to the user as "the venue rejected the order", which is true of
+ * every possible failure and therefore useless.
+ */
+contract PickyVenue {
+    error ReturnAmountIsNotEnough(uint256 got);
+
+    function swap(uint256) external pure {
+        revert ReturnAmountIsNotEnough(24_768_044);
+    }
+}
+
+/** A venue that reverts with nothing at all — the one case there is genuinely nothing to bubble. */
+contract SilentVenue {
+    function swap(uint256) external pure {
+        revert();
+    }
+}
+
 contract XorrDelegationTest is Test {
     XorrDelegation internal del;
     MockUSDC internal usdc;
@@ -318,5 +340,47 @@ contract XorrDelegationTest is Test {
         vm.prank(bot);
         del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
         assertEq(asset.allowance(address(del), address(assetVenue)), 0, "approval left behind");
+    }
+
+    /**
+     * The venue's own error survives the delegation.
+     *
+     * `revert VenueCallFailed()` replaced whatever the venue said, so a slippage failure, an empty
+     * pool and malformed calldata all reached the user as one sentence. Bubbling the raw revert is
+     * what lets the executor translate `ReturnAmountIsNotEnough` into "the price moved more than
+     * your slippage limit" — a thing the user can act on.
+     */
+    function test_VenueRevertReasonSurvivesSpend() public {
+        PickyVenue picky = new PickyVenue();
+        vm.prank(owner);
+        del.setVenue(address(picky), true);
+
+        bytes memory data = abi.encodeWithSignature("swap(uint256)", uint256(1));
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(PickyVenue.ReturnAmountIsNotEnough.selector, 24_768_044));
+        del.spend(owner, address(usdc), address(picky), 10e6, data);
+    }
+
+    function test_VenueRevertReasonSurvivesClose() public {
+        PickyVenue picky = new PickyVenue();
+        vm.prank(owner);
+        del.setVenue(address(picky), true);
+
+        bytes memory data = abi.encodeWithSignature("swap(uint256)", uint256(1));
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(PickyVenue.ReturnAmountIsNotEnough.selector, 24_768_044));
+        del.closePosition(owner, address(usdc), address(picky), 10e6, data);
+    }
+
+    /** With nothing to bubble, the named error is still the honest answer. */
+    function test_SilentVenueStillReportsVenueCallFailed() public {
+        SilentVenue silent = new SilentVenue();
+        vm.prank(owner);
+        del.setVenue(address(silent), true);
+
+        bytes memory data = abi.encodeWithSignature("swap(uint256)", uint256(1));
+        vm.prank(bot);
+        vm.expectRevert(XorrDelegation.VenueCallFailed.selector);
+        del.spend(owner, address(usdc), address(silent), 10e6, data);
     }
 }

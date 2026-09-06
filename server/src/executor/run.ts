@@ -17,7 +17,7 @@ import { append } from '../audit/log.js';
 import { evaluate, recordSpend } from '../rules/engine.js';
 import { closeAsDelegate, readPolicy, spendAsDelegate } from '../evm/delegation.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
-import { buildSwap, TOKENS } from '../venues/oneinch.js';
+import { buildSwap, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
 import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
@@ -347,8 +347,13 @@ export async function runStrategy(
           // In the INPUT token's units. Passing dollars here scaled a position into wei and the
           // router refused a trade orders of magnitude too large.
           amount: intent.amountIn,
+          // On a whole-position close the planner has the chain's own figure; the delegation and
+          // the router have to be handed the same one or the router reverts for the difference.
+          amountRaw: intent.amountInRaw,
           from: DELEGATION_FROM,
           receiver: owner,
+          // A risk-reducing close gets more room than a scheduled buy. See `SLIPPAGE`.
+          slippagePct: isCloseIntent(intent) ? SLIPPAGE.stop : SLIPPAGE.scheduled,
         });
 
     /*
@@ -370,8 +375,12 @@ export async function runStrategy(
           owner,
           token: payToken.address,
           venue: swap.to as Address,
-          // In the SOLD token's own units, not dollars.
-          amount: BigInt(Math.floor(intent.amountIn * 10 ** payToken.decimals)),
+          /*
+           * In the SOLD token's own units, not dollars — and from the chain when the planner had
+           * the exact figure. The float path overshot a real balance by 8 wei and reverted; a
+           * partial sell can keep using it, because there the float IS the intended size.
+           */
+          amount: intent.amountInRaw ?? BigInt(Math.floor(intent.amountIn * 10 ** payToken.decimals)),
           data: swap.data,
         })
       : await spendAsDelegate({
@@ -482,6 +491,16 @@ export async function runStrategy(
     });
     return { status: 'failed', runId, error };
   }
+}
+
+/**
+ * Is this leg reducing risk rather than taking it on?
+ *
+ * A close and a supply are both "not a scheduled buy", but only the close is urgent enough to pay
+ * up for. Kept as one function so the slippage decision and the cap decision cannot drift apart.
+ */
+function isCloseIntent(intent: TradeIntent): boolean {
+  return !intent.direct && intent.outSymbol === 'USDC';
 }
 
 /**
@@ -604,6 +623,17 @@ export function humanFailure(error: string): string {
     '0x3e814127': "Today's cap is used up. Nothing was placed.", // DailyCapExceeded
     '0x1f2a2005': 'The order size came out as zero, so nothing was placed.', // ZeroAmount()
     '0xc2e441e5': 'The venue rejected the order, so nothing was placed.', // VenueCallFailed()
+    /*
+     * 1inch's own errors, now that the delegation bubbles them instead of masking them.
+     *
+     * `ReturnAmountIsNotEnough` is the common one and used to arrive as VenueCallFailed, so a
+     * trade blocked by a price move looked identical to malformed calldata. It is the difference
+     * between "try again" and "something is broken", and the user is the one who has to decide.
+     */
+    '0x9a446475': 'The price moved more than your slippage limit while this was in flight. Nothing was placed.', // ReturnAmountIsNotEnough(uint256)
+    '0xf32bec2f': 'The price moved more than your slippage limit while this was in flight. Nothing was placed.', // ReturnAmountIsNotEnough()
+    '0xf4059071': 'The venue could not collect the token — the approval was short or withdrawn.', // SafeTransferFromFailed()
+    '0x28ebf247': 'The route came back with nothing, so there was no trade to make.', // ZeroReturnAmount()
   };
   const selector = /(?:custom error|reverted with|signature)[^0-9a-fx]*(0x[0-9a-f]{8})\b/.exec(e)?.[1];
   if (selector && BY_SELECTOR[selector]) return BY_SELECTOR[selector];
@@ -614,6 +644,7 @@ export function humanFailure(error: string): string {
   if (e.includes('policyexpired')) return BY_SELECTOR['0x9c5bebca']!;
   if (e.includes('venuenotallowed')) return BY_SELECTOR['0x2114fba2']!;
   if (e.includes('notdelegate')) return BY_SELECTOR['0x1db3b859']!;
+  if (e.includes('returnamountisnotenough')) return BY_SELECTOR['0x9a446475']!;
 
   if (e.includes('cannot fill on'))
     return 'This network cannot settle trades. Prices are real; filling needs Base or a Base fork.';

@@ -164,6 +164,19 @@ export default function Safety() {
       <Text style={[type.footnote, { color: ink.i28, textAlign: 'center', marginTop: 12 }]}>
         Takes effect in under a second across every device.
       </Text>
+      {/*
+        Stopping and exiting are different needs, and only the first one was offered.
+        Deliberately a quiet secondary link rather than a second big red button: two destructive
+        buttons of equal weight is how someone taps the wrong one.
+      */}
+      <Text
+        onPress={() => router.push('/flatten')}
+        accessibilityRole="button"
+        accessibilityLabel="Sell every position into USDC"
+        style={[type.footnote, { color: ink.i45, textAlign: 'center', marginTop: 14, paddingVertical: 6 }]}
+      >
+        Stopping is not selling. Sell everything into cash ›
+      </Text>
     </Screen>
   );
 }

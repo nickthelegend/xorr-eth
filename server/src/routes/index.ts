@@ -118,7 +118,13 @@ routes.get('/wallet/balance', async (c) => {
   return c.json({
     usd: value.total,
     cashUsd: value.cash,
-    holdings: value.holdings,
+    /*
+     * `raw` is dropped on the way out.
+     *
+     * It is a bigint, which JSON cannot serialise, and the client has no use for wei — it displays
+     * units and dollars. It exists so the SERVER can close a whole position exactly.
+     */
+    holdings: value.holdings.map(({ symbol, units, usd }) => ({ symbol, units, usd })),
     /** USDC earning yield on Aave. Part of the total, but not spendable until withdrawn. */
     suppliedUsd: value.supplied,
     dailyCapUsd: policy?.dailyCapUsd ?? 0,

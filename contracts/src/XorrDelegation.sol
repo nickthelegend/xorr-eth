@@ -177,7 +177,7 @@ contract XorrDelegation {
         IERC20(token).approve(venue, amount);
 
         (bool ok, bytes memory ret) = venue.call(data);
-        if (!ok) revert VenueCallFailed();
+        _bubble(ok, ret);
 
         // Never leave a standing approval behind.
         IERC20(token).approve(venue, 0);
@@ -230,7 +230,7 @@ contract XorrDelegation {
         IERC20(token).approve(venue, amount);
 
         (bool ok, bytes memory ret) = venue.call(data);
-        if (!ok) revert VenueCallFailed();
+        _bubble(ok, ret);
 
         IERC20(token).approve(venue, 0);
 
@@ -271,5 +271,27 @@ contract XorrDelegation {
     /// @dev UTC day index. The cap resets at midnight UTC, which is what the app tells the user.
     function _dayOf(uint256 timestamp) private pure returns (uint256) {
         return timestamp / 1 days;
+    }
+
+    /**
+     * @dev Re-throw the venue's own revert instead of replacing it.
+     *
+     * `revert VenueCallFailed()` threw away everything the venue said. A 1inch fill that failed
+     * because the price moved past the slippage limit, one that failed because a pool was empty,
+     * and one that failed because the calldata was malformed all reached the user as the same
+     * sentence: "the venue rejected the order". That is the same class of unhelpfulness as
+     * "custom program error: 0x1", and this codebase already decided that is not acceptable.
+     *
+     * So: if the venue reverted with data, bubble it up byte for byte. The executor can then
+     * decode `ReturnAmountIsNotEnough` and say "the price moved more than your slippage limit",
+     * which is both true and actionable. Only a silent revert — no data at all — falls back to
+     * the named error, because there is nothing else to say.
+     */
+    function _bubble(bool ok, bytes memory ret) private pure {
+        if (ok) return;
+        if (ret.length == 0) revert VenueCallFailed();
+        assembly {
+            revert(add(ret, 0x20), mload(ret))
+        }
     }
 }

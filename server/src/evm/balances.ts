@@ -16,7 +16,23 @@ import { TOKENS } from '../venues/oneinch.js';
 import { priceOf } from '../market/prices.js';
 import { usdcReserve } from '../market/yield.js';
 
-export type Holding = { symbol: string; units: number; usd: number };
+export type Holding = {
+  symbol: string;
+  units: number;
+  usd: number;
+  /**
+   * The balance exactly as the chain holds it.
+   *
+   * `units` is a float and cannot represent a wei count. Selling a whole position by converting
+   * back — `BigInt(Math.floor(units * 10 ** decimals))` — overshot a real WETH balance by 8 wei,
+   * and `transferFrom` reverted for asking for more than existed. It failed as an opaque
+   * "closePosition reverted", which on a stop-loss is the worst possible moment for a rounding
+   * error to surface.
+   *
+   * Anything that closes a WHOLE position must use this. Percentages and displays can use `units`.
+   */
+  raw: bigint;
+};
 
 /** Spendable USDC, in dollars. */
 export async function cashUsd(owner: Address): Promise<number> {
@@ -80,18 +96,19 @@ export async function holdings(owner: Address): Promise<Holding[]> {
     })),
   });
 
-  const held: { symbol: string; units: number }[] = [];
+  const held: { symbol: string; units: number; raw: bigint }[] = [];
   entries.forEach(([symbol, token], i) => {
     const r = balances[i];
     if (!r || r.status !== 'success') return;
-    const units = Number(formatUnits(r.result as bigint, token.decimals));
-    if (units > 0) held.push({ symbol, units });
+    const raw = r.result as bigint;
+    const units = Number(formatUnits(raw, token.decimals));
+    if (units > 0) held.push({ symbol, units, raw });
   });
 
   return Promise.all(
-    held.map(async ({ symbol, units }) => {
+    held.map(async ({ symbol, units, raw }) => {
       const price = await priceOf(symbol).catch(() => 0);
-      return { symbol, units, usd: units * price };
+      return { symbol, units, usd: units * price, raw };
     }),
   );
 }

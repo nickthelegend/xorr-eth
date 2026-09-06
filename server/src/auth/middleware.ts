@@ -23,6 +23,15 @@ const PUBLIC_PATHS = new Set([
   '/market/tradable',
   '/market/stocks',
   '/yield/supply',
+  /*
+   * The verification console.
+   *
+   * Public for the same reason the contract is: the whole argument is that you do not have to
+   * trust us, and a proof you need our permission to run is not a proof. Every probe behind it is
+   * a read of something already public — the chain, the subgraph, a price feed — and the
+   * wallet-specific ones take an address anyone could paste into an explorer.
+   */
+  '/verify',
 ]);
 
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */

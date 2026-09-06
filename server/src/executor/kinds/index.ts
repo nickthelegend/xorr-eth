@@ -36,6 +36,15 @@ export type TradeIntent = {
   /** Shown in the activity log, so a user can see WHY this trade happened. */
   because: string;
   /**
+   * The exact on-chain amount, when the planner knows it.
+   *
+   * A whole-position close must move the balance the chain actually holds. `amountIn` is a float
+   * and cannot represent a wei count — converting it back overshot a real WETH balance by 8 wei
+   * and the transfer reverted, which on a stop-loss is the worst possible time for a rounding
+   * error. Set for a full close; absent for a sized trade, where a float is the right precision.
+   */
+  amountInRaw?: bigint;
+  /**
    * Not every leg is a swap.
    *
    * Supplying to a lending pool moves the same capital under the same daily cap, but there is no
@@ -147,6 +156,8 @@ export async function planExitRules(ctx: PlanContext): Promise<TradeIntent | nul
     outSymbol: 'USDC',
     // Close the whole position. A partial close on a stop is a decision the user did not make.
     amountIn: held.units,
+    // And close it to the wei, not to whatever a float rounds to.
+    amountInRaw: held.raw,
     usd: held.usd,
     because: hitTP
       ? `${ctx.symbol} is up ${movePct.toFixed(1)}% from ${entry.toFixed(2)}, which is your take profit.`
