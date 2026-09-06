@@ -292,6 +292,24 @@ export function warmMarketCache(): void {
     }
   }
 
+  /*
+   * The backtest's history — a different endpoint, and it was not warmed at all.
+   *
+   * `market_chart` is what tier 5's setup screen and every agent backtest read, and a cold one
+   * measured **61 seconds** against the free tier's retry ladder. A screen that promises "run
+   * against real history at your current limits" and then sits for a minute is a screen people
+   * assume is broken.
+   *
+   * One request per symbol, at the LONGEST lookback, because `backtest/engine.ts` slices a
+   * shorter window out of a longer one it already holds: three URLs here make 30d, 90d, 6m and 1y
+   * instant for all three symbols. Warming the short windows instead would be twelve requests and
+   * buy less.
+   */
+  for (const symbol of ['BTC', 'ETH', 'WETH']) {
+    const id = COINGECKO_IDS[symbol];
+    if (id) urls.push(`${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=365`);
+  }
+
   // Keep trying until each one lands. A single pass is not enough on a rate-limited tier: the
   // first sweep can exhaust its retries while the queue is backed up, and then the endpoint stays
   // cold until a user happens to ask for it — which is precisely the request that should be fast.

@@ -3,8 +3,16 @@
  * Run: LIVE=1 npx vitest run src/venues/oneinch.live.test.ts
  */
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SLIPPAGE_PCT, buildSwap, prettyVenue, quote, routeLabel, venuesFrom } from './oneinch.js';
-import { ADDRESSES } from '../evm/chains.js';
+import {
+  CAN_SETTLE,
+  DEFAULT_SLIPPAGE_PCT,
+  buildSwap,
+  prettyVenue,
+  quote,
+  routeLabel,
+  venuesFrom,
+} from './oneinch.js';
+import { ADDRESSES, CHAIN_KEY } from '../evm/chains.js';
 
 describe('1inch swap routing', () => {
   it('quotes ETH -> USDC across real Base venues', async () => {
@@ -34,7 +42,15 @@ describe('1inch swap routing', () => {
     expect(largeRate).toBeLessThanOrEqual(smallRate * 1.001);
   }, 90_000);
 
-  it('builds real swap calldata aimed at the 1inch router', async () => {
+  /*
+   * Skipped where a fill is IMPOSSIBLE, not where it is inconvenient.
+   *
+   * 1inch has no deployment on Base Sepolia, so `buildSwap` refuses before it asks — and it is
+   * right to. Running this there produced a red suite for the two-environment split working
+   * exactly as documented, which trains people to ignore the suite. Quotes are asked of Base
+   * mainnet and are tested above on every chain; only SETTLEMENT is environment-bound.
+   */
+  it.skipIf(!CAN_SETTLE)(`builds real swap calldata aimed at the 1inch router (needs a chain 1inch settles on; this is ${CHAIN_KEY})`, async () => {
     const tx = await buildSwap({
       inSymbol: 'USDC',
       outSymbol: 'WETH',

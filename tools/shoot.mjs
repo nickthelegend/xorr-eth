@@ -76,7 +76,11 @@ const ROUTES = [
   ['43-send', '/send'],
   ['44-recovery', '/recovery'],
   ['45-legal', '/legal/terms'],
-  ['46-dev-components', '/_dev/components'],
+  // `/_dev/components` was never a route — the design harness lives at `/_dev/ui`, and
+  // `/_dev/ui-edge` was not swept at all, so the one screen whose whole job is to render every
+  // edge case was the one screen nothing checked.
+  ['46-dev-ui', '/_dev/ui'],
+  ['46b-dev-ui-edge', '/_dev/ui-edge'],
   ['47-dev-fidelity', '/_dev/fidelity'],
   ['48-dev-boom', '/_dev/boom'],
 ];
@@ -119,7 +123,15 @@ const EXPECT = {
   '22-perp': { must: [/BTC/] },
   '23-position': { must: [/Entry|entry|position/i] },
   '24-auto-close': { must: [/Take profit|Stop|stop/i] },
-  '25-bot': { must: [/Watching|watching/] },
+  /*
+   * The agent's status line, not a fixed string.
+   *
+   * This asserted /Watching/ — which passed because the screen hardcoded "Watching 14 markets"
+   * whenever there was no proposal: a number nothing had counted, in profit-green, under an
+   * agent's name. The assertion was pinning the bug in place. What has to be true is that the
+   * line says something about the agent's actual state.
+   */
+  '25-bot': { must: [/No proposal right now|Watching|Proposed|Waiting/] },
   '26-bot-roster': { must: [/Momentum Scout/] },
   '27-bot-leaderboard': { must: [/Momentum Scout|Leaderboard|leaderboard/] },
   // Whichever agent the id names — and never a different one silently substituted.
@@ -148,7 +160,8 @@ const EXPECT = {
   '43-send': { must: [/allowlist/i] },
   '44-recovery': { must: [/Recovery|recovery|backed up/] },
   '45-legal': { must: [/Terms|terms/] },
-  '46-dev-components': { must: [/Components/] },
+  '46-dev-ui': { must: [/Design system/] },
+  '46b-dev-ui-edge': { must: [/Edge cases/] },
   '47-dev-fidelity': { must: [/Fidelity|fidelity/i] },
   '48-dev-boom': { must: [/Break this screen/, /Throw during render/] },
 };
@@ -276,8 +289,28 @@ const resolveIds = async () => {
   }
 };
 
+/**
+ * Wait for the executor's boot warm before judging anything.
+ *
+ * `warmMarketCache` pulls every symbol's chart through a 1.1s-spaced queue, so for about a minute
+ * after a restart some charts answer 503 while the entry is still being fetched. That is a real
+ * state, handled honestly by the app — and it is not the state a user is in, so measuring it tells
+ * you nothing about whether the chart works. Waiting makes the sweep repeatable instead of a race.
+ */
+const waitForWarm = async () => {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    const res = await fetch(`${API}/market/ohlc?symbol=BTC&days=1`).catch(() => undefined);
+    if (res?.ok) return true;
+    await new Promise((r) => setTimeout(r, 3_000));
+  }
+  console.log('charts still warming after 120s — shooting anyway, some may show the fetching state');
+  return false;
+};
+
 const main = async () => {
   await fs.mkdir(OUT, { recursive: true });
+  await waitForWarm();
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
@@ -291,7 +324,21 @@ const main = async () => {
 
   const errors = [];
   const netFail = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 160)); });
+  /*
+   * The two halves have to agree about the warming handshake.
+   *
+   * The `response` hook below already excuses a 503 — the client retries it and the screen says
+   * "Fetching" while it does. But Chrome ALSO writes "Failed to load resource: … 503" to the
+   * console for the same response, and that half was counted, so `/asset/BTC` and
+   * `/auto-close/:id` failed the sweep for the one thing the sweep had decided was fine. One
+   * rule, stated once, applied to both.
+   */
+  const WARMING = /Failed to load resource.*\b503\b/i;
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    const text = m.text().slice(0, 160);
+    if (!WARMING.test(text)) errors.push(text);
+  });
   page.on('pageerror', (e) => errors.push('UNCAUGHT ' + String(e.message).slice(0, 160)));
   page.on('requestfailed', (r) => {
     /*

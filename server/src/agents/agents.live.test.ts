@@ -9,8 +9,19 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8788';
+/*
+ * Resolve the minter relative to THIS file, never to the working directory.
+ *
+ * It was `cwd: process.cwd()` with a relative `src/e2e-token.ts`, so the suite ran from `server/`
+ * and failed from the repo root — where the root `vitest.config.mts` also includes these files.
+ * `npm run test:live` at the root therefore reported two suites as broken for a reason that had
+ * nothing to do with the server.
+ */
+const TOKEN_SCRIPT = fileURLToPath(new URL('../e2e-token.ts', import.meta.url));
+
 const TEST_EMAIL = process.env.E2E_PRIVY_EMAIL ?? 'test-8958@privy.io';
 
 let token: string;
@@ -27,10 +38,7 @@ const req = (path: string, init?: RequestInit) =>
 
 beforeAll(() => {
   // A real Privy access token, verified by the same verifyAuthToken production uses.
-  token = execFileSync('npx', ['tsx', 'src/e2e-token.ts', TEST_EMAIL], {
-    encoding: 'utf8',
-    cwd: process.cwd(),
-  }).trim();
+  token = execFileSync('npx', ['tsx', TOKEN_SCRIPT, TEST_EMAIL], { encoding: 'utf8' }).trim();
   expect(token.length).toBeGreaterThan(100);
 });
 

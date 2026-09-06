@@ -43,9 +43,20 @@ describe('a backtest computed from REAL history, not hardcoded rows', () => {
   }, 90_000);
 
   it('different lookbacks give genuinely different results', async () => {
-    const a = await backtestDca({ symbol: 'BTC', lookback: '30d', perRunUsd: 50, dailyCapUsd: 1600, everyNDays: 7 });
+    /*
+     * The LONGER window first, deliberately.
+     *
+     * A year of history contains the last thirty days of it, so asking for `1y` and then `30d`
+     * costs one upstream request instead of two — and the two results are then provably the same
+     * data measured over different spans rather than two fetches that could disagree. Asked the
+     * other way round this made two cold calls through a rate-limited queue, each waiting out its
+     * own retry ladder, and timed out.
+     */
     const b = await backtestDca({ symbol: 'BTC', lookback: '1y', perRunUsd: 50, dailyCapUsd: 1600, everyNDays: 7 });
+    const a = await backtestDca({ symbol: 'BTC', lookback: '30d', perRunUsd: 50, dailyCapUsd: 1600, everyNDays: 7 });
     expect(b.trades).toBeGreaterThan(a.trades);
     expect(a.equity).not.toEqual(b.equity);
+    // The shorter span is a slice of the longer one, so its last close is the same day's close.
+    expect(a.equity.length).toBeLessThan(b.equity.length);
   }, 120_000);
 });

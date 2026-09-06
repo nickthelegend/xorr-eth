@@ -4,9 +4,9 @@
  * Screen 20 shows "2 addresses" with nothing behind it. Adding one starts a cooling-off
  * period, so an attacker who gets the phone still cannot move funds today.
  *
- * "Add an address" had no `onPress`. It does now — the entry is validated as a Solana
- * address, persisted, and starts its cooling-off clock, which is what makes the "Pending"
- * state on the row below mean something.
+ * "Add an address" had no `onPress`. It does now — the entry is validated, persisted, and
+ * starts its cooling-off clock, which is what makes the "Pending" state on the row below
+ * mean something.
  */
 import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
@@ -27,10 +27,17 @@ import {
   space,
   typeScale,
 } from '@/ui';
-import { COOLING_OFF_HOURS, useAllowlist } from '@/wallet/allowlist';
+import { COOLING_OFF_HOURS, isValidAddress, useAllowlist } from '@/wallet/allowlist';
 
-/** base58, 32–44 characters — the shape every Solana address takes. */
-const ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+/*
+ * The validator lives in the store, and there is exactly one of it.
+ *
+ * This screen had its own copy — base58, 32–44 characters, the shape a SOLANA address takes,
+ * left over from before the pivot. Base58 has no `0` and no `x`, so every real Base address
+ * failed it: the button never enabled, and the screen told the user their own wallet "does not
+ * look like a Solana address". The store's `add()` has validated `0x…` correctly the whole
+ * time; this regex sat in front of it and never let a valid address through.
+ */
 const FIELD_H = 48;
 
 export default function Allowlist() {
@@ -42,15 +49,15 @@ export default function Allowlist() {
 
   const trimmed = address.trim();
   const duplicate = addresses.some((a) => a.address === trimmed);
-  const valid = ADDRESS.test(trimmed) && label.trim().length > 0 && !duplicate;
+  const valid = isValidAddress(trimmed) && label.trim().length > 0 && !duplicate;
 
   const problem = !trimmed
     ? undefined
     : duplicate
       ? 'That address is already on the list.'
-      : ADDRESS.test(trimmed)
+      : isValidAddress(trimmed)
         ? undefined
-        : 'That does not look like a Solana address.';
+        : 'That is not a Base address. It should start 0x and be 42 characters.';
 
   return (
     <Screen>
@@ -103,8 +110,8 @@ export default function Allowlist() {
             <Field
               value={address}
               onChangeText={setAddress}
-              placeholder="Solana address"
-              label="Solana address"
+              placeholder="0x…"
+              label="Base address"
               mono
             />
             {problem ? (

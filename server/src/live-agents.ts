@@ -44,7 +44,16 @@ const MAX_UINT256 = (1n << 256n) - 1n;
 const CAP_USD = Number(process.env.CAP_USD ?? 1000);
 
 const chain = { ...base, rpcUrls: { default: { http: [RPC] }, public: { http: [RPC] } } };
-const pub = createPublicClient({ chain, transport: http(RPC) });
+/*
+ * `cacheTime: 0`, because this client is a measuring instrument.
+ *
+ * viem caches the latest block number for four seconds, so a balance read taken right after a
+ * transaction confirmed could answer from the block BEFORE it — reporting that a fill which had
+ * demonstrably happened had moved nothing. It made tier 3 and tier 4 fail intermittently and sent
+ * me looking for a custody bug that was not there. A test that reads stale state is worse than no
+ * test: it accuses working code.
+ */
+const pub = createPublicClient({ chain, transport: http(RPC), cacheTime: 0 });
 
 async function anvil(method: string, params: unknown[]) {
   const r = (await fetch(RPC, {

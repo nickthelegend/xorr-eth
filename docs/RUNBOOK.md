@@ -95,3 +95,38 @@ have diverged. **The chain is right.** Reconcile our records to it, never the ot
 - Do not edit `audit_log`. The trigger will refuse, and working around it destroys the artifact
   the trail exists to be.
 - Do not raise a user's cap to unblock them. The block is the feature.
+
+## 8. The Base mainnet fork ages, and has to be re-forked
+
+`base-fork` is anvil pinned at the mainnet block it started from. It does not follow mainnet, but
+**1inch quotes against live mainnet** — so the longer the fork runs, the further the real pools
+drift from its copy of them, until the router's `minReturn` no longer holds and every fill reverts.
+
+It reports itself correctly rather than silently filling badly:
+
+```
+The price moved more than your slippage limit while this was in flight. Nothing was placed.
+```
+
+Measured: at **~8,700 blocks behind** (about five hours of real trading) every swap failed this
+way. Under an hour it is fine.
+
+Re-fork when you see that error on trades that should route:
+
+```bash
+# 1. Restart anvil so it forks at the current mainnet block.
+#    On Railway: set any variable on the `base-fork` service — a redeploy re-forks.
+
+# 2. Redeploy OUR contracts onto it and fund a wallet. A fresh anvil has none of them.
+FORK_RPC=<fork url> npm --prefix server run setup:fork -- <walletToFund>
+
+# 3. Point the executor at the new addresses (they change every time).
+#    DELEGATION_ADDRESS, AQUA_BOOK_ADDRESS, SWAPVM_BOOK_ADDRESS
+
+# 4. Prove it end to end.
+npx tsx server/src/live-agents.ts     # 20 checks: grant, fill, close, scopes, cap, revoke
+```
+
+The database survives — agent keys, strategies and the audit trail are keyed by user, not by
+contract address. Only the on-chain state is new, so a wallet has to be re-granted and re-funded,
+which `setup:fork` and `live-agents.ts` do between them.

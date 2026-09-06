@@ -22,16 +22,12 @@ import { agentGradients } from '@/design/gradients';
 import {
   AgentOrb,
   Button,
-  DeltaChip,
   Eyebrow,
   Fill,
-  Price,
   Screen,
   SheetCard,
   Text,
   colors,
-  money,
-  percent,
   radius,
   size,
   space,
@@ -67,18 +63,22 @@ export default function Splash() {
 
       <Fill style={{ justifyContent: 'center' }}>
         <SheetCard borderRadius={radius.sheetLg} padding={space.s22}>
-          <Eyebrow small>Total value</Eyebrow>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: space.s10,
-              marginTop: space.s8,
-            }}
-          >
-            <Price variant="heroBalance">{money(63.28)}</Price>
-            <DeltaChip label={percent(-1.4)} tone="down" />
-          </View>
+          {/*
+            No balance here, invented or otherwise.
+
+            This card carried an eyebrow reading "Total value", a hero-sized $63.28 and a red
+            −1.4% chip — on the splash, before anyone has signed in or funded anything. It is the
+            first screen a person sees and it opened with a portfolio that does not exist, in the
+            exact typography the real one uses on the home screen. "Every price on screen is real
+            or it is labelled" does not have a marketing exemption, and the app's own route sweep
+            asserts this string is gone.
+
+            What the card is actually for is showing what the product does, so it says that.
+          */}
+          <Eyebrow small>What it does</Eyebrow>
+          <Text variant="titleLg" style={{ marginTop: space.s8 }}>
+            {brand.TAGLINE}
+          </Text>
 
           <View
             style={{

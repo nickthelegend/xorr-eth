@@ -7,10 +7,10 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "migrate": "tsx src/db/migrate.ts",
-    "setup:devnet": "tsx src/solana/setup.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude \"**/*.live.test.ts\"",
-    "test:live": "vitest run \"src/**/*.live.test.ts\""
+    "test:live": "LIVE=1 vitest run live.test",
+    "setup:fork": "tsx src/fork-bootstrap.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.6",

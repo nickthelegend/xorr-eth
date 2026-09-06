@@ -36,6 +36,56 @@ describe('limits are enforced outside the client', () => {
     }
   });
 
+  it('a used-up cap does NOT silence an exit', async () => {
+    /*
+     * The most dangerous bug this file can miss.
+     *
+     * The account cap is checked before the planner has decided anything, so an `exit-rules`
+     * strategy arrived with a placeholder size and was refused with `daily_cap` whenever the
+     * wallet had spent its day — a take-profit, a stop-loss and a trailing stop all switched off
+     * by a SPENDING limit. A cap exists to bound what goes at risk; a cap that blocks an exit
+     * traps you in the position it was supposed to protect.
+     */
+    const spentOut = await evaluate(
+      { ...base, usd: 900, dailyCapUsd: 1000, reducesRiskOnly: true },
+      client(1000),
+    );
+    expect(spentOut.allowed).toBe(true);
+
+    // Even past the cap entirely, which is where a stop matters most.
+    const wayOver = await evaluate(
+      { ...base, usd: 5_000, dailyCapUsd: 1000, reducesRiskOnly: true },
+      client(4315),
+    );
+    expect(wayOver.allowed).toBe(true);
+  });
+
+  it('but permission still governs an exit', async () => {
+    // Revoked and expired are the user saying no, not saying "not more than this much".
+    const revoked = await evaluate(
+      { ...base, reducesRiskOnly: true, delegationRevoked: true },
+      client(0),
+    );
+    expect(revoked.allowed).toBe(false);
+    if (!revoked.allowed) expect(revoked.reason).toBe('delegation_revoked');
+
+    const expired = await evaluate(
+      { ...base, reducesRiskOnly: true, delegationExpiresAt: new Date(Date.now() - 1000) },
+      client(0),
+    );
+    expect(expired.allowed).toBe(false);
+    if (!expired.allowed) expect(expired.reason).toBe('delegation_expired');
+
+    const killed = await evaluate({ ...base, reducesRiskOnly: true, killed: true }, client(0));
+    expect(killed.allowed).toBe(false);
+  });
+
+  it('a BUY is still capped — the exemption is for exits only', async () => {
+    const v = await evaluate({ ...base, usd: 900, dailyCapUsd: 1000 }, client(1000));
+    expect(v.allowed).toBe(false);
+    if (!v.allowed) expect(v.reason).toBe('daily_cap');
+  });
+
   it('never claims a negative amount is left', async () => {
     /*
      * Lowering the cap mid-day, or re-granting a smaller one, puts today's spend above it. That

@@ -65,6 +65,34 @@ async function history(symbol: string, days: number): Promise<[number, number][]
   if (hit && Date.now() - hit.at < TTL_MS) return hit.prices;
 
   /*
+   * One request per symbol, ever — the longest window, sliced.
+   *
+   * A longer series contains every shorter one, so there is no reason to ask the upstream twice.
+   * It used to fetch per lookback, and against a tier that rate-limits each cold call waited out
+   * its own retry ladder: a first `90d` backtest measured **118 seconds**, then `1y` another 63,
+   * on a screen that promises "run against real history at your current limits". Fetching the
+   * full span once makes the first backtest of a symbol the only slow one and every other
+   * lookback instant — and it makes them provably the same data over different spans rather than
+   * separate fetches that could disagree.
+   */
+  const cached = [...cache.entries()].find(
+    ([k, e]) =>
+      k.startsWith(`${id}:`) &&
+      Date.now() - e.at < TTL_MS &&
+      Number(k.slice(id.length + 1)) >= days,
+  );
+  if (cached) {
+    const slice = cached[1].prices.slice(-(days + 1));
+    if (slice.length >= 5) {
+      cache.set(key, { at: cached[1].at, prices: slice });
+      return slice;
+    }
+  }
+
+  /** The longest span the app offers. Asking for it is what makes every other lookback free. */
+  const span = Math.max(...Object.values(DAYS));
+
+  /*
    * No `interval=daily` — the granularity is ours to impose.
    *
    * `interval=daily` is a paid-plan parameter on CoinGecko's public API: a keyless caller sending
@@ -78,12 +106,14 @@ async function history(symbol: string, days: number): Promise<[number, number][]
    * to ask for.
    */
   const json = await getJson<{ prices?: [number, number][] }>(
-    `${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${days}`,
+    `${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${span}`,
     // History changes once a day; caching it hard is both correct and kind to the upstream.
     10 * 60_000,
   );
-  const prices = daily(json.prices ?? []);
-  if (prices.length < 5) throw new Error(`not enough history for ${symbol}`);
+  const full = daily(json.prices ?? []);
+  if (full.length < 5) throw new Error(`not enough history for ${symbol}`);
+  cache.set(`${id}:${span}`, { at: Date.now(), prices: full });
+  const prices = full.slice(-(days + 1));
   cache.set(key, { at: Date.now(), prices });
   return prices;
 }

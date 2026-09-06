@@ -12,7 +12,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run --exclude \"**/*.live.test.ts\"",
     "test:watch": "vitest",
-    "test:live": "LIVE=1 vitest run \"src/**/*.live.test.ts\""
+    "test:live": "LIVE=1 vitest run live.test"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",

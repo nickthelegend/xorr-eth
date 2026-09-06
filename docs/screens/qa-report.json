@@ -6,7 +6,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "XORR\nA bot that trades while you get on with your life\nWHAT IT DOES\nTrades inside a permission you sign, and can take back.\nRecurring buys\nStops that hold\nOne-tap stop\nGet started\nBy continuing you agree to the Terms and Privacy Policy."
+  "text": "XORR\nA bot that trades while you get on with your life\nWHAT IT DOES\nA bot that trades while you get on with your life\nRecurring buys\nStops that hold\nOne-tap stop\nGet started\nBy continuing you agree to the Terms and Privacy Policy."
  },
  {
   "stem": "02-goals",
@@ -33,7 +33,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "3/3\nFund the wallet\nThe bot can only trade what has settled. You can top up or withdraw whenever you like.\n$500\n$250\n$500\n$1,000\n$2,500\nHOW YOU ARE PAYING\nTransfer from an exchange\nWithdraw to your address\nFREE\nOn-chain deposit\nUSDC on Base\nON-CHAIN\nCard on-ramp\nThird-party provider\nINSTANT\nFee\nFree\nAvailable\nMon, Sep 7\nSEND USDC TO\n0x95A0b368588713011a15f4b1041423f31B08e615\nOn Base. Nothing else "
+  "text": "3/3\nFund the wallet\nThe bot can only trade what has settled. You can top up or withdraw whenever you like.\n$500\n$250\n$500\n$1,000\n$2,500\nHOW YOU ARE PAYING\nTransfer from an exchange\nWithdraw to your address\nFREE\nOn-chain deposit\nUSDC on Base\nON-CHAIN\nCard on-ramp\nThird-party provider\nINSTANT\nFee\nFree\nAvailable\nTue, Sep 8\nSEND USDC TO\n0x95A0b368588713011a15f4b1041423f31B08e615\nOn Base. Nothing else "
  },
  {
   "stem": "05-delegate",
@@ -60,7 +60,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "TOTAL VALUE\n$99,974.83\nSend\nSwap\nMore\nCash\nAvailable to trade\n$99,974.83\nIN THE LAST DAY\nGot it\n10 trades · 3 stopped by your limits · 2 moves to yield · 35 risk checks\nProposed nothing\nNo live market for WETH.\nSold all WETH\n0.066337 WETH to USDC. You asked to be flattened.\nqa fire 1788677974481\nBTC is $79,763, above your $1,000 level.\nand 47 more ›\nAgents\n1 hired\nMomentum Scout\nActive\nEarnings De"
+  "text": "Wallet\nTOTAL VALUE\n$99,953.95\ndown 0.2% unrealised\nSend\nSwap\nMore\nCash\nAvailable to trade\n$96,524.48\nIN THE LAST DAY\nGot it\n1 stopped by your limits · 49 risk checks\nProposed nothing\nNo live market for WETH.\nFired Yield Keeper\n1 of its strategies were paused. Nothing was sold.\nCreated lifecycle probe\nFirst run Mon Sep 14 2026.\nand 47 more ›\nAgents ›\n3 hired\nMomentum Scout\nActive\nEarnings Desk\nActi"
  },
  {
   "stem": "08-markets",
@@ -69,7 +69,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\nSIMULATED\n$3,412.10\n+0.44%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.6"
+  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\n$4,415\n−0.26%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nP"
  },
  {
   "stem": "09-markets-crypto",
@@ -78,7 +78,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$79,827\n+0.09%\nETH\nEthereum · Perp · 100x\n$2,495\n+1.50%\nSOL\nSolana · Spot · Perp\n$105.02\n+2.60%\nXRP\nXRP · Perp · 50x\n$1.42\n+0.80%\nDOGE\nDogecoin · Perp · 50x\n$0.0908\n+5.94%\nHYPE\nHyperliquid · Spot · Perp\n$86.21\n+1.75%\nAAVE\nAave · Spot · Perp\n$134.81\n+3.62%\nLINK\nChainlink · Perp · 50x\n$12.22\n+3.90%\nTON\nToncoin "
+  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$79,982\n+0.25%\nETH\nEthereum · Perp · 100x\n$2,510\n+1.34%\nSOL\nSolana · Spot · Perp\n$106.00\n+2.48%\nXRP\nXRP · Perp · 50x\n$1.42\n+0.46%\nDOGE\nDogecoin · Perp · 50x\n$0.0903\n−0.76%\nHYPE\nHyperliquid · Spot · Perp\n$88.06\n+3.21%\nAAVE\nAave · Spot · Perp\n$134.52\n+0.60%\nLINK\nChainlink · Perp · 50x\n$13.09\n+8.67%\nTON\nToncoin "
  },
  {
   "stem": "10-markets-stocks",
@@ -87,7 +87,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$232.01\nAAPLc\nApple · Tokenized share\n$322.96\nTSLAc\nTesla · Tokenized share\n$357.78\nMETAc\nMeta · Tokenized share\n$617.88\nMSFTc\nMicrosoft · Tokenized share\n$520.16\nAMZNc\nAmazon · Tokenized share\n$283.38\nGOOGLc\nAlphabet · Tokenized share\n$340.65\nMSTRc\nMicroStrategy · Tokenized share\n$143.50"
+  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$232.15\nAAPLc\nApple · Tokenized share\n$322.59\nTSLAc\nTesla · Tokenized share\n$357.12\nMETAc\nMeta · Tokenized share\n$616.80\nMSFTc\nMicrosoft · Tokenized share\n$524.86\nAMZNc\nAmazon · Tokenized share\n$283.09\nGOOGLc\nAlphabet · Tokenized share\n$340.45\nMSTRc\nMicroStrategy · Tokenized share\n$143.08"
  },
  {
   "stem": "11-markets-commodities",
@@ -96,7 +96,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\nSIMULATED\n$3,412.10\n+0.44%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot fee"
+  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\n$4,415\n−0.26%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot feed\nSIMULATED\n$"
  },
  {
   "stem": "12-markets-indices",
@@ -123,7 +123,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$357.78\nSOL\n$105.02\n+2.60%\nHYPE\n$86.21\n+1.75%"
+  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$357.12\nSOL\n$106.05\n+2.52%\nHYPE\n$88.14\n+3.28%"
  },
  {
   "stem": "15-search",
@@ -132,7 +132,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$79,829\n+0.08%\nETH\nEthereum · Perp · 100x\n$2,496\n+1.51%\nSOL\nSolana · Spot · Perp\n$105.02\n+2.62%\nXRP\nXRP · Perp · 50x\n$1.42\n+0.86%\nDOGE\nDogecoin · Perp · 50x\n$0.0908\n+5.96%\nHYPE\nHyperliquid · Spot · Perp\n$86.26\n+1.83%\nAAVE\nAave · Spot · Perp\n$134.82\n+3.64%\nLINK\nChainlink · Perp · 50x\n$12.22\n+3.84%\nTON\nToncoin · Spot · Perp\n$1.42\n−0.26%\nNVDAc\nNvidia · Tokenized share"
+  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$79,993\n+0.26%\nETH\nEthereum · Perp · 100x\n$2,511\n+1.36%\nSOL\nSolana · Spot · Perp\n$106.05\n+2.52%\nXRP\nXRP · Perp · 50x\n$1.42\n+0.49%\nDOGE\nDogecoin · Perp · 50x\n$0.0904\n−0.69%\nHYPE\nHyperliquid · Spot · Perp\n$88.14\n+3.28%\nAAVE\nAave · Spot · Perp\n$134.56\n+0.55%\nLINK\nChainlink · Perp · 50x\n$13.12\n+8.90%\nTON\nToncoin · Spot · Perp\n$1.43\n−0.08%\nNVDAc\nNvidia · Tokenized share"
  },
  {
   "stem": "16-asset",
@@ -141,7 +141,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Bitcoin\n$79,837\nup 0.2% today\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Bitcoin\n$79,993\nup 0.1% today\n$79,896\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "17-asset-stock",
@@ -150,7 +150,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Nvidia\n$232.02\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Nvidia\n$232.15\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "18-chart",
@@ -159,7 +159,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USD\n$79,837\n+0.14%\n+$115.00 today\n$79,837\n80.3K\n80.1K\n79.9K\n79.7K\n79.5K\n15m\n1H\n4H\n1D\n1W\n3 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
+  "text": "BTC/USD\n$79,896\n+0.19%\n+$155.00 today\n80.2K\n80.0K\n79.8K\n79.5K\n79.3K\n$79,896\n15m\n1H\n4H\n1D\n1W\n7 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
  },
  {
   "stem": "19-order",
@@ -168,7 +168,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "WETH\nBuy\nSell\n$250\n0.1002 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of WETH\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
+  "text": "WETH\nBuy\nSell\n$250\n0.0996 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of WETH\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
  },
  {
   "stem": "20-order-stock",
@@ -177,7 +177,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "NVDAc\nBuy\nSell\n$250\n1.0775 NVDAc\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of NVDAc\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
+  "text": "NVDAc\nBuy\nSell\n$250\n1.0769 NVDAc\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of NVDAc\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
  },
  {
   "stem": "21-swap",
@@ -186,7 +186,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$249.61\nWETH\nYOU RECEIVE\n$248.89\nat least $248.15 after slippage\nUSDC\nRoute\nBest of 2 venues\nFee (0.25%)\n$0.62\nPrice impact\nNaN%\nMax slippage\n0.30%\nReview swap"
+  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$251.05\nWETH\nYOU RECEIVE\n$250.83\nat least $250.07 after slippage\nUSDC\nRoute\nBest of 4 venues\nFee (0.25%)\n$0.63\nPrice impact\nNaN%\nMax slippage\n0.30%\nReview swap"
  },
  {
   "stem": "22-perp",
@@ -195,7 +195,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USDT\n$79,833\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$65,144\nFunding\n—\nA 18% move against you wipes the margin.\nOpen interest\n—\n24h volume\n—\nMark vs index\n+$0.00\nNext funding\n00:10:35\nShort\nLong"
+  "text": "BTC/USDT\n$80,012\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$65,290\nFunding\n—\nA 18% move against you wipes the margin.\nOPEN INTEREST\n—\n24H VOLUME\n—\nMARK VS INDEX\n+$0.00\nNEXT FUNDING\n02:40:14\nShort\nLong"
  },
  {
   "stem": "23-position",
@@ -204,7 +204,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Position\nYou have no open positions.\nStart a recurring buy ›"
+  "text": "CBBTC long\nUNREALISED\n−$0.49\n−0.2% on $239.51 held\nEntry\n$80,160\nMark\n$79,996\nSize\n0.0030 CBBTC\nFunding paid\nNone — spot\nClose\n50%\n25%\n50%\n75%\n100%\nRealises −$0.25 and frees $120.00.\nEdit TP/SL\nClose 50%"
  },
  {
   "stem": "24-auto-close",
@@ -213,7 +213,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Auto Close\nMark $79,837\nTake Profit\n$80,635\nStop Loss\n$79,039\n1:30 PM\n5:30 PM\n10:00 PM\nTake Profit\n−\n+1.0%\n+\nStop Loss\n−\n−1.0%\n+\nCancel\nSet\nMake $0.00 at TP or lose $0.00 at SL"
+  "text": "Auto Close\n$79,905\nTake Profit\n$80,704\nStop Loss\n$79,106\nTake Profit\n−\n+1.0%\n+\nStop Loss\n−\n−1.0%\n+\nCancel\nSet\nMake $2.40 at TP or lose $2.40 at SL"
  },
  {
   "stem": "25-bot",
@@ -222,7 +222,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Momentum Scout\nWatching 14 markets\nToday\nNo live market for WETH\nHome\nMarkets\nBot\nStrategies\nAssets"
+  "text": "Momentum Scout\nNo proposal right now\nToday\nNo live market for WETH\nHome\nMarkets\nAgents\nTrade\nAssets"
  },
  {
   "stem": "26-bot-roster",
@@ -231,7 +231,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Agents\n3 of 4 hired\nMomentum Scout\nRides breakouts on liquid majors\nNo trades yet\nHired\nEarnings Desk\nTrades tokenized equity earnings\nNo trades yet\nHired\nYield Keeper\nMoves idle cash into the best rate\n77% win rate\nHire\nDrawdown Guard\nCuts risk when the book bleeds\nNo trades yet\nHired\nPast performance of a strategy says nothing about tomorrow."
+  "text": "Agents\n3 of 4 hired\nMomentum Scout\nRides breakouts on liquid majors\nNo trades yet\nHired\nEarnings Desk\nTrades tokenized equity earnings\nNo trades yet\nHired\nYield Keeper\nMoves idle cash into the best rate\n85% win rate\nHire\nDrawdown Guard\nCuts risk when the book bleeds\nNo trades yet\nHired\nPast performance of a strategy says nothing about tomorrow."
  },
  {
   "stem": "27-bot-leaderboard",
@@ -240,7 +240,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Leaderboard\nHow your agents are actually doing against each other. Fire the laggards.\nP&L\nWin rate\nVolume\n01\nYield Keeper\n77% win · 60 trades\n+$3,838.19\n02\nMomentum Scout\n0% win · 0 trades\n+$0.00\n03\nEarnings Desk\n0% win · 0 trades\n+$0.00\n04\nDrawdown Guard\n0% win · 0 trades\n+$0.00\nRanked by P&L · last 30 days"
+  "text": "Leaderboard\nHow your agents are actually doing against each other. Fire the laggards.\nP&L\nWin rate\nVolume\n01\nYield Keeper\n85% win · 123 trades\n+$41,111.35\n02\nMomentum Scout\n0% win · 0 trades\n+$0.00\n03\nEarnings Desk\n0% win · 0 trades\n+$0.00\n04\nDrawdown Guard\n0% win · 0 trades\n+$0.00\nRanked by P&L · last 30 days"
  },
  {
   "stem": "28-bot-intro",
@@ -267,7 +267,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nReturn\n+35.0%\nMax DD\n−12.6%\nSharpe\n3.7\nTrades\n13\nIf you'd started with\n−\n$5,000\n+\n$6,750.00\n+$1,750.00\nRun this strategy live"
+  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nRETURN\n+37.4%\nMAX DD\n−12.6%\nSHARPE\n3.8\nTRADES\n13\nIf you'd started with\n−\n$5,000\n+\n$6,870.00\n+$1,870.00\ncoingecko market_chart, daily closes · Nothing here is a promise.\nRun this strategy live"
  },
  {
   "stem": "31-strategies",
@@ -276,7 +276,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Strategies\n5 running\nWhat the bot is allowed to do on its own, and what it is doing right now.\nRunning\nAdd new\ndisposal demo\nNext run Mon, Sep 7\n$45\nLive\nRun now\nPause\nTrailing stop on WETH\nNext run Sun, Sep 6\n$0\nLive\nRun now\nPause\nWETH range\nNext run Mon, Sep 7\n$160\nLive\nRun now\nPause\nIdle cash to Aave\nNext run Mon, Sep 7\n$100\nLive\nRun now\nPause\nWeekly WETH buy\nNext run Mon, Sep 7\n$25\nLive\nRun no"
+  "text": "Strategies\n24 running\nWhat the bot is allowed to do on its own, and what it is doing right now.\nRunning\nAdd new\nladder 3 — take profit with the cap used up\nNext run Tue, Sep 8\n$0\nLive\nRun now\nPause\nladder 5 — range accumulation — fell through a rung\nNext run Tue, Sep 8\n$80\nLive\nRun now\nPause\nladder 5 — range accumulation — first sight\nNext run Tue, Sep 8\n$80\nLive\nRun now\nPause\nladder 4 — idle cash"
  },
  {
   "stem": "32-strategy-dca",
@@ -285,7 +285,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Recurring buy\nWETH\nCBBTC\nUSDC\n$50\nof WETH, weekly\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nNEXT THREE RUNS\nSun, Sep 13\n$50\nSun, Sep 20\n$50\nSun, Sep 27\n$50\nBuy $50 of WETH, weekly\nRuns on schedule inside your daily cap. Pause or cancel any time."
+  "text": "Recurring buy\nWETH\nCBBTC\nUSDC\n$50\nof WETH, weekly\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nNEXT THREE RUNS\nMon, Sep 14\n$50\nMon, Sep 21\n$50\nMon, Sep 28\n$50\nBuy $50 of WETH, weekly\nRuns on schedule inside your daily cap. Pause or cancel any time."
  },
  {
   "stem": "32b-strategy-yield",
@@ -294,7 +294,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Idle cash to yield\nAAVE V3 · USDC SUPPLY\nFloats with the pool. Not a promise.\n3.78%\n$250\nswept at most, daily\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nALWAYS KEEP SPENDABLE\n$50\n$100\n$250\n$500\nIF IT RAN NOW\nSpendable cash\n$98,984.83\nKept back\n$100.00\nWould move\n$250.00\nAlready earning\n$990.01\nNEXT THREE RUNS\nMon, Sep 7\nup to $250\nTue, Sep 8\nup to $250\nWed, Sep 9\nup to $250\nSweep up "
+  "text": "Idle cash to yield\nAAVE V3 · USDC SUPPLY\nFloats with the pool. Not a promise.\n3.78%\n$250\nswept at most, daily\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nALWAYS KEEP SPENDABLE\n$50\n$100\n$250\n$500\nIF IT RAN NOW\nSpendable cash\n$96,524.48\nKept back\n$100.00\nWould move\n$250.00\nAlready earning\n$3,190.07\nNEXT THREE RUNS\nTue, Sep 8\nup to $250\nWed, Sep 9\nup to $250\nThu, Sep 10\nup to $250\nSweep "
  },
  {
   "stem": "32c-strategy-grid",
@@ -303,7 +303,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,496.12\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
+  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,511.11\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
  },
  {
   "stem": "32d-yield-position",
@@ -312,7 +312,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Earning at Aave\nSUPPLIED\n$990.01\nEarning 3.78% a year. The balance itself grows — there is no claim step and nothing to harvest.\nWITHDRAW\n25%\n50%\nAll\nWithdraws the whole position, including the interest earned between now and the moment it lands.\nWithdraw all of it\nYou sign this, not the bot. It was never given the power to take this back out."
+  "text": "Earning at Aave\nSUPPLIED\n$3,190.07\nEarning 3.78% a year. The balance itself grows — there is no claim step and nothing to harvest.\nWITHDRAW\n25%\n50%\nAll\nWithdraws the whole position, including the interest earned between now and the moment it lands.\nWithdraw all of it\nYou sign this, not the bot. It was never given the power to take this back out."
  },
  {
   "stem": "32e-flatten",
@@ -321,7 +321,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Sell everything\nCloses every position into USDC and leaves it in your own wallet. It does not touch your permission — the bot stays stopped or running exactly as you left it.\nNothing to sell.\nYou hold no positions above $1.00. Your balance is already cash.\nSell everything\nThe cash lands in your wallet, not ours. This does not use your daily cap."
+  "text": "Sell everything\nCloses every position into USDC and leaves it in your own wallet. It does not touch your permission — the bot stays stopped or running exactly as you left it.\nWOULD SELL\nCBBTC\n0.002994 CBBTC\n$239.57\nRoughly\n$239.57\nMarket orders, up to 2% slippage. That is wider than a scheduled buy allows, because an exit that refuses to execute is not an exit.\nSell $239.57 into USDC\nThe cash land"
  },
  {
   "stem": "32f-judge",
@@ -330,7 +330,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n15/15\nclaims verified\nPASS\nThe app is talking to a real chain.\nchain 8453 (base-fork) at block 50928001\nPASS\nXorrDelegation is deployed and has code.\n3926 bytes at 0x6b1f38b55fb9db86d8c904fb3f1e249d923d6f76\nPASS\nThe permission is read fro"
+  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n15/15\nclaims verified\nPASS\nThe app is talking to a real chain.\nchain 8453 (base-fork) at block 50928154\nPASS\nXorrDelegation is deployed and has code.\n3926 bytes at 0x6b1f38b55fb9db86d8c904fb3f1e249d923d6f76\nPASS\nThe permission is read fro"
  },
  {
   "stem": "33-holdings",
@@ -339,7 +339,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Assets\nPORTFOLIO VALUE\n$99,974.83\nALLOCATION\nBlue-chip crypto\n55%\nTokenized equities\n30%\nStable yield\n15%\nHoldings\nNothing held yet. A recurring buy is the simplest way to start.\nREALISED\n+$2.49\nWETH · 0.2763 sold\n+$2.49\nAt average cost. Closed positions stay here even though they are no longer holdings.\nWALLET\n0x95A0b368588713011a15f4b1041423f31B08e615\nConnected · base-sepolia\nHome\nMarkets\nBot\nSt"
+  "text": "Assets\nPORTFOLIO VALUE\n$99,954.10\nALLOCATION\nBlue-chip crypto\n55%\nTokenized equities\n30%\nStable yield\n15%\nHoldings\nCBBTC\n0.0030 · avg $80,159.79\n$239.55\n−0.2%\nREALISED\n−$3.12\nWETH · 1.2534 sold\n−$3.12\nAt average cost. Closed positions stay here even though they are no longer holdings.\nWALLET\n0x95A0b368588713011a15f4b1041423f31B08e615\nConnected · base-fork\nHome\nMarkets\nAgents\nTrade\nAssets"
  },
  {
   "stem": "34-activity",
@@ -348,7 +348,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nProposed nothing\nNo live market for WETH.\nMomentum Scout · 01:19 PM\nProposed nothing\nNo live market for WETH.\nMomentum Scout · 01:11 PM\nSold all WETH\n0.066337 WETH to USDC. You asked to be flattened.\nDrawdown Guard · 12:29 PM\nfork · 0x87266df3…\nqa fire 1788677974481\nBTC is $79,763, above your $1,000 le"
+  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nProposed nothing\nNo live market for WETH.\nMomentum Scout · 02:50 AM\nProposed nothing\nNo live market for WETH.\nMomentum Scout · 02:39 AM\nFired Yield Keeper\n1 of its strategies were paused. Nothing was sold.\nYield Keeper · 02:31 AM\nCreated lifecycle probe\nFirst run Mon Sep 14 2026.\nYield Keeper · 02:31 A"
  },
  {
   "stem": "35-history",
@@ -366,7 +366,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Briefing\nUpdated 18m ago\nOnly what moved your book, and what each agent did about it.\nON-CHAIN\n14h\nWhy crypto experts say buying and holding bitcoin easily beats trying to time the market\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n15h\nDollar-backed stablecoins can push local currencies lower, Bank of Korea study finds\nEverything is inside its limits. There is nothing "
+  "text": "Briefing\nLoaded 2:52 AM\nOnly what moved your book, and what each agent did about it.\nON-CHAIN\n3h\nPrediction markets inch closer to the Supreme Court: State of Crypto\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n5h\nUkrainian police took down a crypto scam that stole up to $1 million a month\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n7h\nBette"
  },
  {
   "stem": "37-inbox",
@@ -375,7 +375,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nProposed nothing\nNo live market for WETH. · 01:19 PM\nProposed nothing\nNo live market for WETH. · 01:11 PM\nSold all WETH\n0.066337 WETH to USDC. You asked to be flattened. · 12:29 PM\nqa fire 1788677974481\nBTC is $79,763, above your $1,000 level. · 12:29 PM\nEnded qa idem qa-1788677974323-l12p0edda1\nIt will "
+  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nProposed nothing\nNo live market for WETH. · 02:50 AM\nProposed nothing\nNo live market for WETH. · 02:39 AM\nFired Yield Keeper\n1 of its strategies were paused. Nothing was sold. · 02:31 AM\nCreated lifecycle probe\nFirst run Mon Sep 14 2026. · 02:31 AM\nHired Yield Keeper\nMoves idle cash into the best rate. I"
  },
  {
   "stem": "38-safety",
@@ -393,7 +393,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Settings\nWALLET\nAddress\n0x95…e615\nNetwork\nbase-sepolia\nRecovery phrase\nNot backed up\nWHAT THE BOT MAY DO\nStatus\nLive\nDaily cap\n$1,600/day\nWithdrawal allowlist\n2 addresses\nHOW THE BOT TALKS\nDry\nSharp\nFlat\nUnderstated. States what it did and why, with the occasional flat aside.\nThis changes how the bot writes, never what it reports. Prices, sizes and limits read the same on every setting.\nALERTS\nNot"
+  "text": "Settings\nWALLET\nAddress\n0x95…e615\nNetwork\nbase-sepolia\nRecovery\nRead this\nWHAT THE BOT MAY DO\nStatus\nLive\nDaily cap\n$1,600/day\nWithdrawal allowlist\n0 addresses\nHOW THE BOT TALKS\nDry\nSharp\nFlat\nUnderstated. States what it did and why, with the occasional flat aside.\nThis changes how the bot writes, never what it reports. Prices, sizes and limits read the same on every setting.\nALERTS\nNotifications\n"
  },
  {
   "stem": "40-alerts",
@@ -402,7 +402,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Alerts\n4 of 4 on\nThe agents watch everything. These are the moments they interrupt you for.\nDaily cap nearly gone\nSo you can raise it or stop\nPermission expiring\nA day before it lapses\nBTC above $200k\nA level it has not seen\nBTC above $75,974\nWent off 2h ago — quiet until the condition clears\nWhat the bot tells you\nA trade went through\nEvery fill the bot places.\nA trade was stopped\nYour cap, expir"
+  "text": "Alerts\n4 of 4 on\nThe agents watch everything. These are the moments they interrupt you for.\nDaily cap nearly gone\nWatching · last went off 1h ago\nPermission expiring\nA day before it lapses\nBTC above $200k\nA level it has not seen\nBTC above $75,974\nWent off 16h ago — quiet until the condition clears\nWhat the bot tells you\nA trade went through\nEvery fill the bot places.\nA trade was stopped\nYour cap, "
  },
  {
   "stem": "41-alerts-new",
@@ -411,7 +411,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "New alert\nAlerts interrupt you. Circuit breakers stop the bot. This creates the first kind.\nPrice\nAgent\nRisk\nSYMBOL\nABOVE\nAlert me when WETH is above $95"
+  "text": "New alert\nAlerts interrupt you. Circuit breakers stop the bot. This creates the first kind.\nPrice\nAgent\nRisk\nSYMBOL\nABOVE\nThe executor watches this, not your phone — so it still fires with the app closed. It notifies once, then turns itself off.\nAlert me when WETH is above $95"
  },
  {
   "stem": "42-allowlist",
@@ -429,7 +429,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Send\nFunds can only leave to an address you have already allowlisted. That is what stops a compromised phone from draining the wallet.\nDESTINATION\nAmount\n$0.00\nNetwork fee\n~$0.001\nA new address takes effect after a cooling-off period. Adding one now does not let you send to it today.\nManage allowlist\nReview withdrawal"
+  "text": "Send\nFunds can only leave to an address you have already allowlisted. That is what stops a compromised phone from draining the wallet.\nDESTINATION\nNothing on your allowlist yet.\nAMOUNT\nSpendable cash\n$96,524.48\nA new address takes effect after a cooling-off period. Adding one now does not let you send to it today.\nAdd a destination to your allowlist first.\nManage allowlist\nSend\nYou sign this yours"
  },
  {
   "stem": "44-recovery",
@@ -438,7 +438,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Recovery\nBack this up now\nxorr does not hold your keys, which means xorr cannot recover them. If you lose this device and have no backup, the funds in this wallet are gone. There is no support line for that.\nRECOVERY PHRASE\nHidden. Reveal it somewhere nobody can see your screen.\nReveal phrase\nAnyone who reads this phrase can take everything in the wallet. Never type it into a website, a message, o"
+  "text": "Recovery\nWhere the key actually is\nThis is a Privy embedded wallet on base-fork. Its key is split so that no single party — not Privy, and certainly not xorr — can reconstruct it alone; using it needs you to be signed in. xorr never sees it, which is why the bot gets a permission instead of a key.\nWhat recovery means here\nThere is no phrase to write down, and that is the design rather than somethi"
  },
  {
   "stem": "45-legal",
@@ -450,13 +450,22 @@
   "text": "Terms\nDraft — September 2026\nWhat xorr is\nxorr is software that runs trading strategies on your behalf. It is not a broker, an exchange, or a custodian.\nYour funds stay in a wallet you control. xorr never holds them and cannot move them to an address you have not allowlisted.\nWhat you are agreeing to\nWhen you grant the bot permission to trade, you are authorising software to place orders with your"
  },
  {
-  "stem": "46-dev-components",
-  "route": "/_dev/components",
+  "stem": "46-dev-ui",
+  "route": "/_dev/ui",
   "ok": true,
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Components\nBUTTONS\nPrimary\nDestructive\nConfirmed\nSecondary\nGhost\nDisabled\nLoading\nSkip\nApprove\nPILLS & SEGMENTS\nSelected\nUnselected\nAnother\nChosen\nNot chosen\nP&L\nWin rate\nVolume\nBuy\nSell\nCONTROLS\n−\n$1,600/day\n+\nTrade Autonomously\nExecutes inside your limits without asking\n2/3\nORBS & MARKS\nYield Keeper\nActive\nDrawdown Guard\nPaused\n+$842\nEarnings Desk\nNew\nROWS\nSOL\nSolana · Spot · Perp\n$102.87\n+2.40%"
+  "text": "Design system\nEvery primitive in src/ui, in every state. Inter is loaded — 400, 500, 600, 700, selected by family name.\nTYPE · DESIGN.MD §2\nheroAmount · 52/60 · Inter-Bold · ls -2\n$66,560.18\nheroBalance · 46/53 · Inter-Bold · ls -1.4\n$66,560.18\npnlHero · 46/53 · Inter-Bold · ls -1.4\n$66,560.18\npriceLg · 42/48 · Inter-Bold · ls -1.2\n$66,560.18\npriceMd · 38/44 · Inter-Bold · ls -1.2\n$66,560.18\nprice"
+ },
+ {
+  "stem": "46b-dev-ui-edge",
+  "route": "/_dev/ui-edge",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Edge cases\nW1 · empty candle series — empty plot at the asked height, no NaN\nW2 · single candle — one full-width candle, no divide by zero\nW3 · flat series, hi == lo — toPct returns 50, not NaN\n0.1K\n0.1K\n0.1K\n0.1K\n0.1K\n$100\nW3b · doji — the 1.4% body floor keeps a flat candle visible\nW4 · zero-width container — renders nothing, emits no negative width\nW5 · empty area and sparkline data\nW6 · single"
  },
  {
   "stem": "47-dev-fidelity",
@@ -465,7 +474,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Fidelity\nHide grid\nDesign canvas 402 × 874. Open a screen and compare it against ui/mobile-ui/reference/.\nTOKENS IN PLAY\nGutter\n20px\nTop padding\n54px\nHairline\n1.000px @ rgba(255,255,255,0.05)\nDurations\n150 / 180 / 200 / 250 / 1750\nbg\nsurface\ncontrol\nup\ndown\nwarn\nSCREENS\n1\nSplash\n/(onboarding)\n2\nWallet home\n/(tabs)\n3\nAgent intro\n/bot/momentum-scout/intro\n4\nTrade settings\n/bot/momentum-scout/setting"
+  "text": "Fidelity\nHide grid\nDesign canvas 402 × 874. Open a screen and compare it against ui/mobile-ui/reference/.\nTOKENS IN PLAY\nGutter\n20px\nRow heights\n48 / 56 / 66\nHairline\nrgba(255,255,255,0.05)\nDurations\n150 / 180 / 250\nbg\nsurface\ncontrol\nup\ndown\nwarn\nSCREENS\n1\nSplash\n/(onboarding)\n2\nWallet home\n/(tabs)\n3\nAgent intro\n/bot/momentum-scout/intro\n4\nTrade settings\n/bot/momentum-scout/settings\n5\nWatchlist\n/"
  },
  {
   "stem": "48-dev-boom",

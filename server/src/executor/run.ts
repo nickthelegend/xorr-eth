@@ -157,6 +157,19 @@ export const EXECUTABLE_KINDS = new Set(Object.keys(PLANNERS));
 export const SELF_SIZING_KINDS = new Set(['exit-rules', 'rebalance']);
 
 /**
+ * Kinds that can only ever REDUCE exposure.
+ *
+ * Not the same set as the self-sizing one, and the difference is the whole point: a rebalance
+ * sizes itself and may buy, so the daily cap must still govern it. `exit-rules` can only sell —
+ * take profit, stop loss, trailing stop — so a spending limit has no business refusing it.
+ *
+ * Deliberately a set rather than a check on the planned intent, because this gate runs BEFORE the
+ * planner. A kind that might do either is judged after planning, by `isCloseIntent`, where the
+ * answer is actually known.
+ */
+export const CLOSE_ONLY_KINDS = new Set(['exit-rules']);
+
+/**
  * How many runs are on chain right now.
  *
  * Shutdown waits on this. A SIGTERM in the middle of a fill used to leave the `strategy_runs` row
@@ -289,6 +302,20 @@ async function runStrategyInner(
     dailyCapUsd: chainPolicy.dailyCapUsd,
     delegationExpiresAt: new Date(chainPolicy.expiresAt),
     delegationRevoked: chainPolicy.revoked,
+    /*
+     * A kind that can only close is exempt from the cap, here and on chain.
+     *
+     * This gate runs BEFORE the planner, so it judges a placeholder size — and for `exit-rules`
+     * that meant a wallet which had spent its daily cap got `daily_cap` back for a take-profit,
+     * a stop-loss and a trailing stop alike. The one strategy that exists to reduce risk was the
+     * one a spending limit could switch off, and the failure was intermittent because it depended
+     * on how much the account had already traded that day.
+     *
+     * The strategy-level allowance below already reasons this way for a close, and
+     * `closePosition` on chain never touches the cap either. This is the third place that had to
+     * agree and did not.
+     */
+    reducesRiskOnly: CLOSE_ONLY_KINDS.has(strategy.kind),
   });
 
   if (!verdict.allowed) {
@@ -582,9 +609,21 @@ async function runStrategyInner(
      * automine, and this executor is meant for one that does not.
      */
     let filledUnits = units;
+
+    /*
+     * EVERY leg waits for its receipt. Only a swap has a delta to measure.
+     *
+     * The wait was inside `if (!intent.direct)`, so an Aave supply reported `filled`, wrote the
+     * position row, the audit entry and the day's spend — all before the transaction was mined. On
+     * a chain that does not automine that is the exact race the paragraph above forbids, and if
+     * the supply reverted the book would carry a position the chain never had. The reason the
+     * guard existed is the balance READ, which a direct leg has no counterpart for; that part
+     * stays conditional and the wait does not.
+     */
+    const settled = await waitForTx(signature).catch(() => false);
+    if (!settled) throw new Error(`transaction ${signature} did not confirm`);
+
     if (!intent.direct) {
-      const settled = await waitForTx(signature).catch(() => false);
-      if (!settled) throw new Error(`transaction ${signature} did not confirm`);
       const measured = await measuredDelta({
         owner,
         symbol: intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol,

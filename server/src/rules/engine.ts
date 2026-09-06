@@ -22,6 +22,17 @@ export type RuleContext = {
   spreadPct?: number;
   maxSpreadPct?: number;
   killed?: boolean;
+  /**
+   * This leg only REDUCES exposure, so the daily cap does not apply to it.
+   *
+   * The cap is a limit on putting capital at risk. A cap that can block an exit is a cap that
+   * traps you — and it did: the account cap was checked before the planner had decided anything,
+   * so a wallet that had spent its day could not be stopped out. A take-profit and a stop-loss
+   * were refused with `daily_cap`, which is the safety rail being switched off by a spending
+   * limit. Permission still governs everything: revoked and expired refuse a close too, because
+   * those are the user saying no rather than the user saying "not more than this much".
+   */
+  reducesRiskOnly?: boolean;
 };
 
 export type RuleVerdict =
@@ -92,7 +103,7 @@ export async function evaluate(ctx: RuleContext, client?: PoolClient): Promise<R
 
   const spent = await spentToday(ctx.walletId, client);
   const remaining = ctx.dailyCapUsd - spent;
-  if (ctx.usd > remaining) {
+  if (!ctx.reducesRiskOnly && ctx.usd > remaining) {
     /*
      * Never say a negative amount is "left".
      *

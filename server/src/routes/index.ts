@@ -8,7 +8,13 @@ import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
 import { evaluate, spentToday } from '../rules/engine.js';
-import { runStrategy, EXECUTABLE_KINDS, SELF_SIZING_KINDS, type StrategyRow } from '../executor/run.js';
+import {
+  runStrategy,
+  CLOSE_ONLY_KINDS,
+  EXECUTABLE_KINDS,
+  SELF_SIZING_KINDS,
+  type StrategyRow,
+} from '../executor/run.js';
 import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { CHAIN_KEY, explorerTx, ADDRESSES, SETTLEMENT_VENUES } from '../evm/chains.js';
@@ -575,12 +581,24 @@ routes.post('/strategies', async (c) => {
     );
   }
 
+  /*
+   * A strategy that can only CLOSE commits nothing, so the cap has nothing to say about it.
+   *
+   * The commitment check refused an `exit-rules` strategy whose own allocation was zero, because
+   * the strategies already live summed past the cap — so a user whose day was committed could not
+   * add a stop-loss, which is exactly the moment they would want one. Same mistake as the runtime
+   * gate: a limit on putting capital at risk was being applied to the thing that takes it off.
+   *
+   * The sum still counts every spending strategy, and this one adds nothing to it.
+   */
+  const closeOnly = CLOSE_ONLY_KINDS.has(body.kind);
   const sums = await query<{ sum: string | null }>(
-    `SELECT SUM(daily_allocation_usd) AS sum FROM strategies WHERE wallet_id=$1 AND state IN ('live','watch')`,
-    [w.id],
+    `SELECT SUM(daily_allocation_usd) AS sum FROM strategies
+      WHERE wallet_id=$1 AND state IN ('live','watch') AND kind <> ALL($2::text[])`,
+    [w.id, [...CLOSE_ONLY_KINDS]],
   );
-  const committed = Number(sums[0]?.sum ?? 0) + body.dailyAllocationUsd;
-  if (committed > policy.dailyCapUsd) {
+  const committed = Number(sums[0]?.sum ?? 0) + (closeOnly ? 0 : body.dailyAllocationUsd);
+  if (!closeOnly && committed > policy.dailyCapUsd) {
     return c.json(
       {
         error: 'over_cap',

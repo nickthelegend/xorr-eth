@@ -49,7 +49,9 @@ history we hold.
 | `XorrDelegation` | [`0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e`](https://sepolia.basescan.org/address/0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e) on Base Sepolia |
 | Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.2`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2) — synced, no indexing errors |
 | Aqua venue subgraph | built + pinned `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ` |
-| Bot delegate key | `0xe992FE56589d1111d0b7Bb7c4Ca3946d4d53E403` |
+| Bot delegate key | `0xC38f38f45463f77bD823FebE16b15714Eb98c8A5` — the key the deployed executor signs with, funded for its own gas |
+| Executor (Base Sepolia) | [`executor-production-1659.up.railway.app`](https://executor-production-1659.up.railway.app/verify) — the public, explorer-checkable deployment |
+| Executor (Base mainnet fork) | [`executor-fork-production.up.railway.app`](https://executor-fork-production.up.railway.app/verify) — where fills actually execute |
 
 A real grant signed by a real Privy embedded wallet is queryable right now:
 [`0x596f4c08…`](https://sepolia.basescan.org/tx/0x596f4c08eca02e0d4dd0928e7499c4cccad31461c35e5b98e2f5bf211595ee6d)
@@ -73,10 +75,10 @@ Nothing in this repo is claimed to work in an environment where it was not run.
 | Sponsor | What it does here | Status |
 |---|---|---|
 | **Privy** | Auth + embedded wallets. The identity and the wallet that signs are one object, so there is no second account system — and the wallet Privy creates is the `owner` in the on-chain policy. | **Done.** Real login → real embedded wallet → real signed grant, revoke and approval |
-| **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. | **Done.** 22 fork tests against `0x1111113CCf…` with real ERC-20 movement |
+| **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. | **Done.** 15 fork tests against `0x1111113CCf…` with real ERC-20 movement |
 | **1inch — Aggregator** | Swap routing and execution. The Route row names the protocols actually routed through. | **Done.** Real fills on a Base mainnet fork |
 | **1inch — SwapVM** | `XorrSwapVMBook` compiles the terms of a trade into SwapVM program bytecode — a deadline, a slippage floor, a fee, a salt — so the *rules* of the fill are enforced inside the VM rather than trusted to whoever submits it. | **Done.** 10 fork tests, including behavioural guards that prove the deadline really expires and the fee really costs |
-| **The Graph** | Two independent subgraphs, joined. One indexes our delegation contract (what you permitted); one indexes 1inch Aqua on Base mainnet (what liquidity exists). The **join picks the venue** — neither index can see the other's half. | Delegation index **deployed + synced**; Aqua index **built, awaiting a Studio slug** |
+| **The Graph** | Two independent subgraphs, joined. One indexes our delegation contract (what you permitted); one indexes 1inch Aqua on Base mainnet (what liquidity exists). The **join picks the venue** — neither index can see the other's half. | Delegation index **deployed + synced** and read before every spend; Aqua index **built and pinned**, awaiting a Studio slug — see [The one thing that is not done](#the-one-thing-that-is-not-done) |
 | **Aave v3** | Tier 4's venue. Idle USDC is supplied through the same delegation, under the same daily cap and the same venue allowlist — and the aToken goes straight to the user, because `supply()` names the recipient. | **Done.** 18 fork assertions, including that the bot *cannot* withdraw |
 | **Base** | Everything settles here. Tokenized equities, cbBTC, Aave, 1inch — all Base-native. | **Done** |
 | **Basenames** | Base's own naming, resolved against the L2 resolver — not ENS, which answers on the wrong chain. The safety screen names both parties to the permission rather than showing two truncated hexes that look identical in the middle. | **Done.** `jesse.base.eth` ⇄ `0x2211d1D0…` both directions |
@@ -143,13 +145,13 @@ the executor has actually run it.
 | A dependency goes down | Four consecutive failures open a per-host circuit breaker for 30s. Every screen already handles a failed read; they now get there in milliseconds instead of twenty-five seconds. |
 | A screen throws | Contained to that screen. The tab bar keeps working and the kill switch stays one tap away. |
 | The executor is killed mid-run | It drains first. Anything it could not finish is reconciled at the next boot and **not retried** — a run that may have signed and lost its receipt must never be repeated. |
-| You want out entirely | "Sell everything" closes every position into USDC through `closePosition`, so a spending cap can never block an exit. |
+| You want out entirely | "Sell everything" closes every position into USDC through `closePosition`, so a spending cap can never block an exit. Withdrawing the USDC is then a transaction **you** sign to an address you allowlisted a day earlier — the executor has no transfer-out path at all, which is what makes it not a custodian. |
 
 ## Every screen
 
-53 screens, captured at the design canvas (402×874) against a signed-in session. The same sweep
+54 screens, captured at the design canvas (402×874) against a signed-in session. The same sweep
 checks the console and the network on every route and currently reports **zero errors and zero
-failed requests** across all 53. Regenerate with `node tools/shoot.mjs`.
+failed requests** across all 54. Regenerate with `node tools/shoot.mjs`.
 
 ### Onboarding
 | | | | |
@@ -190,9 +192,23 @@ failed requests** across all 53. Regenerate with `node tools/shoot.mjs`.
 | **Allowlist** `/allowlist`<br/><img src="docs/screens/42-allowlist.png" width="180"/> | **Send** `/send`<br/><img src="docs/screens/43-send.png" width="180"/> | **Recovery** `/recovery`<br/><img src="docs/screens/44-recovery.png" width="180"/> | **Legal** `/legal/:doc`<br/><img src="docs/screens/45-legal.png" width="180"/> |
 
 ### Design harness
-| | |
-|---|---|
-| **Components** `/_dev/components`<br/><img src="docs/screens/46-dev-components.png" width="180"/> | **Fidelity** `/_dev/fidelity`<br/><img src="docs/screens/47-dev-fidelity.png" width="180"/> |
+| | | |
+|---|---|---|
+| **Design system** `/_dev/ui`<br/><img src="docs/screens/46-dev-ui.png" width="180"/> | **Edge cases** `/_dev/ui-edge`<br/><img src="docs/screens/46b-dev-ui-edge.png" width="180"/> | **Fidelity** `/_dev/fidelity`<br/><img src="docs/screens/47-dev-fidelity.png" width="180"/> |
+
+### The one thing that is not done
+
+The **Aqua venue subgraph** is built, compiled to WASM and pinned to IPFS at
+`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`, and `decide()` already joins it into the routing
+decision. It is not deployed: `graph deploy` answers `Subgraph not found`, because the `xorr-aqua`
+slug has never been created in Subgraph Studio and creating one is a wallet-signed action in the
+Studio dashboard that no API exposes. It cannot be folded into the existing `xorr` subgraph either
+— that one indexes `base-sepolia` and this one indexes `base`.
+
+The consequence is stated rather than hidden: with no endpoint configured, `decide()` routes to the
+1inch aggregator and **says** it could not see the Aqua index, because treating "cannot see" as
+"nothing there" would hide an outage behind a worse fill. One dashboard click and
+`AQUA_SUBGRAPH_URL` finishes it.
 
 ### On a real Android build
 
@@ -232,10 +248,22 @@ XORR_CHAIN=base-fork FORK_RPC=http://127.0.0.1:8545 npx tsx server/src/fork-e2e.
 ## Tests
 
 ```bash
-npm test                              # 143 app
-(cd server && npm test)               # 42 executor
-(cd contracts && forge test)          # 36 contract, incl. 22 Aqua fork tests
-npm run test:live                     # real APIs, real chain
+npm test                                       # 245 — app AND executor units
+(cd server && npm test)                        # 86 executor on its own
+npm run test:live                              # 83 against real APIs and a real chain
+(cd server && npm run test:live)               # 59 more, needing the fork environment
+(cd contracts && forge test)                   # 22 contract unit
+(cd contracts && forge test --match-contract Fork \
+   --fork-url $BASE_RPC)                       # 32 fork: 15 Aqua, 10 SwapVM, 7 equities
+node tools/shoot.mjs                           # 54 screens, console + network + content
+```
+
+Two scripts drive the DEPLOYED executor rather than a local one, because "it works on my machine"
+is the claim this repo exists to avoid making:
+
+```bash
+npx tsx server/src/live-agents.ts    # grant, fill, close, scopes, idempotency, cap, revoke — 20 checks
+npx tsx server/src/live-ladder.ts    # every ladder tier marked available, actually run — 11 checks
 ```
 
 `docs/BASE-BUILD-CAMP.md` is the same work framed for that submission.
