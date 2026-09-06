@@ -42,6 +42,8 @@ const WHALE: Address = '0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB';
 const MAX_UINT256 = (1n << 256n) - 1n;
 /** The cap the owner grants. Raise it when re-running against a fork that already traded today. */
 const CAP_USD = Number(process.env.CAP_USD ?? 1000);
+/** Our Aqua book, when the deployment has one — it has to be on the list or `spend()` refuses it. */
+const BOOK = process.env.AQUA_BOOK_ADDRESS as Address | undefined;
 
 const chain = { ...base, rpcUrls: { default: { http: [RPC] }, public: { http: [RPC] } } };
 /*
@@ -156,11 +158,24 @@ async function main() {
   await anvil('anvil_impersonateAccount', [OWNER]);
   const owner = createWalletClient({ account: OWNER, chain, transport: http(RPC) });
   const expires = BigInt(Math.floor(Date.now() / 1000) + 30 * 86_400);
+
+  /*
+   * Headroom ON TOP of what the day has already spent.
+   *
+   * The cap is a limit for the UTC day and re-granting does not reset the tally — correctly, or a
+   * user could raise their own cap by re-signing. But granting a flat $1,000 meant the second run
+   * of this script in a day came back `daily_cap` on every buy, which reads as the agents being
+   * broken when it is the cap doing its job. `live-ladder.ts` already reasons this way.
+   */
+  const spentSoFar = Number(
+    ((await call('/delegation')).body as { spentTodayUsd?: number } | null)?.spentTodayUsd ?? 0,
+  );
+  const cap = Math.ceil(spentSoFar) + CAP_USD;
   const grantHash = await owner.writeContract({
     address: DELEGATION,
     abi: GRANT_ABI,
     functionName: 'grant',
-    args: [DELEGATE, parseUnits(String(CAP_USD), 6), expires, [ROUTER, AAVE]],
+    args: [DELEGATE, parseUnits(String(cap), 6), expires, [ROUTER, AAVE, ...(BOOK ? [BOOK] : [])]],
   });
   await pub.waitForTransactionReceipt({ hash: grantHash });
   /*
@@ -206,11 +221,11 @@ async function main() {
   } | null;
   check(
     del.status === 200 &&
-      Number(d?.dailyCapUsd) === CAP_USD &&
+      Number(d?.dailyCapUsd) === cap &&
       d?.delegatePubkey?.toLowerCase() === DELEGATE.toLowerCase() &&
       (d?.venueAllowlist ?? []).some((v) => v.toLowerCase() === ROUTER.toLowerCase()),
     'the executor reads the policy from the CHAIN',
-    `cap $${d?.dailyCapUsd} · delegate ${d?.delegatePubkey} · ${d?.venueAllowlist?.length ?? 0} venues`,
+    `cap $${d?.dailyCapUsd} (${CAP_USD} of headroom) · delegate ${d?.delegatePubkey} · ${d?.venueAllowlist?.length ?? 0} venues`,
   );
 
   // ── 4. Create a real DCA strategy ───────────────────────────────────────────────────────
@@ -326,8 +341,8 @@ async function main() {
       label: 'QA — over cap',
       symbol: 'WETH',
       cadence: 'daily',
-      dailyAllocationUsd: CAP_USD * 5,
-      params: { amountUsd: CAP_USD * 5 },
+      dailyAllocationUsd: cap * 5,
+      params: { amountUsd: cap * 5 },
     }),
   });
   check(
@@ -371,7 +386,7 @@ async function main() {
     address: DELEGATION,
     abi: GRANT_ABI,
     functionName: 'grant',
-    args: [DELEGATE, parseUnits(String(CAP_USD), 6), expires, [ROUTER, AAVE]],
+    args: [DELEGATE, parseUnits(String(cap), 6), expires, [ROUTER, AAVE, ...(BOOK ? [BOOK] : [])]],
   });
   await pub.waitForTransactionReceipt({ hash: regrant });
   await anvil('anvil_stopImpersonatingAccount', [OWNER]);

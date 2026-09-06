@@ -25,7 +25,7 @@ import { requireUser } from '../auth/middleware.js';
 import { one, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { holdings } from '../evm/balances.js';
-import { closeAsDelegate, readPolicy } from '../evm/delegation.js';
+import { closeAsDelegate, readPolicy, waitForTx } from '../evm/delegation.js';
 import { buildSwap, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
 import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { explorerTx } from '../evm/chains.js';
@@ -148,6 +148,22 @@ panic.post('/panic/flatten', async (c) => {
         amount: h.raw,
         data: swap.data,
       });
+
+    /*
+     * Wait for the receipt before recording the sale.
+     *
+     * `closeAsDelegate` returns as soon as the transaction is broadcast. Both of these paths then
+     * wrote the position row, the audit entry and a "Sold" line for the user — for a transaction
+     * that had not been mined and, on a chain without automine, might still revert. The book would
+     * then say a position was closed while the chain still held it, which is the one direction this
+     * error must never go: a user told they are out of a trade they are still in.
+     *
+     * `runStrategy` already waits for exactly this reason. This path was written separately and
+     * never got it.
+     */
+    const settled = await waitForTx(signature).catch(() => false);
+    if (!settled) throw new Error(`close ${signature} did not confirm`);
+
 
       await tx(async (client) => {
         await applyFill(client, {
@@ -337,6 +353,22 @@ export async function closeHolding(params: {
       amount: raw,
       data: swap.data,
     });
+
+    /*
+     * Wait for the receipt before recording the sale.
+     *
+     * `closeAsDelegate` returns as soon as the transaction is broadcast. Both of these paths then
+     * wrote the position row, the audit entry and a "Sold" line for the user — for a transaction
+     * that had not been mined and, on a chain without automine, might still revert. The book would
+     * then say a position was closed while the chain still held it, which is the one direction this
+     * error must never go: a user told they are out of a trade they are still in.
+     *
+     * `runStrategy` already waits for exactly this reason. This path was written separately and
+     * never got it.
+     */
+    const settled = await waitForTx(signature).catch(() => false);
+    if (!settled) throw new Error(`close ${signature} did not confirm`);
+
 
     await tx(async (client) => {
       await applyFill(client, { walletId: w.id, symbol, units: -units, usd: -usd });

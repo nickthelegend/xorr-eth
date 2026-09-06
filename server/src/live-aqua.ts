@@ -24,7 +24,7 @@ import {
 } from 'viem';
 import { base } from 'viem/chains';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { BOOK_ABI, encodeStrategy, openBooks, strategyHash, type AquaStrategy } from './venues/aqua.js';
+import { BOOK_ABI, encodeStrategy, strategyHash, type AquaStrategy } from './venues/aqua.js';
 import { decodeEventLog } from 'viem';
 
 /** The book's own fill event. Names the maker who actually paid, which is what has to be measured. */
@@ -91,6 +91,24 @@ function check(ok: boolean, label: string, detail: string) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}  — ${detail}`);
   ok ? pass++ : fail++;
 }
+
+/*
+ * Retire what this run created.
+ *
+ * Every run left its strategies `live`, and `POST /strategies` sums the live allocations against
+ * the on-chain cap — correctly. So the fourth or fifth run of a script started failing with
+ * `over_cap` on a wallet that was fine, for strategies nobody was going to run again. A script
+ * that cannot be run twice is a script people stop running.
+ */
+const created: string[] = [];
+async function retireCreated() {
+  for (const id of created) {
+    await call(`/strategies/${id}`, { method: 'PATCH', body: JSON.stringify({ state: 'ended' }) }).catch(
+      () => undefined,
+    );
+  }
+}
+
 const bal = (t: Address, who: Address) =>
   pub.readContract({ address: t, abi: erc20Abi, functionName: 'balanceOf', args: [who] });
 
@@ -264,15 +282,6 @@ async function main() {
   });
   check(b0 > 0n && b1 > 0n, 'the book quotes against the maker\'s own balances', `${formatUnits(b0, 18)} WETH / ${formatUnits(b1, 6)} USDC`);
 
-  /*
-   * Snapshot EVERY open book's maker, not just ours — the fill goes to whichever quotes best.
-   */
-  const before = new Map<string, bigint>();
-  for (const b of await openBooks({})) {
-    before.set(b.strategy.maker.toLowerCase(), await bal(WETH, b.strategy.maker));
-  }
-  const wethBeforeByMaker = (m: Address) => before.get(m.toLowerCase()) ?? 0n;
-
   // ── The bot takes against it, through the delegation ─────────────────────────────────────
   const made = await call('/strategies', {
     method: 'POST',
@@ -282,14 +291,15 @@ async function main() {
     }),
   });
   const id = (made.body as { id?: string }).id;
+  if (id) created.push(id);
   check(!!id, 'a strategy exists to route', `${made.status} ${id ?? JSON.stringify(made.body).slice(0, 150)}`);
-  if (!id) return finish();
+  if (!id) return await finish();
 
   const ran = await call(`/agent/strategies/${id}/run`, { method: 'POST' }, ENTRY);
   const out = ran.body as { status?: string; signature?: Hex; units?: number };
   console.log(`    run → ${JSON.stringify(out).slice(0, 240)}`);
   check(out.status === 'filled', 'the deployed agent filled', `${out.status} ${out.signature ?? ''}`.slice(0, 80));
-  if (!out.signature) return finish();
+  if (!out.signature) return await finish();
 
   /*
    * The proof. Not "a trade happened" — a trade happened AT THE BOOK.
@@ -335,9 +345,37 @@ async function main() {
       'the bought token went to the TAKER, not to any contract',
       `taker ${args.taker}`,
     );
+    /*
+     * Proved from the RECEIPT, not from a balance snapshot.
+     *
+     * Comparing before/after needed the filling maker to have been seen before the run, and
+     * `buildAquaFill` legitimately picks the deepest book — which on a long-lived fork can belong
+     * to a maker shipped outside the log window. The check then failed on a trade that was
+     * correct. The receipt carries the proof directly: an ERC-20 Transfer of exactly `amountOut`
+     * FROM the maker's own address, in the same transaction.
+     */
+    const TRANSFER = {
+      type: 'event',
+      name: 'Transfer',
+      inputs: [
+        { name: 'from', type: 'address', indexed: true },
+        { name: 'to', type: 'address', indexed: true },
+        { name: 'value', type: 'uint256', indexed: false },
+      ],
+    } as const;
+    const fromMaker = receipt.logs.some((l) => {
+      if (l.address.toLowerCase() !== args.tokenOut.toLowerCase()) return false;
+      try {
+        const d = decodeEventLog({ abi: [TRANSFER], data: l.data, topics: l.topics });
+        const t = d.args as unknown as { from: Address; value: bigint };
+        return t.from.toLowerCase() === args.maker.toLowerCase() && t.value === args.amountOut;
+      } catch {
+        return false;
+      }
+    });
     check(
-      (await bal(WETH, args.maker)) < wethBeforeByMaker(args.maker),
-      'real ERC-20 left the FILLING maker\'s own wallet — Aqua\'s whole claim',
+      fromMaker,
+      'the token came straight OUT of the maker\'s own wallet — Aqua\'s whole claim',
       `maker ${args.maker.slice(0, 10)}… paid ${formatUnits(args.amountOut, 18)} WETH for ${formatUnits(args.amountIn, 6)} USDC`,
     );
   }
@@ -348,10 +386,11 @@ async function main() {
     'zero WETH, zero USDC',
   );
 
-  finish();
+  await finish();
 }
 
-function finish() {
+async function finish() {
+  await retireCreated();
   console.log(`\n${pass} pass · ${fail} fail`);
   if (fail > 0) process.exitCode = 1;
 }

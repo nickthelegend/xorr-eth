@@ -76,6 +76,24 @@ function check(ok: boolean, label: string, detail: string) {
   ok ? pass++ : fail++;
 }
 
+
+/*
+ * Retire what this run created.
+ *
+ * Every run left its strategies `live`, and `POST /strategies` sums the live allocations against
+ * the on-chain cap — correctly. So the fourth or fifth run of a script started failing with
+ * `over_cap` on a wallet that was fine, for strategies nobody was going to run again. A script
+ * that cannot be run twice is a script people stop running.
+ */
+const created: string[] = [];
+async function retireCreated() {
+  for (const id of created) {
+    await call(`/strategies/${id}`, { method: 'PATCH', body: JSON.stringify({ state: 'ended' }) }).catch(
+      () => undefined,
+    );
+  }
+}
+
 const bal = (t: Address, who: Address) =>
   pub.readContract({ address: t, abi: erc20Abi, functionName: 'balanceOf', args: [who] });
 
@@ -101,6 +119,7 @@ async function runTier(params: {
     }),
   });
   const id = (made.body as { id?: string }).id;
+  if (id) created.push(id);
   if (!id) {
     check(false, `tier ${params.tier} · ${params.name} — created`, JSON.stringify(made.body).slice(0, 200));
     return {};
@@ -373,6 +392,7 @@ async function main() {
     );
   }
 
+  await retireCreated();
   console.log(`\n${pass} pass · ${fail} fail`);
   if (fail > 0) process.exitCode = 1;
 }

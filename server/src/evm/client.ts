@@ -34,7 +34,23 @@ export const delegateAccount = privateKeyToAccount(
   (process.env.DELEGATE_PRIVATE_KEY as Hex) ?? loadOrCreateKey('delegate'),
 );
 
-export const publicClient = createPublicClient({ chain, transport: http(rpcUrl) });
+/**
+ * `cacheTime: 0`, because every read this client makes is a safety read.
+ *
+ * viem caches the latest block number for four seconds by default and resolves `readContract`
+ * against it. So for up to four seconds after a user revokes, `readPolicy` still returned the
+ * policy as LIVE — and the bot went on trading with it. A close placed inside that window
+ * succeeded on a revoked permission, which is the kill switch failing at the only moment it
+ * exists for.
+ *
+ * The README's claim is "revoke needs only the owner's signature: no server, no oracle, no
+ * cooperation from the bot". A four-second window where the bot has not noticed is cooperation.
+ *
+ * The cost is one `eth_blockNumber` per read, against a policy read, a balance read and a gas
+ * check that were each already a round trip. Nothing this executor reads is worth being stale:
+ * not the policy, not the balances it sizes a trade from, not the gas it decides it can afford.
+ */
+export const publicClient = createPublicClient({ chain, transport: http(rpcUrl), cacheTime: 0 });
 
 export const walletClient = createWalletClient({
   account: delegateAccount,
