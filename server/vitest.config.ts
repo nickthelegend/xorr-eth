@@ -15,6 +15,6 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/*.chain.test.ts'],
     fileParallelism: !process.env.LIVE ? undefined : false,
-    globalSetup: ['../src/test/wait-for-warm.ts'],
+    globalSetup: ['../tools/wait-for-warm.ts'],
   },
 });

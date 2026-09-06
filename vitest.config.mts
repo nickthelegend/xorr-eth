@@ -51,9 +51,9 @@ export default defineConfig({
     fileParallelism: !process.env.LIVE,
     /*
      * The live suite waits for the executor's cache to fill before judging anything. See
-     * `src/test/wait-for-warm.ts`; it is a no-op without LIVE.
+     * `tools/wait-for-warm.ts`; it is a no-op without LIVE.
      */
-    globalSetup: ['src/test/wait-for-warm.ts'],
+    globalSetup: ['tools/wait-for-warm.ts'],
   },
   resolve: {
     alias: {

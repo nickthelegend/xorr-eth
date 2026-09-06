@@ -9,6 +9,10 @@
  * re-run it instead of read it.
  *
  * Only for the live suite. The unit tests touch no network and this never runs for them.
+ *
+ * It lives in `tools/` rather than `src/` because `src/data/repositories.test.ts` enforces that
+ * network access in `src/` exists only in the data and wallet layers — and it is right to: this is
+ * test tooling, not app code, and it belongs with `shoot.mjs`.
  */
 const API = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8788';
 
