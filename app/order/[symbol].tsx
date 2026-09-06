@@ -21,7 +21,7 @@ import { money, percent } from '@/format';
 import { orderCta, orderFee, slPnl, tpPnl } from '@/state/derived';
 import { unitsFor, usePrice } from '@/data/usePrices';
 import { useStore } from '@/state/store';
-import { DEFAULT_BUY } from '@/data/tradable';
+import { DEFAULT_BUY, isTradable } from '@/data/tradable';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
@@ -31,6 +31,7 @@ export default function OrderTicket() {
     side?: string;
   }>();
   const router = useRouter();
+  const tradable = isTradable(symbol);
 
   const orderAmt = useStore((s) => s.orderAmt);
   const pressKey = useStore((s) => s.pressKey);
@@ -142,17 +143,31 @@ export default function OrderTicket() {
           <Text style={[type.secondaryMd, { color: sheet.ink }]}>{money(orderFee(amount))}</Text>
         </View>
 
-        <Button
-          label={orderCta(side, orderAmt, symbol)}
-          variant={side === 'buy' ? 'buy' : 'sell'}
-          onPress={() => router.back()}
-        />
+        {/*
+          An order ticket for something this chain cannot settle is a ticket that can never be
+          filled. The asset screen already refuses to offer a Buy for one; the ticket itself was
+          still reachable directly and happily said "Buy $250 of NOPE".
+        */}
+        {tradable ? (
+          <Button
+            label={orderCta(side, orderAmt, symbol)}
+            variant={side === 'buy' ? 'buy' : 'sell'}
+            onPress={() => router.back()}
+          />
+        ) : (
+          <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+            <Text style={[type.secondaryMd, { color: sheet.muted, textAlign: 'center' }]}>
+              {`${symbol} cannot be settled on Base, so there is no order to place.`}
+            </Text>
+          </View>
+        )}
 
-        <Text
-          style={[type.footnote, { color: sheet.dim, textAlign: 'center', marginTop: 12 }]}
-        >
-          {`Auto Close is on: TP ${percent(tp)} / SL ${percent(sl)} — make ${money(tpPnl(tp))} or lose ${money(slPnl(sl))}`}
-        </Text>
+        {/* A promise about an order that cannot be placed is worse than saying nothing. */}
+        {tradable ? (
+          <Text style={[type.footnote, { color: sheet.dim, textAlign: 'center', marginTop: 12 }]}>
+            {`Auto Close is on: TP ${percent(tp)} / SL ${percent(sl)} — make ${money(tpPnl(tp))} or lose ${money(slPnl(sl))}`}
+          </Text>
+        ) : null}
       </View>
     </Screen>
   );

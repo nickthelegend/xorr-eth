@@ -24,7 +24,7 @@ import {
 import { ink, pnl, surfaces } from '@/design/colors';
 import { MIN_HIT, radius } from '@/design/space';
 import { type } from '@/design/type';
-import { money } from '@/format';
+import { money, quantity } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { STRATEGY_LADDER } from '@/strategies/ladder';
@@ -167,7 +167,7 @@ function StrategyRow({ s, onChanged }: { s: Strategy; onChanged: () => void }) {
         // not drifted, and it must not read as a failure.
         setNote(
           r.status === 'filled'
-            ? `Filled ${r.units?.toFixed(4)} at ${money(r.price ?? 0)}`
+            ? `Filled ${quantity(r.units ?? 0)} at ${money(r.price ?? 0)}`
             : r.status === 'skipped'
               ? r.reason === 'already_ran_this_period'
                 ? 'Already ran this period.'

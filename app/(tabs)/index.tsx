@@ -46,7 +46,8 @@ export default function Home() {
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const staking = useAsync(() => repos.yield.staking(), []);
 
-  const total = balance.data ?? 0;
+  // null means the balance could not be read. A dash, never a confident $0.00 for a funded wallet.
+  const total = balance.data ?? null;
   const featuredQuote = featured.data?.[DEFAULT_BUY];
   const featuredHeld = (positions.data ?? []).find((p) => p.symbol === DEFAULT_BUY);
 
@@ -67,7 +68,9 @@ export default function Home() {
       <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 22 }}>
         <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Total value</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
-          <Text style={[type.heroBalance, { color: ink.full }]}>{money(total)}</Text>
+          <Text style={[type.heroBalance, { color: ink.full }]}>
+            {total === null ? '—' : money(total)}
+          </Text>
         </View>
 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 20 }}>
@@ -100,7 +103,7 @@ export default function Home() {
         <Row
           primary="Cash"
           secondary="Available to trade"
-          value={money(total)}
+          value={total === null ? '—' : money(total)}
           height={58}
           style={{ marginTop: 18 }}
         />

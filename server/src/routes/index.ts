@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
 import { evaluate, spentToday } from '../rules/engine.js';
-import { runStrategy, type StrategyRow } from '../executor/run.js';
+import { runStrategy, SELF_SIZING_KINDS, type StrategyRow } from '../executor/run.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { CHAIN_KEY, explorerTx, ADDRESSES } from '../evm/chains.js';
 import { delegatePublicKey, readPolicy, waitForTx, DELEGATION_ADDRESS } from '../evm/delegation.js';
@@ -410,6 +410,23 @@ routes.post('/strategies', async (c) => {
       {
         error: 'over_cap',
         message: `That would commit $${committed.toLocaleString('en-US')} a day against a $${policy.dailyCapUsd.toLocaleString('en-US')} cap. Raise the cap or lower this strategy.`,
+      },
+      400,
+    );
+  }
+
+  /*
+   * A spending strategy needs an amount; a self-sizing one decides its own.
+   *
+   * "Buy $0 of WETH every week" was accepted and would then be blocked at every single run — a
+   * strategy that looks live on the list and can never do anything. A rebalance or a stop is
+   * different: it is sized by looking, so zero is the correct configuration for it.
+   */
+  if (!SELF_SIZING_KINDS.has(body.kind) && !(body.dailyAllocationUsd > 0)) {
+    return c.json(
+      {
+        error: 'invalid_request',
+        detail: `dailyAllocationUsd: a ${body.kind} strategy needs an amount above zero.`,
       },
       400,
     );

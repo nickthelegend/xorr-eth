@@ -45,7 +45,7 @@ export default function Assets() {
       <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: 20 }}>
         <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Portfolio value</Text>
         <Text style={[type.heroBalance, { color: ink.full, marginTop: 8 }]}>
-          {money(balance.data ?? 0)}
+          {balance.data === null || balance.data === undefined ? "—" : money(balance.data)}
         </Text>
 
         <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 20 }}>

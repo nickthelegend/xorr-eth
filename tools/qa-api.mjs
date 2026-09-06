@@ -164,5 +164,123 @@ await check('B12', 'swap quote names real venues', async () => {
   return `${j.outAmount.toFixed(5)} WETH via ${j.venues.join('+')}`;
 });
 
+
+// ── B13–B23 ─────────────────────────────────────────────────────────────────
+
+const post = (path, body) => req(path, { method: 'POST', body: JSON.stringify(body) });
+
+await check('B13', 'over-cap strategy is refused with the arithmetic', async () => {
+  const r = await post('/strategies', {
+    kind: 'dca', state: 'live', label: 'qa over cap', symbol: 'WETH',
+    cadence: 'daily', dailyAllocationUsd: 9_999_999,
+  });
+  const j = await r.json();
+  must(r.status === 400, `status ${r.status}`);
+  must(j.error === 'over_cap', `error ${j.error}`);
+  must(/\$[\d,]+ a day against a \$[\d,]+ cap/.test(j.message), `message: ${j.message}`);
+  return j.message.slice(0, 60);
+});
+
+await check('B14', 'untradable symbol names what IS tradable', async () => {
+  const r = await post('/strategies', {
+    kind: 'dca', state: 'live', label: 'qa sol', symbol: 'SOL',
+    cadence: 'weekly', dailyAllocationUsd: 10,
+  });
+  const j = await r.json();
+  must(r.status === 400, `status ${r.status}`);
+  must(/not tradable/.test(j.detail ?? ''), `detail ${j.detail}`);
+  must(/WETH/.test(j.detail ?? ''), 'does not name the alternatives');
+  return 'refused, alternatives named';
+});
+
+await check('B15', 'malformed JSON is 400, never 500', async () => {
+  const r = await req('/strategies', { method: 'POST', body: '{not json' });
+  const j = await r.json();
+  must(r.status === 400, `status ${r.status}`);
+  must(j.error === 'invalid_json', `error ${j.error}`);
+  return j.error;
+});
+
+await check('B16', 'missing fields are named', async () => {
+  const r = await post('/strategies', { kind: 'dca', symbol: 'WETH' });
+  const j = await r.json();
+  must(r.status === 400, `status ${r.status}`);
+  must(j.error === 'invalid_request', `error ${j.error}`);
+  must(/label|state/.test(j.detail ?? ''), `detail ${j.detail}`);
+  return j.detail.slice(0, 50);
+});
+
+await check('B17', 'running twice in a period is a no-op', async () => {
+  const made = await post('/strategies', {
+    kind: 'dca', state: 'live', label: `qa idem ${Date.now()}`, symbol: 'WETH',
+    cadence: 'weekly', dailyAllocationUsd: 5, params: { usd: 5 },
+  });
+  if (made.status !== 200) return `skipped: cap full (${made.status})`;
+  const { id } = await made.json();
+  const first = await (await post(`/strategies/${id}/run`, {})).json();
+  const second = await (await post(`/strategies/${id}/run`, {})).json();
+  must(second.status === 'skipped', `second run was ${second.status}`);
+  must(second.reason === 'already_ran_this_period', `reason ${second.reason}`);
+  await req(`/strategies/${id}`, { method: 'DELETE' });
+  return `first ${first.status}, second ${second.reason}`;
+});
+
+await check('B18', "another wallet's strategy id is 404, not 403", async () => {
+  const r = await post('/strategies/123e4567-e89b-42d3-a456-426614174000/run', {});
+  must(r.status === 404, `status ${r.status}`);
+  const j = await r.json();
+  must(j.error === 'not_found', `error ${j.error}`);
+  return 'not_found';
+});
+
+await check('B19', 'agent lifecycle: hire is idempotent', async () => {
+  const a = await (await post('/agents', { personaId: 'momentum-scout' })).json();
+  const b = await (await post('/agents', { personaId: 'momentum-scout' })).json();
+  must(a.id === b.id, 'hiring twice made two agents');
+  must(a.hired === true, 'not marked hired');
+  const patched = await (
+    await req(`/agents/${a.id}`, { method: 'PATCH', body: JSON.stringify({ tone: 'flat' }) })
+  ).json();
+  must(patched.tone === 'flat', `tone ${patched.tone}`);
+  return `${a.name} tone=${patched.tone}`;
+});
+
+await check('B20', 'a created alert comes back in the list', async () => {
+  const name = `qa alert ${Date.now()}`;
+  const made = await (
+    await post('/alerts', { kind: 'price', symbol: 'WETH', name, detail: 'qa', config: { above: 1 } })
+  ).json();
+  must(made.id, `no id: ${JSON.stringify(made)}`);
+  const list = await (await req('/alerts')).json();
+  must(list.some((a) => a.id === made.id), 'created alert is not in the list');
+  // And the toggle persists.
+  await post(`/alerts/${made.id}`, { enabled: false });
+  const after = await (await req('/alerts')).json();
+  must(after.find((a) => a.id === made.id).enabled === false, 'toggle did not persist');
+  await req(`/alerts/${made.id}`, { method: 'DELETE' });
+  return 'created, listed, toggled, deleted';
+});
+
+await check('B21', 'the audit hash chain verifies', async () => {
+  const j = await (await req('/activity/verify')).json();
+  must(j.ok === true || j.valid === true, `verify said ${JSON.stringify(j).slice(0, 90)}`);
+  return JSON.stringify(j).slice(0, 60);
+});
+
+await check('B22', 'the public market surface is rate limited', async () => {
+  // 260 requests inside the window; the ceiling is 240.
+  let limited = 0;
+  for (let i = 0; i < 260; i++) {
+    const r = await fetch(`${B}/market/symbols`);
+    if (r.status === 429) {
+      limited++;
+      must(r.headers.get('retry-after'), '429 without a Retry-After');
+      break;
+    }
+  }
+  must(limited > 0, 'never rate limited after 260 requests');
+  return '429 with Retry-After';
+});
+
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) process.exitCode = 1;

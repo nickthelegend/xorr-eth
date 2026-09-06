@@ -86,7 +86,8 @@ export interface PortfolioRepository {
   positions(): Promise<Position[]>;
   position(id: string): Promise<Position | null>;
   sleeves(): Promise<Sleeve[]>;
-  balanceUsd(): Promise<number>;
+  /** `null` means the balance could not be read — never render that as zero. */
+  balanceUsd(): Promise<number | null>;
 }
 
 export interface ActivityRepository {

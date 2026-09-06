@@ -72,7 +72,21 @@ export const LocalRepositories: Repositories = {
               : { ...i, px: fmtPrice(s.price), chg: '', feed: 'live' as const };
           }
           const q = live[i.sym];
-          if (!q) return { ...i, feed: i.feed === 'live' ? 'simulated' : i.feed };
+          if (!q) {
+            /*
+             * An instrument that HAS a live feed and did not answer shows a dash, not the design's
+             * price.
+             *
+             * Falling back to the fixture put BTC on screen at $66,560 — the handoff's 2024 number
+             * — under a SIMULATED tag while the real price was $79,880. The tag satisfies the
+             * letter of "real or labelled" and not one bit of its intent: a confident, specific,
+             * twenty-percent-wrong price is the failure that rule exists to prevent. An instrument
+             * that never had a feed keeps its indicative price, which is what the label is for.
+             */
+            return i.feed === 'live'
+              ? { ...i, px: '—', chg: '', feed: 'simulated' as const }
+              : i;
+          }
           return {
             ...i,
             px: fmtPrice(q.price),
@@ -254,9 +268,16 @@ export const LocalRepositories: Repositories = {
       // The three sleeves are product config, not measured data — legitimately local.
       return sleeveFixtures;
     },
-    async balanceUsd(): Promise<number> {
+    async balanceUsd(): Promise<number | null> {
+      /*
+       * `null` when the executor could not be reached, and it matters.
+       *
+       * Returning 0 put "TOTAL VALUE $0.00" on the home screen of a funded wallet whenever the
+       * server was down — a specific, confident, wrong number, which is the one thing this app is
+       * not allowed to show. A dash says "I do not know", which is the truth.
+       */
       const b = await api.get<{ usd: number }>('/wallet/balance').catch(() => undefined);
-      return b?.usd ?? 0;
+      return b ? b.usd : null;
     },
   },
 

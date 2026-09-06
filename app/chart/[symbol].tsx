@@ -58,7 +58,15 @@ export default function ProChart() {
   const proj = bars.length ? tight(bars) : null;
   const candles = proj ? projectCandles(bars, proj) : [];
   const volumes = projectVolume(volumeFromBars(bars));
-  const last = bars.length ? bars[bars.length - 1]![3] : 0;
+  /*
+   * No bars means no price, not a price of zero.
+   *
+   * `$0.0000  +0.00%  +$0.00 today` for a market with no feed is three invented numbers wearing
+   * the confidence of measured ones — the exact failure the "real or labelled" rule exists to
+   * prevent. A dash says the same thing honestly.
+   */
+  const hasPrice = bars.length > 0;
+  const last = hasPrice ? bars[bars.length - 1]![3] : 0;
   const first = bars.length ? bars[0]![0] : 0;
   const changeAbs = last - first;
   const changePct = first ? (changeAbs / first) * 100 : 0;
@@ -85,22 +93,26 @@ export default function ProChart() {
 
       <View style={{ marginTop: 18, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={[type.priceMedium, { color: ink.full }]}>{fmtPrice(last)}</Text>
-          <View
-            style={{
-              backgroundColor: up ? pnl.upBg : pnl.downBg,
-              borderRadius: 12,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-            }}
-          >
-            <Text style={[type.rowDelta, { color: up ? pnl.up : pnl.down, fontWeight: '600' }]}>
-              {percent(changePct, { digits: 2 })}
-            </Text>
-          </View>
+          <Text style={[type.priceMedium, { color: ink.full }]}>
+            {hasPrice ? fmtPrice(last) : '—'}
+          </Text>
+          {hasPrice ? (
+            <View
+              style={{
+                backgroundColor: up ? pnl.upBg : pnl.downBg,
+                borderRadius: 12,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+              }}
+            >
+              <Text style={[type.rowDelta, { color: up ? pnl.up : pnl.down, fontWeight: '600' }]}>
+                {percent(changePct, { digits: 2 })}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Text style={[type.secondaryMd, { color: ink.i40 }]}>
-          {signedMoney(changeAbs)} today
+          {hasPrice ? `${signedMoney(changeAbs)} today` : 'No live price for this market.'}
         </Text>
       </View>
 
@@ -169,12 +181,16 @@ export default function ProChart() {
           : `${greenCloses} of the last ${bars.length} closes were up. Momentum Scout is watching the range high before it adds.`}
       </NoteStrip>
 
-      <ButtonRow
-        style={{ marginTop: 14 }}
-        affirmativeFlex={1}
-        secondary={<Button label="Short" variant="secondary" />}
-        affirmative={<Button label="Long" variant="buy" />}
-      />
+      {/* No feed, no trade. Offering Short/Long on a market with no price is offering an action
+          whose outcome nobody can state. */}
+      {hasPrice ? (
+        <ButtonRow
+          style={{ marginTop: 14 }}
+          affirmativeFlex={1}
+          secondary={<Button label="Short" variant="secondary" />}
+          affirmative={<Button label="Long" variant="buy" />}
+        />
+      ) : null}
     </Screen>
   );
 }
