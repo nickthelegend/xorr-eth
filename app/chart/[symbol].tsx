@@ -47,13 +47,33 @@ export default function ProChart() {
   const { symbol = 'BTC' } = useLocalSearchParams<{ symbol: string }>();
   const router = useRouter();
   // screens.md: 1H is the default (bolded in the pill row).
-  const [tf, setTf] = useState(1);
+  const [tf, setTfRaw] = useState(1);
 
   const { data, loading } = useAsync(
     () => repos.markets.candles(symbol, TIMEFRAMES[tf]!),
     [symbol, tf],
   );
 
+  /*
+   * Which candle the user is reading, if any.
+   *
+   * Reset whenever the timeframe changes: a selection is an index into a specific series, and
+   * keeping it across a reload would point at a different bar of a different length while
+   * appearing to be the same choice.
+   */
+  const [sel, setSel] = useState<number | null>(null);
+
+  /**
+   * Changing the timeframe clears the selection.
+   *
+   * A selection is an index into one specific series. Carrying it across a reload would leave it
+   * pointing at a different bar, of a different length, while looking like the same choice — and
+   * the readout would confidently show the wrong candle's numbers.
+   */
+  const setTf = (next: number) => {
+    setSel(null);
+    setTfRaw(next);
+  };
   const bars = data?.bars ?? [];
   const proj = bars.length ? tight(bars) : null;
   const candles = proj ? projectCandles(bars, proj) : [];
@@ -72,6 +92,8 @@ export default function ProChart() {
   const changePct = first ? (changeAbs / first) * 100 : 0;
   const up = changeAbs >= 0;
   const greenCloses = bars.filter((b) => b[3] >= b[0]).length;
+  /** The raw OHLC of the chosen bar. Guarded, because a stale index must not read past the end. */
+  const picked = sel !== null && sel >= 0 && sel < bars.length ? bars[sel] : null;
 
   return (
     <Screen tabbed>
@@ -111,9 +133,22 @@ export default function ProChart() {
             </View>
           ) : null}
         </View>
-        <Text style={[type.secondaryMd, { color: ink.i40 }]}>
-          {hasPrice ? `${signedMoney(changeAbs)} today` : 'No live price for this market.'}
-        </Text>
+        {/*
+          The numbers behind one bar, when a bar is chosen.
+          The chart was the centrepiece and read-only: a user could see the shape and never the
+          open, high, low or close of any single candle. The data is already loaded, so this costs
+          a tap and nothing else. The line reverts the moment the selection clears.
+        */}
+        {picked ? (
+          <Text style={[type.secondaryMd, { color: ink.i55 }]}>
+            O {fmtPrice(picked[0])}  H {fmtPrice(picked[1])}  L {fmtPrice(picked[2])}  C{' '}
+            {fmtPrice(picked[3])}
+          </Text>
+        ) : (
+          <Text style={[type.secondaryMd, { color: ink.i40 }]}>
+            {hasPrice ? `${signedMoney(changeAbs)} today` : 'No live price for this market.'}
+          </Text>
+        )}
       </View>
 
       <Screen.Content style={{ marginTop: 18 }}>
@@ -137,7 +172,12 @@ export default function ProChart() {
                     }}
                   />
                 ))}
-                <Candlestick candles={candles} height={CHART_H} />
+                <Candlestick
+                  candles={candles}
+                  height={CHART_H}
+                  selected={sel}
+                  onSelect={setSel}
+                />
                 {proj ? (
                   <MarkLine
                     topPct={proj.y(last)}

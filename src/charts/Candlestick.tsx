@@ -17,7 +17,7 @@
  * complete. Live updates mutate the last candle in place with no transition."
  */
 import React from 'react';
-import { Platform, View, type ViewStyle } from 'react-native';
+import { Platform, Pressable, View, type ViewStyle } from 'react-native';
 import Svg, { Defs, FeGaussianBlur, Filter, Rect } from 'react-native-svg';
 import { pnl } from '../design/colors';
 import { candleBloom } from '../design/space';
@@ -30,9 +30,21 @@ export type CandlestickProps = {
   candles: ProjectedCandle[];
   height: number;
   style?: ViewStyle;
+  /**
+   * Make the candles selectable, reporting the index pressed — or null to clear.
+   *
+   * The chart is the screen's centrepiece and it was read-only: a user could see the shape and
+   * not the numbers behind any single bar. The data is already loaded, so a readout costs nothing
+   * but the wiring.
+   *
+   * Omitting this leaves the chart exactly as it was, non-interactive, which is right where it is
+   * used as an illustration rather than as the subject of the screen.
+   */
+  onSelect?: (index: number | null) => void;
+  selected?: number | null;
 };
 
-export function Candlestick({ candles, height, style }: CandlestickProps) {
+export function Candlestick({ candles, height, style, onSelect, selected }: CandlestickProps) {
   return (
     <View
       style={[{ flexDirection: 'row', gap: CANDLE_GAP, height }, style]}
@@ -41,20 +53,50 @@ export function Candlestick({ candles, height, style }: CandlestickProps) {
         candles[candles.length - 1]?.up ? 'up' : 'down'
       }`}
     >
-      {candles.map((c, i) => (
-        <Candle key={i} c={c} height={height} />
-      ))}
+      {candles.map((c, i) =>
+        onSelect ? (
+          <Pressable
+            key={i}
+            onPress={() => onSelect(selected === i ? null : i)}
+            accessibilityRole="button"
+            accessibilityLabel={`Candle ${i + 1} of ${candles.length}`}
+            accessibilityState={{ selected: selected === i }}
+            // flex:1 so the touch target is the whole column, not just the drawn body — a 1.6px
+            // wick is not something anyone can hit.
+            style={{ flex: 1 }}
+          >
+            <Candle c={c} height={height} dimmed={selected !== null && selected !== undefined && selected !== i} />
+          </Pressable>
+        ) : (
+          <Candle key={i} c={c} height={height} />
+        ),
+      )}
     </View>
   );
 }
 
-function Candle({ c, height }: { c: ProjectedCandle; height: number }) {
+function Candle({
+  c,
+  height,
+  dimmed = false,
+}: {
+  c: ProjectedCandle;
+  height: number;
+  /**
+   * Everything except the selected candle steps back.
+   *
+   * A highlight on the selection would add a colour; dimming the rest keeps the palette exactly as
+   * it is and still makes the choice obvious. It is a state change, not a transition —
+   * animations.md is explicit that candles do not animate, and this does not.
+   */
+  dimmed?: boolean;
+}) {
   const color = c.up ? pnl.candleUp : pnl.candleDown;
   const bloom = c.up ? candleBloom.up : candleBloom.down;
   const pct = (v: number) => (v / 100) * height;
 
   return (
-    <View style={{ flex: 1, position: 'relative' }}>
+    <View style={{ flex: 1, position: 'relative', opacity: dimmed ? 0.35 : 1 }}>
       {/* Wick */}
       <View
         style={{

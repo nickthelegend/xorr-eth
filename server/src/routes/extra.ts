@@ -4,7 +4,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
-import { backtestDca, type Lookback } from '../backtest/engine.js';
+import { backtestDca, backtestGrid, type Lookback } from '../backtest/engine.js';
 import { leaderboard } from '../agents/leaderboard.js';
 import { PERSONAS } from '../bot/personas.js';
 import { speak, fallbackLine } from '../bot/llm.js';
@@ -308,4 +308,52 @@ extra.get('/graph/activity', async (c) => {
   if (!w) return c.json({ spends: [], daily: [] });
   const [spends, daily] = await Promise.all([spendsFor(w.address), dailySpendFor(w.address)]);
   return c.json({ spends, daily });
+});
+
+/**
+ * What a strategy WOULD have done, before you commit money to it.
+ *
+ * Agents had a backtest and strategies did not, which is backwards: an agent is a persona, and a
+ * strategy is the thing that actually spends. For a grid it answers the question its own
+ * description raises — the range holding is an assumption, and how often it held over the last
+ * ninety days is a fact.
+ */
+extra.post('/strategies/backtest', async (c) => {
+  requireUser(c);
+  const body = z
+    .object({
+      kind: z.enum(['dca', 'grid']),
+      symbol: z.string().min(1),
+      lookback: z.enum(['30d', '90d', '6m', '1y']).default('90d'),
+      params: z.record(z.string(), z.unknown()).default({}),
+    })
+    .parse(await c.req.json());
+
+  const p = body.params as Record<string, number>;
+  try {
+    if (body.kind === 'grid') {
+      const lower = Number(p.lower);
+      const upper = Number(p.upper);
+      const steps = Math.floor(Number(p.steps ?? 4));
+      const usdPerStep = Number(p.usdPerStep);
+      if (!(lower > 0) || !(upper > lower) || !(steps >= 1) || !(usdPerStep > 0)) {
+        return c.json({ error: 'invalid_range', message: 'A range needs a bottom below its top, at least one rung, and a size.' }, 400);
+      }
+      return c.json(
+        await backtestGrid({ symbol: body.symbol, lookback: body.lookback as Lookback, lower, upper, steps, usdPerStep }),
+      );
+    }
+    return c.json(
+      await backtestDca({
+        symbol: body.symbol,
+        lookback: body.lookback as Lookback,
+        perRunUsd: Number(p.usd ?? 50),
+        dailyCapUsd: Number(p.dailyCapUsd ?? Number.MAX_SAFE_INTEGER),
+        everyNDays: Number(p.everyNDays ?? 7),
+      }),
+    );
+  } catch (e) {
+    // No history means no backtest. Inventing one would be the worst possible failure here.
+    return c.json({ error: 'no_history', message: e instanceof Error ? e.message : String(e) }, 502);
+  }
 });

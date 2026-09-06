@@ -10,20 +10,19 @@
  * carries a disclaimer, because screen 17 also says "Nothing here is a promise."
  */
 import { getJson } from '../http/get.js';
+import { COINGECKO_IDS } from '../market/ids.js';
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';
 
-const IDS: Record<string, string> = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  XRP: 'ripple',
-  DOGE: 'dogecoin',
-  HYPE: 'hyperliquid',
-  AAVE: 'aave',
-  LINK: 'chainlink',
-  TON: 'the-open-network',
-};
+/*
+ * The canonical map, not a second copy of it.
+ *
+ * This module kept its own nine-entry table with no WETH and no cbBTC — the two symbols the
+ * executor actually trades — so backtesting the thing a user was about to run returned "no price
+ * history for WETH". A private duplicate of a shared fact is a bug waiting for the shared fact to
+ * grow, and this one had already been waiting.
+ */
+const IDS = COINGECKO_IDS;
 
 export type Lookback = '30d' | '90d' | '6m' | '1y';
 
@@ -164,5 +163,127 @@ export async function backtestDca(params: {
     feed: 'live',
     source: 'coingecko market_chart, daily closes',
     disclaimer: 'Nothing here is a promise.',
+  };
+}
+
+export type GridBacktest = BacktestResult & {
+  /** How much of the window the price actually spent inside the band. */
+  inRangePct: number;
+  buys: number;
+  sells: number;
+  /** Units still held at the end — the position a broken range leaves you with. */
+  unitsLeft: number;
+  /** What those units are worth at the last price, and what they cost. */
+  leftValue: number;
+  leftCost: number;
+};
+
+/**
+ * A grid, replayed over real daily closes.
+ *
+ * This is the tier where a backtest earns its keep. A grid's entire risk is the assumption in its
+ * own description — that the range holds — and that is a question about history, not about the
+ * future: "over the last ninety days, how much of the time was the price actually inside the band
+ * I am about to draw?" A user who sees 41% has learned something a projection could never tell
+ * them.
+ *
+ * It replays the SAME rules the executor runs: rungs are crossings, a rung is bought once, a rise
+ * closes the cheapest lot, and the whole thing stops outside the band. A backtest of different
+ * rules than the ones that will run is worse than none, because it is believed.
+ */
+export async function backtestGrid(params: {
+  symbol: string;
+  lookback: Lookback;
+  lower: number;
+  upper: number;
+  steps: number;
+  usdPerStep: number;
+}): Promise<GridBacktest> {
+  const { lower, upper, steps, usdPerStep } = params;
+  const prices = await history(params.symbol, DAYS[params.lookback]);
+  const rungs = Array.from({ length: steps + 1 }, (_, i) => lower + (i * (upper - lower)) / steps);
+  const levelOf = (px: number) => rungs.filter((r) => px >= r).length - 1;
+
+  /** Open lots, keyed by the rung they were bought at, holding the units acquired there. */
+  const lots = new Map<number, number>();
+  let lastLevel: number | null = null;
+  let invested = 0;
+  let realised = 0;
+  let buys = 0;
+  let sells = 0;
+  let inRange = 0;
+  const equity: number[] = [];
+
+  for (const [, px] of prices) {
+    const inside = px >= lower && px <= upper;
+    if (inside) inRange += 1;
+
+    if (!inside) {
+      // Outside the band the executor stops. Holding still has value, so the curve continues.
+      equity.push([...lots.values()].reduce((a, u) => a + u * px, 0) + realised);
+      continue;
+    }
+
+    const level = levelOf(px);
+    if (lastLevel === null) {
+      lastLevel = level;
+    } else if (level < lastLevel && !lots.has(level)) {
+      const effective = px * (1 + SLIPPAGE_PCT);
+      const spend = usdPerStep * (1 - FEE_PCT);
+      lots.set(level, spend / effective);
+      invested += usdPerStep;
+      buys += 1;
+      lastLevel = level;
+    } else if (level > lastLevel && lots.size > 0) {
+      // The cheapest lot, exactly as the planner does — it is the one the rise has made a profit
+      // on, and closing the newest instead books the smallest gain available.
+      const cheapest = Math.min(...lots.keys());
+      const units = lots.get(cheapest)!;
+      lots.delete(cheapest);
+      const effective = px * (1 - SLIPPAGE_PCT);
+      realised += units * effective * (1 - FEE_PCT);
+      sells += 1;
+      lastLevel = level;
+    } else if (level !== lastLevel) {
+      lastLevel = level;
+    }
+
+    equity.push([...lots.values()].reduce((a, u) => a + u * px, 0) + realised);
+  }
+
+  const lastPx = prices[prices.length - 1]?.[1] ?? 0;
+  const unitsLeft = [...lots.values()].reduce((a, u) => a + u, 0);
+  const leftValue = unitsLeft * lastPx;
+  const finalValue = leftValue + realised;
+  const ret = invested > 0 ? ((finalValue - invested) / invested) * 100 : 0;
+
+  const perUnit = prices.map(([, p]) => p);
+  const dailyReturns: number[] = [];
+  for (let i = 1; i < perUnit.length; i++) {
+    dailyReturns.push((perUnit[i]! - perUnit[i - 1]!) / perUnit[i - 1]!);
+  }
+
+  return {
+    lookback: params.lookback,
+    ret: Number(ret.toFixed(1)),
+    maxDd: Number(maxDrawdown(equity.length ? equity : perUnit).toFixed(1)),
+    sharpe: Number(sharpeRatio(dailyReturns).toFixed(1)),
+    trades: buys + sells,
+    buys,
+    sells,
+    curve: curveFrom(equity),
+    inRangePct: prices.length ? Number(((inRange / prices.length) * 100).toFixed(0)) : 0,
+    unitsLeft: Number(unitsLeft.toFixed(6)),
+    leftValue: Number(leftValue.toFixed(2)),
+    /*
+     * What the open lots COST, not what they are worth.
+     *
+     * The difference between these two is the honest answer to "what happens if the range breaks",
+     * and it is the number a grid's marketing never shows.
+     */
+    leftCost: Number((lots.size * usdPerStep).toFixed(2)),
+    feed: 'live',
+    source: 'coingecko market_chart, daily closes',
+    disclaimer: 'Nothing here is a promise. A range that held is not a range that will hold.',
   };
 }

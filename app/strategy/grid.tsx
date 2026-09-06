@@ -20,6 +20,18 @@ import { type } from '@/design/type';
 import { money } from '@/format';
 import { repos } from '@/data';
 import { usePrices } from '@/data/usePrices';
+import { useAsync } from '@/data/useAsync';
+import { api } from '@/data/api';
+
+type GridBacktest = {
+  inRangePct: number;
+  buys: number;
+  sells: number;
+  ret: number;
+  leftValue: number;
+  leftCost: number;
+  disclaimer: string;
+};
 import { nextRuns } from '@/strategies/schedule';
 import type { Cadence } from '@/data/types';
 
@@ -42,6 +54,24 @@ export default function GridSetup() {
   const [cadence, setCadence] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  /*
+   * The backtest is on demand, not automatic.
+   *
+   * It costs a call to a rate-limited history API, and re-running it on every keystroke while
+   * someone types a range would spend that quota on ranges they are still in the middle of
+   * deciding — and could take the live prices down with it.
+   */
+  const [testNonce, setTestNonce] = useState(0);
+  const back = useAsync(async () => {
+    if (testNonce === 0) return null;
+    return api.post<GridBacktest>('/strategies/backtest', {
+      kind: 'grid',
+      symbol,
+      lookback: '90d',
+      params: { lower: lo, upper: hi, steps, usdPerStep },
+    });
+  }, [testNonce]);
+  const runBacktest = () => setTestNonce((n) => n + 1);
 
   const steps = STEP_OPTIONS[stepIdx]!;
   const lo = parseFloat(lower) || 0;
@@ -195,6 +225,62 @@ export default function GridSetup() {
                     </View>
                   );
                 })}
+              </View>
+            ) : null}
+
+            {/*
+              What this range would have done, over real history.
+              A grid's entire risk is the assumption in its own description — that the range holds
+              — and that is a question about the past, not a forecast. "In range 41% of the last
+              ninety days" is something a projection can never tell you.
+            */}
+            {rungs.length > 0 ? (
+              <View
+                style={{
+                  backgroundColor: sheet.fill,
+                  borderRadius: radius.md2,
+                  padding: 14,
+                  marginTop: 16,
+                  gap: 8,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={[type.eyebrowSm, { color: sheet.muted }]}>OVER THE LAST 90 DAYS</Text>
+                  {!back.data && !back.loading ? (
+                    <Pressable onPress={runBacktest} accessibilityRole="button" accessibilityLabel="Test this range against real history">
+                      <Text style={[type.pill, { color: pnl.cancelInk }]}>Test it</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                {back.loading ? (
+                  <Text style={[type.body, { color: sheet.muted }]}>Replaying real prices…</Text>
+                ) : back.error ? (
+                  <Text style={[type.noteBody, { color: pnl.candleDown }]}>
+                    No price history for {symbol}, so there is nothing to test against.
+                  </Text>
+                ) : back.data ? (
+                  <>
+                    <Text style={[type.rowPrimaryLg, { color: sheet.ink }]}>
+                      In range {back.data.inRangePct}% of the time
+                    </Text>
+                    <Text style={[type.noteBody, { color: sheet.muted }]}>
+                      {back.data.buys} buys and {back.data.sells} sells, {back.data.ret >= 0 ? 'up' : 'down'}{' '}
+                      {Math.abs(back.data.ret)}% on what it put to work.
+                    </Text>
+                    {back.data.leftCost > 0 ? (
+                      <Text style={[type.noteBody, { color: pnl.candleDown }]}>
+                        It would have ended still holding {money(back.data.leftValue)} of {symbol}
+                        {' '}that cost {money(back.data.leftCost)} — that is what a broken range
+                        looks like.
+                      </Text>
+                    ) : null}
+                    <Text style={[type.footnote, { color: sheet.dim }]}>{back.data.disclaimer}</Text>
+                  </>
+                ) : (
+                  <Text style={[type.noteBody, { color: sheet.muted }]}>
+                    Replay this exact range over real daily closes before you commit to it.
+                  </Text>
+                )}
               </View>
             ) : null}
 
