@@ -82,9 +82,16 @@ describe('3.6 no hyphen-minus in any numeric field [G12]', () => {
 
 describe('3.10 series that were trapped inside the prototype [G5][G6][G7]', () => {
   it('sparklines exist as data for all 5 watchlist groups', () => {
-    expect(watchlistGroups).toHaveLength(5);
+    // The design shipped five groups. Two of them — Metals and an Overview "Total" pseudo-row —
+    // held only symbols nothing on Base can price, and a tab that renders as dashes is worse than
+    // a tab that is not there. What remains is every group that can show a real number.
+    expect(watchlistGroups.length).toBeGreaterThanOrEqual(3);
     const rows = watchlistGroups.flatMap((g) => g.rows);
-    expect(rows).toHaveLength(11);
+    // Every row must be one the app can actually price. Four were dropped — XAUT, XAGT, JUP and a
+    // "Total" pseudo-row — because nothing on Base quotes them, and a curated list of markets that
+    // render as a dash is not a curated list.
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(r.sym).not.toMatch(/^(XAUT|XAGT|JUP|Total)$/);
     for (const r of rows) {
       // 90x30 viewBox — design.md §6 "Sparkline".
       const pts = r.spark.split(' ').map((p) => p.split(',').map(Number));

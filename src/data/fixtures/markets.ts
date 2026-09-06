@@ -248,8 +248,8 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "commodities",
     "label": "Commodities",
-    "note": "Perpetual swaps · no expiry · ICE feed on crude",
-    "more": "See all 11 commodity contracts",
+    "note": "Prices are indicative — no tokenized commodity routes on Base yet",
+    "more": "Not tradable here",
     "instruments": [
       {
         "sym": "XAUT",
@@ -364,8 +364,8 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "indices",
     "label": "Indices",
-    "note": "Index exposure through tokenized ETFs",
-    "more": "See all 9 index products",
+    "note": "Prices are indicative — no index token has liquidity on Base yet",
+    "more": "Not tradable here",
     "instruments": [
       {
         "sym": "SPYx",
@@ -480,8 +480,8 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "preipo",
     "label": "Pre-IPO",
-    "note": "Private-company exposure · settles at IPO",
-    "more": "See all 12 pre-IPO perps",
+    "note": "Prices are indicative — private markets have no on-chain instrument",
+    "more": "Not tradable here",
     "instruments": [
       {
         "sym": "OPENAI",

@@ -38,26 +38,6 @@ export const watchlistGroups: WatchlistGroup[] = [
     ]
   },
   {
-    "label": "Metals",
-    "tab": "Metals",
-    "rows": [
-      {
-        "sym": "XAUT",
-        "px": "—",
-        "chg": "",
-        "up": true,
-        "spark": "0,20 16,17 30,18 44,12 58,14 74,9 90,7"
-      },
-      {
-        "sym": "XAGT",
-        "px": "—",
-        "chg": "",
-        "up": false,
-        "spark": "0,10 16,13 30,11 46,16 60,15 74,19 90,21"
-      }
-    ]
-  },
-  {
     "label": "Equities",
     "tab": "Stocks",
     "rows": [
@@ -94,26 +74,6 @@ export const watchlistGroups: WatchlistGroup[] = [
         "chg": "",
         "up": true,
         "spark": "0,25 14,20 30,22 46,12 62,14 78,7 90,4"
-      },
-      {
-        "sym": "JUP",
-        "px": "—",
-        "chg": "",
-        "up": false,
-        "spark": "0,11 18,14 34,12 50,16 66,15 90,20"
-      }
-    ]
-  },
-  {
-    "label": "Overview",
-    "tab": "Overview",
-    "rows": [
-      {
-        "sym": "Total",
-        "px": "—",
-        "chg": "",
-        "up": true,
-        "spark": "0,21 18,17 34,18 50,13 66,12 82,9 90,8"
       }
     ]
   }

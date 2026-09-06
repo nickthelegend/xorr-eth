@@ -51,7 +51,7 @@ export default function ClassList() {
         }
         right={
           <Text style={[type.footnote, { color: ink.i28 }]}>
-            {cls?.instruments.length ?? 0} markets
+            {rows.length} of {cls?.instruments.length ?? 0} markets
           </Text>
         }
       />

@@ -29,6 +29,7 @@ import { money, percent, price as fmtPrice, quantity, signedMoney } from '@/form
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { usePrice } from '@/data/usePrices';
+import { isTradable } from '@/data/tradable';
 
 const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
 /** The timeframe each range pill maps to when asking for real candles. */
@@ -177,20 +178,34 @@ export default function AssetDetail() {
         </NoteStrip>
       </Screen.Content>
 
-      <ButtonRow
-        style={{ marginTop: 14 }}
-        affirmativeFlex={1}
-        secondary={
-          <Button
-            label="Sell"
-            variant="secondary"
-            onPress={() => router.push(`/order/${symbol}?side=sell`)}
-          />
-        }
-        affirmative={
-          <Button label="Buy" onPress={() => router.push(`/order/${symbol}?side=buy`)} />
-        }
-      />
+      {/*
+        A Buy button on a market this chain cannot settle is a promise the app cannot keep. These
+        instruments are real markets and their prices are labelled SIMULATED; what does not exist
+        is a token on Base to route into. Saying so is better than a button that leads to an order
+        ticket which can never be filled.
+      */}
+      {isTradable(symbol ?? '') ? (
+        <ButtonRow
+          style={{ marginTop: 14 }}
+          affirmativeFlex={1}
+          secondary={
+            <Button
+              label="Sell"
+              variant="secondary"
+              onPress={() => router.push(`/order/${symbol}?side=sell`)}
+            />
+          }
+          affirmative={
+            <Button label="Buy" onPress={() => router.push(`/order/${symbol}?side=buy`)} />
+          }
+        />
+      ) : (
+        <View style={{ marginTop: 14, paddingVertical: 14, alignItems: 'center' }}>
+          <Text style={[type.secondary, { color: ink.i40, textAlign: 'center' }]}>
+            Not tradable on Base. There is no token for this market to settle into.
+          </Text>
+        </View>
+      )}
     </Screen>
   );
 }
