@@ -109,6 +109,13 @@ export async function applyFill(
        ON CONFLICT (wallet_id, symbol, side) DO NOTHING`,
       [randomUUID(), params.walletId, params.symbol, Math.abs(params.units), Math.abs(params.usd)],
     );
+    // A disposal with no cost basis is still a disposal, and the report has to show it — flagged,
+    // so nobody mistakes an unknown cost for a zero one.
+    await client.query(
+      `INSERT INTO disposals (id, wallet_id, symbol, units, proceeds_usd, cost_usd, realised_usd, basis_known)
+       VALUES ($1,$2,$3,$4,$5,0,0,false)`,
+      [randomUUID(), params.walletId, params.symbol, Math.abs(params.units), Math.abs(params.usd)],
+    );
     return;
   }
 
@@ -141,6 +148,28 @@ export async function applyFill(
   const realised = hasBasis ? proceeds - costOut : 0;
   // What was really sold, even when the book had no record of holding it.
   const soldForRecord = hasBasis ? soldUnits : Math.abs(params.units);
+
+  /*
+   * Record the disposal itself, not just its effect on the totals.
+   *
+   * The running totals answer "how am I doing". They cannot answer the question an accountant
+   * asks, which is per-disposal: what was sold, when, for how much, against what cost. Those four
+   * numbers exist right here and were being added into a sum and discarded.
+   */
+  await client.query(
+    `INSERT INTO disposals (id, wallet_id, symbol, units, proceeds_usd, cost_usd, realised_usd, basis_known)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [
+      randomUUID(),
+      params.walletId,
+      params.symbol,
+      soldForRecord,
+      proceeds,
+      costOut,
+      realised,
+      hasBasis,
+    ],
+  );
 
   await client.query(
     `UPDATE positions

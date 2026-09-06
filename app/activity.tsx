@@ -70,8 +70,28 @@ export default function Activity() {
   const setActFilter = useStore((s) => s.setActFilter);
   const { data, loading, error, reload } = useAsync(() => repos.activity.list(), []);
   const [exporting, setExporting] = useState(false);
+  const [exportingTax, setExportingTax] = useState(false);
 
   const rows = filterActivity(data ?? [], actFilter);
+
+  /**
+   * The disposals file: every sale, its cost basis, and the gain or loss.
+   *
+   * Separate from the audit trail because they answer different questions for different readers.
+   * Average cost is stated inside the file rather than assumed — a jurisdiction that requires FIFO
+   * needs to be told this is not it.
+   */
+  async function exportDisposals() {
+    setExportingTax(true);
+    try {
+      const csv = await repos.activity.exportDisposals();
+      await Share.share({ message: csv, title: 'xorr disposals' });
+    } catch (e) {
+      console.warn('disposal export failed', e);
+    } finally {
+      setExportingTax(false);
+    }
+  }
 
   async function exportTrail() {
     setExporting(true);
@@ -160,13 +180,31 @@ export default function Activity() {
         )}
       </Screen.Content>
 
-      <Button
-        label="Export audit trail"
-        variant="ghost"
-        loading={exporting}
-        onPress={exportTrail}
-        style={{ marginTop: 14 }}
-      />
+      {/*
+        Two different documents, so two different buttons.
+        The audit trail records what the BOT did; the disposals file records what the USER owes.
+        Folding the second into the first would produce a file that is the wrong shape for both
+        jobs — an accountant does not want blocked runs, and a compliance reviewer does not want
+        cost basis.
+      */}
+      {/* A plain row: `ButtonRow` is the secondary/affirmative pair for a decision, and these two
+          are peers rather than a choice between them. */}
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+        <Button
+          label="Export audit trail"
+          variant="ghost"
+          loading={exporting}
+          onPress={exportTrail}
+          style={{ flex: 1 }}
+        />
+        <Button
+          label="Disposals (CSV)"
+          variant="ghost"
+          loading={exportingTax}
+          onPress={exportDisposals}
+          style={{ flex: 1 }}
+        />
+      </View>
     </Screen>
   );
 }

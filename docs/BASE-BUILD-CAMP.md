@@ -34,9 +34,24 @@ genuine except that the chain is a local copy: real router, real pools, real bal
 ```bash
 anvil --fork-url https://mainnet.base.org --port 8545 --chain-id 8453
 npx tsx server/src/fork-bootstrap.ts <your address>   # deploys, funds, writes .env.fork
+npx tsx server/src/fork-grant.ts <your address> 2000  # the owner grants the policy
+npx tsx server/src/seed.ts <your address>             # real strategies, real fills, real alerts
 npx tsx server/src/fork-e2e.ts WETH                   # 11 assertions, real fill
 (cd contracts && forge test --fork-url https://mainnet.base.org)   # 51 tests
 ```
+
+`seed.ts` is a shortcut through the clicking, not through the system: it creates strategies and
+runs them through the same executor the scheduler uses, so every fill, position and audit entry it
+produces is one the app made itself. Without it the first thing a judge sees is every empty state
+in the product, which is an honest picture of a fresh install and a poor picture of what was built.
+
+Then check it yourself:
+
+```bash
+curl -s "localhost:8788/verify?owner=<your address>" | jq '.passed, .failed'
+```
+
+Or open `/judge` in the app — the same fifteen claims, re-run in front of you.
 
 `fork-e2e` asserts the things that matter rather than that it did not throw: the bought token
 lands in the **user's** wallet, neither contract keeps a balance, the on-chain cap decrements, and

@@ -119,6 +119,14 @@ export interface ActivityRepository {
   list(): Promise<ActivityEvent[]>;
   /** PLAN.md 12.11: the audit trail is the compliance artifact, so export is a real feature. */
   exportTrail(format: 'csv' | 'json'): Promise<string>;
+  /**
+   * Every disposal with its cost basis — the document an accountant asks for.
+   *
+   * Distinct from the audit trail, which records what the bot did. Blocked runs belong in one and
+   * cost basis belongs in the other, and a file that tried to be both would be the wrong shape for
+   * each.
+   */
+  exportDisposals(): Promise<string>;
 }
 
 export interface NewsRepository {

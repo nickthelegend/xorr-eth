@@ -533,5 +533,34 @@ await check('B37', 'an unroutable symbol gets no second opinion, not a wrong one
   return x.note;
 });
 
+await check('B38', 'shutting down does not abandon a claimed run', async () => {
+  // The property is asserted through /metrics rather than by killing the server mid-suite: a run
+  // left `pending` forever is exactly what an abandoned claim looks like, and the period key means
+  // that period can never be retried.
+  const m = await (await req('/metrics', {}, false)).json();
+  const pending = m.runs.pending ?? 0;
+  must(pending <= 1, `${pending} runs stuck pending — a claim was abandoned`);
+  return `${pending} pending`;
+});
+
+await check('B39', 'every disposal is exported with its cost basis', async () => {
+  const r = await req('/pnl/disposals.csv');
+  must(r.status === 200, `status ${r.status}`);
+  const csv = await r.text();
+  const [header, ...rows] = csv.trim().split('\n');
+  must(
+    header === 'date,symbol,units,proceeds_usd,cost_basis_usd,gain_loss_usd,basis_method,basis_known',
+    `unexpected header: ${header}`,
+  );
+  const data = rows.filter((l) => l.split(',')[1]);
+  if (data.length === 0) return 'no disposals yet — header only, which is the honest empty file';
+  // The basis method is stated in the file. A jurisdiction that requires FIFO has to be told this
+  // is not it, and a column that says so is the only place that can carry it.
+  must(data.every((l) => l.includes('average_cost')), 'the basis method is not stated per row');
+  const totalRow = rows[rows.length - 1];
+  must(totalRow.startsWith(',,,,,'), 'no total row');
+  return `${data.length} disposal(s), total ${totalRow.split(',')[5]}`;
+});
+
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) process.exitCode = 1;

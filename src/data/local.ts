@@ -310,6 +310,9 @@ export const LocalRepositories: Repositories = {
     async exportTrail(format) {
       return api.getText(`/activity/export?format=${format}`);
     },
+    async exportDisposals() {
+      return api.getText('/pnl/disposals.csv');
+    },
   },
 
   news: {

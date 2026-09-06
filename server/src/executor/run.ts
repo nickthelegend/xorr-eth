@@ -147,7 +147,32 @@ export const EXECUTABLE_KINDS = new Set(Object.keys(PLANNERS));
  */
 export const SELF_SIZING_KINDS = new Set(['exit-rules', 'rebalance']);
 
+/**
+ * How many runs are on chain right now.
+ *
+ * Shutdown waits on this. A SIGTERM in the middle of a fill used to leave the `strategy_runs` row
+ * claimed and never finished — and because the period key is unique, that period can never be
+ * retried, so the strategy silently skips a day and the row sits `pending` forever. A deploy
+ * should not cost a user their scheduled buy.
+ */
+let inFlight = 0;
+export function inFlightRuns(): number {
+  return inFlight;
+}
+
 export async function runStrategy(
+  strategy: StrategyRow,
+  at: Date = new Date(),
+): Promise<RunOutcome> {
+  inFlight += 1;
+  try {
+    return await runStrategyInner(strategy, at);
+  } finally {
+    inFlight -= 1;
+  }
+}
+
+async function runStrategyInner(
   strategy: StrategyRow,
   at: Date = new Date(),
 ): Promise<RunOutcome> {

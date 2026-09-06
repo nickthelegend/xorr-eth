@@ -651,6 +651,55 @@ routes.get('/positions', async (c) => {
  * Separate from `/positions` because a closed position is not a holding and must not appear in a
  * holdings list — but the profit taken on it is real money and has to live somewhere.
  */
+/**
+ * Disposals, as a spreadsheet an accountant can open.
+ *
+ * The audit trail is the compliance artifact for what the BOT did; this is the compliance artifact
+ * for what the user OWES, and they are not the same document. Average cost, stated in the file
+ * rather than assumed, because a jurisdiction that wants FIFO needs to know this is not it.
+ *
+ * A disposal with no recorded cost is included and flagged. Excluding it would produce a tidier
+ * file that understates proceeds, which is the wrong direction to be wrong in on a tax report.
+ */
+routes.get('/pnl/disposals.csv', async (c) => {
+  const w = await requireWallet(c);
+  const rows = await query<{
+    at: Date;
+    symbol: string;
+    units: string;
+    proceeds_usd: string;
+    cost_usd: string;
+    realised_usd: string;
+    basis_known: boolean;
+  }>(
+    `SELECT at, symbol, units, proceeds_usd, cost_usd, realised_usd, basis_known
+       FROM disposals WHERE wallet_id = $1 ORDER BY at ASC`,
+    [w.id],
+  );
+
+  const header = 'date,symbol,units,proceeds_usd,cost_basis_usd,gain_loss_usd,basis_method,basis_known';
+  const body = rows.map((r) =>
+    [
+      new Date(r.at).toISOString(),
+      r.symbol,
+      r.units,
+      r.proceeds_usd,
+      r.cost_usd,
+      r.realised_usd,
+      'average_cost',
+      r.basis_known ? 'yes' : 'no',
+    ].join(','),
+  );
+  const total = rows.reduce((a, r) => a + Number(r.realised_usd), 0);
+  // A total row, because the first thing anyone does with this file is add up the last column.
+  body.push(`,,,,,${total.toFixed(2)},,`);
+
+  return c.body([header, ...body].join('\n'), 200, {
+    'content-type': 'text/csv; charset=utf-8',
+    'content-disposition': 'attachment; filename="xorr-disposals.csv"',
+  });
+});
+
 routes.get('/pnl/realised', async (c) => {
   const w = await requireWallet(c);
   return c.json(await realisedPnl(w.id));

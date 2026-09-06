@@ -14,10 +14,12 @@ import { catchup } from './routes/catchup.js';
 import { idempotency } from './http/idempotency.js';
 import { requestId, currentRequestId, log } from './http/request-id.js';
 import { startScheduler } from './executor/scheduler.js';
+import { inFlightRuns } from './executor/run.js';
+import { reconcileInterruptedRuns } from './executor/reconcile.js';
 import { CHAIN_KEY, rpcUrl } from './evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
 import { authMiddleware } from './auth/middleware.js';
-import { DATABASE_URL } from './db/index.js';
+import { DATABASE_URL, pool } from './db/index.js';
 
 const app = new Hono();
 
@@ -44,9 +46,39 @@ app.use('*', async (c, next) => {
   }
 });
 
+/**
+ * Which origins may call this executor.
+ *
+ * `*` was the wrong answer once real state-changing routes existed: any page a user has open can
+ * make a same-credentials request to a wildcard origin. It matters less than it looks here —
+ * authentication is a bearer token rather than a cookie, so a hostile page cannot borrow the
+ * session — but "less than it looks" is not a reason to leave it open, and CORS is the cheapest
+ * control in the stack.
+ *
+ * Configurable, because the origins genuinely differ per deployment: Expo's dev server moves port
+ * when 8081 is taken, and a device build has no origin at all. An unset list keeps the wildcard
+ * and says so at boot rather than silently locking out the local client.
+ */
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function originFor(requested: string | undefined): string {
+  if (ALLOWED_ORIGINS.length === 0) return '*';
+  if (requested && ALLOWED_ORIGINS.includes(requested)) return requested;
+  // Deny by echoing the first allowed origin rather than the requested one: the browser compares
+  // them and refuses. Echoing nothing at all produces a confusing "no CORS header" error instead
+  // of the accurate "this origin is not allowed".
+  return ALLOWED_ORIGINS[0]!;
+}
+
 app.use('*', async (c, next) => {
+  const requested = c.req.header('origin');
   await next();
-  c.header('access-control-allow-origin', '*');
+  c.header('access-control-allow-origin', originFor(requested));
+  // Required whenever the origin is not `*`, or caches will serve one origin's response to another.
+  if (ALLOWED_ORIGINS.length > 0) c.header('vary', 'Origin');
   // The web client sends `Authorization: Bearer <privy token>`; without it here the browser's
   // preflight rejects every authenticated request and the whole app looks logged-out.
   // `idempotency-key` and `x-request-id` are ours; without them here the browser preflight
@@ -135,7 +167,47 @@ app.route('/', ops);
 app.route('/', catchup);
 
 const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: app.fetch, port });
+const server = serve({ fetch: app.fetch, port });
+
+/**
+ * Shut down without abandoning work.
+ *
+ * A SIGTERM in the middle of a run left the `strategy_runs` row claimed and never finished — the
+ * period key means that period can never be retried, so the strategy silently skips a day and the
+ * row sits `pending` forever. Draining first is the difference between a deploy costing nothing
+ * and a deploy costing a user their scheduled buy.
+ *
+ * Bounded: a drain that never finishes is a process that never dies, and an orchestrator will kill
+ * it less politely. Ten seconds is longer than any single fill has taken and shorter than the
+ * grace period every scheduler gives.
+ */
+const DRAIN_MS = 10_000;
+let shuttingDown = false;
+
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log.info(`${signal} — draining for up to ${DRAIN_MS}ms`);
+
+  if (scheduler) clearInterval(scheduler);
+  server.close();
+
+  const deadline = Date.now() + DRAIN_MS;
+  while (inFlightRuns() > 0 && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const stranded = inFlightRuns();
+  if (stranded > 0) {
+    log.warn(`${stranded} run(s) still in flight after ${DRAIN_MS}ms — exiting anyway`);
+  }
+
+  await pool.end().catch(() => undefined);
+  log.info('stopped cleanly');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 console.log(`xorr executor on :${port}`);
 console.log(`  db      ${DATABASE_URL.replace(/:[^:@]*@/, ':***@')}`);
 console.log(`  chain    ${CHAIN_KEY} ${rpcUrl}`);
@@ -143,7 +215,19 @@ console.log(`  contract ${DELEGATION_ADDRESS}`);
 console.log(`  delegate ${delegatePublicKey}`);
 console.log('  auth     Privy (every route except /health)');
 
-if (process.env.SCHEDULER !== 'off') startScheduler();
+/*
+ * Heal anything the last shutdown could not.
+ *
+ * Before the scheduler starts, so a tick cannot race a row that is about to be closed. Failures
+ * here are logged and not fatal: an executor that refuses to start because it could not tidy up
+ * is worse than one that starts with a few rows still untidy.
+ */
+await reconcileInterruptedRuns().catch((e: unknown) =>
+  log.error('reconcile failed:', e instanceof Error ? e.message : e),
+);
+
+/** Held so shutdown can stop it before draining; otherwise a tick starts a run mid-drain. */
+const scheduler = process.env.SCHEDULER !== 'off' ? startScheduler() : undefined;
 
 // Populate the price and chart caches before anyone opens a screen.
 warmMarketCache();
