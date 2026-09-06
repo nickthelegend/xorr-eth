@@ -30,6 +30,7 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { hiredCount, useHasHydrated, useStore } from '@/state/store';
 import { DEFAULT_BUY } from '@/data/tradable';
+import { CatchUp } from '@/home/CatchUp';
 
 export default function Home() {
   const router = useRouter();
@@ -107,6 +108,12 @@ export default function Home() {
           height={58}
           style={{ marginTop: 18 }}
         />
+
+        {/*
+          The premise, closed. Renders nothing when nothing happened — a card that reports zero is
+          a card people stop reading, and the moment it matters is the moment they have stopped.
+        */}
+        <CatchUp />
 
         <SectionHeader
           title="Agents"

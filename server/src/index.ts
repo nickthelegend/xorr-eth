@@ -10,7 +10,9 @@ import { alerts } from './routes/alerts.js';
 import { verifyRoutes } from './routes/verify.js';
 import { panic } from './routes/panic.js';
 import { ops } from './routes/ops.js';
+import { catchup } from './routes/catchup.js';
 import { idempotency } from './http/idempotency.js';
+import { requestId, currentRequestId, log } from './http/request-id.js';
 import { startScheduler } from './executor/scheduler.js';
 import { CHAIN_KEY, rpcUrl } from './evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
@@ -19,13 +21,39 @@ import { DATABASE_URL } from './db/index.js';
 
 const app = new Hono();
 
+/*
+ * First, so every line logged by anything downstream carries the id — including the error handler
+ * and the rate limiter, which are the two places you most want it.
+ */
+app.use('*', requestId);
+
+/*
+ * One line per request, after it finishes, with the status and how long it took.
+ *
+ * There was no access log at all, so "the app was slow at 3pm" had nothing behind it. Logged after
+ * `next()` because the status and the duration only exist once the handler is done.
+ */
+app.use('*', async (c, next) => {
+  const t0 = Date.now();
+  await next();
+  const ms = Date.now() - t0;
+  // Health checks and metrics run every few seconds; logging them buries everything else.
+  const noisy = c.req.path === '/health' || c.req.path === '/metrics';
+  if (!noisy || c.res.status >= 400) {
+    log.info(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
+  }
+});
+
 app.use('*', async (c, next) => {
   await next();
   c.header('access-control-allow-origin', '*');
   // The web client sends `Authorization: Bearer <privy token>`; without it here the browser's
   // preflight rejects every authenticated request and the whole app looks logged-out.
-  c.header('access-control-allow-headers', 'content-type,authorization');
+  // `idempotency-key` and `x-request-id` are ours; without them here the browser preflight
+  // strips exactly the two headers that make a retry safe and a failure traceable.
+  c.header('access-control-allow-headers', 'content-type,authorization,idempotency-key,x-request-id');
   c.header('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  c.header('access-control-expose-headers', 'x-request-id,idempotent-replay,retry-after');
 });
 app.options('*', (c) => c.body(null, 204));
 
@@ -44,8 +72,9 @@ app.onError((err, c) => {
   }
   // Everything else is ours. Surface the real message: a trading server that hides its errors is
   // worse than one that fails.
-  console.error('[error]', err.message);
-  return c.json({ error: err.message }, 500);
+  log.error(err.message, err.stack?.split('\n')[1]?.trim() ?? '');
+  // The id goes in the body too, so a user can quote it from a screen without opening devtools.
+  return c.json({ error: err.message, requestId: currentRequestId() }, 500);
 });
 
 /**
@@ -103,6 +132,7 @@ app.route('/', alerts);
 app.route('/', verifyRoutes);
 app.route('/', panic);
 app.route('/', ops);
+app.route('/', catchup);
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port });

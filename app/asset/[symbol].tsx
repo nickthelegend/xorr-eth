@@ -28,6 +28,7 @@ import { type } from '@/design/type';
 import { money, percent, price as fmtPrice, quantity, signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { api } from '@/data/api';
 import { usePrice } from '@/data/usePrices';
 import { isTradable, settlementSymbol } from '@/data/tradable';
 
@@ -73,6 +74,18 @@ export default function AssetDetail() {
   // Tokenized equities have a real spot price and no history: they are priced off the 1inch route
   // that would fill them, not a candle feed. A real price with no chart is a true state to show.
   const { quote, loading: priceLoading, reload: reloadQuote } = usePrice(symbol);
+  /*
+   * The same asset, priced a second way.
+   *
+   * Every number in this app came from one feed, and one feed is one point of being wrong. 1inch's
+   * spot price is derived from the on-chain liquidity a fill would actually go through, which
+   * makes it the right second opinion rather than just another API: when the two disagree, the one
+   * that decides what a trade costs is the on-chain one.
+   */
+  const cross = useAsync(
+    () => api.get<{ agree: boolean; note: string }>(`/market/crosscheck?symbol=${encodeURIComponent(symbol)}`),
+    [symbol],
+  );
   const spot = hasSeries ? closes.at(-1)! : quote?.price && quote.price > 0 ? quote.price : undefined;
   // Either half can still be arriving; both say "fetching" rather than "nothing here".
   /*
@@ -152,6 +165,18 @@ export default function AssetDetail() {
                 : 'Spot price. No price history for this market.'}
           </Text>
         )}
+
+        {/*
+          A second opinion, from the pools a fill would actually touch.
+
+          Shown only when it disagrees. A line saying "two sources agree" on every asset every day
+          is noise that trains people to stop reading — the whole value is that it appears when
+          something is wrong, and the number the executor would trade at is the one that matters
+          when they diverge.
+        */}
+        {cross.data && !cross.data.agree ? (
+          <Text style={[type.noteBody, { color: pnl.warn, marginTop: 6 }]}>{cross.data.note}</Text>
+        ) : null}
       </View>
 
       {points && candleView ? (

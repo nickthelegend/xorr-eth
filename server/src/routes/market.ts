@@ -28,6 +28,7 @@ import { isAddress, type Address } from 'viem';
 import { addressOfBasename, basenameOf } from '../evm/basename.js';
 import type { Context } from 'hono';
 import { perpMetrics } from '../market/perp.js';
+import { crossCheck } from '../market/crosscheck.js';
 
 export const market = new Hono();
 
@@ -423,4 +424,21 @@ market.get('/basename', async (c) => {
     return c.json({ address, name: await basenameOf(address as Address) });
   }
   return c.json({ error: 'pass ?name= or a valid ?address=' }, 400);
+});
+
+/**
+ * The same asset, priced two ways. Public, like every other price route.
+ *
+ * Deliberately its own endpoint rather than a field on `/market/quotes`: the second source costs a
+ * round trip to a rate-limited API, and paying that for every symbol on a list screen to answer a
+ * question only the asset screen asks would be a poor trade.
+ */
+market.get('/market/crosscheck', async (c) => {
+  /*
+   * Not uppercased. The tokenized equities are registered mixed-case — `NVDAc`, not `NVDAC` — so
+   * normalising here silently missed every one of them and fell through to a wrong answer.
+   */
+  const symbol = c.req.query('symbol') ?? '';
+  if (!symbol) return c.json({ error: 'pass ?symbol=' }, 400);
+  return c.json(await crossCheck(symbol));
 });

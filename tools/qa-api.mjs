@@ -374,7 +374,9 @@ await check('B27', 'a strategy kind with no executor is refused at creation', as
   const r = await req('/strategies', {
     method: 'POST',
     body: JSON.stringify({
-      kind: 'grid', state: 'live', label: 'should not exist', symbol: 'WETH',
+      // `momentum` is tier 6 and genuinely has no executor. This used to say `grid`, which became
+      // wrong the moment tier 5 shipped — a test asserting a gap has to move as the gap closes.
+      kind: 'momentum', state: 'live', label: 'should not exist', symbol: 'WETH',
       params: {}, cadence: 'daily', dailyAllocationUsd: 5,
     }),
   });
@@ -382,7 +384,10 @@ await check('B27', 'a strategy kind with no executor is refused at creation', as
   // run. Refusing it costs the user one error message while someone is still there to read it.
   must(r.status === 400, `status ${r.status} — an unrunnable strategy was accepted`);
   const body = await r.json();
-  must(JSON.stringify(body).includes('grid') || JSON.stringify(body).includes('runnable'), `unhelpful error: ${JSON.stringify(body)}`);
+  must(
+    JSON.stringify(body).includes('momentum') || JSON.stringify(body).includes('runnable'),
+    `unhelpful error: ${JSON.stringify(body)}`,
+  );
   return '400 with the runnable kinds named';
 });
 
@@ -496,6 +501,36 @@ await check('B34', 'selling everything does not consume the daily cap', async ()
     `cap moved ${before.remainingTodayUsd} -> ${after.remainingTodayUsd}`,
   );
   return `${r.sold} sold, ${r.failed} failed, cap still $${after.remainingTodayUsd}`;
+});
+
+await check('B35', 'a request carries an id, and honours one it is given', async () => {
+  const r = await req('/wallet');
+  const generated = r.headers.get('x-request-id');
+  must(generated && generated.length > 8, 'no id on the response');
+  const mine = await req('/wallet', { headers: { 'x-request-id': 'qa-trace-1' } });
+  must(mine.headers.get('x-request-id') === 'qa-trace-1', 'a caller-supplied id was not honoured');
+  return `generated ${generated.slice(0, 8)}…, echoed qa-trace-1`;
+});
+
+await check('B36', 'prices are cross-checked against a second, on-chain source', async () => {
+  const r = await withRetry(() => fetch(`${B}/market/crosscheck?symbol=ETH`));
+  must(r.status === 200, `status ${r.status}`);
+  const x = await r.json();
+  // The second source is worth having because it is derived from the pools a fill would touch,
+  // not because it is merely a second API.
+  must(typeof x.oneinch === 'number' && x.oneinch > 0, `no on-chain price: ${JSON.stringify(x)}`);
+  if (x.coingecko === null) return 'only the on-chain source answered — reported as such, not as a disagreement';
+  must(typeof x.spreadPct === 'number', 'two prices but no spread computed');
+  must(x.spreadPct < 5, `implausible spread ${x.spreadPct}%`);
+  return `coingecko $${x.coingecko.toFixed(2)} vs 1inch $${x.oneinch.toFixed(2)} — ${x.spreadPct.toFixed(3)}%`;
+});
+
+await check('B37', 'an unroutable symbol gets no second opinion, not a wrong one', async () => {
+  const x = await (await withRetry(() => fetch(`${B}/market/crosscheck?symbol=BTC`))).json();
+  // This used to fall back to WETH's address and return WETH's price labelled as BTC.
+  must(x.oneinch === null, `BTC was priced on chain as ${x.oneinch} — that is WETH's price`);
+  must(/not routable/i.test(x.note), `unhelpful note: ${x.note}`);
+  return x.note;
 });
 
 console.log(`\n${pass} passed, ${failures.length} failed`);

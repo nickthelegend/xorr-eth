@@ -36,6 +36,8 @@ const PUBLIC_PATHS = new Set([
   '/basename',
   /** Operational, and read-only. A health check behind a session cannot be used by a load balancer. */
   '/metrics',
+  /** A second opinion on a public price is still a public price. */
+  '/market/crosscheck',
 ]);
 
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */
