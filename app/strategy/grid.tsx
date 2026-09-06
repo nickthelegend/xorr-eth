@@ -11,7 +11,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -64,7 +64,7 @@ const CADENCES = [
 const FIELD_H = 46;
 
 export default function GridSetup() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const [symbol, setSymbol] = useState<Symbol>('WETH');
   const { quotes } = usePrices([symbol]);
   const mark = quotes[symbol]?.price;
@@ -139,7 +139,7 @@ export default function GridSetup() {
         // The most it can ever have at work: one rung per level, and never more than that.
         dailyAllocationUsd: maxCommitted,
       });
-      router.back();
+      goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -156,7 +156,7 @@ export default function GridSetup() {
         <IconButton
           name="close"
           accessibilityLabel="Close"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           background="none"
           color={colors.sheet.ink}
           glyph={20}

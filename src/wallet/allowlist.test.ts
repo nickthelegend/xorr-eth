@@ -59,3 +59,21 @@ describe('the cooling-off period is the point', () => {
     expect(isUsable(entry(now - (COOLING_OFF_HOURS + 24) * HOUR), now)).toBe(true);
   });
 });
+
+describe('adding the same address twice', () => {
+  it('is refused by the store, because the screen reads stale state', () => {
+    /*
+     * Not a hypothetical: double-tapping "Add" in the running app produced two identical rows and
+     * a React duplicate-key error. The screen's own check reads the rendered list, so both taps
+     * saw it without the entry either was adding.
+     */
+    const a: AllowlistEntry = { label: 'Cold storage', address: '0x4200000000000000000000000000000000000006', addedAt: 1 };
+    const dedupe = (prev: AllowlistEntry[], addr: string) =>
+      prev.some((x) => x.address.toLowerCase() === addr.trim().toLowerCase());
+    expect(dedupe([a], a.address)).toBe(true);
+    // Case and surrounding space are the same address.
+    expect(dedupe([a], '  0x4200000000000000000000000000000000000006  ')).toBe(true);
+    expect(dedupe([a], a.address.toUpperCase().replace('0X', '0x'))).toBe(true);
+    expect(dedupe([a], '0x95A0b368588713011a15f4b1041423f31B08e615')).toBe(false);
+  });
+});

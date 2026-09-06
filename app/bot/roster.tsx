@@ -13,6 +13,7 @@
 import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import { agentGradient } from '@/design/gradients';
 import {
   AgentOrb,
@@ -36,6 +37,7 @@ const HIRE_H = 40;
 
 export default function Roster() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { data, loading, reload } = useAsync(() => repos.bot.listAgents(), []);
   // Which card is mid-flight. Hiring is a write, and a button that does nothing visible
   // while it travels reads as broken.
@@ -67,7 +69,7 @@ export default function Roster() {
             name="back"
             accessibilityLabel="Back"
             background="none"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
           <Text variant="screenTitle">Agents</Text>
         </View>

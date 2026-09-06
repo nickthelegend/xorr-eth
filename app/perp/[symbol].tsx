@@ -11,6 +11,7 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   AreaChart,
   Button,
@@ -60,6 +61,7 @@ const LEV_OPTIONS = LEVERAGE_OPTIONS.map((l) => ({ value: l as number, label: `$
 export default function PerpContract() {
   const { symbol = 'XAUT' } = useLocalSearchParams<{ symbol: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const lev = useStore((s) => s.lev);
   const setLev = useStore((s) => s.setLev);
 
@@ -93,7 +95,7 @@ export default function PerpContract() {
             name="back"
             accessibilityLabel="Back"
             background="none"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
           <Text variant="cardTitle">{symbol}/USDT</Text>
         </View>

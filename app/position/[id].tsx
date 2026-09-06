@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { assetGradient } from '@/design/gradients';
 import {
@@ -58,6 +59,7 @@ const STAT_ROW = 46;
 export default function PositionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const closePct = useStore((s) => s.closePct);
   const setClosePct = useStore((s) => s.setClosePct);
   const reduced = useReducedMotion();
@@ -118,7 +120,7 @@ export default function PositionScreen() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         {p ? <AssetMark gradient={assetGradient(p.symbol)} size={26} /> : null}
         <Text variant="cardTitle" numberOfLines={1}>
@@ -275,7 +277,7 @@ export default function PositionScreen() {
       </Fill>
 
       {flat ? (
-        <Button label="Done" onPress={() => router.back()} />
+        <Button label="Done" onPress={() => goBack()} />
       ) : (
         <ButtonRow
           style={{ marginTop: space.s14 }}

@@ -16,6 +16,7 @@
 import React, { useMemo, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -39,11 +40,13 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { api } from '@/data/api';
 import type { Address } from 'viem';
+import { userSigningNote, userSigningWorks } from '@/chain';
 
 const FIELD_H = 52;
 
 export default function Send() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { addresses, pendingFor } = useAllowlist();
   const [selected, setSelected] = useState(0);
   const [amount, setAmount] = useState('');
@@ -71,7 +74,8 @@ export default function Send() {
     return undefined;
   }, [addresses.length, entry, pendingFor, amount, amountUsd, overBalance]);
 
-  const ready = Boolean(entry) && !pendingFor(entry!) && amountUsd > 0 && !overBalance && !!params.data;
+  const ready =
+    userSigningWorks && Boolean(entry) && !pendingFor(entry!) && amountUsd > 0 && !overBalance && !!params.data;
 
   return (
     <Screen>
@@ -80,7 +84,7 @@ export default function Send() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle">Send</Text>
       </View>
@@ -155,6 +159,13 @@ export default function Send() {
           A new address takes effect after a cooling-off period. Adding one now does not let you
           send to it today.
         </NoteStrip>
+
+        {/* Said before the button is pressed, not by a revert afterwards. See src/chain.ts. */}
+        {userSigningWorks ? null : (
+          <NoteStrip kind="blocked" style={{ marginTop: space.s10 }}>
+            {userSigningNote}
+          </NoteStrip>
+        )}
 
         {problem ? (
           <Text variant="secondary" color={colors.down} style={{ marginTop: space.s12 }}>

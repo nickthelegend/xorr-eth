@@ -20,7 +20,7 @@
  */
 import React from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Fill,
@@ -36,7 +36,7 @@ import {
 import { useStore } from '@/state/store';
 
 export default function Recovery() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const wallet = useStore((s) => s.wallet);
   const setRecoveryBackedUp = useStore((s) => s.setRecoveryBackedUp);
   const acknowledged = useStore((s) => s.recoveryBackedUp);
@@ -48,7 +48,7 @@ export default function Recovery() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle">Recovery</Text>
       </View>
@@ -97,7 +97,7 @@ export default function Recovery() {
         label={acknowledged ? 'Understood' : 'I understand'}
         onPress={() => {
           setRecoveryBackedUp(true);
-          router.back();
+          goBack();
         }}
       />
       <Text

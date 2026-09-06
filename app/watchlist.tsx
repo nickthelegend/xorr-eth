@@ -16,6 +16,7 @@
 import React, { useMemo } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import { assetGradient } from '@/design/gradients';
 import {
   AssetMark,
@@ -44,6 +45,7 @@ const ROW_H = 64;
 
 export default function Watchlist() {
   const router = useRouter();
+  const goBack = useGoBack();
   const tab = useStore((s) => s.tab);
   const setTab = useStore((s) => s.setTab);
   const group = watchlistGroups[tab] ?? watchlistGroups[0]!;
@@ -70,7 +72,7 @@ export default function Watchlist() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
       </View>
 

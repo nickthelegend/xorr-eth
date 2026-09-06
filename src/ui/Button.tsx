@@ -56,7 +56,11 @@ const DISABLED: Pick<Skin, 'bg' | 'fg'> = { bg: colors.control, fg: colors.ink35
 
 export interface ButtonProps {
   label: string;
-  onPress?: () => void;
+  /**
+   * May return a promise. If it does, the button refuses further presses until it settles —
+   * see `guardedPress` for why `loading` alone was not enough.
+   */
+  onPress?: () => void | Promise<unknown>;
   variant?: ButtonVariant;
   disabled?: boolean;
   /**
@@ -74,6 +78,42 @@ export interface ButtonProps {
   testID?: string;
 }
 
+/**
+ * One press, one action — enforced synchronously.
+ *
+ * `loading` was supposed to do this and cannot on its own: it is React state, so a screen sets it
+ * inside its async handler and the flag only reaches the button on the NEXT render. Two taps
+ * dispatched in the same tick both read `loading === false` and both fire. Measured, not theorised:
+ * double-tapping "Buy $25 of WETH, weekly" created **two identical recurring buys**, and the user
+ * would have been charged twice a week from then on. Seventeen screens share that pattern.
+ *
+ * A ref flips in the same tick as the first press, so the second one has something to see. It
+ * clears when the handler's promise settles — or immediately for a synchronous handler, which
+ * cannot have an in-flight state to protect.
+ */
+function useGuardedPress(
+  onPress: (() => void | Promise<unknown>) | undefined,
+  loading: boolean,
+) {
+  const inFlight = React.useRef(false);
+  React.useEffect(() => {
+    // A screen that finished its own work and cleared `loading` releases the guard with it, so a
+    // handler that never returns a promise still cannot wedge the button shut.
+    if (!loading) inFlight.current = false;
+  }, [loading]);
+
+  return React.useCallback(() => {
+    if (!onPress || inFlight.current) return;
+    const result = onPress();
+    if (result && typeof (result as Promise<unknown>).finally === 'function') {
+      inFlight.current = true;
+      void (result as Promise<unknown>).finally(() => {
+        inFlight.current = false;
+      });
+    }
+  }, [onPress]);
+}
+
 export function Button({
   label,
   onPress,
@@ -87,6 +127,7 @@ export function Button({
   testID,
 }: ButtonProps) {
   const skin = SKINS[variant];
+  const press = useGuardedPress(onPress, loading);
   const bg = disabled ? DISABLED.bg : (backgroundColor ?? skin.bg);
   const fg = disabled ? DISABLED.fg : (color ?? skin.fg);
   const h = height ?? skin.height;
@@ -94,7 +135,7 @@ export function Button({
   return (
     <Press
       testID={testID}
-      onPress={onPress}
+      onPress={press}
       disabled={disabled || loading || !onPress}
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || loading, busy: loading }}

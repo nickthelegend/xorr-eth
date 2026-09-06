@@ -5,6 +5,7 @@
 import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Eyebrow,
   Fill,
@@ -32,6 +33,7 @@ const TONE_OPTIONS = TONES.map((t) => ({ value: t.id, label: t.label }));
 
 export default function Settings() {
   const router = useRouter();
+  const goBack = useGoBack();
   // The store's `wallet` is only ever set by the onboarding screen, so deep-linking here —
   // or opening Settings in a session that did not run onboarding — showed "Address: None"
   // and "Network: —" for a user who has a wallet. Read the source of truth, like every
@@ -55,7 +57,7 @@ export default function Settings() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Settings</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
+        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
       </View>
 
       <Fill style={{ marginTop: space.s20 }}>

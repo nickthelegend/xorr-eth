@@ -12,6 +12,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   AreaChart,
   Button,
@@ -45,6 +46,7 @@ const CHART_H = 150;
 export default function Backtest() {
   const { id = 'momentum-scout' } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const btLook = useStore((s) => s.btLook);
   const setBtLook = useStore((s) => s.setBtLook);
   const btCapital = useStore((s) => s.btCapital);
@@ -65,7 +67,7 @@ export default function Backtest() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle">Backtest</Text>
       </View>

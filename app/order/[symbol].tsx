@@ -11,7 +11,8 @@
  */
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Fill,
@@ -50,7 +51,7 @@ export default function OrderTicket() {
     symbol: string;
     side?: string;
   }>();
-  const router = useRouter();
+  const goBack = useGoBack();
   // An order ticket for something this chain cannot settle is a ticket that can never be
   // filled. The asset screen already refuses to offer a Buy for one; the ticket itself was
   // still reachable directly and happily said "Buy $250 of NOPE".
@@ -111,7 +112,7 @@ export default function OrderTicket() {
         });
         if (res.status === 'closed') {
           setFilled({ units: res.units ?? 0, price: (res.usd ?? 0) / (res.units || 1) });
-          setTimeout(() => router.back(), 1200);
+          setTimeout(() => goBack(), 1200);
         } else {
           setRefusal(res.detail ?? res.error ?? `The sale came back "${res.status}".`);
         }
@@ -123,7 +124,7 @@ export default function OrderTicket() {
         setFilled({ units: res.units ?? 0, price: res.price ?? 0 });
         // Let the fill land on screen before the sheet goes; a ticket that closes the
         // instant you tap it leaves you unsure whether anything happened.
-        setTimeout(() => router.back(), 1200);
+        setTimeout(() => goBack(), 1200);
       } else {
         // The policy engine's own sentence — "the daily cap is spent", not "409".
         // The policy engine's own sentence — "the daily cap is spent", not "409".
@@ -145,7 +146,7 @@ export default function OrderTicket() {
         <IconButton
           name="close"
           accessibilityLabel="Close"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           background="none"
           color={colors.sheet.ink}
           glyph={20}

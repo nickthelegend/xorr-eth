@@ -17,7 +17,7 @@ import {
 } from '../executor/run.js';
 import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
-import { CHAIN_KEY, explorerTx, ADDRESSES, SETTLEMENT_VENUES } from '../evm/chains.js';
+import { ADDRESSES, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
 import { basenameOf } from '../evm/basename.js';
 import {
   allowedVenues,
@@ -31,6 +31,8 @@ import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
 import { TOKENS } from '../venues/oneinch.js';
+import { publicClient } from '../evm/client.js';
+import { STOCKS } from '../venues/stocks.js';
 import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
 import { PUSH_KINDS } from '../notifications/push.js';
 
@@ -199,6 +201,53 @@ routes.get('/delegation', async (c) => {
  * The USER signs the grant, with their own Privy wallet — the executor never holds the owner key
  * and so cannot grant itself permission. This route only says what to sign.
  */
+
+/**
+ * The tokens worth asking the user to approve — and no more.
+ *
+ * Approving every entry in the routing registry meant ELEVEN modals before the grant: the user
+ * tapped Approve a dozen times to finish onboarding, and eight of those were Ondo equities that
+ * have no code on Base Sepolia at all. An approval for a contract that does not exist is a
+ * transaction that costs gas and grants nothing.
+ *
+ * So: the settlement token, plus every registry token that actually has code on the chain we
+ * settle on. On Sepolia that is three signatures instead of eleven; on mainnet or a fork it is the
+ * full set, which is correct there because those contracts are real and sellable.
+ *
+ * Checked with `eth_getCode` rather than assumed from a chain flag, because the whole point of the
+ * two-environment split is that the answer differs and the chain is the one that knows.
+ */
+async function approvableTokens(): Promise<{ symbol: string; address: Address }[]> {
+  /*
+   * SETTLEMENT addresses, not quote addresses.
+   *
+   * `TOKENS` is the routing registry and it is always Base MAINNET — 1inch is only ever asked
+   * about mainnet, which is why `QUOTE_ADDRESSES` exists. Approving from it on Sepolia asked the
+   * user to approve mainnet USDC, which has no code there, so the filter below removed it and the
+   * list came back as WETH alone: the one token that happens to share an address across both.
+   * The user would then have granted a permission that could never pull the token it spends.
+   *
+   * `ADDRESSES` follows `XORR_CHAIN`, so this is what the delegation will actually be asked to
+   * move. The equities are added only where they exist, which `IS_BASE_MAINNET_STATE` already
+   * answers and `getCode` then confirms.
+   */
+  const settlement: [string, Address][] = [
+    ['USDC', ADDRESSES.usdcBase],
+    ['WETH', ADDRESSES.wethBase],
+    ['CBBTC', ADDRESSES.cbbtcBase],
+    ...(IS_BASE_MAINNET_STATE
+      ? Object.values(STOCKS).map((st) => [st.symbol, st.address] as [string, Address])
+      : []),
+  ];
+  const entries = settlement;
+  const codes = await Promise.all(
+    entries.map(([, address]) => publicClient.getCode({ address }).catch(() => undefined)),
+  );
+  return entries
+    .filter((_, i) => (codes[i]?.length ?? 0) > 2)
+    .map(([symbol, address]) => ({ symbol, address }));
+}
+
 routes.get('/delegation/params', async (c) => {
   requireUser(c);
   return c.json({
@@ -219,9 +268,7 @@ routes.get('/delegation/params', async (c) => {
      * form. The list follows the routing registry, so a token that becomes tradable becomes
      * approvable in the same change rather than two releases later.
      */
-    tokens: Object.entries(TOKENS)
-      .filter(([symbol]) => symbol !== 'ETH')
-      .map(([symbol, t]) => ({ symbol, address: t.address })),
+    tokens: await approvableTokens(),
     chain: CHAIN_KEY,
   });
 });

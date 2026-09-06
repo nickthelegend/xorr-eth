@@ -12,7 +12,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -56,7 +56,7 @@ function phrase(c: Cadence): string {
 }
 
 export default function YieldSetup() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const [amount, setAmount] = useState('250');
   const [cadence, setCadence] = useState<Cadence>('daily');
   const [keepCashUsd, setKeepCashUsd] = useState<number>(100);
@@ -99,7 +99,7 @@ export default function YieldSetup() {
         nextRunAt: runs[0]!.getTime(),
         dailyAllocationUsd: usd,
       });
-      router.back();
+      goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -116,7 +116,7 @@ export default function YieldSetup() {
         <IconButton
           name="close"
           accessibilityLabel="Close"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           background="none"
           color={colors.sheet.ink}
           glyph={20}

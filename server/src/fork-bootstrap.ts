@@ -157,6 +157,11 @@ async function main() {
       '# a fresh anvil has none of these contracts.',
       'XORR_CHAIN=base-fork',
       `FORK_RPC=${RPC}`,
+      // The APP has to sign on the same chain the executor settles on. Without these the Privy
+      // provider defaults to Base Sepolia and every user-signed transaction — the grant, the
+      // approvals, a withdrawal — goes to a chain nobody is trading on.
+      'EXPO_PUBLIC_XORR_CHAIN=base-fork',
+      `EXPO_PUBLIC_CHAIN_RPC=${RPC}`,
       `DELEGATION_ADDRESS=${delegation}`,
       `EXPO_PUBLIC_DELEGATION_ADDRESS=${delegation}`,
       `AQUA_BOOK_ADDRESS=${book}`,

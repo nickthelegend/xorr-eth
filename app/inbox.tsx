@@ -7,6 +7,7 @@
 import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   EmptyState,
   Fill,
@@ -37,6 +38,7 @@ function kindFor(action: string, kind: string): AlertKind {
 
 export default function Inbox() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { data, loading } = useAsync(() => repos.activity.list(), []);
 
   return (
@@ -46,7 +48,7 @@ export default function Inbox() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle">Inbox</Text>
       </View>

@@ -12,6 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
   Button,
@@ -42,6 +43,7 @@ const SETTING_ROW = 52;
 
 export default function Safety() {
   const router = useRouter();
+  const goBack = useGoBack();
   // How many agents can actually place an order right now, from the server. Counting a
   // boolean in browser state would make the kill switch's own explanation a guess.
   const roster = useAsync(() => repos.bot.listAgents(), []);
@@ -119,7 +121,7 @@ export default function Safety() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle">Safety</Text>
       </View>

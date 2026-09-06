@@ -8,7 +8,7 @@
  */
 import React from 'react';
 import { PrivyProvider as WebProvider } from '@privy-io/react-auth';
-import { baseSepolia, base } from 'viem/chains';
+import { activeChain, supportedChains } from '@/chain';
 import { colors } from '@/ui';
 
 const APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
@@ -26,8 +26,9 @@ export function AppPrivyProvider({ children }: { children: React.ReactNode }) {
         // makes "sign in and you own a wallet" a single step rather than two.
         embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' } },
         loginMethods: ['email', 'wallet'],
-        defaultChain: baseSepolia,
-        supportedChains: [baseSepolia, base],
+        // Follows EXPO_PUBLIC_XORR_CHAIN — see src/chain.ts for what hardcoding this cost.
+        defaultChain: activeChain,
+        supportedChains,
         appearance: {
           theme: 'dark',
           accentColor: colors.ink,

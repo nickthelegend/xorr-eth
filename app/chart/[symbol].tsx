@@ -12,6 +12,7 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   ButtonPair,
@@ -48,6 +49,7 @@ const CHART_H = 230;
 export default function ProChart() {
   const { symbol = 'BTC' } = useLocalSearchParams<{ symbol: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   // screens.md: 1H is the default (bolded in the pill row).
   const [tf, setTfRaw] = useState(1);
   /*
@@ -88,7 +90,7 @@ export default function ProChart() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="cardTitle">{symbol}/USD</Text>
         {data?.feed === 'simulated' ? <Tag label="Simulated" small tone="warn" /> : null}

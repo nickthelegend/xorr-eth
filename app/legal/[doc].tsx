@@ -8,7 +8,8 @@
  */
 import React from 'react';
 import { ScrollView, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Fill,
   IconButton,
@@ -22,7 +23,7 @@ import { LEGAL } from '@/legal/documents';
 
 export default function LegalDoc() {
   const { doc } = useLocalSearchParams<{ doc: string }>();
-  const router = useRouter();
+  const goBack = useGoBack();
   const entry = LEGAL[doc ?? 'terms'] ?? LEGAL.terms!;
 
   return (
@@ -32,7 +33,7 @@ export default function LegalDoc() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle" numberOfLines={1} style={{ flex: 1 }}>
           {entry.title}

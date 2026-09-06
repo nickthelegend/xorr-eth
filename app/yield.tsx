@@ -11,7 +11,7 @@
  */
 import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -38,7 +38,7 @@ const PORTIONS = [0.25, 0.5, 1] as const;
 const PORTION_H = 42;
 
 export default function Yield() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const [portion, setPortion] = useState<number>(1);
   const [txHash, setTxHash] = useState<string>();
   const [nonce, setNonce] = useState(0);
@@ -65,7 +65,7 @@ export default function Yield() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Earning at Aave</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
+        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
       </View>
 
       <Fill style={{ marginTop: space.s16 }}>

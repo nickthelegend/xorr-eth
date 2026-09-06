@@ -10,7 +10,7 @@
  */
 import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Fill,
@@ -41,7 +41,7 @@ import { COOLING_OFF_HOURS, isValidAddress, useAllowlist } from '@/wallet/allowl
 const FIELD_H = 48;
 
 export default function Allowlist() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const { addresses, add, pendingFor } = useAllowlist();
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState('');
@@ -66,7 +66,7 @@ export default function Allowlist() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle">Allowlist</Text>
       </View>

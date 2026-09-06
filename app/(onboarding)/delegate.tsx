@@ -29,6 +29,9 @@ import {
   size,
   space,
 } from '@/ui';
+import { userSigningNote, userSigningWorks } from '@/chain';
+import { useAsync } from '@/data/useAsync';
+import { api } from '@/data/api';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { CAP_MAX, CAP_MIN, RUN_FOR, capLabel, runForMs } from '@/state/derived';
 import { useStore } from '@/state/store';
@@ -46,6 +49,19 @@ export default function GrantDelegation() {
   // The grant is signed by the USER's own wallet. The executor cannot grant itself
   // permission — that is the whole point of the delegation being on-chain.
   const { grant: signGrant, busy, error: grantError } = useGrantDelegation();
+  /*
+   * How many signatures this is actually going to ask for.
+   *
+   * The grant is one transaction, and it is preceded by an ERC-20 approval for every token the
+   * delegation may need to pull — which on a chain where the tokenized equities exist is eleven.
+   * Eleven wallet prompts with no warning reads as the app having broken, and a user who stops
+   * half way has approvals but no permission. Saying the number first costs one sentence.
+   */
+  const params = useAsync(
+    () => api.get<{ tokens?: { symbol: string }[] }>('/delegation/params'),
+    [],
+  );
+  const signatures = (params.data?.tokens?.length ?? 0) + 1;
   const error = localError ?? grantError;
 
   async function grant() {
@@ -141,6 +157,25 @@ export default function GrantDelegation() {
           the damage; they do not prevent it.
         </NoteStrip>
 
+        {/*
+          The grant is the one signature this whole product depends on, so if the build cannot
+          take it the screen says so before asking — rather than letting Privy answer with a
+          revert about a balance on a chain the user is not looking at. See src/chain.ts.
+        */}
+        {signatures > 2 ? (
+          <NoteStrip kind="risk" style={{ marginTop: space.s10 }}>
+            Your wallet will ask you to sign {signatures} times: one approval for each token the
+            bot may need to sell, then the permission itself. Stopping part way leaves the bot
+            without permission — nothing is granted until the last one.
+          </NoteStrip>
+        ) : null}
+
+        {userSigningWorks ? null : (
+          <NoteStrip kind="blocked" style={{ marginTop: space.s10 }}>
+            {userSigningNote}
+          </NoteStrip>
+        )}
+
         {error ? (
           <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s14 }}>
             {error}
@@ -148,7 +183,12 @@ export default function GrantDelegation() {
         ) : null}
       </Fill>
 
-      <Button label="Sign this permission" loading={busy} onPress={grant} />
+      <Button
+        label="Sign this permission"
+        loading={busy}
+        disabled={!userSigningWorks}
+        onPress={grant}
+      />
       <Button
         label="Not yet — look around first"
         variant="ghost"

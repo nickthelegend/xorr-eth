@@ -6,6 +6,7 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   AssetMark,
   Button,
@@ -31,6 +32,7 @@ const PAGE = 25;
 export default function ClassList() {
   const { classId } = useLocalSearchParams<{ classId: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const [page, setPage] = useState(1);
   const { data, loading, error, reload } = useAsync(() => repos.markets.listClasses(), []);
 
@@ -46,7 +48,7 @@ export default function ClassList() {
             name="back"
             accessibilityLabel="Back"
             background="none"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
           <Text variant="screenTitle" numberOfLines={1}>
             {cls?.label ?? 'Markets'}

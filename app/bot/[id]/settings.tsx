@@ -14,7 +14,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '@/design/Icon';
@@ -60,7 +60,7 @@ const MARKER_W = 3;
 const MARKER_H = 10;
 
 export default function TradeSettings() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const reduced = useReducedMotion();
   const [localError, setLocalError] = useState<string>();
   // These four controls ARE the delegation policy, so saving them is a signature, not a
@@ -92,7 +92,7 @@ export default function TradeSettings() {
       // Read it back from the chain rather than trusting what we just sent.
       const d = await repos.wallet.delegation();
       setDelegation(d);
-      router.back();
+      goBack();
     } catch (e) {
       setLocalError(e instanceof Error ? e.message : String(e));
     }

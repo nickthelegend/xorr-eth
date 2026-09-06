@@ -19,7 +19,7 @@
  */
 import React, { useCallback, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Eyebrow,
   Fill,
@@ -69,7 +69,7 @@ const TONE = {
 const FIELD_H = 46;
 
 export default function Judge() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const wallet = useStore((s) => s.wallet);
   const [owner, setOwner] = useState(wallet?.address ?? '');
   // The address the last run used, so editing the field does not silently relabel the results
@@ -98,7 +98,7 @@ export default function Judge() {
             name="back"
             accessibilityLabel="Back"
             background="none"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
           <Text variant="screenTitle" numberOfLines={1}>
             Check it yourself

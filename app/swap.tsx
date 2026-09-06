@@ -8,7 +8,7 @@
  */
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Icon } from '@/design/Icon';
 import {
@@ -51,7 +51,7 @@ const SEAM_RING = 3;
 const SEAM_PULL = -14;
 
 export default function Swap() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const swapAmt = useStore((s) => s.swapAmt);
   const bumpSwap = useStore((s) => s.bumpSwap);
   const reduced = useReducedMotion();
@@ -86,7 +86,7 @@ export default function Swap() {
             name="back"
             accessibilityLabel="Back"
             background="none"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
           <Text variant="cardTitle">Swap</Text>
         </View>
@@ -239,7 +239,7 @@ export default function Swap() {
         label="Review swap"
         style={{ marginTop: space.s14 }}
         disabled={overBalance}
-        onPress={() => router.back()}
+        onPress={() => goBack()}
       />
       {overBalance ? (
         <Text

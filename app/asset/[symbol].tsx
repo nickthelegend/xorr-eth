@@ -12,6 +12,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   AreaChart,
   AssetMark,
@@ -58,6 +59,7 @@ const ROW_H = 52;
 export default function AssetDetail() {
   const { symbol } = useLocalSearchParams<{ symbol: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const [range, setRange] = useState(0);
   const [starred, setStarred] = useState(false);
   // design.md calls the candlestick the centrepiece, and the bars are already fetched — the
@@ -156,7 +158,7 @@ export default function AssetDetail() {
             name="back"
             accessibilityLabel="Back"
             background="none"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
           {i ? <AssetMark gradient={{ c1: i.c1, c2: i.c2 }} size={26} /> : null}
           <Text variant="cardTitleLg" numberOfLines={1}>

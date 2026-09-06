@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import { Icon } from '@/design/Icon';
 import {
   Button,
@@ -47,6 +48,7 @@ const FIELD_H = 48;
 
 export default function WalletSetup() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { ready, authenticated, address, createWallet } = useAuth();
   const { sendCode, loginWithCode } = useEmailLogin();
   const setWallet = useStore((s) => s.setWallet);
@@ -99,7 +101,7 @@ export default function WalletSetup() {
 
   return (
     <Screen>
-      <Progress step={2} total={3} onBack={() => router.back()} />
+      <Progress step={2} total={3} onBack={() => goBack()} />
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         Your wallet, your keys

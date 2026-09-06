@@ -16,6 +16,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -68,6 +69,7 @@ const PRESETS = [250, 500, 1000, 2500];
 
 export default function Fund() {
   const router = useRouter();
+  const goBack = useGoBack();
   const dep = useStore((s) => s.dep);
   const setDep = useStore((s) => s.setDep);
   const method = useStore((s) => s.method);
@@ -79,7 +81,7 @@ export default function Fund() {
 
   return (
     <Screen>
-      <Progress step={3} total={3} onBack={() => router.back()} />
+      <Progress step={3} total={3} onBack={() => goBack()} />
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         Fund the wallet

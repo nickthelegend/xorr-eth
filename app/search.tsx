@@ -5,6 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   AssetMark,
   EmptyState,
@@ -29,6 +30,7 @@ const PREVIEW = 12;
 
 export default function Search() {
   const router = useRouter();
+  const goBack = useGoBack();
   const [q, setQ] = useState('');
   const { data, loading } = useAsync(() => repos.markets.listClasses(), []);
 
@@ -45,7 +47,7 @@ export default function Search() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Search</Text>
-        <IconButton name="close" accessibilityLabel="Close search" onPress={() => router.back()} />
+        <IconButton name="close" accessibilityLabel="Close search" onPress={() => goBack()} />
       </View>
 
       <View

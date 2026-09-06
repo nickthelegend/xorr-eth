@@ -57,8 +57,22 @@ export function useAllowlist() {
     if (!isValidAddress(address)) {
       throw new Error('That is not a Base address. It should start 0x and be 42 characters.');
     }
+    const clean = address.trim();
     setAddresses((prev) => {
-      const next = [...prev, { label, address, addedAt: Date.now() }];
+      /*
+       * The duplicate check belongs HERE, where `prev` is authoritative.
+       *
+       * The screen checks too, and cannot be trusted to: it reads the rendered `addresses`, so two
+       * taps in the same tick both see the list without the entry either of them is adding. Double
+       * tapping "Add" produced two identical rows, a React duplicate-key error, and an allowlist
+       * that disagreed with itself about how many destinations the user had approved.
+       *
+       * Returning `prev` unchanged also means a second press cannot restart the cooling-off clock
+       * on an address already waiting — which would otherwise be a way to keep an entry pending
+       * forever by accident.
+       */
+      if (prev.some((a) => a.address.toLowerCase() === clean.toLowerCase())) return prev;
+      const next = [...prev, { label, address: clean, addedAt: Date.now() }];
       void AsyncStorage.setItem(KEY, JSON.stringify(next)).catch(() => undefined);
       return next;
     });

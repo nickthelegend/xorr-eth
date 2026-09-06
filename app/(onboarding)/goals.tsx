@@ -7,6 +7,7 @@
  */
 import React from 'react';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   ChoiceChip,
@@ -27,6 +28,7 @@ const RISK_OPTIONS = onboarding.riskLevels.map((label, value) => ({ value, label
 
 export default function Goals() {
   const router = useRouter();
+  const goBack = useGoBack();
   const goals = useStore((s) => s.goals);
   const toggleGoal = useStore((s) => s.toggleGoal);
   const riskQ = useStore((s) => s.riskQ);
@@ -35,7 +37,7 @@ export default function Goals() {
 
   return (
     <Screen>
-      <Progress step={1} total={3} onBack={() => router.back()} />
+      <Progress step={1} total={3} onBack={() => goBack()} />
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         {'What should your\nbot optimise for?'}

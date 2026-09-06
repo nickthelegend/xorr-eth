@@ -6,7 +6,7 @@
  * a mark chip, and TP/SL marker rows at their projected prices. Two control blocks
  * (stepper with a coloured value chip, then a ruler), gap 26. Cancel / Set.
  *
- * "Set" used to call `router.back()` and nothing else — the screen that exists to arm a stop
+ * "Set" used to call `goBack()` and nothing else — the screen that exists to arm a stop
  * did not arm one, and the numbers lived in app state only, so the "stop" vanished when the
  * phone slept. It now creates a real **`exit-rules` strategy**, which is the executor's own
  * tier-3 mechanism: `planExitRules` reads `entryPrice`, `takeProfitPct`, `stopLossPct` and
@@ -16,7 +16,8 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { LayoutChangeEvent, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   ButtonRow,
@@ -62,7 +63,7 @@ const MARKER_OFFSET = 11;
 
 export default function AutoClose() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const goBack = useGoBack();
 
   // TP/SL are set against the position's OWN market, on live candles. The handoff's static
   // BTC series meant a user editing a stop on an ETH position was reading a BTC chart.
@@ -147,7 +148,7 @@ export default function AutoClose() {
         cadence: 'daily',
         dailyAllocationUsd: 0,
       });
-      router.back();
+      goBack();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -164,7 +165,7 @@ export default function AutoClose() {
         <IconButton
           name="close"
           accessibilityLabel="Close"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           background="none"
           color={colors.sheet.ink}
           glyph={20}
@@ -283,7 +284,7 @@ export default function AutoClose() {
             label="Cancel"
             backgroundColor={colors.cancelBg}
             color={colors.cancelInk}
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
         }
         primary={

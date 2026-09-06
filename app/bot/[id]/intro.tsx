@@ -8,6 +8,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import Svg, { Circle, Rect } from 'react-native-svg';
 import { agentGradient } from '@/design/gradients';
 import {
@@ -49,6 +50,7 @@ const BENEFITS = [
 export default function AgentIntro() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const goBack = useGoBack();
   const { data, loading } = useAsync(() => repos.bot.listAgents(), []);
   const agent = (data ?? []).find((a) => a.id === id);
 
@@ -60,7 +62,7 @@ export default function AgentIntro() {
         <IconButton
           name="close"
           accessibilityLabel="Close"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           background="none"
           glyph={20}
         />

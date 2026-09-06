@@ -12,6 +12,7 @@ import { useCallback, useState } from 'react';
 import { useEmbeddedEthereumWallet } from '@privy-io/expo';
 import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
 import { api } from '@/data/api';
+import { activeChain } from '@/chain';
 
 const DELEGATION_ABI = [
   {
@@ -65,9 +66,48 @@ export function useGrantDelegation() {
       const wallet = wallets?.[0];
       if (!wallet) throw new Error('No wallet yet. Finish sign-in first.');
       const provider = await wallet.getProvider();
+      /*
+       * Put the wallet on the chain this deployment settles on, before it signs anything.
+       *
+       * Privy's provider has its own idea of the current chain and it is not necessarily ours:
+       * the web SDK took `defaultChain` from a hardcoded constant, and the native SDK is told
+       * nothing at all. Either way a user's `grant`, their approvals and their withdrawals were
+       * signed against whatever chain the wallet happened to be on — which on a fork deployment
+       * is not the chain the executor reads, so the bot ends up with permission nobody can use.
+       *
+       * Asking explicitly is cheap and it is the only way to be certain. A wallet already on the
+       * right chain answers immediately; one that cannot switch says so before a signature is
+       * requested rather than after.
+       */
+      await provider
+        .request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: `0x${activeChain.id.toString(16)}` }],
+        })
+        .catch(() => undefined);
+
+      /*
+       * Estimate the gas ourselves, and say so in the request.
+       *
+       * Without a `gas` field the wallet supplies its own, and Privy's fell back to a plain
+       * transfer's 21,000 — below the intrinsic cost of any contract call. Every user-signed write
+       * in the product is a contract call, so `grant`, the ERC-20 approvals and a withdrawal all
+       * came back **"intrinsic gas too low"** with a Retry button that would fail identically.
+       *
+       * A quarter of headroom over the estimate, because an estimate is made against the current
+       * state and the transaction executes against the next one — a storage slot going from zero
+       * to non-zero costs more than the estimator saw. When estimation itself fails the request
+       * still goes without a limit rather than with a made-up one: the wallet's guess is bad, and
+       * a number we invented here would be worse.
+       */
+      const gas = await provider
+        .request({ method: 'eth_estimateGas', params: [{ from: wallet.address, to, data }] })
+        .then((g) => `0x${((BigInt(g as string) * 125n) / 100n).toString(16)}`)
+        .catch(() => undefined);
+
       return (await provider.request({
         method: 'eth_sendTransaction',
-        params: [{ from: wallet.address, to, data }],
+        params: [{ from: wallet.address, to, data, ...(gas ? { gas } : {}) }],
       })) as Hex;
     },
     [wallets],

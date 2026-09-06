@@ -11,6 +11,7 @@
 import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   EmptyState,
   ErrorState,
@@ -32,6 +33,7 @@ import { useStore } from '@/state/store';
 
 export default function History() {
   const router = useRouter();
+  const goBack = useGoBack();
   const wallet = useStore((s) => s.wallet);
   const { data, loading, error, reload } = useAsync(
     () => (wallet?.address ? spendsFor(wallet.address) : Promise.resolve([])),
@@ -46,7 +48,7 @@ export default function History() {
           name="back"
           accessibilityLabel="Back"
           background="none"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
         />
         <Text variant="screenTitle">History</Text>
       </View>

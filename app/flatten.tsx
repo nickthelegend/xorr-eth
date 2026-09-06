@@ -16,7 +16,7 @@
  */
 import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -50,7 +50,7 @@ type ResultLeg = Leg & { status: 'sold' | 'failed' | 'skipped'; detail: string; 
 type Result = { legs: ResultLeg[]; sold: number; failed: number };
 
 export default function Flatten() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>();
   const [error, setError] = useState<string>();
@@ -76,7 +76,7 @@ export default function Flatten() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Sell everything</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
+        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
       </View>
 
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
@@ -187,7 +187,7 @@ export default function Flatten() {
       </Fill>
 
       {result ? (
-        <Button label="Done" height={size.buttonLg} onPress={() => router.back()} />
+        <Button label="Done" height={size.buttonLg} onPress={() => goBack()} />
       ) : (
         <Button
           label={p && p.legs.length > 0 ? `Sell ${money(p.totalUsd)} into USDC` : 'Sell everything'}

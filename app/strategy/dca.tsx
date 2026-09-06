@@ -10,7 +10,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -58,7 +58,7 @@ function phrase(c: Cadence): string {
 }
 
 export default function DcaSetup() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const [amount, setAmount] = useState('50');
   const [cadence, setCadence] = useState<Cadence>('weekly');
   const [symbol, setSymbol] = useState<Symbol>('WETH');
@@ -84,7 +84,7 @@ export default function DcaSetup() {
         nextRunAt: runs[0]!.getTime(),
         dailyAllocationUsd: usd,
       });
-      router.back();
+      goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -101,7 +101,7 @@ export default function DcaSetup() {
         <IconButton
           name="close"
           accessibilityLabel="Close"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           background="none"
           color={colors.sheet.ink}
           glyph={20}
@@ -151,7 +151,20 @@ export default function DcaSetup() {
             <Eyebrow small color={colors.sheet.muted}>
               Next three runs
             </Eyebrow>
-            {runs.map((d) => (
+            {/*
+              A schedule of nothing is not a schedule.
+
+              With the amount cleared this listed three dated rows at $0 — a confident preview of
+              three buys that would never happen, under a heading promising the opposite. The
+              button is correctly disabled at that point; the panel above it was still making a
+              claim. It asks for the amount instead.
+            */}
+            {usd <= 0 ? (
+              <Text variant="body" color={colors.sheet.muted}>
+                Enter an amount to see the schedule.
+              </Text>
+            ) : null}
+            {usd > 0 && runs.map((d) => (
               <View
                 key={d.toISOString()}
                 style={{ flexDirection: 'row', justifyContent: 'space-between' }}

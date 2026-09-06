@@ -10,7 +10,7 @@
  */
 import React, { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { agentGradient } from '@/design/gradients';
 import {
@@ -49,7 +49,7 @@ const ORB = 38;
 const SORTS = LEADERBOARD_LABELS.map((label, value) => ({ value, label }));
 
 export default function Leaderboard() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const lbSort = useStore((s) => s.lbSort);
   const setLbSort = useStore((s) => s.setLbSort);
   const { data, loading } = useAsync(() => repos.bot.leaderboard(), []);
@@ -64,7 +64,7 @@ export default function Leaderboard() {
             name="back"
             accessibilityLabel="Back"
             background="none"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
           />
           <Text variant="screenTitle">Leaderboard</Text>
         </View>

@@ -2,12 +2,12 @@
  * Add custom alert — PLAN.md 10.9 [G14]. Screen 18's ghost button had no destination.
  *
  * And then it had one that did nothing: the screen built an alert object and called
- * `router.back()`, so it looked like it worked and remembered nothing. An alert that is not
+ * `goBack()`, so it looked like it worked and remembered nothing. An alert that is not
  * persisted is an alert that will not fire.
  */
 import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   Eyebrow,
@@ -37,7 +37,7 @@ const KINDS = [
 const FIELD_H = 48;
 
 export default function NewAlert() {
-  const router = useRouter();
+  const goBack = useGoBack();
   const [kind, setKind] = useState<Kind>('price');
   const [symbol, setSymbol] = useState<string>(DEFAULT_BUY);
   const [level, setLevel] = useState('95');
@@ -60,7 +60,7 @@ export default function NewAlert() {
         detail: `Notifies you once when ${sym} trades above $${level}.`,
         config: { above: value },
       });
-      router.back();
+      goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -72,7 +72,7 @@ export default function NewAlert() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">New alert</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => router.back()} />
+        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
       </View>
 
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
