@@ -48,13 +48,15 @@ export const STRATEGY_LADDER: LadderEntry[] = [
     judgement: 'Risk-reducing only. Easy to trust because it can only close.',
     available: true,
     cta: 'Set exit rules',
-    route: '/auto-close/current',
+    // Exit rules attach to a position, so the route is the position list. `/auto-close/current`
+    // was never a real id — it rendered the not-found state for anyone who tapped it.
+    route: '/holdings',
   },
   {
     tier: 4,
     kind: 'yield-rotation',
     label: 'Move idle cash to yield',
-    what: 'Parks stables and idle SOL wherever the rate is best.',
+    what: 'Parks idle USDC wherever the rate is best.',
     judgement: 'Low judgement, and every move is a published rate you can check.',
     available: false,
     cta: 'Later',

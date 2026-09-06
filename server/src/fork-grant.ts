@@ -15,6 +15,7 @@ import { base } from 'viem/chains';
 const RPC = process.env.FORK_RPC ?? 'http://127.0.0.1:8545';
 const USDC: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const ROUTER: Address = '0x111111125421cA6dc452d289314280a0f8842A65';
+const WETH: Address = '0x4200000000000000000000000000000000000006';
 
 const chain = { ...base, rpcUrls: { default: { http: [RPC] }, public: { http: [RPC] } } };
 const pub = createPublicClient({ chain, transport: http(RPC) });
@@ -56,6 +57,21 @@ async function main() {
     address: USDC, abi: erc20Abi, functionName: 'approve', args: [delegation, cap * 30n],
   });
   await pub.waitForTransactionReceipt({ hash: h2 });
+
+  /*
+   * Approve the assets a stop-loss might have to SELL, not just the USDC it spends.
+   *
+   * A stop that needs a fresh signature at the moment it fires is a stop that does not fire — the
+   * user is asleep, which is the entire premise. So the approval has to exist before it is needed.
+   * The blast radius is unchanged: the delegation can still only move funds to an allowlisted
+   * venue and still cannot send anywhere it chooses.
+   */
+  for (const asset of [WETH]) {
+    const h = await w.writeContract({
+      address: asset, abi: erc20Abi, functionName: 'approve', args: [delegation, 2n ** 255n],
+    });
+    await pub.waitForTransactionReceipt({ hash: h });
+  }
   await rpc('anvil_stopImpersonatingAccount', [owner]);
 
   const remaining = await pub.readContract({

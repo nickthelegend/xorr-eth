@@ -15,13 +15,15 @@ import type { PoolClient } from 'pg';
 import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { evaluate, recordSpend } from '../rules/engine.js';
-import { readPolicy, spendAsDelegate } from '../evm/delegation.js';
+import { closeAsDelegate, readPolicy, spendAsDelegate } from '../evm/delegation.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
 import { buildSwap, TOKENS } from '../venues/oneinch.js';
 import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { priceOf } from '../market/prices.js';
+import { PLANNERS, type TradeIntent } from './kinds/index.js';
+import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 
 /**
  * Our XorrAquaBook deployment, when there is one. Aqua only exists on Base mainnet, so on Sepolia
@@ -61,7 +63,7 @@ export type RunOutcome =
   | { status: 'watch'; runId: string; units: number; price: number }
   | { status: 'blocked'; runId: string; reason: string; detail: string }
   | { status: 'failed'; runId: string; error: string }
-  | { status: 'skipped'; reason: 'already_ran_this_period' };
+  | { status: 'skipped'; reason: 'already_ran_this_period' | 'nothing_to_do' };
 
 export type StrategyRow = {
   id: string;
@@ -103,7 +105,16 @@ async function claimRun(
  * Adding a tier to `src/strategies/ladder.ts` is not enough — it needs a branch here, and this set
  * is what stops a half-built tier from silently behaving like a recurring buy.
  */
-export const EXECUTABLE_KINDS = new Set(['dca', 'buy', 'recurring-buy']);
+export const EXECUTABLE_KINDS = new Set(Object.keys(PLANNERS));
+
+/**
+ * Kinds whose size is decided by looking, not by configuration.
+ *
+ * A stop-loss closes what is held; a rebalance trades the drift. Neither has a meaningful "amount"
+ * before the planner runs, and forcing one on them made the spend rules reject the only strategies
+ * that exclusively reduce risk.
+ */
+export const SELF_SIZING_KINDS = new Set(['exit-rules', 'rebalance']);
 
 export async function runStrategy(
   strategy: StrategyRow,
@@ -185,9 +196,22 @@ export async function runStrategy(
     return finishBlocked(runId, walletId, strategy, 'no_delegation', 'No trading permission has been granted.');
   }
 
+  /*
+   * Some kinds size themselves.
+   *
+   * A recurring buy has a configured amount, so the spend rules apply to it directly. A stop-loss
+   * does not: it closes whatever is held, and the size is only known once the planner has looked.
+   * Running the spend rules against its configured 0 rejected it as "the amount must be above
+   * zero" — the safety rail firing on the one strategy that only ever REDUCES risk.
+   *
+   * So for self-sizing kinds the amount checks are deferred to the planner, and the checks that
+   * are about permission rather than size — expiry, revocation — still run for everything.
+   */
+  const selfSizing = SELF_SIZING_KINDS.has(strategy.kind);
+
   const verdict = await evaluate({
     walletId,
-    usd,
+    usd: selfSizing ? Math.max(usd, 0.01) : usd,
     dailyCapUsd: chainPolicy.dailyCapUsd,
     delegationExpiresAt: new Date(chainPolicy.expiresAt),
     delegationRevoked: chainPolicy.revoked,
@@ -256,7 +280,9 @@ export async function runStrategy(
         'The permission was revoked on-chain, so I did not place this.',
       );
     }
-    if (usd > policy.remainingTodayUsd) {
+    // The daily cap limits SPENDING. A close does not spend, and a cap that can block a stop is a
+    // cap that can stop a stop — so this check does not apply to a self-sizing, risk-reducing kind.
+    if (!selfSizing && usd > policy.remainingTodayUsd) {
       return finishBlocked(
         runId,
         walletId,
@@ -266,27 +292,76 @@ export async function runStrategy(
       );
     }
 
-    const price = await priceOf(strategy.symbol);
-    const units = usd / price;
+    /*
+     * What does THIS kind want to do?
+     *
+     * The planner decides the trade; every gate above decided whether a trade is allowed at all.
+     * Keeping the two apart is what stops a new tier from arriving with its own copy of the safety
+     * logic and getting it subtly wrong.
+     */
+    const intent: TradeIntent | null = await PLANNERS[strategy.kind]!({
+      owner,
+      budgetUsd: usd,
+      params: strategy.params as Record<string, unknown>,
+      symbol: strategy.symbol,
+    });
 
-    // Real 1inch calldata. The delegation contract pulls the USDC and forwards this to the router
+    // "Nothing to do" is the right answer most of the time for a rebalance that has not drifted or
+    // a stop that has not been hit. It is not a failure and must not read as one.
+    if (!intent) {
+      return finishNoop(
+        runId,
+        walletId,
+        strategy,
+        'Checked, and there was nothing to do this run.',
+      );
+    }
+
+    const price = await priceOf(intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol);
+    // How many units of the ASSET this leg moves — bought on a buy, sold on a close.
+    const units = intent.outSymbol === 'USDC' ? intent.amountIn : intent.usd / price;
+
+    // Real 1inch calldata. The delegation contract pulls the input and forwards this to the router
     // inside one transaction, so the user's funds are never parked anywhere in between — and the
     // bought token is delivered straight to the user's own wallet, never to the contract.
     const swap = await buildSwap({
-      inSymbol: 'USDC',
-      outSymbol: strategy.symbol === 'ETH' ? 'WETH' : strategy.symbol,
-      amount: usd,
+      inSymbol: intent.inSymbol,
+      outSymbol: intent.outSymbol,
+      // In the INPUT token's units. Passing dollars here scaled a position into wei and the
+      // router refused a trade orders of magnitude too large.
+      amount: intent.amountIn,
       from: DELEGATION_FROM,
       receiver: owner,
     });
 
-    const signature = await spendAsDelegate({
-      owner,
-      token: ADDRESSES.usdcBase,
-      venue: swap.to,
-      usd,
-      data: swap.data,
-    });
+    /*
+     * Buying and closing are different transactions.
+     *
+     * `spend()` measures against a daily cap denominated in the settlement token, so a sell cannot
+     * go through it: 0.3e18 wei of WETH against a cap of 2000e6 USDC units is nonsense arithmetic,
+     * and worse, a used-up spending cap would silence a stop-loss. `closePosition()` is separately
+     * authorised by the same policy and does not touch the cap, because de-risking is not spending.
+     */
+    const payToken = VENUE_TOKENS[intent.inSymbol];
+    if (!payToken) throw new Error(`No token registry entry for ${intent.inSymbol}`);
+
+    const isClose = intent.outSymbol === 'USDC';
+    const signature = isClose
+      ? await closeAsDelegate({
+          owner,
+          token: payToken.address,
+          venue: swap.to as Address,
+          // In the SOLD token's own units, not dollars.
+          amount: BigInt(Math.floor(intent.amountIn * 10 ** payToken.decimals)),
+          data: swap.data,
+        })
+      : await spendAsDelegate({
+          owner,
+          token: payToken.address,
+          venue: swap.to,
+          usd: intent.usd,
+          data: swap.data,
+        });
 
     /*
      * Record what just happened.
@@ -305,14 +380,25 @@ export async function runStrategy(
          WHERE id=$1`,
         [runId, signature, units, price],
       );
-      await applyFill(client, { walletId, symbol: strategy.symbol, units, usd });
-      await recordSpend(walletId, usd, client);
+      // A close reduces the position; a buy adds to it.
+      await applyFill(client, {
+        walletId,
+        symbol: intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol,
+        units: intent.outSymbol === 'USDC' ? -units : units,
+        usd: intent.outSymbol === 'USDC' ? -intent.usd : intent.usd,
+      });
+      // Closing is not spending, so it does not consume the day's allowance — the contract
+      // agrees, and the two tallies must not disagree.
+      if (!isClose) await recordSpend(walletId, intent.usd, client);
       await append(
         {
           walletId,
           agent: 'Yield Keeper',
-          action: `Bought ${units.toFixed(4)} ${strategy.symbol}`,
-          detail: `$${usd.toLocaleString('en-US')} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${strategy.label}.`,
+          action:
+            intent.outSymbol === 'USDC'
+              ? `Sold ${units.toFixed(4)} ${intent.inSymbol}`
+              : `Bought ${units.toFixed(4)} ${intent.outSymbol}`,
+          detail: `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
           kind: 'trade',
           signature,
           payload: {
@@ -358,6 +444,44 @@ export async function runStrategy(
     });
     return { status: 'failed', runId, error };
   }
+}
+
+/**
+ * The run happened, looked, and correctly did nothing.
+ *
+ * Distinct from `blocked`, which means a limit stopped it. Collapsing the two would make a healthy
+ * rebalance look like a refused one every time the portfolio was already on target.
+ */
+async function finishNoop(
+  runId: string,
+  walletId: string,
+  strategy: StrategyRow,
+  detail: string,
+): Promise<RunOutcome> {
+  await tx(async (client) => {
+    await client.query(
+      `UPDATE strategy_runs SET status='skipped', error=NULL, finished_at=now() WHERE id=$1`,
+      [runId],
+    );
+    if (strategy.cadence) {
+      await client.query(`UPDATE strategies SET next_run_at=$2 WHERE id=$1`, [
+        strategy.id,
+        advance(new Date(), strategy.cadence),
+      ]);
+    }
+    await append(
+      {
+        walletId,
+        agent: 'Drawdown Guard',
+        action: `Nothing to do for ${strategy.label}`,
+        detail,
+        kind: 'risk',
+        payload: { runId, strategyId: strategy.id },
+      },
+      client,
+    );
+  });
+  return { status: 'skipped', reason: 'nothing_to_do' };
 }
 
 async function finishBlocked(

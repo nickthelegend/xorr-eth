@@ -54,6 +54,17 @@ contract XorrDelegation {
     );
     event Revoked(address indexed owner, address indexed delegate);
     event VenueAllowed(address indexed owner, address indexed venue, bool allowed);
+    /// @notice A position was closed. Deliberately a different event from `Spent`: one is the bot
+    ///         committing the user's money, the other is it taking risk off, and a history that
+    ///         cannot tell them apart is not much of a history.
+    event Closed(
+        address indexed owner,
+        address indexed delegate,
+        address indexed venue,
+        address token,
+        uint256 amount
+    );
+
     event Spent(
         address indexed owner,
         address indexed delegate,
@@ -174,6 +185,59 @@ contract XorrDelegation {
         emit Spent(owner, p.delegate, venue, token, amount, spent + amount);
         return ret;
     }
+
+    /**
+     * @notice Close a position: sell an asset the owner holds, back to the settlement token.
+     *
+     * @dev Why this is not `spend`.
+     *
+     * The daily cap is denominated in the settlement token's units, because it is a limit on how
+     * much of the user's money the bot may COMMIT. Routing a sell through `spend` was wrong twice
+     * over: the amount would be 0.3e18 wei of WETH measured against a cap of 2000e6 USDC units,
+     * which is nonsense arithmetic, and a stop-loss would stop working the moment the day's
+     * spending cap was used up. A stop that a spending limit can silence is not a stop.
+     *
+     * So closing is separately authorised and separately bounded:
+     *   - same delegate, same expiry, same revocation flag, same venue allowlist
+     *   - the proceeds MUST go to the owner: this function cannot be used to move funds anywhere
+     *   - it does not touch the daily cap in either direction, because de-risking is not spending
+     *
+     * The asymmetry is deliberate and is the same asymmetry as the ladder: a permission that can
+     * only reduce exposure is safe to grant more freely than one that can add to it.
+     *
+     * @param owner The user whose policy authorises this.
+     * @param token The asset being sold. Must not be the settlement token.
+     * @param venue The allowlisted contract to trade against.
+     * @param amount Amount of `token` to sell, in that token's own units.
+     * @param data Calldata forwarded to `venue`.
+     */
+    function closePosition(
+        address owner,
+        address token,
+        address venue,
+        uint256 amount,
+        bytes calldata data
+    ) external returns (bytes memory result) {
+        Policy memory p = _policies[owner];
+
+        if (msg.sender != p.delegate) revert NotDelegate();
+        if (p.revoked) revert PolicyRevoked();
+        if (block.timestamp >= p.expiresAt) revert PolicyExpired();
+        if (!_venueAllowed[owner][venue]) revert VenueNotAllowed(venue);
+        if (amount == 0) revert ZeroAmount();
+
+        require(IERC20(token).transferFrom(owner, address(this), amount), "pull failed");
+        IERC20(token).approve(venue, amount);
+
+        (bool ok, bytes memory ret) = venue.call(data);
+        if (!ok) revert VenueCallFailed();
+
+        IERC20(token).approve(venue, 0);
+
+        emit Closed(owner, p.delegate, venue, token, amount);
+        return ret;
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // Views — the app reads its own limits from the chain, never from our database

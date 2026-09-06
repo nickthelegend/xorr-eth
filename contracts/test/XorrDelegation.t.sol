@@ -49,7 +49,11 @@ contract MockVenue {
 contract XorrDelegationTest is Test {
     XorrDelegation internal del;
     MockUSDC internal usdc;
+    /// A non-settlement asset, so a close can be tested for what it is: selling a holding.
+    MockUSDC internal asset;
     MockVenue internal venue;
+    /// A venue that trades the non-settlement asset, so a close has somewhere real to sell into.
+    MockVenue internal assetVenue;
     MockVenue internal unlistedVenue;
 
     address internal owner = address(0xA11CE);
@@ -62,6 +66,7 @@ contract XorrDelegationTest is Test {
     function setUp() public {
         del = new XorrDelegation();
         usdc = new MockUSDC();
+        asset = new MockUSDC();
         venue = new MockVenue(usdc);
         unlistedVenue = new MockVenue(usdc);
 
@@ -74,6 +79,9 @@ contract XorrDelegationTest is Test {
         // The owner approves the delegation contract to pull, and grants the policy.
         usdc.approve(address(del), type(uint256).max);
         del.grant(bot, DAILY_CAP, uint64(block.timestamp + 3 days), venues);
+        // The close tests sell `asset`, which needs a venue that can actually take it.
+        assetVenue = new MockVenue(asset);
+        del.setVenue(address(assetVenue), true);
         vm.stopPrank();
     }
 
@@ -247,5 +255,68 @@ contract XorrDelegationTest is Test {
 
     function _swapCall(uint256 amount) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(MockVenue.swap.selector, amount);
+    }
+
+    // ── Closing is separately authorised, and separately bounded ────────────
+
+    function test_CloseSellsWithoutTouchingTheDailyCap() public {
+        // A stop that a spending limit can silence is not a stop. Use the cap up first, then
+        // close: the close must still work.
+        vm.prank(bot);
+        del.spend(owner, address(usdc), address(venue), DAILY_CAP, _swapCall(DAILY_CAP));
+        assertEq(del.remainingToday(owner), 0, "cap should be exhausted");
+
+        asset.mint(owner, 1e18);
+        vm.prank(owner);
+        asset.approve(address(del), type(uint256).max);
+
+        vm.prank(bot);
+        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+
+        assertEq(asset.balanceOf(owner), 0, "the asset was not sold");
+        // Still zero, not negative and not reset: closing is not spending.
+        assertEq(del.remainingToday(owner), 0, "closing moved the spend cap");
+    }
+
+    function test_CloseObeysTheVenueAllowlist() public {
+        asset.mint(owner, 1e18);
+        vm.prank(owner);
+        asset.approve(address(del), type(uint256).max);
+
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(XorrDelegation.VenueNotAllowed.selector, address(0xBAD)));
+        del.closePosition(owner, address(asset), address(0xBAD), 1e18, "");
+    }
+
+    function test_CloseStopsWhenRevoked() public {
+        asset.mint(owner, 1e18);
+        vm.startPrank(owner);
+        asset.approve(address(del), type(uint256).max);
+        del.revoke();
+        vm.stopPrank();
+
+        vm.prank(bot);
+        vm.expectRevert(XorrDelegation.PolicyRevoked.selector);
+        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+    }
+
+    function test_OnlyTheDelegateCanClose() public {
+        asset.mint(owner, 1e18);
+        vm.prank(owner);
+        asset.approve(address(del), type(uint256).max);
+
+        vm.prank(address(0xC0FFEE));
+        vm.expectRevert(XorrDelegation.NotDelegate.selector);
+        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+    }
+
+    function test_CloseLeavesNoStandingApproval() public {
+        asset.mint(owner, 1e18);
+        vm.prank(owner);
+        asset.approve(address(del), type(uint256).max);
+
+        vm.prank(bot);
+        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+        assertEq(asset.allowance(address(del), address(assetVenue)), 0, "approval left behind");
     }
 }

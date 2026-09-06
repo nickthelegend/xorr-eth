@@ -44,6 +44,19 @@ export const DELEGATION_ABI = [
   },
   {
     type: 'function',
+    name: 'closePosition',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'token', type: 'address' },
+      { name: 'venue', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'data', type: 'bytes' },
+    ],
+    outputs: [{ name: 'result', type: 'bytes' }],
+  },
+  {
+    type: 'function',
     name: 'policyOf',
     stateMutability: 'view',
     inputs: [{ name: 'owner', type: 'address' }],
@@ -186,4 +199,32 @@ export async function waitForTx(hash: Hex, timeoutMs = 30_000): Promise<boolean>
     confirmations: 1,
   });
   return receipt.status === 'success';
+}
+
+/**
+ * Close a position: sell a held asset back to the settlement token.
+ *
+ * Separate from `spendAsDelegate` because the contract treats it separately, and for the same
+ * reason: the daily cap is denominated in the settlement token, so routing a sell through `spend`
+ * would measure 0.3e18 wei of WETH against a cap of 2000e6 USDC units. Worse, it would let a
+ * spending limit silence a stop-loss — and a stop a limit can silence is not a stop.
+ *
+ * `amount` is in the SOLD token's own units, not dollars, which is why this cannot share a
+ * signature with the spend path.
+ */
+export async function closeAsDelegate(params: {
+  owner: Address;
+  token: Address;
+  venue: Address;
+  amount: bigint;
+  data: Hex;
+}): Promise<Hex> {
+  const { request } = await publicClient.simulateContract({
+    account: delegateAccount,
+    address: DELEGATION_ADDRESS,
+    abi: DELEGATION_ABI,
+    functionName: 'closePosition',
+    args: [params.owner, params.token, params.venue, params.amount, params.data],
+  });
+  return walletClient.writeContract(request);
 }
