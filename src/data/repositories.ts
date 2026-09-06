@@ -82,6 +82,28 @@ export interface StrategyRepository {
   end(id: string): Promise<Strategy>;
 }
 
+export interface OrderRepository {
+  /**
+   * Place a market order. Screen 14's CTA.
+   *
+   * The executor picks the route and the price and enforces every limit — it runs the same
+   * `runStrategy` path the scheduler runs. A `blocked` outcome carries the policy engine's
+   * own reason, which is the sentence the user should read.
+   */
+  place(input: { symbol: string; usd: number }): Promise<OrderOutcome>;
+}
+
+export type OrderOutcome = {
+  status: 'filled' | 'watch' | 'blocked' | 'failed' | 'skipped';
+  orderId?: string;
+  txHash?: string;
+  units?: number;
+  price?: number;
+  reason?: string;
+  detail?: string;
+  error?: string;
+};
+
 export interface PortfolioRepository {
   positions(): Promise<Position[]>;
   position(id: string): Promise<Position | null>;
@@ -113,7 +135,27 @@ export interface PortfolioRepository {
       basisIncomplete: boolean;
     }[];
   }>;
+  /**
+   * Sell part or all of a holding at the live route — screen 22's "Close {n}%", and the
+   * sell side of the order ticket.
+   *
+   * Goes through `closePosition`, never `spend`, so the daily cap cannot silence it. The
+   * executor picks the route and the price; the app sends only how much.
+   */
+  close(input: { symbol: string; fraction: number }): Promise<PositionClose>;
 }
+/** What came back from a close. `txHash` is the on-chain proof. */
+export type PositionClose = {
+  status: 'closed' | 'blocked' | 'failed';
+  symbol?: string;
+  units?: number;
+  usd?: number;
+  txHash?: string;
+  reason?: string;
+  detail?: string;
+  error?: string;
+};
+
 
 export interface ActivityRepository {
   list(): Promise<ActivityEvent[]>;
@@ -211,4 +253,5 @@ export type Repositories = {
   perps: PerpRepository;
   alerts: AlertRepository;
   wallet: WalletRepository;
+  orders: OrderRepository;
 };

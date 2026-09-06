@@ -14,8 +14,8 @@ import { Hono } from 'hono';
 import { query } from '../db/index.js';
 import { publicClient } from '../evm/client.js';
 import { CHAIN_KEY } from '../evm/chains.js';
-import { DELEGATION_ADDRESS, delegatePublicKey } from '../evm/delegation.js';
-import { formatEther } from 'viem';
+import { DELEGATION_ADDRESS } from '../evm/delegation.js';
+import { gasStatus } from '../evm/gas.js';
 import { publicSurface } from '../auth/middleware.js';
 
 export const ops = new Hono();
@@ -52,26 +52,6 @@ async function probe(
   } finally {
     if (timer) clearTimeout(timer);
   }
-}
-
-/**
- * How much gas the bot has left, and whether that is enough to keep working.
- *
- * The delegate pays for every fill out of its own wallet. When it runs dry every strategy fails
- * inside the venue call, which surfaces to the user as "the venue rejected the order" — a sentence
- * that sends them looking at the market instead of at us. It is the most predictable outage this
- * system has and nothing was watching for it.
- */
-const GAS_FLOOR_ETH = 0.01;
-
-export async function gasStatus(): Promise<{
-  eth: number;
-  enough: boolean;
-  floor: number;
-  address: string;
-}> {
-  const eth = Number(formatEther(await publicClient.getBalance({ address: delegatePublicKey })));
-  return { eth, enough: eth >= GAS_FLOOR_ETH, floor: GAS_FLOOR_ETH, address: delegatePublicKey };
 }
 
 ops.get('/health', async (c) => {

@@ -1,34 +1,46 @@
 /**
  * Screen 12 — Bot chat. THE centre tab after the pivot (PLAN.md §3.5).
  *
- * Header: 34px orb, name, "Watching 14 markets" in `up`.
- * Thread: date divider, bot bubble (#111214, radius 20 20 20 6, maxWidth 78%), then the
- * proposed-trade card — "PROPOSED TRADE" eyebrow in `up` + a LIVE countdown, action 21/700 +
- * notional, three 14px stat tiles (Entry / Stop in `down` / Target in `up`), rationale,
- * Skip (flex:1, control) / Approve (flex:1.4, white).
- * On decision the buttons are REPLACED by a reply bubble. Composer at the foot.
+ * Rebuilt on `src/ui` and re-checked against the prototype, which corrected three things:
+ * the header carries a rule and a "···" control, the composer is a 52pt field with a real
+ * 38pt send button (it had none — the only way to send was the keyboard's return key), and
+ * the proposal card's stat tiles sit on `surfaceAlt` so they read against the card rather
+ * than disappearing into it.
  *
- * [G27] The expiry is real: a countdown that expires the proposal, disables the buttons and posts
- * a system line. The handoff shipped the static string "expires 4:12".
+ * The two-button row keeps design.md §5's `flex:1 / flex:1.3`. The prototype drew this one
+ * at 1.4; §5 is the rule and `ButtonRow` is where it lives.
+ *
+ * [G27] The expiry is real: a countdown that expires the proposal, disables the buttons and
+ * posts a system line. The handoff shipped the static string "expires 4:12".
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { AgentOrb, Button, ButtonRow, Screen, SheetCard } from '@/design/components';
-import { borders, ink, pnl, surfaces } from '@/design/colors';
+import { Icon } from '@/design/Icon';
 import { agentGradient } from '@/design/gradients';
-import { DURATION } from '@/design/motion';
-import { EASING } from '@/design/easing';
-import { hairlineWidth, radius } from '@/design/space';
-import { type } from '@/design/type';
-import { useReducedMotion, motionDuration } from '@/design/useReducedMotion';
+import {
+  AssetMark,
+  Button,
+  ButtonRow,
+  Eyebrow,
+  Fill,
+  IconButton,
+  Press,
+  Screen,
+  SheetCard,
+  StatTile,
+  Text,
+  border,
+  colors,
+  divider,
+  duration,
+  radius,
+  size,
+  space,
+  timing,
+  typeScale,
+  useReducedMotion,
+} from '@/ui';
 import { mmss } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -44,8 +56,18 @@ import {
 } from '@/bot/thread';
 import { voice } from '@/bot/message';
 import { useTone } from '@/bot/tone';
-import type { Proposal } from '@/data/types';
 import { DEFAULT_BUY } from '@/data/tradable';
+import type { Proposal } from '@/data/types';
+
+/** Prototype metrics local to the chat: bubble tail, thread gutter, composer, send button. */
+const TAIL = 6;
+const BUBBLE_MAX = '78%' as const;
+const THREAD_PAD_H = space.s16;
+const COMPOSER_H = 52;
+const SEND = 38;
+
+/** A tile inside the proposal card. The card is `surface`, so its tiles step up a shade. */
+const TILE_ON_CARD = { backgroundColor: colors.surfaceAlt, borderRadius: radius.tileSm } as const;
 
 export default function BotChat() {
   const scroller = useRef<ScrollView>(null);
@@ -55,8 +77,8 @@ export default function BotChat() {
   const { messages, proposal, decided, hydrated, hydrate, append, setProposal, setDecided, markRead } =
     useThread();
 
-  // Ask for an open proposal; if there is none, ask the agent to CONSIDER one. Without this the
-  // approve-before-execute pipeline had no producer and the thread was permanently empty.
+  // Ask for an open proposal; if there is none, ask the agent to CONSIDER one. Without this
+  // the approve-before-execute pipeline had no producer and the thread was permanently empty.
   const { data } = useAsync(async () => {
     const open = await repos.bot.currentProposal();
     if (open) return { proposal: open, declined: undefined as string | undefined };
@@ -72,10 +94,25 @@ export default function BotChat() {
   }, [markRead]);
 
   // Seed the thread once, from whatever the agent actually decided.
+  //
+  // The `seeded` ref only guards one mount, and the thread is persisted — so every fresh
+  // load appended the same proposal again and the chat showed it two, three, four times.
+  // The real guard is the thread's own contents: a proposal already in the thread is
+  // already seeded.
   const seeded = useRef(false);
   useEffect(() => {
     if (!hydrated || !data || seeded.current) return;
     seeded.current = true;
+
+    if (data.proposal) {
+      const already = messages.some(
+        (m) => m.type === 'proposal' && m.proposalId === data.proposal!.id,
+      );
+      if (already) {
+        setProposal(data.proposal);
+        return;
+      }
+    }
 
     if (data.proposal) {
       setProposal(data.proposal);
@@ -85,27 +122,59 @@ export default function BotChat() {
     }
     // A decline is a message, not a blank screen. "What it chose not to do" is the product.
     if (data.declined) {
-      append(
-        botProse(agentNameFallback, [
-          voice(stripNumbers(data.declined)),
-        ]),
-      );
+      append(botProse(agentNameFallback, [voice(stripNumbers(data.declined))]));
     }
-  }, [hydrated, data, append, setProposal]);
+  }, [hydrated, data, messages, append, setProposal]);
 
   const items = useMemo(() => withDividers(messages), [messages]);
   const agentName = proposal?.agent ?? agentNameFallback;
 
+  const send = useCallback(() => {
+    const text = draft.trim();
+    if (!text || thinking) return;
+    append(userMessage(text));
+    setDraft('');
+    setThinking(true);
+    // PLAN.md 11.7: a real question to the real agent. The reply is PROSE ONLY — anything
+    // numeric is rejected server-side before it can reach this thread.
+    void repos.bot
+      .ask({ agentId: agentIdFor(agentName), question: text, tone })
+      .then((reply) => append(botProse(agentName, [voice(reply.text)])))
+      .catch(() =>
+        append(
+          botProse(agentName, [voice('I could not answer that just now, so I will not guess.')]),
+        ),
+      )
+      .finally(() => setThinking(false));
+  }, [draft, thinking, append, agentName, tone]);
+
   return (
-    <Screen tabbed>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-        <AgentOrb gradient={agentGradient(agentName)} size={34} face breathe />
-        <View style={{ gap: 2 }}>
-          <Text style={[type.cardTitleSm, { color: ink.full }]}>{agentName}</Text>
-          <Text style={[type.footnote, { color: pnl.up, fontWeight: '600' }]}>
+    <Screen tabBar gutter="none">
+      <View
+        style={[
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space.s12,
+            paddingHorizontal: space.gutter,
+            paddingBottom: space.s16,
+          },
+          divider,
+        ]}
+      >
+        <AssetMark gradient={agentGradient(agentName)} size={size.mark} />
+        <View style={{ flex: 1 }}>
+          <Text variant="rowPrimaryLg">{agentName}</Text>
+          <Text variant="footnote" color={colors.up}>
             {proposal?.status ?? 'Watching 14 markets'}
           </Text>
         </View>
+        <IconButton
+          name="more"
+          accessibilityLabel="Conversation options"
+          background="none"
+          color={colors.ink40}
+        />
       </View>
 
       <KeyboardAvoidingView
@@ -113,19 +182,20 @@ export default function BotChat() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={20}
       >
-        <Screen.Content>
+        <Fill>
           <ScrollView
             ref={scroller}
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
-            contentContainerStyle={{ paddingTop: 20, gap: 14 }}
+            contentContainerStyle={{
+              paddingTop: space.s18,
+              paddingHorizontal: THREAD_PAD_H,
+              gap: space.s12,
+            }}
           >
             {items.map((item, i) =>
               'divider' in item ? (
-                <Text
-                  key={`d${i}`}
-                  style={[type.footnote, { color: ink.i28, textAlign: 'center', marginTop: 6 }]}
-                >
+                <Text key={`d${i}`} variant="footnoteSm" color={colors.ink28} align="center">
                   {item.divider}
                 </Text>
               ) : item.type === 'proposal' ? (
@@ -161,51 +231,58 @@ export default function BotChat() {
               ),
             )}
           </ScrollView>
-        </Screen.Content>
+        </Fill>
 
         <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 10,
-            backgroundColor: surfaces.inputBg,
-            borderWidth: hairlineWidth,
-            borderColor: borders.input,
-            borderRadius: radius.xl,
-            paddingHorizontal: 16,
-            height: 48,
-          }}
+          style={[
+            {
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: space.s10,
+              marginHorizontal: THREAD_PAD_H,
+              backgroundColor: colors.inputBg,
+              borderRadius: radius.sheet,
+              paddingLeft: space.s18,
+              paddingRight: space.s8,
+              height: COMPOSER_H,
+            },
+            border.input,
+          ]}
         >
           <TextInput
             value={draft}
             onChangeText={setDraft}
             placeholder="Ask about this trade…"
-            placeholderTextColor={ink.i35}
-            style={[type.body, { flex: 1, color: ink.full }]}
+            placeholderTextColor={colors.ink35}
+            style={[typeScale.bodyLg, { flex: 1, color: colors.ink }]}
             accessibilityLabel="Message the bot"
             editable={!thinking}
-            onSubmitEditing={() => {
-              const text = draft.trim();
-              if (!text || thinking) return;
-              append(userMessage(text));
-              setDraft('');
-              setThinking(true);
-              // PLAN.md 11.7: a real question to the real agent. The reply is PROSE ONLY —
-              // anything numeric is rejected server-side before it can reach this thread.
-              void repos.bot
-                .ask({ agentId: agentIdFor(agentName), question: text, tone })
-                .then((reply) => append(botProse(agentName, [voice(reply.text)])))
-                .catch(() =>
-                  append(
-                    botProse(agentName, [
-                      voice('I could not answer that just now, so I will not guess.'),
-                    ]),
-                  ),
-                )
-                .finally(() => setThinking(false));
-            }}
+            onSubmitEditing={send}
             returnKeyType="send"
           />
+          {/* The prototype's send button. Without it the only way to send was the keyboard's
+              return key, which is invisible to anyone who has dismissed the keyboard. */}
+          <Press
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            accessibilityState={{ disabled: thinking || draft.trim().length === 0 }}
+            disabled={thinking || draft.trim().length === 0}
+            onPress={send}
+            style={{
+              width: SEND,
+              height: SEND,
+              borderRadius: radius.full,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: draft.trim().length === 0 ? colors.control : colors.ink,
+            }}
+          >
+            <Icon
+              name="send"
+              size={16}
+              color={draft.trim().length === 0 ? colors.ink35 : colors.bg}
+            />
+          </Press>
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -215,8 +292,8 @@ export default function BotChat() {
 const agentNameFallback = 'Momentum Scout';
 
 /**
- * The server's decline reasons name a symbol but sometimes a figure too. A voice segment may not
- * carry a number (src/bot/message.ts), so any digits are dropped rather than the message.
+ * The server's decline reasons name a symbol but sometimes a figure too. A voice segment may
+ * not carry a number (src/bot/message.ts), so any digits are dropped rather than the message.
  */
 function stripNumbers(text: string): string {
   const cleaned = text.replace(/[$]?[\d,.]+%?/g, '').replace(/\s{2,}/g, ' ').trim();
@@ -233,13 +310,10 @@ function Bubble({ message }: { message: ThreadMessage }) {
   const scale = useSharedValue(message.type === 'fill' ? 0.96 : 1);
 
   useEffect(() => {
-    // animations.md "If you add motion" #2: a single 250ms scale-in on the filled-order bubble,
-    // once, on arrival. Nothing else in the thread animates.
+    // animations.md "If you add motion" #2: a single 250ms scale-in on the filled-order
+    // bubble, once, on arrival. Nothing else in the thread animates.
     if (message.type === 'fill') {
-      scale.value = withTiming(1, {
-        duration: motionDuration(DURATION.slow, reduced),
-        easing: EASING,
-      });
+      scale.value = withTiming(1, timing(duration.slow, reduced));
     }
   }, [message.type, reduced, scale]);
 
@@ -247,17 +321,19 @@ function Bubble({ message }: { message: ThreadMessage }) {
 
   if (message.type === 'user') {
     return (
-      <View style={{ alignSelf: 'flex-end', maxWidth: '78%' }}>
+      <View style={{ alignSelf: 'flex-end', maxWidth: BUBBLE_MAX }}>
         <View
           style={{
-            backgroundColor: ink.full,
-            borderRadius: radius.lg2,
-            borderBottomRightRadius: 6,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
+            backgroundColor: colors.ink,
+            borderRadius: radius.card,
+            borderBottomRightRadius: TAIL,
+            paddingHorizontal: space.s14,
+            paddingVertical: space.s10,
           }}
         >
-          <Text style={[type.body, { color: '#000000' }]}>{message.text}</Text>
+          <Text variant="bodySm" color={colors.bg}>
+            {message.text}
+          </Text>
         </View>
       </View>
     );
@@ -265,20 +341,22 @@ function Bubble({ message }: { message: ThreadMessage }) {
 
   const segments = 'segments' in message ? message.segments : [];
   const color =
-    message.type === 'fill' ? pnl.up : message.type === 'declined' ? pnl.down : ink.full;
+    message.type === 'fill' ? colors.up : message.type === 'declined' ? colors.down : colors.ink70;
 
   return (
-    <Animated.View style={[{ alignSelf: 'flex-start', maxWidth: '78%' }, anim]}>
+    <Animated.View style={[{ alignSelf: 'flex-start', maxWidth: BUBBLE_MAX }, anim]}>
       <View
         style={{
-          backgroundColor: '#111214',
-          borderRadius: radius.lg2,
-          borderBottomLeftRadius: 6,
-          paddingHorizontal: 14,
-          paddingVertical: 11,
+          backgroundColor: colors.bubble,
+          borderRadius: radius.card,
+          borderBottomLeftRadius: TAIL,
+          paddingHorizontal: space.s14,
+          paddingVertical: space.s12,
         }}
       >
-        <Text style={[type.body, { color }]}>{renderSegments(segments)}</Text>
+        <Text variant="bodySm" color={color}>
+          {renderSegments(segments)}
+        </Text>
       </View>
     </Animated.View>
   );
@@ -313,67 +391,47 @@ function ProposalCard({
   const expired = remaining === 0;
 
   return (
-    <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 4 }}>
+    <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={[type.eyebrowSm, { color: pnl.up }]}>Proposed trade</Text>
-        <Text style={[type.footnote, { color: expired ? pnl.down : ink.i40 }]}>
+        <Eyebrow color={colors.up}>Proposed trade</Eyebrow>
+        <Text variant="footnote" color={expired ? colors.down : colors.ink35}>
           {expired ? 'expired' : `expires ${mmss(remaining)}`}
         </Text>
       </View>
 
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
-        <Text style={[type.proposalAction, { color: ink.full }]}>{proposal.action}</Text>
-        <Text style={[type.body, { color: ink.i40 }]}>{proposal.notional}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s8, marginTop: space.s10 }}>
+        <Text variant="screenTitle">{proposal.action}</Text>
+        <Text variant="bodySm">{proposal.notional}</Text>
       </View>
 
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-        <StatTile label="Entry" value={proposal.entry} color={ink.full} />
-        <StatTile label="Stop" value={proposal.stop} color={pnl.down} />
-        <StatTile label="Target" value={proposal.target} color={pnl.up} />
+      <View style={{ flexDirection: 'row', gap: space.s8, marginTop: space.s12 }}>
+        <StatTile label="Entry" value={proposal.entry} compact style={TILE_ON_CARD} />
+        <StatTile label="Stop" value={proposal.stop} color={colors.down} compact style={TILE_ON_CARD} />
+        <StatTile label="Target" value={proposal.target} color={colors.up} compact style={TILE_ON_CARD} />
       </View>
 
-      <Text style={[type.noteBody, { color: ink.i45, marginTop: 14 }]}>{proposal.rationale}</Text>
+      <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s12 }}>
+        {proposal.rationale}
+      </Text>
 
       {decided ? null : (
         <ButtonRow
-          style={{ marginTop: 16 }}
-          affirmativeFlex={1.4}
+          style={{ marginTop: space.s14 }}
           secondary={
             <Button
               label="Skip"
               variant="secondary"
-              height={46}
+              color={colors.ink70}
+              height={size.hit}
               disabled={expired}
               onPress={() => onDecide('skip')}
             />
           }
-          affirmative={
-            <Button
-              label="Approve"
-              height={46}
-              disabled={expired}
-              onPress={() => onDecide('approve')}
-            />
+          primary={
+            <Button label="Approve" height={size.hit} disabled={expired} onPress={() => onDecide('approve')} />
           }
         />
       )}
     </SheetCard>
-  );
-}
-
-function StatTile({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: surfaces.surfaceAlt,
-        borderRadius: radius.md,
-        padding: 10,
-        gap: 4,
-      }}
-    >
-      <Text style={[type.footnoteSm, { color: ink.i32 }]}>{label}</Text>
-      <Text style={[type.rowValue, { color }]}>{value}</Text>
-    </View>
   );
 }

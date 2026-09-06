@@ -2,21 +2,32 @@
  * Sign in and get a wallet — Privy.
  *
  * Replaces the handoff's KYC screen (screen 8). Its LAYOUT is reused verbatim — the progress
- * header and four 66px status rows, with the same three circle states — because that pattern
- * reads correctly for any sequential setup. Only the steps change.
+ * header and four status rows, with the same three circle states (done = filled `up` with a
+ * check in `upInk`; current = 2pt white ring; pending = 2pt `pending` ring and dimmed text)
+ * — because that pattern reads correctly for any sequential setup. Only the steps change.
  *
- * The product point: identity and wallet are one object. The user signs in with an email code and
- * comes out the other side owning a wallet xorr cannot spend from. The bot's authority over it is
- * a separate on-chain permission, granted on the next screen.
+ * The product point: identity and wallet are one object. The user signs in with an email
+ * code and comes out the other side owning a wallet xorr cannot spend from. The bot's
+ * authority over it is a separate on-chain permission, granted on the next screen.
  */
 import React, { useEffect, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Icon } from '@/design/Icon';
-import { Button, NoteStrip, Progress, Screen } from '@/design/components';
-import { borders, ink, pnl, surfaces } from '@/design/colors';
-import { hairlineWidth, radius } from '@/design/space';
-import { type } from '@/design/type';
+import {
+  Button,
+  Eyebrow,
+  Fill,
+  NoteStrip,
+  Progress,
+  Screen,
+  Text,
+  border,
+  colors,
+  radius,
+  space,
+  typeScale,
+} from '@/ui';
 import { repos } from '@/data';
 import { useStore } from '@/state/store';
 import { useAuth, useEmailLogin } from '@/auth/useAuth';
@@ -27,6 +38,12 @@ const STEPS = [
   { label: 'Network ready', detail: 'Connected to Base' },
   { label: 'Ready to fund', detail: 'Nothing is deposited yet' },
 ] as const;
+
+/** The step marker. 26pt, 2pt ring — screens 8/9 draw it at this size on both. */
+const MARK = 26;
+const RING = 2;
+const STEP_H = 62;
+const FIELD_H = 48;
 
 export default function WalletSetup() {
   const router = useRouter();
@@ -44,7 +61,8 @@ export default function WalletSetup() {
   const step = !authenticated ? 0 : !address ? 1 : 4;
   const done = step >= STEPS.length;
 
-  // Once Privy has an address, register it with the executor so the bot knows whose wallet it is.
+  // Once Privy has an address, register it with the executor so the bot knows whose wallet
+  // it is.
   useEffect(() => {
     if (!address) return;
     repos.wallet
@@ -83,44 +101,52 @@ export default function WalletSetup() {
     <Screen>
       <Progress step={2} total={3} onBack={() => router.back()} />
 
-      <Text style={[type.onboardingTitle, { color: ink.full, marginTop: 26 }]}>
+      <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         Your wallet, your keys
       </Text>
-      <Text style={[type.body, { color: ink.i40, marginTop: 10 }]}>
+      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
         xorr never holds your money. You keep the wallet; the bot gets a separate, limited
         permission to trade inside it — which you can take back at any time.
       </Text>
 
-      <Screen.Content style={{ marginTop: 22 }}>
+      <Fill style={{ marginTop: space.s22 }}>
         {STEPS.map((s, i) => {
           const isDone = i < step;
           const isCurrent = i === step;
           return (
             <View
               key={s.label}
-              style={{ height: 62, flexDirection: 'row', alignItems: 'center', gap: 14 }}
+              style={{
+                height: STEP_H,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.s14,
+              }}
             >
               <View
                 style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 13,
+                  width: MARK,
+                  height: MARK,
+                  borderRadius: radius.full,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: isDone ? pnl.up : 'transparent',
-                  borderWidth: isDone ? 0 : 2,
-                  borderColor: isCurrent ? ink.full : borders.pending,
+                  backgroundColor: isDone ? colors.up : 'transparent',
+                  borderWidth: isDone ? 0 : RING,
+                  borderColor: isCurrent ? colors.ink : colors.pending,
                 }}
               >
-                {isDone ? <Icon name="check" size={14} color={pnl.upInk} strokeWidth={2.4} /> : null}
+                {isDone ? (
+                  <Icon name="check" size={14} color={colors.upInk} strokeWidth={2.4} />
+                ) : null}
               </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text
-                  style={[type.rowPrimary, { color: isDone || isCurrent ? ink.full : ink.i32 }]}
-                >
+              <View style={{ flex: 1, gap: space.s2 }}>
+                <Text variant="rowPrimary" color={isDone || isCurrent ? colors.ink : colors.ink32}>
                   {s.label}
                 </Text>
-                <Text style={[type.secondary, { color: isDone || isCurrent ? ink.i38 : ink.i28 }]}>
+                <Text
+                  variant="secondarySm"
+                  color={isDone || isCurrent ? colors.ink38 : colors.ink28}
+                >
                   {s.detail}
                 </Text>
               </View>
@@ -129,7 +155,7 @@ export default function WalletSetup() {
         })}
 
         {!authenticated ? (
-          <View style={{ gap: 10, marginTop: 8 }}>
+          <View style={{ gap: space.s10, marginTop: space.s8 }}>
             <Field
               label="Email"
               value={email}
@@ -139,20 +165,28 @@ export default function WalletSetup() {
               keyboard="email-address"
             />
             {codeSent ? (
-              <Field label="Code" value={code} onChange={setCode} placeholder="6-digit code" keyboard="number-pad" />
+              <Field
+                label="Code"
+                value={code}
+                onChange={setCode}
+                placeholder="6-digit code"
+                keyboard="number-pad"
+              />
             ) : null}
           </View>
         ) : null}
 
-        <NoteStrip kind={authenticated ? 'acted' : 'risk'} style={{ marginTop: 16 }}>
-          Losing this wallet means losing the funds in it. Back up the recovery method before you
-          deposit anything.
+        <NoteStrip kind={authenticated ? 'acted' : 'risk'} style={{ marginTop: space.s16 }}>
+          Losing this wallet means losing the funds in it. Back up the recovery method before
+          you deposit anything.
         </NoteStrip>
 
         {error ? (
-          <Text style={[type.noteBody, { color: pnl.down, marginTop: 14 }]}>{error}</Text>
+          <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s14 }}>
+            {error}
+          </Text>
         ) : null}
-      </Screen.Content>
+      </Fill>
 
       {done ? (
         <Button label="Continue — add funds" onPress={() => router.push('/fund')} />
@@ -186,32 +220,31 @@ function Field({
   keyboard?: 'default' | 'email-address' | 'number-pad';
 }) {
   return (
-    <View style={{ gap: 8 }}>
-      <Text style={[type.eyebrowSm, { color: ink.i32 }]}>{label}</Text>
-      <View
-        style={{
-          height: 48,
-          borderRadius: radius.md2,
-          backgroundColor: surfaces.inputBg,
-          borderWidth: hairlineWidth,
-          borderColor: borders.input,
-          paddingHorizontal: 14,
-          justifyContent: 'center',
-          opacity: editable ? 1 : 0.6,
-        }}
-      >
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          placeholder={placeholder}
-          placeholderTextColor={ink.i35}
-          editable={editable}
-          autoCapitalize="none"
-          keyboardType={keyboard}
-          style={[type.body, { color: ink.full }]}
-          accessibilityLabel={label}
-        />
-      </View>
+    <View style={{ gap: space.s8 }}>
+      <Eyebrow small>{label}</Eyebrow>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={colors.ink35}
+        editable={editable}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType={keyboard}
+        accessibilityLabel={label}
+        style={[
+          typeScale.body,
+          border.input,
+          {
+            height: FIELD_H,
+            borderRadius: radius.tile,
+            backgroundColor: colors.inputBg,
+            paddingHorizontal: space.s14,
+            color: colors.ink,
+            opacity: editable ? 1 : 0.6,
+          },
+        ]}
+      />
     </View>
   );
 }

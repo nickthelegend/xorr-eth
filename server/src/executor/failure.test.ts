@@ -6,7 +6,7 @@
  * user nothing about whether their money is safe or their limits worked.
  */
 import { describe, expect, it } from 'vitest';
-import { humanFailure } from './run.js';
+import { humanFailure } from './failure.js';
 
 describe('revert reasons, in plain language', () => {
   it('names the daily cap when the cap is what stopped it', () => {

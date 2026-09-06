@@ -61,10 +61,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${res.statusText}${body ? `: ${body}` : ''}`);
+    const text = await res.text().catch(() => '');
+    // A refusal often carries a REASON — the policy engine's own sentence, the one the user
+    // should read. Parse it here so a caller does not have to re-parse an error message.
+    let parsed: unknown;
+    try {
+      parsed = text ? JSON.parse(text) : undefined;
+    } catch {
+      parsed = undefined;
+    }
+    throw new ApiError(res.status, `${res.status} ${res.statusText}${text ? `: ${text}` : ''}`, parsed);
   }
   return (await res.json()) as T;
+}
+
+/**
+ * An HTTP answer we did not want, with the body attached.
+ *
+ * A 409 from `/orders` is not a transport failure — it is the policy engine saying no, in a
+ * sentence written for the user. Losing that to `new Error('409 Conflict')` meant the screen
+ * had to show a status code where it could have shown "the daily cap is spent".
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly body?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
 }
 
 export const api = {

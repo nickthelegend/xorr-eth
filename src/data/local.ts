@@ -21,7 +21,7 @@ import {
   type Quote,
   type StockQuote,
 } from './marketData';
-import { api } from './api';
+import { ApiError, api } from './api';
 import type {
   ActivityEvent,
   Agent,
@@ -39,7 +39,12 @@ import type {
   Timeframe,
   Wallet,
 } from './types';
-import type { PerpMetrics, Repositories } from './repositories';
+import type {
+  OrderOutcome,
+  PerpMetrics,
+  PositionClose,
+  Repositories,
+} from './repositories';
 import { percent, price as fmtPrice } from '../format';
 
 const allInstruments: Instrument[] = assetClasses.flatMap((c) => c.instruments);
@@ -257,6 +262,22 @@ export const LocalRepositories: Repositories = {
     },
   },
 
+  orders: {
+    async place(input): Promise<OrderOutcome> {
+      // A 409 is a POLICY refusal, not a transport failure — the body carries the reason the
+      // user needs to read, so it is unwrapped rather than thrown as "409".
+      try {
+        return await api.post<OrderOutcome>('/orders', input);
+      } catch (e) {
+        if (e instanceof ApiError && e.body && typeof e.body === 'object') {
+          const b = e.body as Partial<OrderOutcome>;
+          if (b.status) return b as OrderOutcome;
+        }
+        throw e;
+      }
+    },
+  },
+
   portfolio: {
     async positions(): Promise<Position[]> {
       return (await api.get<Position[]>('/positions').catch(() => undefined)) ?? [];
@@ -298,6 +319,19 @@ export const LocalRepositories: Repositories = {
         .catch(() => undefined);
       if (!b) return null;
       return { total: b.usd, cash: b.cashUsd, supplied: b.suppliedUsd ?? 0 };
+    },
+    async close(input): Promise<PositionClose> {
+      // No catch. A sale that did not happen must surface on the screen that asked for it —
+      // a swallowed failure here reads to the user as a completed exit.
+      try {
+        return await api.post<PositionClose>('/positions/close', input);
+      } catch (e) {
+        if (e instanceof ApiError && e.body && typeof e.body === 'object') {
+          const b = e.body as Partial<PositionClose>;
+          if (b.status) return b as PositionClose;
+        }
+        throw e;
+      }
     },
   },
 
