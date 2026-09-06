@@ -73,5 +73,8 @@ describe('every path the client calls exists on the server', () => {
       body,
       `${method} ${path} returned a bare 404 — the client calls a route that does not exist`,
     ).toMatch(/not_found|no_feed|no_wallet/);
-  }, 45_000);
+    // Generous on purpose. This checks that a route EXISTS, and one of them — the backtest —
+    // legitimately replays ninety days of real history on a cold cache. Speed is a different
+    // test's problem; a route that is missing is this one's.
+  }, 120_000);
 });
