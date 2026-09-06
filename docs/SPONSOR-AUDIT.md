@@ -144,15 +144,48 @@ stated point of the two-subgraph join, changes nothing.
 `AQUA_BOOK_ADDRESS` is set on the fork deployment and used for exactly one thing: telling `decide()`
 which app's books to look for in a subgraph that has no endpoint.
 
-### Verdict against "Official Aqua/SwapVM contracts must be used" + "onchain execution of token transfers"
+### Verdict — **CLOSED 2026-09-07**
 
-**The contracts exist and move real tokens under `forge test`. The product does not use them.** A
-judge running the app would see 1inch Aggregation, correctly and impressively — and nothing from the
-track they are judging. This is the single highest-value gap in the project.
+It was true when written: the contracts moved real tokens under `forge test` and the product never
+called them. It is not true now.
 
-**The fix is small and it is already 90% built:** honour `graphCall.route` in `runStrategy` — when
-the route is `aqua`, settle through `XorrAquaBook` instead of `buildSwap`. The book is deployed, the
-contract tests prove the path, and the branch is one `if`.
+[server/src/venues/aqua.ts](server/src/venues/aqua.ts) discovers open books from Aqua's **own**
+`Shipped`/`Docked` logs — which carry the strategy preimage — quotes each against
+`quoteExactIn`, and builds the fill with `delegatedFillArgs`. `runStrategy` tries it before the
+aggregator on every non-close leg, and falls through when no book can serve the size, which is a
+maker quoting what they hold rather than a failure. The book is on the venue list the user signs,
+so `spend()` enforces it like any other venue.
+
+Proved on chain by [server/src/live-aqua.ts](server/src/live-aqua.ts) — **12 checks, 0 failures**:
+
+```
+PASS  a book is open on the official Aqua deployment
+PASS  the fill executed against the AQUA BOOK, not the aggregation router
+        book logs: true · router logs: false · tx 0x3bb021d6823794dc…
+PASS  the book emitted its own Swapped event
+PASS  the bought token went to the TAKER, not to any contract
+PASS  real ERC-20 left the FILLING maker's own wallet — Aqua's whole claim
+        maker 0x20E05865… paid 0.058101023129685135 WETH for 150 USDC
+PASS  the book contract kept nothing
+```
+
+A separate maker wallet ships through the official Aqua contract; the deployed agent takes against
+it with the taker's delegated capital. Two self-custodial parties, neither holding the other's
+money — which is what Aqua is for.
+
+**Three things this took, none of them obvious:**
+
+- The event ABI was a guess and it was wrong twice over: Aqua's `Shipped` takes `maker, app` in that
+  order and **nothing is indexed**. A wrong ABI does not throw — `getLogs` filters on a topic
+  nothing emits and returns `[]`, indistinguishable from "no books". The signatures now come from
+  the vendored interface.
+- The first log window was 200,000 blocks; public Base RPCs cap `eth_getLogs` at **10,000** and
+  reject the rest. The caller's `.catch` turned that into a silent aggregator fallback — the exact
+  failure mode this codebase refuses everywhere else, in the code written to fix it. Bounded now,
+  and a discovery failure is logged rather than swallowed.
+- A book is constant-product, so the ratio of shipped inventory **is** the price it quotes. Two WETH
+  against ten thousand USDC implied \$5,000 while the reference said \$2,495, and the oracle band
+  refused every quote with `PriceOutsideBand`. That is the band doing its job.
 
 ---
 
@@ -162,7 +195,7 @@ contract tests prove the path, and the branch is one `if`.
 |---|---|---|
 | **Privy** | Deep, organic, real — auth, wallet, signing, verification | Use a Privy **control** (session signers), which also removes the hot delegate key |
 | **The Graph** | Real, live, load-bearing — on a chain that cannot trade | Deploy the second subgraph; index the chain that settles |
-| **1inch** | Aggregation excellent; **Aqua/SwapVM never called by the app** | Honour the route `decide()` already computes |
+| **1inch** | Aggregation excellent; **Aqua now settles real fills** ✅ | SwapVM is still contract-tests only |
 
 ---
 
@@ -175,7 +208,7 @@ any substitute.
 
 | # | Feature | Capability | Why a judge notices |
 |---|---|---|---|
-| 1 | **Route the executor through Aqua.** Honour `graphCall.route`; settle through `XorrAquaBook` when a maker book can fill, Aggregator when none can. | Aqua `ship`/`dock`, on-chain fills | Turns a computed decision into on-chain execution through official contracts — the literal track requirement |
+| ~~1~~ | ~~**Route the executor through Aqua.**~~ **BUILT** — `venues/aqua.ts` + the branch in `runStrategy`, proved by `live-aqua.ts` (12/12). | Aqua `ship`/`dock`, on-chain fills | Done |
 | 2 | **User-as-market-maker.** The user's idle USDC + shares quote a book from their own wallet, tokens never leaving it, inside the same delegation cap. | Aqua virtual balances | Aqua's own thesis and this product's thesis are the same idea on opposite sides of the book |
 | 3 | **Stop-loss compiled to SwapVM bytecode.** Deadline, slippage floor and fee become VM instructions, signed off-chain, executed when the level trips. | SwapVM programs | The exit's *rules* enforced in the VM instead of trusted to our server — a real custody reduction |
 | 4 | **Privy session signer replaces the delegate key.** The bot signs inside Privy's TEE under a Privy policy; no private key anywhere in our infrastructure. | Session signers + policy engine | Removes the one hot key; satisfies the B2B "control" criterion outright |

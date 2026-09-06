@@ -128,9 +128,18 @@ export const AAVE_V3_POOL = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5' as cons
  * Permission to call nothing is not dangerous, but it is a claim on the safety screen that is not
  * true, and this screen is the one that has to be exactly true.
  */
-export const SETTLEMENT_VENUES: readonly `0x${string}`[] = IS_BASE_MAINNET_STATE
-  ? [ADDRESSES.oneInchRouter, AAVE_V3_POOL]
-  : [ADDRESSES.oneInchRouter];
+/**
+ * Our Aqua book, when one is deployed. A venue the bot may fill against has to be on the list the
+ * user signed, or `spend()` refuses it — which is the contract doing its job, and was going to be
+ * the first thing an Aqua fill hit.
+ */
+const AQUA_BOOK = process.env.AQUA_BOOK_ADDRESS;
+
+export const SETTLEMENT_VENUES: readonly `0x${string}`[] = [
+  ADDRESSES.oneInchRouter,
+  ...(IS_BASE_MAINNET_STATE ? [AAVE_V3_POOL] : []),
+  ...(AQUA_BOOK && /^0x[0-9a-fA-F]{40}$/.test(AQUA_BOOK) ? [AQUA_BOOK as `0x${string}`] : []),
+];
 
 export function explorerTx(hash: string): string {
   // A fork shares mainnet's history up to the fork block, so an explorer link is right for a

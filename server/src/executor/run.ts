@@ -21,6 +21,7 @@ import { publicClient } from '../evm/client.js';
 import { gasStatus } from '../evm/gas.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
 import { buildSwap, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
+import { buildAquaFill } from '../venues/aqua.js';
 import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
@@ -366,6 +367,15 @@ async function runStrategyInner(
     if (graphCall && !graphCall.act && graphCall.reason !== 'index_is_for_another_deployment') {
       return finishBlocked(runId, walletId, strategy, graphCall.reason, graphCall.rationale);
     }
+    /*
+     * The route the decision made, kept for the settlement branch below.
+     *
+     * This is the line that was missing. `decide()` joins two subgraphs to answer "which venue" and
+     * returned `{ venue: 'aqua', maker, strategyHash }` — and nothing read it. Every fill went to
+     * the aggregator regardless, so the join was a computation with no consequence, and
+     * `XorrAquaBook` was a deployed contract the product never called.
+     */
+    const preferred = graphCall?.act ? graphCall.route.venue : undefined;
 
     /*
      * Can the bot pay for the transaction at all?
@@ -538,7 +548,49 @@ async function runStrategyInner(
     // A direct leg skips this entirely: the delegation forwards the planner's calldata to the
     // venue under exactly the same pull-approve-call-unapprove sequence, and the pool credits the
     // owner rather than us because `supply()` takes the recipient explicitly.
-    const swap = intent.direct
+    /*
+     * Buying and closing are different transactions.
+     *
+     * `spend()` measures against a daily cap denominated in the settlement token, so a sell cannot
+     * go through it: 0.3e18 wei of WETH against a cap of 2000e6 USDC units is nonsense arithmetic,
+     * and worse, a used-up spending cap would silence a stop-loss. `closePosition()` is separately
+     * authorised by the same policy and does not touch the cap, because de-risking is not spending.
+     */
+    const payToken = VENUE_TOKENS[intent.inSymbol];
+    if (!payToken) throw new Error(`No token registry entry for ${intent.inSymbol}`);
+
+    /*
+     * Aqua first, when a book can actually serve the size.
+     *
+     * The taker side is the side an operator can legitimately act on: the MAKER self-custodies
+     * through Aqua (they signed their own ship), and WE trade inside a cap the taker signed and can
+     * revoke. `delegatedFillArgs` returns exactly what `spend()` takes, so the fill goes through
+     * the same permission as every other trade — cap, expiry and venue allowlist all enforced by
+     * the contract rather than by us.
+     *
+     * `undefined` when no book can fill it, and that is not a failure: a maker quotes what they
+     * hold. The aggregator takes it from there, which is the whole point of having both.
+     *
+     * Tried when the index recommended it AND, on a deployment with no index, whenever a book
+     * exists — the chain is the authority here as everywhere else. Never on a close: an exit has
+     * to be certain, and a book deep enough to buy into may not be deep enough to sell out of.
+     */
+    const aqua =
+      intent.direct || isCloseIntent(intent) || preferred === '1inch'
+        ? undefined
+        : await buildAquaFill({
+            owner,
+            tokenIn: payToken.address,
+            tokenOut: (VENUE_TOKENS[intent.outSymbol]?.address ?? payToken.address) as Address,
+            amountIn:
+              intent.amountInRaw ??
+              BigInt(Math.round(intent.amountIn * 10 ** payToken.decimals)),
+            slippage: SLIPPAGE.scheduled / 100,
+          }).catch(() => undefined);
+
+    const swap = aqua
+      ? { to: aqua.venue, data: aqua.data }
+      : intent.direct
       ? { to: intent.direct.venue, data: intent.direct.data }
       : await buildSwap({
           inSymbol: intent.inSymbol,
@@ -554,17 +606,6 @@ async function runStrategyInner(
           // A risk-reducing close gets more room than a scheduled buy. See `SLIPPAGE`.
           slippagePct: isCloseIntent(intent) ? SLIPPAGE.stop : SLIPPAGE.scheduled,
         });
-
-    /*
-     * Buying and closing are different transactions.
-     *
-     * `spend()` measures against a daily cap denominated in the settlement token, so a sell cannot
-     * go through it: 0.3e18 wei of WETH against a cap of 2000e6 USDC units is nonsense arithmetic,
-     * and worse, a used-up spending cap would silence a stop-loss. `closePosition()` is separately
-     * authorised by the same policy and does not touch the cap, because de-risking is not spending.
-     */
-    const payToken = VENUE_TOKENS[intent.inSymbol];
-    if (!payToken) throw new Error(`No token registry entry for ${intent.inSymbol}`);
 
     // A direct leg is never a close: it puts capital to work rather than taking it off the table,
     // so it spends against the cap like any other outflow.
@@ -678,7 +719,7 @@ async function runStrategyInner(
         {
           walletId,
           agent: 'Yield Keeper',
-          action: describeLeg(intent, filledUnits),
+          action: describeLeg(intent, filledUnits, aqua ? 'aqua' : '1inch'),
           detail: intent.direct
             ? `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} moved. ${intent.because}`
             : `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
@@ -782,13 +823,14 @@ function isCloseIntent(intent: TradeIntent): boolean {
  * The action line in the activity log is the only place some people ever read what the bot did, so
  * it names the thing that happened, not the token that moved.
  */
-function describeLeg(intent: TradeIntent, units: number): string {
+function describeLeg(intent: TradeIntent, units: number, venue?: 'aqua' | '1inch'): string {
   if (intent.direct) {
     return `Supplied $${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${intent.inSymbol} to Aave`;
   }
+  const where = venue === 'aqua' ? ' on an Aqua book' : '';
   return intent.outSymbol === 'USDC'
-    ? `Sold ${units.toFixed(4)} ${intent.inSymbol}`
-    : `Bought ${units.toFixed(4)} ${intent.outSymbol}`;
+    ? `Sold ${units.toFixed(4)} ${intent.inSymbol}${where}`
+    : `Bought ${units.toFixed(4)} ${intent.outSymbol}${where}`;
 }
 
 /**
