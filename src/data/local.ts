@@ -273,8 +273,20 @@ export const LocalRepositories: Repositories = {
 
   alerts: {
     async list(): Promise<Alert[]> {
-      // A fixed catalogue of alert types is product CONFIG, not market data — legitimately local.
+      // The user's own alerts, persisted. The catalogue below is the starting set for someone who
+      // has never made one — it is product config, not a stand-in for saved state.
+      const remote = await api.get<Alert[]>('/alerts').catch(() => undefined);
+      if (remote && remote.length > 0) return remote;
       return alertFixtures;
+    },
+    async create(input: {
+      kind: 'price' | 'agent' | 'risk';
+      symbol?: string;
+      name: string;
+      detail?: string;
+      config?: Record<string, unknown>;
+    }): Promise<Alert> {
+      return api.post<Alert>('/alerts', input);
     },
     async setEnabled(id, enabled) {
       await api.post(`/alerts/${id}`, { enabled }).catch(() => undefined);

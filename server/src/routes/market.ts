@@ -19,6 +19,7 @@ import { COINGECKO_IDS } from '../market/ids.js';
 import { TOKENS, quote } from '../venues/oneinch.js';
 import { STOCKS } from '../venues/stocks.js';
 import { usdcSupplyYield } from '../market/yield.js';
+import { perpMetrics } from '../market/perp.js';
 
 export const market = new Hono();
 
@@ -286,3 +287,15 @@ export function warmMarketCache(): void {
 /** How long to wait before another go at whatever has not warmed yet. */
 const WARM_RETRY_MS = 20_000;
 
+
+/**
+ * GET /perp/:symbol — mark price and funding schedule.
+ *
+ * Public: a mark price is not user data. 404 when there is no spot feed, because a perp screen
+ * with no mark has nothing true to put on it.
+ */
+market.get('/perp/:symbol', async (c) => {
+  const m = await perpMetrics(c.req.param('symbol'));
+  if (!m) return c.json({ error: 'no_feed', detail: 'No spot feed for this contract.' }, 404);
+  return c.json(m);
+});

@@ -5,7 +5,8 @@ import React, { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button, IconButton, Screen, ScreenHeader, Segmented } from '@/design/components';
-import { borders, ink, surfaces } from '@/design/colors';
+import { borders, ink, pnl, surfaces } from '@/design/colors';
+import { repos } from '@/data';
 import { hairlineWidth, radius } from '@/design/space';
 import { type } from '@/design/type';
 import { DEFAULT_BUY } from '@/data/tradable';
@@ -17,6 +18,34 @@ export default function NewAlert() {
   const [kind, setKind] = useState(0);
   const [symbol, setSymbol] = useState<string>(DEFAULT_BUY);
   const [level, setLevel] = useState('95');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  /**
+   * Save it.
+   *
+   * This screen built an alert object and then called `router.back()`, so it looked like it worked
+   * and remembered nothing. An alert that is not persisted is an alert that will not fire.
+   */
+  async function create() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const kindId = (['price', 'agent', 'risk'] as const)[kind]!;
+      await repos.alerts.create({
+        kind: kindId,
+        symbol,
+        name: `${symbol} above $${level}`,
+        detail: `Notifies you once when ${symbol} trades above $${level}.`,
+        config: { above: Number(level) },
+      });
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Screen>
@@ -44,7 +73,16 @@ export default function NewAlert() {
         <Field label="Above" value={level} onChange={setLevel} keyboard="decimal-pad" />
       </Screen.Content>
 
-      <Button label={`Alert me when ${symbol} is above $${level}`} onPress={() => router.back()} />
+      {error ? (
+        <Text style={[type.footnote, { color: pnl.down, marginBottom: 8 }]}>
+          {`That did not save: ${error}`}
+        </Text>
+      ) : null}
+      <Button
+        label={`Alert me when ${symbol} is above $${level}`}
+        loading={busy}
+        onPress={() => void create()}
+      />
     </Screen>
   );
 }

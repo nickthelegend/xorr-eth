@@ -6,6 +6,7 @@ import { routes } from './routes/index.js';
 import { extra } from './routes/extra.js';
 import { market, warmMarketCache } from './routes/market.js';
 import { agents } from './agents/routes.js';
+import { alerts } from './routes/alerts.js';
 import { startScheduler } from './executor/scheduler.js';
 import { CHAIN_KEY, rpcUrl } from './evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
@@ -50,6 +51,7 @@ app.route('/', routes);
 app.route('/', extra);
 app.route('/', market);
 app.route('/', agents);
+app.route('/', alerts);
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port });

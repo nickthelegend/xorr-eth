@@ -149,7 +149,11 @@ export default function PerpContract() {
             />
             <Row
               primary="Funding"
-              value={m ? `${percent(m.fundingRate * 100, { digits: 4 })} / 1h` : '—'}
+              // Null means we cannot know it, not that it is zero. A funding rate of "0.0000%"
+              // that nobody measured is exactly the number a perp trader would act on.
+              value={
+                m?.fundingRate != null ? `${percent(m.fundingRate * 100, { digits: 4 })} / 1h` : '—'
+              }
               height={48}
               divider={false}
             />
@@ -172,9 +176,12 @@ export default function PerpContract() {
         >
           <StatCell
             label="Open interest"
-            value={m ? compactMoney(m.openInterestUsd) : '—'}
+            value={m?.openInterestUsd != null ? compactMoney(m.openInterestUsd) : '—'}
           />
-          <StatCell label="24h volume" value={m ? compactMoney(m.dayVolumeUsd) : '—'} />
+          <StatCell
+            label="24h volume"
+            value={m?.dayVolumeUsd != null ? compactMoney(m.dayVolumeUsd) : '—'}
+          />
           <StatCell
             label="Mark vs index"
             value={m ? money(m.markVsIndex, { explicitSign: true }) : '—'}

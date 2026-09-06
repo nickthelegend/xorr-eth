@@ -181,3 +181,24 @@ CREATE INDEX IF NOT EXISTS agents_wallet_idx ON agents (wallet_id) WHERE hired;
 -- a strategy whose agent is fired keeps running under the user's own permission rather than
 -- vanishing with the agent.
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL;
+
+/*
+ * Alerts.
+ *
+ * `app/alerts/new.tsx` built an alert and dropped it, and toggling one POSTed to a route that did
+ * not exist and had its 404 swallowed. So the screen looked like it worked and remembered nothing.
+ */
+CREATE TABLE IF NOT EXISTS alerts (
+  id          TEXT PRIMARY KEY,
+  wallet_id   TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL CHECK (kind IN ('price','agent','risk')),
+  symbol      TEXT,
+  name        TEXT NOT NULL,
+  detail      TEXT NOT NULL,
+  enabled     BOOLEAN NOT NULL DEFAULT true,
+  -- The threshold this fires on: { above: 95 } / { below: 60 } / { drawdownPct: 10 }.
+  config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS alerts_wallet_idx ON alerts (wallet_id);

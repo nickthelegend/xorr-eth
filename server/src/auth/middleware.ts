@@ -25,6 +25,9 @@ const PUBLIC_PATHS = new Set([
   '/yield/supply',
 ]);
 
+/** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */
+const PUBLIC_PREFIXES = ['/perp/'];
+
 declare module 'hono' {
   interface ContextVariableMap {
     user: AuthedUser;
@@ -32,7 +35,9 @@ declare module 'hono' {
 }
 
 export async function authMiddleware(c: Context, next: Next) {
-  if (PUBLIC_PATHS.has(c.req.path) || c.req.method === 'OPTIONS') return next();
+  const isPublic =
+    PUBLIC_PATHS.has(c.req.path) || PUBLIC_PREFIXES.some((p) => c.req.path.startsWith(p));
+  if (isPublic || c.req.method === 'OPTIONS') return next();
 
   try {
     const user = await verifyToken(c.req.header('authorization'));

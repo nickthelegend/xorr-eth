@@ -107,9 +107,15 @@ export type PerpMetrics = {
   markPx: number;
   oraclePx: number;
   markVsIndex: number;
-  openInterestUsd: number;
-  dayVolumeUsd: number;
-  fundingRate: number;
+  /**
+   * Null where xorr cannot know it.
+   *
+   * These three need a venue's own order book, and xorr does not run one. Null so the screen can
+   * say "not available" — a plausible number here is the kind a perp trader would act on.
+   */
+  openInterestUsd: number | null;
+  dayVolumeUsd: number | null;
+  fundingRate: number | null;
   maxLeverage: number;
   nextFundingSeconds: number;
   /** Absolute unix ms — the client counts down from this, purely. */
@@ -128,6 +134,14 @@ export interface YieldRepository {
 
 export interface AlertRepository {
   list(): Promise<Alert[]>;
+  /** Persist a new alert. It used to be built on screen and discarded. */
+  create(input: {
+    kind: 'price' | 'agent' | 'risk';
+    symbol?: string;
+    name: string;
+    detail?: string;
+    config?: Record<string, unknown>;
+  }): Promise<Alert>;
   setEnabled(id: string, enabled: boolean): Promise<void>;
 }
 

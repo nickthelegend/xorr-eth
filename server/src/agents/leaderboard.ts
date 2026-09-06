@@ -49,7 +49,8 @@ export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
   const marks = new Map<string, number>();
   for (const s of symbols) {
     try {
-      marks.set(s, await priceOf(s));
+      // A screen, so a short deadline: an unpriced symbol is excluded, not waited for.
+      marks.set(s, await priceOf(s, 3_000));
     } catch {
       // No feed for this symbol — its runs are excluded rather than valued at a guess.
     }
