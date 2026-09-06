@@ -37,3 +37,21 @@ describe('tradable set', () => {
     }
   }, 60_000);
 });
+
+describe('market symbols map to what they settle as', () => {
+  it('BTC settles as cbBTC and ETH as WETH — the market is real either way', async () => {
+    const { isTradable, settlementSymbol } = await import('./tradable');
+    expect(settlementSymbol('BTC')).toBe('CBBTC');
+    expect(settlementSymbol('ETH')).toBe('WETH');
+    // "BTC is not tradable" would be true in the most useless way while the app buys cbBTC.
+    expect(isTradable('BTC')).toBe(true);
+    expect(isTradable('ETH')).toBe(true);
+  });
+
+  it('still refuses a market with no instrument on this chain', async () => {
+    const { isTradable } = await import('./tradable');
+    for (const sym of ['XAUT', 'SPYx', 'OPENAI', 'SOL']) {
+      expect(isTradable(sym), `${sym} should not be tradable on Base`).toBe(false);
+    }
+  });
+});

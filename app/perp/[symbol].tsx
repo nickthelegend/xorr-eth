@@ -10,7 +10,6 @@
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { AreaChart } from '@/charts';
 import {
   Button,
   ButtonRow,
@@ -30,7 +29,7 @@ import { LEVERAGE_OPTIONS, leverageSummary } from '@/state/derived';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
-import { areaSeries } from '@/data/fixtures/series';
+import { Candlestick, projectCandles, tight } from '@/charts';
 
 export default function PerpContract() {
   const { symbol = 'XAUT' } = useLocalSearchParams<{ symbol: string }>();
@@ -43,6 +42,9 @@ export default function PerpContract() {
   // liquid proxy the venue actually lists; the screen labels the feed either way.
   const feedSymbol = symbol === 'XAUT' ? 'BTC' : symbol;
   const { data: m, loading } = useAsync(() => repos.perps.metrics(feedSymbol), [feedSymbol]);
+  // Real OHLC for THIS contract. A perp with no spot feed gets no chart, and says so.
+  const candles = useAsync(() => repos.markets.candles(feedSymbol, '1H'), [feedSymbol]);
+  const perpCandles = candles.data?.bars ?? [];
   const isProxy = feedSymbol !== symbol;
   const summary = leverageSummary(lev, m?.markPx);
 
@@ -100,13 +102,22 @@ export default function PerpContract() {
         <TagChip label={m ? `Max ${m.maxLeverage}x` : 'Spot feed'} />
       </View>
 
-      <AreaChart
-        points={areaSeries.XAUT!}
-        height={132}
-        stroke={commodity.goldFill}
-        style={{ marginTop: 16 }}
-        accessibilityLabel="Gold price chart"
-      />
+      {/*
+        Real candles for this symbol, or none.
+        This drew `areaSeries.XAUT` — gold's shape — under every perp regardless of which contract
+        was open. The repository already refuses to invent bars; the screen was undoing that.
+      */}
+      {perpCandles.length > 1 ? (
+        <Candlestick
+          candles={projectCandles(perpCandles, tight(perpCandles))}
+          height={132}
+          style={{ marginTop: 16 }}
+        />
+      ) : (
+        <View style={{ height: 132, marginTop: 16, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={[type.body, { color: ink.i40 }]}>No price history for this contract.</Text>
+        </View>
+      )}
 
       <Screen.Content style={{ marginTop: 16 }}>
         <SheetCard radius={radius.xl} padding={16}>

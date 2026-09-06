@@ -6,9 +6,9 @@
  * Agent note. Sell (control) / Buy (white).
  */
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { AreaChart, pointsFromPrices } from '@/charts';
+import { AreaChart, Candlestick, pointsFromPrices, projectCandles, tight } from '@/charts';
 import {
   AssetMark,
   Button,
@@ -29,7 +29,7 @@ import { money, percent, price as fmtPrice, quantity, signedMoney } from '@/form
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { usePrice } from '@/data/usePrices';
-import { isTradable } from '@/data/tradable';
+import { isTradable, settlementSymbol } from '@/data/tradable';
 
 const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
 /** The timeframe each range pill maps to when asking for real candles. */
@@ -59,6 +59,10 @@ export default function AssetDetail() {
   // bars and the screen was quietly undoing that.
   const hasSeries = closes.length > 1;
   const points = hasSeries ? pointsFromPrices(closes) : null;
+  // design.md calls the candlestick the centrepiece, and the bars are already fetched — the area
+  // chart was only ever a summary of the same data. Both are offered; candles are the default
+  // wherever there are real ones to draw.
+  const [candleView, setCandleView] = useState(true);
   const changePct = hasSeries ? ((closes.at(-1)! - closes[0]!) / closes[0]!) * 100 : 0;
   const up = changePct >= 0;
 
@@ -120,14 +124,27 @@ export default function AssetDetail() {
         )}
       </View>
 
-      {points ? (
-        <AreaChart
-          points={points}
-          height={170}
-          stroke={ink.full}
-          style={{ marginTop: 18 }}
-          accessibilityLabel={`${i?.name ?? symbol} price chart, ${RANGES[range]}`}
-        />
+      {points && candleView ? (
+        <Pressable
+          onPress={() => setCandleView(false)}
+          accessibilityRole="button"
+          accessibilityLabel={`${i?.name ?? symbol} candlestick chart, ${RANGES[range]}. Switch to the line view.`}
+        >
+          <Candlestick candles={projectCandles(bars, tight(bars))} height={170} style={{ marginTop: 18 }} />
+        </Pressable>
+      ) : points ? (
+        <Pressable
+          onPress={() => setCandleView(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${i?.name ?? symbol} price chart, ${RANGES[range]}. Switch to candles.`}
+        >
+          <AreaChart
+            points={points}
+            height={170}
+            stroke={ink.full}
+            style={{ marginTop: 18 }}
+          />
+        </Pressable>
       ) : (
         <View
           style={{ height: 170, marginTop: 18, alignItems: 'center', justifyContent: 'center' }}
@@ -192,11 +209,14 @@ export default function AssetDetail() {
             <Button
               label="Sell"
               variant="secondary"
-              onPress={() => router.push(`/order/${symbol}?side=sell`)}
+              onPress={() => router.push(`/order/${settlementSymbol(symbol ?? '')}?side=sell`)}
             />
           }
           affirmative={
-            <Button label="Buy" onPress={() => router.push(`/order/${symbol}?side=buy`)} />
+            <Button
+              label="Buy"
+              onPress={() => router.push(`/order/${settlementSymbol(symbol ?? '')}?side=buy`)}
+            />
           }
         />
       ) : (
