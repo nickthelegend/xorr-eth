@@ -37,8 +37,21 @@ export type Quote = { price: number; change24h: number; source: 'coingecko' };
  * should not produce two round trips for the same symbol list.
  */
 const TTL_MS = 15_000;
-/** How many times to wait out a "warming" 503 before giving up and letting the screen say so. */
-const WARMING_RETRIES = 3;
+/** How many times to wait out a "warming" 503 before handing the state to the screen. */
+const WARMING_RETRIES = 4;
+
+/**
+ * The executor is fetching this from upstream and has not finished.
+ *
+ * Its own error type so a screen can say "fetching" rather than "there is nothing here" — the
+ * difference between a wait and a dead end.
+ */
+export class StillWarming extends Error {
+  constructor(path: string) {
+    super(`still warming: ${path}`);
+    this.name = 'StillWarming';
+  }
+}
 const cache = new Map<string, { at: number; value: unknown }>();
 const inflight = new Map<string, Promise<unknown>>();
 
@@ -62,7 +75,12 @@ async function getJson<T>(path: string, ttlMs = TTL_MS): Promise<T> {
             signal: ctrl.signal,
             headers: { accept: 'application/json' },
           });
-          if (res.status === 503 && attempt < WARMING_RETRIES - 1) {
+          // A 503 is always "still warming", on the last attempt as much as the first. Falling
+          // through to the generic error on the final try meant the caller saw a plain Error, the
+          // `instanceof StillWarming` check failed, and the screen said "no feed" for data that
+          // was seconds away — the exact confusion this state exists to prevent.
+          if (res.status === 503) {
+            if (attempt === WARMING_RETRIES - 1) throw new StillWarming(path);
             const after = Number(res.headers.get('retry-after'));
             await new Promise((r) =>
               setTimeout(r, Number.isFinite(after) && after > 0 ? after * 1000 : 2_000),
@@ -77,7 +95,8 @@ async function getJson<T>(path: string, ttlMs = TTL_MS): Promise<T> {
           clearTimeout(timer);
         }
       }
-      throw new Error(`still warming after ${WARMING_RETRIES} attempts: ${path}`);
+      // Unreachable: the loop either returns, throws, or continues.
+      throw new StillWarming(path);
     } finally {
       inflight.delete(path);
     }
@@ -92,7 +111,13 @@ export function clearMarketDataCache(): void {
   inflight.clear();
 }
 
-/** Spot quotes for any symbols we have a feed for. Unknown symbols are omitted. */
+/**
+ * Spot quotes for any symbols we have a feed for. Unknown symbols are omitted.
+ *
+ * Throws `StillWarming` when the executor is fetching from upstream, so a caller can tell "not
+ * yet" from "no feed" — the price is the number a user reads first, and labelling one that is
+ * seconds away as unavailable is the more expensive of the two mistakes.
+ */
 export async function fetchQuotes(symbols: string[]): Promise<Record<string, Quote>> {
   const known = symbols.filter((s) => COINGECKO_IDS[s]);
   if (known.length === 0) return {};

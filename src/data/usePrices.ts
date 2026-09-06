@@ -12,7 +12,7 @@ import { useMemo } from 'react';
 import { repos } from './index';
 import { useAsync } from './useAsync';
 
-export type LivePrice = { price: number; change24h?: number } | undefined;
+export type LivePrice = { price: number; change24h?: number; warming?: boolean } | undefined;
 
 export function usePrices(symbols: string[]) {
   const key = symbols.join(',');
@@ -31,6 +31,7 @@ export function usePrice(symbol: string | undefined) {
 
 /** Format a unit conversion against a live price, or say plainly that there is no price. */
 export function unitsFor(amountUsd: number, quote: LivePrice, symbol: string): string {
+  if (quote?.warming) return `Fetching the ${symbol} price…`;
   if (!quote || quote.price <= 0) return `No live ${symbol} price`;
   return `${(amountUsd / quote.price).toFixed(4)} ${symbol}`;
 }

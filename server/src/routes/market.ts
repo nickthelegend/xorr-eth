@@ -255,7 +255,19 @@ export function warmMarketCache(): void {
   // rest of the timeframe pills. The upstream serves these one at a time behind a rate limit, so
   // the order is the difference between a fast first screen and a fast last one.
   const urls = [ALL_IDS_URL];
-  for (const days of [1, 30, 7, 90]) {
+
+  // The window every asset screen opens on, for EVERY symbol with a feed. Warming only three
+  // symbols meant opening LINK or AAVE waited on a cold fetch behind a rate limiter, and the
+  // screen showed its warming state for someone who had done nothing unusual.
+  const ids = [...new Set(Object.values(COINGECKO_IDS))];
+  for (const id of ids) {
+    urls.push(`${COINGECKO}/coins/${id}/ohlc?vs_currency=usd&days=1`);
+  }
+
+  // The remaining timeframe pills, for the symbols a session is most likely to open. Warming every
+  // window for every symbol would be 48 requests through a 1.1s-spaced queue, which starves the
+  // very first request it is meant to help.
+  for (const days of [30, 7, 90]) {
     for (const symbol of ['BTC', 'ETH', 'WETH']) {
       const id = COINGECKO_IDS[symbol];
       if (id) urls.push(`${COINGECKO}/coins/${id}/ohlc?vs_currency=usd&days=${days}`);

@@ -5,7 +5,7 @@
  * Range pills 1D/1W/1M/1Y/All. Three rows: Your position / Avg cost / Unrealised.
  * Agent note. Sell (control) / Buy (white).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AreaChart, Candlestick, pointsFromPrices, projectCandles, tight } from '@/charts';
@@ -51,12 +51,16 @@ export default function AssetDetail() {
     [symbol, range],
   );
 
+
   const i = inst.data;
   const bars = candles.data?.bars ?? [];
   const closes = bars.map((b) => b[3]);
   // No real series means NO CHART. The fallback here used to be `areaSeries.SOL`, which drew
   // Solana's shape under whatever symbol the user had opened — the repository refuses to invent
   // bars and the screen was quietly undoing that.
+  // "Not yet" and "not ever" get different words, and the first one retries.
+  const warming = candles.data?.feed === 'warming';
+
   const hasSeries = closes.length > 1;
   const points = hasSeries ? pointsFromPrices(closes) : null;
   // design.md calls the candlestick the centrepiece, and the bars are already fetched — the area
@@ -68,8 +72,30 @@ export default function AssetDetail() {
 
   // Tokenized equities have a real spot price and no history: they are priced off the 1inch route
   // that would fill them, not a candle feed. A real price with no chart is a true state to show.
-  const { quote } = usePrice(symbol);
-  const spot = hasSeries ? closes.at(-1)! : quote?.price;
+  const { quote, loading: priceLoading, reload: reloadQuote } = usePrice(symbol);
+  const spot = hasSeries ? closes.at(-1)! : quote?.price && quote.price > 0 ? quote.price : undefined;
+  // Either half can still be arriving; both say "fetching" rather than "nothing here".
+  /*
+   * Still arriving, in any of the three ways it can be.
+   *
+   * The screen only knew "have data" and "have none", so during the very first fetch it said "No
+   * live price for this market" and "No chart for this market yet" — a confident claim about a
+   * market it had not finished asking about. Loading, warming and empty are three different
+   * states and only the last one is news.
+   */
+  const warmingAny =
+    warming || quote?.warming === true || priceLoading || (candles.loading && !candles.data);
+
+  // The executor answered "come back", so come back. Without this the screen sits on its warming
+  // message until the user navigates, which looks identical to being stuck.
+  useEffect(() => {
+    if (!warmingAny) return;
+    const t = setTimeout(() => {
+      candles.reload();
+      reloadQuote();
+    }, 4_000);
+    return () => clearTimeout(t);
+  }, [warmingAny, candles, reloadQuote]);
 
   if (inst.error) {
     return (
@@ -111,7 +137,7 @@ export default function AssetDetail() {
           <Text style={[type.priceLarge, { color: ink.full }]}>
             {spot !== undefined ? fmtPrice(spot) : '—'}
           </Text>
-          {spot === undefined ? <SimulatedTag /> : null}
+          {spot === undefined && !warmingAny ? <SimulatedTag /> : null}
         </View>
         {hasSeries ? (
           <Text style={[type.body, { color: up ? pnl.up : pnl.down }]}>
@@ -119,7 +145,11 @@ export default function AssetDetail() {
           </Text>
         ) : (
           <Text style={[type.body, { color: ink.i40 }]}>
-            {spot === undefined ? 'No live price for this market.' : 'Spot price. No price history for this market.'}
+            {warmingAny
+              ? 'Fetching the latest price…'
+              : spot === undefined
+                ? 'No live price for this market.'
+                : 'Spot price. No price history for this market.'}
           </Text>
         )}
       </View>
@@ -149,7 +179,9 @@ export default function AssetDetail() {
         <View
           style={{ height: 170, marginTop: 18, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Text style={[type.body, { color: ink.i40 }]}>No chart for this market yet.</Text>
+          <Text style={[type.body, { color: ink.i40 }]}>
+            {warmingAny ? 'Fetching price history…' : 'No chart for this market yet.'}
+          </Text>
         </View>
       )}
 

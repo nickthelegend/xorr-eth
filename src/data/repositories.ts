@@ -35,7 +35,9 @@ export interface MarketRepository {
    */
   quotes(
     symbols: string[],
-  ): Promise<Record<string, { price: number; change24h?: number } | undefined>>;
+  ): Promise<
+    Record<string, { price: number; change24h?: number; warming?: boolean } | undefined>
+  >;
   candles(symbol: string, timeframe: Timeframe): Promise<Candles>;
 }
 

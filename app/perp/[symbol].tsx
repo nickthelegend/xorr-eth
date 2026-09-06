@@ -115,7 +115,11 @@ export default function PerpContract() {
         />
       ) : (
         <View style={{ height: 132, marginTop: 16, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={[type.body, { color: ink.i40 }]}>No price history for this contract.</Text>
+          <Text style={[type.body, { color: ink.i40 }]}>
+            {candles.data?.feed === 'warming'
+              ? 'Fetching price history…'
+              : 'No price history for this contract.'}
+          </Text>
         </View>
       )}
 

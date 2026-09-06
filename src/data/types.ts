@@ -47,7 +47,14 @@ export type Candles = {
   symbol: string;
   timeframe: Timeframe;
   bars: Bar[];
-  feed: 'live' | 'simulated';
+  /**
+   * `warming` is not `simulated`.
+   *
+   * The executor fetches history from a rate-limited upstream and answers 503 with a Retry-After
+   * while it does. Collapsing that into "no chart for this market" tells a user their market has
+   * no history when it will have some in seconds — the wrong answer, stated confidently.
+   */
+  feed: 'live' | 'simulated' | 'warming';
 };
 
 export type Agent = GradientStops & {

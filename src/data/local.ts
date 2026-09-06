@@ -17,6 +17,7 @@ import {
   fetchCandles,
   fetchQuotes,
   fetchStockQuotes,
+  StillWarming,
   type Quote,
   type StockQuote,
 } from './marketData';
@@ -92,13 +93,20 @@ export const LocalRepositories: Repositories = {
       // CoinGecko listing and are priced off the 1inch route that would fill them. A screen asking
       // for a price should not have to know which kind of asset it is holding.
       const needsStocks = symbols.some((s) => STOCK_SYMBOLS.has(s));
+      let warming = false;
       const [live, stocks] = await Promise.all([
-        fetchQuotes(symbols).catch((): Record<string, Quote> => ({})),
+        fetchQuotes(symbols).catch((e: unknown): Record<string, Quote> => {
+          warming = e instanceof StillWarming;
+          return {};
+        }),
         needsStocks
           ? fetchStockQuotes().catch((): Record<string, StockQuote> => ({}))
           : Promise.resolve({} as Record<string, StockQuote>),
       ]);
-      const out: Record<string, { price: number; change24h?: number } | undefined> = {};
+      const out: Record<
+        string,
+        { price: number; change24h?: number; warming?: boolean } | undefined
+      > = {};
       for (const s of symbols) {
         const stock = stocks[s];
         if (stock?.price != null) {
@@ -108,14 +116,24 @@ export const LocalRepositories: Repositories = {
           continue;
         }
         const q = live[s];
-        out[s] = q ? { price: q.price, change24h: q.change24h } : undefined;
+        out[s] = q
+          ? { price: q.price, change24h: q.change24h }
+          : warming
+            ? { price: 0, change24h: undefined, warming: true }
+            : undefined;
       }
       return out;
     },
 
     async candles(symbol: string, timeframe: Timeframe): Promise<Candles> {
-      const live = await fetchCandles(symbol, timeframe).catch(() => null);
+      let warming = false;
+      const live = await fetchCandles(symbol, timeframe).catch((e: unknown) => {
+        // "Not yet" and "not ever" are different answers and the screen shows different words.
+        warming = e instanceof StillWarming;
+        return null;
+      });
       if (live) return live;
+      if (warming) return { symbol, timeframe, bars: [], feed: 'warming' };
       // No feed for this symbol means NO CHART. Handing back another asset's bars under this
       // symbol's name would be the most misleading thing this app could do.
       return { symbol, timeframe, bars: [], feed: 'simulated' };
