@@ -14,7 +14,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Icon } from '@/design/Icon';
 import { Button, Screen, Segmented } from '@/design/components';
-import { ink, pnl, sheet } from '@/design/colors';
+import { pnl, sheet } from '@/design/colors';
 import { radius } from '@/design/space';
 import { type } from '@/design/type';
 import { money, percent } from '@/format';

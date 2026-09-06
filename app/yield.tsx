@@ -93,8 +93,8 @@ export default function Yield() {
 
               {supplied <= 0 ? (
                 <Text style={[type.noteBody, { color: ink.i45, marginTop: 16 }]}>
-                  Nothing supplied yet. A "move idle cash to yield" strategy puts spare USDC here
-                  automatically, inside your daily cap.
+                  Nothing supplied yet. A &ldquo;move idle cash to yield&rdquo; strategy puts spare
+                  USDC here automatically, inside your daily cap.
                 </Text>
               ) : (
                 <>

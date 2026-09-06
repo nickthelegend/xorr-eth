@@ -10,8 +10,17 @@
  * The client has the same protection in src/data/marketData.ts. Both halves need it: the app
  * refreshing a chart and the executor pricing a fill hit the same upstream quota.
  */
-const MIN_SPACING_MS = Number(process.env.HTTP_MIN_SPACING_MS ?? 1_100);
-const MAX_ATTEMPTS = 5;
+/*
+ * Read per call, not at module load.
+ *
+ * These are the knobs that decide how long a failing dependency takes to give up, and they were
+ * baked in at import time — so a test of the retry behaviour had to sit through the real
+ * twenty-five seconds per call, four times over, which is not a test anyone runs. Reading them
+ * lazily costs nothing and makes the behaviour reachable.
+ */
+const spacingMs = () => Number(process.env.HTTP_MIN_SPACING_MS ?? 1_100);
+const maxAttempts = () => Number(process.env.HTTP_MAX_ATTEMPTS ?? 5);
+const backoffBaseMs = () => Number(process.env.HTTP_BACKOFF_BASE_MS ?? 800);
 
 /**
  * One lane per upstream host.
@@ -20,14 +29,67 @@ const MAX_ATTEMPTS = 5;
  * every 1inch call behind it, so a single slow feed could take a quote from 300ms to half a
  * minute. Rate limits are per host, so the spacing belongs per host too.
  */
-type Lane = { queue: Promise<unknown>; lastRequestAt: number };
+type Lane = {
+  queue: Promise<unknown>;
+  lastRequestAt: number;
+  /** Consecutive failures. Reset by any success. */
+  failures: number;
+  /** While set and in the future, the host is skipped entirely. */
+  openUntil: number;
+};
 const lanes = new Map<string, Lane>();
+
+/**
+ * Stop knocking on a door nobody is answering.
+ *
+ * The retry loop is right for a busy upstream and wrong for a dead one: five attempts with
+ * exponential backoff means every single request to a host that is down takes about twenty-five
+ * seconds before failing. With a scheduler tick and a page of market rows all asking at once, one
+ * dead dependency turns into an app that appears to hang rather than one that degrades.
+ *
+ * So after enough consecutive failures the host is skipped outright for a cooldown, and callers
+ * fail immediately with a message that names the host and when it will be tried again. Every
+ * screen already handles a failed read by showing a stated error — they just get there in
+ * milliseconds instead of half a minute.
+ *
+ * One success closes it. A half-open probe would be tidier, but the lane's minimum spacing already
+ * means the first request after the cooldown IS the probe.
+ */
+const BREAKER_THRESHOLD = 4;
+const BREAKER_COOLDOWN_MS = 30_000;
+
+export class UpstreamUnavailable extends Error {
+  constructor(host: string, until: number) {
+    super(
+      `${host} has failed ${BREAKER_THRESHOLD} times in a row; not retrying for another ` +
+        `${Math.max(0, Math.ceil((until - Date.now()) / 1000))}s.`,
+    );
+    this.name = 'UpstreamUnavailable';
+  }
+}
+
+/** Testing and operational visibility: which hosts are currently shut out, and until when. */
+export function breakerState(): { host: string; failures: number; openUntil: number }[] {
+  return [...lanes.entries()].map(([host, l]) => ({
+    host,
+    failures: l.failures,
+    openUntil: l.openUntil,
+  }));
+}
+
+/** Testing only. */
+export function resetBreakers(): void {
+  for (const l of lanes.values()) {
+    l.failures = 0;
+    l.openUntil = 0;
+  }
+}
 
 function laneFor(url: string): Lane {
   const host = new URL(url).host;
   let lane = lanes.get(host);
   if (!lane) {
-    lane = { queue: Promise.resolve(), lastRequestAt: 0 };
+    lane = { queue: Promise.resolve(), lastRequestAt: 0, failures: 0, openUntil: 0 };
     lanes.set(host, lane);
   }
   return lane;
@@ -41,10 +103,43 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function rawGet<T>(url: string, timeoutMs: number, headers: Record<string, string> = {}): Promise<T> {
   const lane = laneFor(url);
+  const host = new URL(url).host;
+
+  // Fail fast while the breaker is open, rather than spending twenty-five seconds proving what the
+  // last four requests already established.
+  if (lane.openUntil > Date.now()) throw new UpstreamUnavailable(host, lane.openUntil);
+
+  /*
+   * Count EVERY way this can fail, not just the tidy one.
+   *
+   * The counter was only reached on the fall-through path — retries exhausted against 429s and
+   * 5xx — while a connection error threw straight out of the loop and skipped it entirely. That
+   * is precisely the case the breaker exists for: a host that is down refuses connections, it does
+   * not politely return 503. So the whole attempt loop is wrapped, and any failure counts.
+   */
+  try {
+    return await attempt<T>(url, timeoutMs, headers, lane);
+  } catch (e) {
+    lane.failures += 1;
+    if (lane.failures >= BREAKER_THRESHOLD && lane.openUntil <= Date.now()) {
+      lane.openUntil = Date.now() + BREAKER_COOLDOWN_MS;
+      console.warn(`[http] ${host} is failing; pausing requests to it for ${BREAKER_COOLDOWN_MS}ms`);
+    }
+    throw e;
+  }
+}
+
+async function attempt<T>(
+  url: string,
+  timeoutMs: number,
+  headers: Record<string, string>,
+  lane: Lane,
+): Promise<T> {
   let lastStatus = 0;
   let lastError: Error | undefined;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const wait = MIN_SPACING_MS - (Date.now() - lane.lastRequestAt);
+  const attempts = maxAttempts();
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const wait = spacingMs() - (Date.now() - lane.lastRequestAt);
     if (wait > 0) await sleep(wait);
     lane.lastRequestAt = Date.now();
 
@@ -59,12 +154,18 @@ async function rawGet<T>(url: string, timeoutMs: number, headers: Record<string,
       if (res.status === 429 || res.status >= 500) {
         const retryAfter = Number(res.headers.get('retry-after'));
         const backoff =
-          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 800 * 2 ** attempt;
-        if (attempt === MAX_ATTEMPTS) break;
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter * 1000
+            : backoffBaseMs() * 2 ** attempt;
+        if (attempt === attempts) break;
         await sleep(backoff);
         continue;
       }
       if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
+      // Any success closes the breaker. The lane's minimum spacing means the first request after a
+      // cooldown is already the probe, so there is nothing to add here.
+      lane.failures = 0;
+      lane.openUntil = 0;
       return (await res.json()) as T;
     } catch (e) {
       // A timeout or a dropped connection is the same kind of failure as a 503 — the upstream is
@@ -75,15 +176,15 @@ async function rawGet<T>(url: string, timeoutMs: number, headers: Record<string,
         (e.name === 'AbortError' ||
           e.name === 'TimeoutError' ||
           /aborted|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(e.message));
-      if (!transient || attempt === MAX_ATTEMPTS) throw e;
+      if (!transient || attempt === attempts) throw e;
       lastError = e;
-      await sleep(800 * 2 ** attempt);
+      await sleep(backoffBaseMs() * 2 ** attempt);
     } finally {
       clearTimeout(timer);
     }
   }
   if (lastError) throw lastError;
-  throw new Error(`${lastStatus} after ${MAX_ATTEMPTS} attempts: ${url}`);
+  throw new Error(`${lastStatus} after ${attempts} attempts: ${url}`);
 }
 
 export async function getJson<T>(

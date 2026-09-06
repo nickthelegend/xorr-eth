@@ -15,6 +15,24 @@ Chain: **Base**. ETH Online 2026 · Base Build Camp 2026.
 
 ---
 
+## Check it yourself
+
+Everything below is a claim. `/judge` in the app — and `GET /verify` behind it, which needs no
+account — re-runs fifteen of them live: the contract read from the chain, the subgraph queried, the
+venue allowlist tested against a control address, the audit chain re-hashed, the price feeds
+cross-checked. Each row shows what was observed and the call that produced it, so it can be
+repeated somewhere this code cannot reach.
+
+```bash
+curl -s "localhost:8788/verify?owner=0xYourAddress" | jq '.passed, .failed'
+```
+
+<p align="center">
+  <img src="docs/screens/32f-judge.png" width="240" alt="The verification console" />
+  <img src="docs/screens/32c-strategy-grid.png" width="240" alt="Range accumulation" />
+  <img src="docs/screens/32e-flatten.png" width="240" alt="Sell everything" />
+</p>
+
 ## The idea in one paragraph
 
 Handing a bot your money is a trust problem, not a trading problem. So the permission is the
@@ -61,6 +79,7 @@ Nothing in this repo is claimed to work in an environment where it was not run.
 | **The Graph** | Two independent subgraphs, joined. One indexes our delegation contract (what you permitted); one indexes 1inch Aqua on Base mainnet (what liquidity exists). The **join picks the venue** — neither index can see the other's half. | Delegation index **deployed + synced**; Aqua index **built, awaiting a Studio slug** |
 | **Aave v3** | Tier 4's venue. Idle USDC is supplied through the same delegation, under the same daily cap and the same venue allowlist — and the aToken goes straight to the user, because `supply()` names the recipient. | **Done.** 18 fork assertions, including that the bot *cannot* withdraw |
 | **Base** | Everything settles here. Tokenized equities, cbBTC, Aave, 1inch — all Base-native. | **Done** |
+| **Basenames** | Base's own naming, resolved against the L2 resolver — not ENS, which answers on the wrong chain. The safety screen names both parties to the permission rather than showing two truncated hexes that look identical in the middle. | **Done.** `jesse.base.eth` ⇄ `0x2211d1D0…` both directions |
 
 ## The core primitive
 
@@ -87,12 +106,50 @@ contract.
 | Markets | 17 of 44 instruments have a real feed. **The other 27 are tagged SIMULATED on screen.** |
 
 **The rule that settles arguments:** every price on screen is real, or it is labelled. A confident
-wrong number is the worst outcome available — that rule has caught five bugs in this repo.
+wrong number is the worst outcome available — that rule has caught eight bugs in this repo, most
+recently a cross-check that fell back to WETH's address and priced BTC as ether.
+
+Prices are checked against a second, independent source: 1inch's spot API, derived from the pools a
+fill would actually touch. Measured live, the two agree within 0.03% on ETH and 0.02% on cbBTC. The
+asset screen mentions it only when they disagree — a line saying "two sources agree" on every asset
+every day is noise that trains people to stop reading.
+
+## The strategy ladder
+
+Ordered by how much the bot has to be right about the future, not by how impressive it sounds. Five
+of seven rungs run.
+
+| | What it does | Why it sits here |
+|---|---|---|
+| **1 · Recurring buy** | A fixed amount into one asset on a schedule. | No forecast. You can check every run against a calendar. |
+| **2 · Rebalance** | Holds your sleeves at the weights you approved, trading only the drift. | Deterministic. The only input is your own target. |
+| **3 · Take profit, stop loss, trailing stop** | Closes a position at levels you set. It never opens one. | Risk-reducing only. The trailing stop follows the high-water mark, updated on every run — including the ones where it does nothing, which is when trailing has to happen. |
+| **4 · Idle cash to yield** | Supplies spare USDC to Aave v3. | Every move is a published rate you can check. The bot can supply and deliberately **cannot withdraw** — burning your own aTokens needs nobody's permission, so that power was never granted. |
+| **5 · Range accumulation** | Buys a rung lower and sells a rung higher inside a band you draw. | The first tier that assumes something — that the range holds. So the setup screen backtests exactly that against real history before you commit. |
+| 6 · Momentum | — | Not built. The first tier that needs the bot to be right about the future. |
+| 7 · Events and earnings | — | Not built. Most judgement, most ways to be wrong, last. |
+
+Every tier runs through the same `spend()` or `closePosition()` — one set of gates, checked once.
+A tier with a screen and no executor is worse than no tier, so `available` is flipped only after
+the executor has actually run it.
+
+## When it goes wrong
+
+| | |
+|---|---|
+| A trade is blocked | The cap, expiry or allowlist refused it. Said in plain language, pushed to your phone, and written to the trail — silence there looks identical to the bot not trying. |
+| The bot runs out of gas | Caught before anything is signed, so the run blocks with the true reason instead of failing inside the venue call as "the venue rejected the order". |
+| The price moves mid-flight | The delegation bubbles the venue's own revert instead of replacing it, so 1inch's `ReturnAmountIsNotEnough` becomes "the price moved more than your slippage limit". |
+| A dependency goes down | Four consecutive failures open a per-host circuit breaker for 30s. Every screen already handles a failed read; they now get there in milliseconds instead of twenty-five seconds. |
+| A screen throws | Contained to that screen. The tab bar keeps working and the kill switch stays one tap away. |
+| The executor is killed mid-run | It drains first. Anything it could not finish is reconciled at the next boot and **not retried** — a run that may have signed and lost its receipt must never be repeated. |
+| You want out entirely | "Sell everything" closes every position into USDC through `closePosition`, so a spending cap can never block an exit. |
 
 ## Every screen
 
-47 screens, captured at the design canvas (402×874) against a signed-in session.
-Regenerate with `node tools/shoot.mjs`.
+53 screens, captured at the design canvas (402×874) against a signed-in session. The same sweep
+checks the console and the network on every route and currently reports **zero errors and zero
+failed requests** across all 53. Regenerate with `node tools/shoot.mjs`.
 
 ### Onboarding
 | | | | |
@@ -123,7 +180,8 @@ Regenerate with `node tools/shoot.mjs`.
 | | | | |
 |---|---|---|---|
 | **Strategies** `/strategies`<br/><img src="docs/screens/31-strategies.png" width="180"/> | **Recurring buy**<br/><img src="docs/screens/32-strategy-dca.png" width="180"/> | **Assets** `/holdings`<br/><img src="docs/screens/33-holdings.png" width="180"/> | **Activity** `/activity`<br/><img src="docs/screens/34-activity.png" width="180"/> |
-| **Idle cash to yield** `/strategy/yield`<br/><img src="docs/screens/32b-strategy-yield.png" width="180"/> | **History** `/history`<br/><img src="docs/screens/35-history.png" width="180"/> | **Briefing** `/briefing`<br/><img src="docs/screens/36-briefing.png" width="180"/> | **Inbox** `/inbox`<br/><img src="docs/screens/37-inbox.png" width="180"/> |
+| **Idle cash to yield** `/strategy/yield`<br/><img src="docs/screens/32b-strategy-yield.png" width="180"/> | **Range accumulation** `/strategy/grid`<br/><img src="docs/screens/32c-strategy-grid.png" width="180"/> | **Earning at Aave** `/yield`<br/><img src="docs/screens/32d-yield-position.png" width="180"/> | **Sell everything** `/flatten`<br/><img src="docs/screens/32e-flatten.png" width="180"/> |
+| **Check it yourself** `/judge`<br/><img src="docs/screens/32f-judge.png" width="180"/> | **History** `/history`<br/><img src="docs/screens/35-history.png" width="180"/> | **Briefing** `/briefing`<br/><img src="docs/screens/36-briefing.png" width="180"/> | **Inbox** `/inbox`<br/><img src="docs/screens/37-inbox.png" width="180"/> |
 
 ### Safety and settings
 | | | | |

@@ -23,6 +23,9 @@ import { usePrices } from '@/data/usePrices';
 import { useAsync } from '@/data/useAsync';
 import { api } from '@/data/api';
 
+import { nextRuns } from '@/strategies/schedule';
+import type { Cadence } from '@/data/types';
+
 type GridBacktest = {
   inRangePct: number;
   buys: number;
@@ -32,8 +35,6 @@ type GridBacktest = {
   leftCost: number;
   disclaimer: string;
 };
-import { nextRuns } from '@/strategies/schedule';
-import type { Cadence } from '@/data/types';
 
 const SYMBOLS = ['WETH', 'CBBTC'];
 const STEP_OPTIONS = [2, 4, 6, 8];
@@ -54,6 +55,13 @@ export default function GridSetup() {
   const [cadence, setCadence] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+
+  const steps = STEP_OPTIONS[stepIdx]!;
+  const lo = parseFloat(lower) || 0;
+  const hi = parseFloat(upper) || 0;
+  const usdPerStep = parseFloat(perRung) || 0;
+  const runs = useMemo(() => nextRuns(CADENCES[cadence]!, 3), [cadence]);
+
   /*
    * The backtest is on demand, not automatic.
    *
@@ -73,11 +81,6 @@ export default function GridSetup() {
   }, [testNonce]);
   const runBacktest = () => setTestNonce((n) => n + 1);
 
-  const steps = STEP_OPTIONS[stepIdx]!;
-  const lo = parseFloat(lower) || 0;
-  const hi = parseFloat(upper) || 0;
-  const usdPerStep = parseFloat(perRung) || 0;
-  const runs = useMemo(() => nextRuns(CADENCES[cadence]!, 3), [cadence]);
 
   /*
    * Suggest a band around the live price rather than making someone guess in the dark.

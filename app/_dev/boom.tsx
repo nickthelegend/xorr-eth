@@ -9,7 +9,7 @@
  * thing it does deliberately, and a check that has to be excused is a check nobody trusts.
  */
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { Button, Screen, ScreenHeader } from '@/design/components';
 import { ink } from '@/design/colors';
 import { type } from '@/design/type';

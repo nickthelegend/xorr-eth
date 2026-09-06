@@ -1,0 +1,63 @@
+# What can be checked without a chain, a key or a paid API.
+#
+# Deliberately not "run everything". The interesting proofs in this repo need a Base mainnet fork,
+# a Privy secret and a 1inch key — a CI job that skipped them silently would report green for a
+# suite it never ran, which is worse than not having CI. So this runs the parts that are genuinely
+# hermetic, and the README says plainly which parts are not.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci --ignore-scripts
+          (cd server && npm ci --ignore-scripts)
+
+      - name: Typecheck the app
+        run: npx tsc --noEmit
+
+      - name: Typecheck the executor
+        run: npx tsc --noEmit -p server/tsconfig.json
+
+      - name: Lint
+        run: npm run lint
+
+      # 220 tests across the client and the executor. The `.live.test.ts` files are excluded here
+      # and by name — they need real credentials and a real chain, and pretending otherwise is how
+      # a suite starts lying about its own coverage.
+      - name: Unit tests
+        run: npm test
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build
+        run: forge build
+        working-directory: contracts
+
+      # Only the tests that need no fork. The fork suites — Aqua, SwapVM, the tokenized equities —
+      # need a Base mainnet RPC and are run locally against one; a CI job cannot reach that without
+      # a paid endpoint, and it says so rather than skipping quietly.
+      - name: Contract tests (no fork required)
+        run: forge test --match-contract XorrDelegationTest -vv
+        working-directory: contracts
