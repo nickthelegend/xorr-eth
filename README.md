@@ -162,6 +162,7 @@ npm test                              # 143 app
 npm run test:live                     # real APIs, real chain
 ```
 
+`docs/BASE-BUILD-CAMP.md` is the same work framed for that submission.
 `docs/TESTPLAN.md` is the executed plan — every item PASS/FAIL with its evidence.
 `PLAN.md` is what is left to build, with every gap tied to the task it blocks.
 
