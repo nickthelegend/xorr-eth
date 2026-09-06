@@ -87,6 +87,13 @@ export type ActivityEvent = {
   kind: ActivityKind;
   /** On-chain signature when the event produced a transaction. */
   signature?: string;
+  /**
+   * A block-explorer URL, or a `fork:`/`local:` label when the chain has no explorer.
+   *
+   * The label is deliberate: linking a fork transaction to BaseScan would 404, which reads as the
+   * transaction not being real rather than the network not being public.
+   */
+  explorer?: string;
 };
 
 export type Alert = {

@@ -6,6 +6,7 @@
  * request to a verified Privy user, and `requireUser` is the only way a route reads that identity.
  */
 import type { Context, Next } from 'hono';
+import { log } from '../http/request-id.js';
 import { UnauthorizedError, verifyToken, type AuthedUser } from './privy.js';
 
 /**
@@ -43,6 +44,19 @@ const PUBLIC_PATHS = new Set([
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */
 const PUBLIC_PREFIXES = ['/perp/'];
 
+/**
+ * The public surface, published.
+ *
+ * The client needs to know which paths it may call without a session — otherwise it fires
+ * authenticated requests before it has a token and the browser logs a 401 for each one on every
+ * signed-out load. Exposing the list means the client mirrors a value rather than guessing one,
+ * and `/health` reports it so the two can be checked against each other instead of drifting.
+ */
+export const publicSurface = {
+  paths: [...PUBLIC_PATHS],
+  prefixes: [...PUBLIC_PREFIXES],
+};
+
 declare module 'hono' {
   interface ContextVariableMap {
     user: AuthedUser;
@@ -59,6 +73,15 @@ export async function authMiddleware(c: Context, next: Next) {
     c.set('user', user);
   } catch (e) {
     const detail = e instanceof Error ? e.message : 'Unauthorized';
+    /*
+     * Say why, in the log.
+     *
+     * A 401 is the one status that is equally consistent with "the caller is not signed in" and
+     * "our verification is broken", and the response body cannot say much without helping an
+     * attacker. Without this line the two are indistinguishable from the outside, which is exactly
+     * the position a whole test sweep going 401 leaves you in.
+     */
+    log.warn(`401 ${c.req.method} ${c.req.path}: ${detail}`);
     return c.json({ error: 'unauthorized', detail }, 401);
   }
   return next();

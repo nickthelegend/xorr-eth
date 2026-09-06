@@ -60,7 +60,11 @@ export default function Inbox() {
         {loading && !data ? (
           <LoadingRows count={5} />
         ) : (data ?? []).length === 0 ? (
-          <EmptyState text="Nothing to catch up on." />
+          <EmptyState
+            text="Nothing to catch up on. The bot only writes here when something needs you."
+            actionLabel="See what it is allowed to do"
+            onAction={() => router.push('/safety')}
+          />
         ) : (
           <ScrollView showsVerticalScrollIndicator={false}>
             {(data ?? []).map((r) => (

@@ -27,7 +27,7 @@ vi.mock('../../market/prices.js', () => ({ priceOf: vi.fn() }));
 
 const { cashUsd, holdings } = await import('../../evm/balances.js');
 const { priceOf } = await import('../../market/prices.js');
-const { planRebalance, planExitRules, planDca, planGrid, initialStateFor } = await import(
+const { planRebalance, planExitRules, planDca, planGrid, observationFor } = await import(
   './index.js'
 );
 
@@ -206,7 +206,7 @@ describe('tier 5 — range accumulation', () => {
 
   it('records where the price is, so the next move is a real crossing', async () => {
     vi.mocked(priceOf).mockResolvedValue(2_600);
-    expect(await initialStateFor('grid', ctx({ ...BASE }))).toEqual({ lastLevel: 2, openLots: [] });
+    expect(await observationFor('grid', ctx({ ...BASE }))).toEqual({ lastLevel: 2, openLots: [] });
   });
 
   it('does nothing while the price drifts inside one rung', async () => {
@@ -257,5 +257,60 @@ describe('tier 5 — range accumulation', () => {
   it('sells nothing when it is holding nothing', async () => {
     vi.mocked(priceOf).mockResolvedValue(2_600);
     expect(await planGrid(ctx({ ...BASE, lastLevel: 1, openLots: [] }))).toBeNull();
+  });
+});
+
+describe('tier 3 — trailing stop', () => {
+  const ctx = (params: Record<string, unknown>) => ({
+    owner: OWNER,
+    budgetUsd: 0,
+    params,
+    symbol: 'WETH',
+  });
+
+  beforeEach(() => {
+    vi.mocked(holdings).mockResolvedValue([holding('WETH', 0.4, 1_000)]);
+  });
+
+  it('follows a rise', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_800);
+    expect(await observationFor('exit-rules', ctx({ entryPrice: 2_000, trailPct: 10, peakPrice: 2_500 })))
+      .toEqual({ peakPrice: 2_800 });
+  });
+
+  it('never follows a fall', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_100);
+    // The whole mechanism is that the high-water mark only goes up. If it tracked down, the stop
+    // would trail the price forever and never fire.
+    expect(await observationFor('exit-rules', ctx({ entryPrice: 2_000, trailPct: 10, peakPrice: 2_500 })))
+      .toBeNull();
+  });
+
+  it('seeds from entry, not from a mark that is already underwater', async () => {
+    vi.mocked(priceOf).mockResolvedValue(1_800);
+    // Seeding from today's price on a losing position would put the stop below where the user set
+    // it and let the loss keep running.
+    expect(await observationFor('exit-rules', ctx({ entryPrice: 2_000, trailPct: 10 })))
+      .toEqual({ peakPrice: 2_000 });
+  });
+
+  it('does nothing while the price holds above the trail', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_600);
+    expect(await planExitRules(ctx({ entryPrice: 2_000, trailPct: 10, peakPrice: 2_800 }))).toBeNull();
+  });
+
+  it('closes the whole position when the price falls through the trail', async () => {
+    vi.mocked(priceOf).mockResolvedValue(2_500);
+    const i = await planExitRules(ctx({ entryPrice: 2_000, trailPct: 10, peakPrice: 2_800 }));
+    expect(i?.outSymbol).toBe('USDC');
+    expect(i?.amountIn).toBe(0.4);
+    // It fired from the HIGH, not from entry — the position is still well above where it was
+    // bought, which is exactly the case a fixed stop cannot express.
+    expect(i?.because).toContain('2800.00');
+  });
+
+  it('is inert without a trail configured', async () => {
+    vi.mocked(priceOf).mockResolvedValue(1_000);
+    expect(await observationFor('exit-rules', ctx({ entryPrice: 2_000 }))).toBeNull();
   });
 });

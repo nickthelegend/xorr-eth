@@ -6,7 +6,7 @@
  * swap instantly for content. Nothing moves; nothing fades.
  */
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { borders, ink, pnl, surfaces } from '../colors';
 import { hairlineWidth, radius } from '../space';
 import { type } from '../type';
@@ -65,10 +65,38 @@ export function ErrorState({ error, onRetry }: { error: Error; onRetry?: () => v
   );
 }
 
-export function EmptyState({ text }: { text: string }) {
+/**
+ * An empty list, with somewhere to go.
+ *
+ * Several screens ended at "Nothing here yet." — true, and a dead end. An empty state is the first
+ * thing a new user sees on a screen, so it is the one place where telling them what to do next is
+ * worth more than anything else that could occupy the space. The action is optional because some
+ * lists genuinely have no next step: an audit trail with nothing in it is waiting on the bot, not
+ * on the user.
+ */
+export function EmptyState({
+  text,
+  actionLabel,
+  onAction,
+}: {
+  text: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
-    <View style={{ paddingVertical: 30, alignItems: 'center' }}>
-      <Text style={[type.body, { color: ink.i38 }]}>{text}</Text>
+    <View style={{ paddingVertical: 30, alignItems: 'center', gap: 12 }}>
+      <Text style={[type.body, { color: ink.i38, textAlign: 'center' }]}>{text}</Text>
+      {actionLabel && onAction ? (
+        <Pressable
+          onPress={onAction}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          hitSlop={8}
+          style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+        >
+          <Text style={[type.pill, { color: ink.full }]}>{actionLabel} ›</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

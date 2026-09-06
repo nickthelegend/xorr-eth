@@ -16,6 +16,7 @@ import { publicClient } from '../evm/client.js';
 import { CHAIN_KEY } from '../evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey } from '../evm/delegation.js';
 import { formatEther } from 'viem';
+import { publicSurface } from '../auth/middleware.js';
 
 export const ops = new Hono();
 
@@ -110,6 +111,14 @@ ops.get('/health', async (c) => {
       dependencies: deps,
       // The old shape had `db` as a timestamp. Several things read it.
       db: deps.find((d) => d.name === 'postgres')?.detail,
+      /*
+       * What can be called without a session.
+       *
+       * Published so the client can mirror it rather than keep a second copy that silently drifts
+       * — the same reason `tradable.ts` mirrors the token registry and a test fails when they
+       * disagree.
+       */
+      publicSurface,
     },
     down ? 503 : 200,
   );

@@ -26,7 +26,7 @@ import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { priceOf } from '../market/prices.js';
 import { send } from '../notifications/push.js';
-import { PLANNERS, initialStateFor, type TradeIntent } from './kinds/index.js';
+import { PLANNERS, observationFor, type TradeIntent } from './kinds/index.js';
 import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 
 /**
@@ -361,40 +361,56 @@ export async function runStrategy(
      * Keeping the two apart is what stops a new tier from arriving with its own copy of the safety
      * logic and getting it subtly wrong.
      */
+    /*
+     * Observe before deciding.
+     *
+     * A grid needs to know which rung it was on; a trailing stop needs the high-water mark updated
+     * on the runs where it does NOT fire, which is most of them. Both are facts about the world
+     * that the planner should be handed rather than go and fetch, so the observation happens here
+     * and is persisted immediately — a peak that moved and was not written down is a peak the next
+     * run will not trail from.
+     */
+    let params = strategy.params as Record<string, unknown>;
+    const observed = await observationFor(strategy.kind, {
+      owner,
+      budgetUsd: usd,
+      params,
+      symbol: strategy.symbol,
+    }).catch(() => null);
+    if (observed) {
+      await query(`UPDATE strategies SET params = params || $2::jsonb WHERE id = $1`, [
+        strategy.id,
+        JSON.stringify(observed),
+      ]);
+      params = { ...params, ...observed };
+    }
+
     const intent: TradeIntent | null = await PLANNERS[strategy.kind]!({
       owner,
       budgetUsd: usd,
-      params: strategy.params as Record<string, unknown>,
+      params,
       symbol: strategy.symbol,
     });
 
     // "Nothing to do" is the right answer most of the time for a rebalance that has not drifted or
     // a stop that has not been hit. It is not a failure and must not read as one.
     if (!intent) {
-      /*
-       * A strategy that trades on crossings has to take its first reading somewhere.
-       *
-       * Without this a grid never acquires a `lastLevel`, so every run is a first run and it never
-       * trades — which looks exactly like being broken. Recording the reading IS the correct
-       * outcome of that run, and it is a state change, so it happens here rather than being
-       * silently skipped along with the trade.
-       */
-      const initial = await initialStateFor(strategy.kind, {
-        owner,
-        budgetUsd: usd,
-        params: strategy.params as Record<string, unknown>,
-        symbol: strategy.symbol,
-      }).catch(() => null);
-      if (initial) {
-        await query(`UPDATE strategies SET params = params || $2::jsonb WHERE id = $1`, [
-          strategy.id,
-          JSON.stringify(initial),
-        ]);
+      // The observation above has already been written, so a run that only looked still leaves a
+      // record of what it saw — which is the difference between a grid warming up and one broken.
+      if (observed && observed.lastLevel !== undefined) {
         return finishNoop(
           runId,
           walletId,
           strategy,
-          `Took the first reading: ${strategy.symbol} is on rung ${initial.lastLevel} of your range. Trades start on the next crossing.`,
+          `Took the first reading: ${strategy.symbol} is on rung ${observed.lastLevel} of your range. Trades start on the next crossing.`,
+        );
+      }
+      if (observed && observed.peakPrice !== undefined) {
+        return finishNoop(
+          runId,
+          walletId,
+          strategy,
+          `${strategy.symbol} made a new high of ${Number(observed.peakPrice).toFixed(2)}. Your trailing stop moved up with it.`,
         );
       }
       return finishNoop(

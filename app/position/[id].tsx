@@ -89,7 +89,11 @@ export default function PositionScreen() {
             </View>
           }
         />
-        <EmptyState text="You have no open positions." />
+        <EmptyState
+          text="You have no open positions."
+          actionLabel="Start a recurring buy"
+          onAction={() => router.push('/strategy/dca')}
+        />
       </Screen>
     );
   }

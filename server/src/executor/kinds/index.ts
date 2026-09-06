@@ -148,7 +148,8 @@ export async function planExitRules(ctx: PlanContext): Promise<TradeIntent | nul
   const entry = Number(ctx.params.entryPrice ?? 0);
   const takeProfitPct = Number(ctx.params.takeProfitPct ?? 0);
   const stopLossPct = Number(ctx.params.stopLossPct ?? 0);
-  if (!(entry > 0) || (!takeProfitPct && !stopLossPct)) return null;
+  const trailConfigured = Number(ctx.params.trailPct ?? 0) > 0;
+  if (!(entry > 0) || (!takeProfitPct && !stopLossPct && !trailConfigured)) return null;
 
   const held = (await holdings(ctx.owner)).find((h) => h.symbol === ctx.symbol);
   if (!held || held.usd < MIN_TRADE_USD) return null;
@@ -158,7 +159,21 @@ export async function planExitRules(ctx: PlanContext): Promise<TradeIntent | nul
 
   const hitTP = takeProfitPct > 0 && movePct >= takeProfitPct;
   const hitSL = stopLossPct > 0 && movePct <= -Math.abs(stopLossPct);
-  if (!hitTP && !hitSL) return null;
+
+  /*
+   * A trailing stop: a fixed distance below the best price seen since entry.
+   *
+   * The one people actually ask for, because a fixed stop either sits too close and gets taken out
+   * by noise, or too far and gives back the whole move. `peakPrice` is maintained by
+   * `observationFor` on every run — including the ones where nothing fires, which is most of them
+   * and is exactly when the trailing has to happen.
+   */
+  const trailPct = Number(ctx.params.trailPct ?? 0);
+  const peak = Number(ctx.params.peakPrice ?? 0);
+  const trailFloor = trailPct > 0 && peak > 0 ? peak * (1 - trailPct / 100) : 0;
+  const hitTrail = trailFloor > 0 && mark <= trailFloor;
+
+  if (!hitTP && !hitSL && !hitTrail) return null;
 
   return {
     inSymbol: ctx.symbol,
@@ -170,7 +185,9 @@ export async function planExitRules(ctx: PlanContext): Promise<TradeIntent | nul
     usd: held.usd,
     because: hitTP
       ? `${ctx.symbol} is up ${movePct.toFixed(1)}% from ${entry.toFixed(2)}, which is your take profit.`
-      : `${ctx.symbol} is down ${Math.abs(movePct).toFixed(1)}% from ${entry.toFixed(2)}, which is your stop.`,
+      : hitSL
+        ? `${ctx.symbol} is down ${Math.abs(movePct).toFixed(1)}% from ${entry.toFixed(2)}, which is your stop.`
+        : `${ctx.symbol} fell ${trailPct}% from its high of ${peak.toFixed(2)}, which is your trailing stop.`,
   };
 }
 
@@ -360,27 +377,57 @@ export const PLANNERS: Record<string, (ctx: PlanContext) => Promise<TradeIntent 
 };
 
 /**
- * Kinds that must take a reading before they can act.
+ * What a strategy needs to REMEMBER before it can decide anything, updated every run.
  *
- * A grid trades on CROSSINGS, so its first run has nothing to have crossed from. Recording the
- * level and placing nothing is the correct outcome, and `run.ts` needs to know that so it can
- * persist the reading even though no trade happened.
+ * Two tiers need this and they need it for the same reason: they act on a change rather than on a
+ * level, and a change can only be seen against something previously recorded.
+ *
+ *   - A grid trades on crossings, so its first run has nothing to have crossed from.
+ *   - A trailing stop trails the high-water mark, which has to be updated on the runs where it
+ *     does NOT fire. Updating it only on a fill would leave the stop pinned to the price at
+ *     entry, which is an ordinary stop wearing a trailing stop's name.
+ *
+ * Deliberately separate from the planner and run BEFORE it, so the planner sees the current
+ * observation and stays a pure function of what it is given.
  */
-export async function initialStateFor(
+export async function observationFor(
   kind: string,
   ctx: PlanContext,
 ): Promise<Record<string, unknown> | null> {
-  if (kind !== 'grid') return null;
-  if (Number.isFinite(Number(ctx.params.lastLevel))) return null;
+  if (kind === 'grid') {
+    if (Number.isFinite(Number(ctx.params.lastLevel))) return null;
+    const lower = Number(ctx.params.lower ?? NaN);
+    const upper = Number(ctx.params.upper ?? NaN);
+    const steps = Math.floor(Number(ctx.params.steps ?? 4));
+    if (!(lower > 0) || !(upper > lower) || !(steps >= 1)) return null;
 
-  const lower = Number(ctx.params.lower ?? NaN);
-  const upper = Number(ctx.params.upper ?? NaN);
-  const steps = Math.floor(Number(ctx.params.steps ?? 4));
-  if (!(lower > 0) || !(upper > lower) || !(steps >= 1)) return null;
+    const price = await priceOf(ctx.symbol).catch(() => 0);
+    if (!(price > 0)) return null;
+    const rungs = Array.from({ length: steps + 1 }, (_, i) => lower + (i * (upper - lower)) / steps);
+    const level = Math.max(rungs.filter((r) => price >= r).length - 1, 0);
+    return { lastLevel: level, openLots: [] };
+  }
 
-  const price = await priceOf(ctx.symbol).catch(() => 0);
-  if (!(price > 0)) return null;
-  const rungs = Array.from({ length: steps + 1 }, (_, i) => lower + (i * (upper - lower)) / steps);
-  const level = Math.max(rungs.filter((r) => price >= r).length - 1, 0);
-  return { lastLevel: level, openLots: [] };
+  if (kind === 'exit-rules') {
+    const trailPct = Number(ctx.params.trailPct ?? NaN);
+    if (!Number.isFinite(trailPct) || trailPct <= 0) return null;
+    const price = await priceOf(ctx.symbol).catch(() => 0);
+    if (!(price > 0)) return null;
+    /*
+     * The high-water mark only ever goes up.
+     *
+     * That is the whole mechanism: the stop is a fixed distance below the best price seen since
+     * the position was opened, so it follows a rise and never follows a fall. Seeding it from the
+     * entry price rather than from today's mark matters — seeding from the mark on a position
+     * already underwater would place the stop below where it should be and let the loss run.
+     */
+    const entry = Number(ctx.params.entryPrice ?? 0);
+    const peak = Number(ctx.params.peakPrice ?? 0);
+    const seed = peak > 0 ? peak : Math.max(entry, 0);
+    if (price > seed) return { peakPrice: price };
+    if (seed > 0 && peak === 0) return { peakPrice: seed };
+    return null;
+  }
+
+  return null;
 }

@@ -62,7 +62,11 @@ export default function History() {
         ) : error ? (
           <ErrorState error={error} onRetry={reload} />
         ) : onChain.length === 0 ? (
-          <EmptyState text="Nothing has settled on chain yet." />
+          <EmptyState
+            text="Nothing has settled on chain yet. This reads from the index, not from us."
+            actionLabel="Check every claim yourself"
+            onAction={() => router.push('/judge')}
+          />
         ) : (
           <ScrollView showsVerticalScrollIndicator={false}>
             {onChain.map((r) => (

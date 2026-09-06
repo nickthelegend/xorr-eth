@@ -675,6 +675,16 @@ routes.get('/activity', async (c) => {
       amount: r.amount,
       kind: r.kind,
       signature: r.signature ?? undefined,
+      /*
+       * Where to go and check it.
+       *
+       * "The history you check is not a history we hold" is the README's claim, and the app was
+       * not giving anyone a way to check. `explorerTx` deliberately returns a `fork:` or `local:`
+       * label rather than a URL on those networks — a link to a block explorer that has never
+       * seen the transaction is worse than no link, because it looks like the transaction is not
+       * real.
+       */
+      explorer: r.signature ? explorerTx(r.signature) : undefined,
     })),
   );
 });

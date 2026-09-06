@@ -13,7 +13,7 @@
  * Trades so every row is reachable from a tab.
  */
 import React, { useState } from 'react';
-import { ScrollView, Share, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import {
   Button,
   EmptyState,
@@ -37,8 +37,35 @@ import {
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
+import { useRouter } from 'expo-router';
+
+/**
+ * "Check it on chain" — when there is a chain to check it on.
+ *
+ * `explorerTx` returns a real URL on a public network and a `fork:`/`local:` label otherwise. Both
+ * are shown; only the first is tappable. Pretending a local transaction has an explorer entry
+ * would be the sort of small dishonesty this whole screen exists to make impossible.
+ */
+function ExplorerLink({ explorer }: { explorer: string }) {
+  const isUrl = explorer.startsWith('http');
+  const short = isUrl ? 'View on BaseScan ›' : `${explorer.split(':')[0]} · ${explorer.split(':')[1]?.slice(0, 10)}…`;
+  if (!isUrl) {
+    return <Text style={[type.footnote, { color: ink.i28 }]}>{short}</Text>;
+  }
+  return (
+    <Pressable
+      onPress={() => void Linking.openURL(explorer)}
+      accessibilityRole="link"
+      accessibilityLabel="View this transaction on BaseScan"
+      hitSlop={6}
+    >
+      <Text style={[type.footnote, { color: ink.i55 }]}>{short}</Text>
+    </Pressable>
+  );
+}
 
 export default function Activity() {
+  const router = useRouter();
   const actFilter = useStore((s) => s.actFilter);
   const setActFilter = useStore((s) => s.setActFilter);
   const { data, loading, error, reload } = useAsync(() => repos.activity.list(), []);
@@ -78,7 +105,11 @@ export default function Activity() {
         ) : error ? (
           <ErrorState error={error} onRetry={reload} />
         ) : rows.length === 0 ? (
-          <EmptyState text="Nothing here yet." />
+          <EmptyState
+              text="Nothing here yet. The trail fills itself the first time an agent acts — or declines to."
+              actionLabel="Set up a recurring buy"
+              onAction={() => router.push('/strategy/dca')}
+            />
         ) : (
           <ScrollView showsVerticalScrollIndicator={false}>
             {rows.map((r) => {
@@ -109,6 +140,13 @@ export default function Activity() {
                     <Text style={[type.footnote, { color: ink.i28 }]}>
                       {r.agent} · {r.t}
                     </Text>
+                    {/*
+                      The receipt, where there is one.
+                      A tappable link on a public chain; a plain label on a fork or a local node,
+                      because a link to an explorer that has never seen the transaction reads as
+                      the transaction not being real.
+                    */}
+                    {r.explorer ? <ExplorerLink explorer={r.explorer} /> : null}
                   </View>
                   {r.amount ? (
                     <Text style={[type.rowValue, { color: credit ? pnl.up : ink.i55 }]}>
