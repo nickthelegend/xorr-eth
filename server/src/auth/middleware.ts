@@ -32,6 +32,8 @@ const PUBLIC_PATHS = new Set([
    * wallet-specific ones take an address anyone could paste into an explorer.
    */
   '/verify',
+  /** A name on a public chain is public. Gating it would only make screens slower. */
+  '/basename',
 ]);
 
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */

@@ -15,7 +15,9 @@ import type { PoolClient } from 'pg';
 import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { evaluate, recordSpend } from '../rules/engine.js';
-import { closeAsDelegate, readPolicy, spendAsDelegate } from '../evm/delegation.js';
+import { closeAsDelegate, readPolicy, spendAsDelegate, waitForTx } from '../evm/delegation.js';
+import { erc20Abi, formatUnits } from 'viem';
+import { publicClient } from '../evm/client.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
 import { buildSwap, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
 import { decide } from '../graph/decide.js';
@@ -32,6 +34,33 @@ import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
  * than pretending it considered a book.
  */
 const AQUA_BOOK_ADDRESS = process.env.AQUA_BOOK_ADDRESS;
+
+/** The owner's balance of a token, exactly as the chain holds it. Undefined if it cannot be read. */
+async function rawBalanceOf(owner: Address, symbol: string): Promise<bigint | undefined> {
+  const token = VENUE_TOKENS[symbol];
+  if (!token) return undefined;
+  return publicClient
+    .readContract({ address: token.address, abi: erc20Abi, functionName: 'balanceOf', args: [owner] })
+    .catch(() => undefined);
+}
+
+/**
+ * How many units of `symbol` moved, in the token's own decimals.
+ *
+ * Undefined when either read failed — in which case the caller keeps its estimate rather than
+ * recording a zero, since a zero here would erase the position.
+ */
+async function measuredDelta(params: {
+  owner: Address;
+  symbol: string;
+  before: bigint | undefined;
+}): Promise<number | undefined> {
+  if (params.before === undefined) return undefined;
+  const token = VENUE_TOKENS[params.symbol];
+  const after = await rawBalanceOf(params.owner, params.symbol);
+  if (after === undefined || !token) return undefined;
+  return Number(formatUnits(after - params.before, token.decimals));
+}
 
 /**
  * Roughly how many base units of `symbol` a dollar amount buys, for the venue depth check.
@@ -129,6 +158,15 @@ export async function runStrategy(
   if (!runId) return { status: 'skipped', reason: 'already_ran_this_period' };
 
   const usd = Number(strategy.params.usd ?? strategy.daily_allocation_usd ?? 0);
+  /*
+   * What this ONE strategy may spend per day.
+   *
+   * Distinct from `usd`, which is the size of a single run: a strategy can legitimately run twice
+   * in a day (a manual trigger alongside the schedule), and the allocation is what bounds the sum.
+   * Zero means unbounded by this rule and bounded only by the delegation, which is the right
+   * default for a self-sizing kind that has no configured amount.
+   */
+  const allocationUsd = Number(strategy.daily_allocation_usd ?? 0);
   const walletId = strategy.wallet_id;
 
   // ── Watch mode — PLAN.md 9.12 / §3.3, the trust ramp. ──
@@ -326,6 +364,41 @@ export async function runStrategy(
      * to price "aUSDC" would 400 on a symbol it has never heard of, and `priceOf` would throw
      * before the trade got anywhere near the chain.
      */
+    /*
+     * The strategy's own daily allowance.
+     *
+     * The delegation caps the DAY across everything; nothing capped one strategy inside it. So a
+     * rebalance that decided to move $1,800 could consume the whole cap and every DCA scheduled
+     * after it would be blocked — by a limit the user set for the account, spent by a strategy
+     * they had allocated $200 to. The account-level cap was doing the sub-cap's job and doing it
+     * to whichever strategy happened to run first.
+     *
+     * Summed from `strategy_runs`, not a counter: derived from the rows that record what actually
+     * happened, so there is nothing to keep in sync and nothing to drift.
+     *
+     * A close does not count, for the same reason it does not touch the on-chain cap — an
+     * allowance is a limit on putting capital at risk, and a limit that blocks an exit traps you.
+     */
+    if (!isCloseIntent(intent) && allocationUsd > 0) {
+      const spentRows = await query<{ spent: string | null }>(
+        `SELECT COALESCE(SUM(usd), 0) AS spent
+           FROM strategy_runs
+          WHERE strategy_id = $1 AND status = 'filled' AND finished_at >= date_trunc('day', now() AT TIME ZONE 'UTC')`,
+        [strategy.id],
+      );
+      const spentToday = Number(spentRows[0]?.spent ?? 0);
+      const left = allocationUsd - spentToday;
+      if (intent.usd > left + 0.005) {
+        return finishBlocked(
+          runId,
+          walletId,
+          strategy,
+          'strategy_daily_allocation',
+          `${strategy.label} is allocated $${allocationUsd.toLocaleString('en-US')} a day and has used $${spentToday.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. This asks for $${intent.usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+        );
+      }
+    }
+
     const price = intent.direct
       ? intent.direct.unitPriceUsd
       : await priceOf(intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol);
@@ -370,6 +443,11 @@ export async function runStrategy(
     // A direct leg is never a close: it puts capital to work rather than taking it off the table,
     // so it spends against the cap like any other outflow.
     const isClose = !intent.direct && intent.outSymbol === 'USDC';
+
+    // Read before the transaction so the delta afterwards is the fill and nothing else.
+    const balanceBefore = intent.direct
+      ? undefined
+      : await rawBalanceOf(owner, intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol);
     const signature = isClose
       ? await closeAsDelegate({
           owner,
@@ -392,6 +470,32 @@ export async function runStrategy(
         });
 
     /*
+     * What the fill ACTUALLY delivered, measured on chain.
+     *
+     * The units written to the book were `usd / price` — an estimate from the quote, not the
+     * amount the router handed over. A $90 buy recorded 0.035879 WETH and delivered 0.035775, and
+     * the difference stayed on the book forever as 0.0001 phantom units carrying $0.26 of cost.
+     * Every entry price, every unrealised figure and every rebalance drift was computed against a
+     * position that did not exist.
+     *
+     * So: wait for the receipt, then read the balance either side. Waiting is the right thing to
+     * do regardless — recording a fill before it is mined is a race on any chain that does not
+     * automine, and this executor is meant for one that does not.
+     */
+    let filledUnits = units;
+    if (!intent.direct) {
+      const settled = await waitForTx(signature).catch(() => false);
+      if (!settled) throw new Error(`transaction ${signature} did not confirm`);
+      const measured = await measuredDelta({
+        owner,
+        symbol: intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol,
+        before: balanceBefore,
+      });
+      // A close removes units; the delta is negative and the magnitude is what moved.
+      if (measured !== undefined) filledUnits = Math.abs(measured);
+    }
+
+    /*
      * Record what just happened.
      *
      * This was missing entirely: the trade settled on chain and the app learned nothing from it —
@@ -404,15 +508,29 @@ export async function runStrategy(
      */
     await tx(async (client) => {
       await client.query(
-        `UPDATE strategy_runs SET status='filled', signature=$2, units=$3, price=$4, finished_at=now()
+        `UPDATE strategy_runs SET status='filled', signature=$2, units=$3, price=$4, usd=$5, finished_at=now()
          WHERE id=$1`,
-        [runId, signature, units, price],
+        // `usd` was never written on a fill, so the one column that records what a run COST was
+        // empty for every run that cost anything. The per-strategy cap below is summed from it.
+        [runId, signature, filledUnits, price, intent.usd],
       );
-      // A close reduces the position; a buy adds to it.
-      await applyFill(client, {
+      /*
+       * A supply is not a position, so it does not go in the position book.
+       *
+       * Tier 4 wrote an `aUSDC` row, which then appeared in Holdings priced at $0.00 — there is no
+       * price feed for a receipt token — next to a real balance of $1,220. Worse, it was a second
+       * record of something the chain already answers exactly: `suppliedUsd()` reads the aToken
+       * and the portfolio total already includes it. Two sources for one fact, one of which can
+       * drift and neither of which is more authoritative than the chain.
+       *
+       * A close reduces the position; a buy adds to it. A supply does neither.
+       */
+      if (intent.direct) {
+        // nothing to book: the aToken balance IS the record, and it is read from the chain.
+      } else await applyFill(client, {
         walletId,
         symbol: intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol,
-        units: intent.outSymbol === 'USDC' ? -units : units,
+        units: intent.outSymbol === 'USDC' ? -filledUnits : filledUnits,
         usd: intent.outSymbol === 'USDC' ? -intent.usd : intent.usd,
       });
       // Closing is not spending, so it does not consume the day's allowance — the contract
@@ -422,7 +540,7 @@ export async function runStrategy(
         {
           walletId,
           agent: 'Yield Keeper',
-          action: describeLeg(intent, units),
+          action: describeLeg(intent, filledUnits),
           detail: intent.direct
             ? `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} moved. ${intent.because}`
             : `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
@@ -434,7 +552,7 @@ export async function runStrategy(
           payload: {
             runId,
             strategyId: strategy.id,
-            units,
+            units: filledUnits,
             price,
             usd,
             explorer: explorerTx(signature),
@@ -461,15 +579,15 @@ export async function runStrategy(
      * that fails must never roll back a trade that settled.
      */
     void send(walletId, {
-      title: describeLeg(intent, units),
+      title: describeLeg(intent, filledUnits),
       body: intent.direct
         ? intent.because
-        : `${units.toFixed(4)} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
+        : `${filledUnits.toFixed(4)} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
       route: '/activity',
       kind: 'dca-executed',
     }).catch(() => undefined);
 
-    return { status: 'filled', runId, signature, units, price };
+    return { status: 'filled', runId, signature, units: filledUnits, price };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     await tx(async (client) => {

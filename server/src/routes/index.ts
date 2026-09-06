@@ -11,6 +11,7 @@ import { evaluate, spentToday } from '../rules/engine.js';
 import { runStrategy, EXECUTABLE_KINDS, SELF_SIZING_KINDS, type StrategyRow } from '../executor/run.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { CHAIN_KEY, explorerTx, ADDRESSES, SETTLEMENT_VENUES } from '../evm/chains.js';
+import { basenameOf } from '../evm/basename.js';
 import {
   allowedVenues,
   delegatePublicKey,
@@ -23,7 +24,7 @@ import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
 import { TOKENS } from '../venues/oneinch.js';
-import { getPosition, listPositions } from '../positions/index.js';
+import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
 
 /**
  * Every wallet lookup is scoped to the AUTHENTICATED Privy user.
@@ -54,7 +55,19 @@ routes.get('/health', async (c) => {
 
 // ── Wallet ───────────────────────────────────────────────────────────────────
 
-routes.get('/wallet', async (c) => c.json((await currentWallet(c)) ?? null));
+routes.get('/wallet', async (c) => {
+  const w = await currentWallet(c);
+  if (!w) return c.json(null);
+  /*
+   * `cluster` is where the wallet was CREATED. `chain` is where the executor is settling now.
+   *
+   * They are different facts and the screen was showing the first while meaning the second — so a
+   * wallet created on Sepolia and now trading a Base fork reported "base-sepolia" underneath live
+   * Base balances. The stored value is history and stays; the live one is what a user is asking
+   * about when they look at this line.
+   */
+  return c.json({ ...w, chain: CHAIN_KEY });
+});
 
 routes.post('/wallet/create', async (c) => {
   const { userId, walletAddress } = requireUser(c);
@@ -147,9 +160,23 @@ routes.get('/delegation', async (c) => {
    * shown them a permission they never gave. The chain knows; ask it.
    */
   const allowed = await allowedVenues(w.address as Address).catch(() => []);
+  /*
+   * Who the two parties actually are, in words.
+   *
+   * This screen's whole subject is "who may do what with your money", and it named both parties
+   * with truncated hex. Two addresses that differ only in the middle look identical truncated,
+   * which is the one place that matters. Basenames are Base's own answer and resolving one is a
+   * read of a Base contract — null where there is no name, which is most addresses.
+   */
+  const [ownerName, delegateName] = await Promise.all([
+    basenameOf(w.address as Address),
+    basenameOf(policy.delegate as Address),
+  ]);
   return c.json({
     delegatePubkey: policy.delegate,
+    delegateName,
     ownerPubkey: w.address,
+    ownerName,
     dailyCapUsd: policy.dailyCapUsd,
     expiresAt: policy.expiresAt,
     venueAllowlist: allowed,
@@ -620,6 +647,17 @@ routes.get('/positions', async (c) => {
  *
  * A 404 is still the right answer when the caller is wrong about something. Here they are not.
  */
+/**
+ * What has actually been made, as opposed to what the open book is worth today.
+ *
+ * Separate from `/positions` because a closed position is not a holding and must not appear in a
+ * holdings list — but the profit taken on it is real money and has to live somewhere.
+ */
+routes.get('/pnl/realised', async (c) => {
+  const w = await requireWallet(c);
+  return c.json(await realisedPnl(w.id));
+});
+
 routes.get('/positions/:id', async (c) => {
   const w = await requireWallet(c);
   return c.json((await getPosition(w.id, c.req.param('id'))) ?? null);

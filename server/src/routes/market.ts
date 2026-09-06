@@ -18,10 +18,34 @@ import { getJson, staleValue } from '../http/get.js';
 import { COINGECKO_IDS } from '../market/ids.js';
 import { TOKENS, quote } from '../venues/oneinch.js';
 import { STOCKS } from '../venues/stocks.js';
-import { usdcSupplyYield } from '../market/yield.js';
+import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
+import { withdrawCalldata } from '../venues/aave.js';
+import { suppliedUsd } from '../evm/balances.js';
+import { publicClient } from '../evm/client.js';
+import { one } from '../db/index.js';
+import { requireUser } from '../auth/middleware.js';
+import { isAddress, type Address } from 'viem';
+import { addressOfBasename, basenameOf } from '../evm/basename.js';
+import type { Context } from 'hono';
 import { perpMetrics } from '../market/perp.js';
 
 export const market = new Hono();
+
+/** Aave's "all of it" sentinel. A rebasing balance cannot be emptied with a number. */
+const MAX_UINT256 = (1n << 256n) - 1n;
+
+/**
+ * The caller's wallet, or undefined.
+ *
+ * This module is mostly public routes and has no wallet helper of its own; the two below are the
+ * exceptions because a supplied balance belongs to somebody.
+ */
+async function currentWalletFor(c: Context): Promise<{ address: string } | undefined> {
+  const { userId } = requireUser(c);
+  return await one<{ address: string }>(`SELECT address FROM wallets WHERE user_id = $1 LIMIT 1`, [
+    userId,
+  ]);
+}
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';
 const STALE_TOLERANCE_MS = 10 * 60_000;
@@ -310,4 +334,93 @@ market.get('/perp/:symbol', async (c) => {
   const m = await perpMetrics(c.req.param('symbol'));
   if (!m) return c.json({ error: 'no_feed', detail: 'No spot feed for this contract.' }, 404);
   return c.json(m);
+});
+
+/**
+ * What this wallet has supplied to Aave, and what it is earning.
+ *
+ * Separate from `/yield/supply`, which is the RATE and is public. This is a position and belongs
+ * to a wallet, so it needs a session.
+ */
+market.get('/yield/position', async (c) => {
+  const w = await currentWalletFor(c);
+  if (!w) return c.json({ suppliedUsd: 0, available: false, reason: 'no_wallet' });
+  try {
+    const reserve = await usdcReserve();
+    const code = await publicClient.getCode({ address: reserve.pool }).catch(() => undefined);
+    if ((code?.length ?? 0) <= 4) {
+      return c.json({
+        suppliedUsd: 0,
+        apy: reserve.apy,
+        available: false,
+        // Named, because "0 supplied" and "no lending pool on this chain" look identical otherwise.
+        reason: `Aave v3 is not deployed at ${reserve.pool} on this network.`,
+        pool: reserve.pool,
+        aToken: reserve.aToken,
+        asset: reserve.asset,
+      });
+    }
+    return c.json({
+      suppliedUsd: await suppliedUsd(w.address as Address),
+      apy: reserve.apy,
+      pool: reserve.pool,
+      aToken: reserve.aToken,
+      asset: reserve.asset,
+      available: true,
+    });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+/**
+ * The exact transaction the USER signs to withdraw. Encoded here, not in the client.
+ *
+ * The asset address comes from the reserve rather than a constant, so a client cannot end up
+ * withdrawing the wrong token if Aave migrates one. `usd: null` means everything — Aave takes
+ * `type(uint256).max` for that, and it is the only way to actually empty a rebasing position
+ * instead of leaving a few seconds' interest behind.
+ */
+market.post('/yield/withdraw-calldata', async (c) => {
+  const w = await currentWalletFor(c);
+  if (!w) return c.json({ error: 'no_wallet' }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const usd = body?.usd;
+
+  const reserve = await usdcReserve();
+  const amountRaw =
+    usd === null || usd === undefined || usd === 'max'
+      ? MAX_UINT256
+      : BigInt(Math.floor(Number(usd) * 1e6));
+  if (amountRaw <= 0n) return c.json({ error: 'invalid_amount' }, 400);
+
+  return c.json({
+    to: reserve.pool,
+    data: withdrawCalldata({
+      asset: reserve.asset,
+      amountRaw,
+      // To the owner. The server cannot name a different recipient — this is the whole reason the
+      // calldata is safe to have a server build.
+      owner: w.address as Address,
+    }),
+    /** So the screen can say "all of it" rather than a number that is already slightly stale. */
+    isMax: amountRaw === MAX_UINT256,
+  });
+});
+
+/**
+ * Basename lookup, both directions. Public: a name is a public record on a public chain.
+ *
+ * `?name=` resolves forward, `?address=` resolves in reverse. Null is a normal answer and comes
+ * back as a 200 — most addresses have no name, and treating that as an error would make every
+ * screen that asks have to special-case the common case.
+ */
+market.get('/basename', async (c) => {
+  const name = c.req.query('name');
+  const address = c.req.query('address');
+  if (name) return c.json({ name, address: await addressOfBasename(name) });
+  if (address && isAddress(address)) {
+    return c.json({ address, name: await basenameOf(address as Address) });
+  }
+  return c.json({ error: 'pass ?name= or a valid ?address=' }, 400);
 });

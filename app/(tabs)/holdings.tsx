@@ -20,7 +20,7 @@ import {
 import { ink, pnl } from '@/design/colors';
 import { radius } from '@/design/space';
 import { type } from '@/design/type';
-import { money, percent, quantity } from '@/format';
+import { money, percent, quantity, signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
@@ -32,6 +32,7 @@ export default function Assets() {
   const balance = useAsync(() => repos.portfolio.balanceUsd(), []);
   const sleeves = useAsync(() => repos.portfolio.sleeves(), []);
   const positions = useAsync(() => repos.portfolio.positions(), []);
+  const realised = useAsync(() => repos.portfolio.realised(), []);
 
   const weights = (sleeves.data ?? []).map((s) => s.weight);
   // Real holdings from the position book. This previously listed watchlist FIXTURES, so it
@@ -99,6 +100,48 @@ export default function Assets() {
           ))
         )}
 
+        {/*
+          Money actually taken, kept apart from money on paper.
+          `Holdings` above shows what the open book is worth today, which is an opinion that
+          changes every minute. This is the other number — what selling has actually realised —
+          and it used to exist nowhere: a position that closed took its profit out of the app with
+          it, because the holdings query correctly filters to units > 0.
+        */}
+        {realised.data && realised.data.bySymbol.length > 0 ? (
+          <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 26 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <Text style={[type.eyebrowSm, { color: ink.i32 }]}>REALISED</Text>
+              <Text
+                style={[
+                  type.rowPrimary,
+                  { color: realised.data.total >= 0 ? pnl.up : pnl.down },
+                ]}
+              >
+                {signedMoney(realised.data.total)}
+              </Text>
+            </View>
+            {realised.data.bySymbol.map((r) => (
+              <View
+                key={r.symbol}
+                style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}
+              >
+                <Text style={[type.body, { color: ink.i55 }]}>
+                  {r.symbol} · {quantity(r.unitsSold)} sold
+                  {/* Said inline, because a number that quietly understates is worse than one
+                      that admits it. */}
+                  {r.basisIncomplete ? ' · basis incomplete' : ''}
+                </Text>
+                <Text style={[type.body, { color: r.realised >= 0 ? pnl.up : pnl.down }]}>
+                  {signedMoney(r.realised)}
+                </Text>
+              </View>
+            ))}
+            <Text style={[type.footnote, { color: ink.i28, marginTop: 12 }]}>
+              At average cost. Closed positions stay here even though they are no longer holdings.
+            </Text>
+          </SheetCard>
+        ) : null}
+
         <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 26, marginBottom: 24 }}>
           <Text style={[type.eyebrowSm, { color: ink.i32 }]}>Wallet</Text>
           <Text style={[type.body, { color: ink.full, marginTop: 8 }]} numberOfLines={1}>
@@ -106,7 +149,8 @@ export default function Assets() {
           </Text>
           <Text style={[type.footnote, { color: ink.i28, marginTop: 6 }]}>
             {wallet
-              ? `${wallet.kind === 'embedded' ? 'Created in xorr' : 'Connected'} · ${wallet.cluster}`
+              // The live chain, not the one the wallet row was stamped with when it was created.
+              ? `${wallet.kind === 'embedded' ? 'Created in xorr' : 'Connected'} · ${wallet.chain ?? wallet.cluster}`
               : 'Create or connect one to let the bot trade.'}
           </Text>
         </SheetCard>

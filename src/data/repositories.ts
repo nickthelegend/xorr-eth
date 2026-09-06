@@ -96,6 +96,23 @@ export interface PortfolioRepository {
    * total cannot tell it. `null` for the same reason as above.
    */
   balance(): Promise<{ total: number; cash: number; supplied: number } | null>;
+  /**
+   * Profit actually taken, by symbol and in total.
+   *
+   * Separate from `positions()` because a closed position is not a holding — but the money made
+   * on it is real, and filtering it out of the holdings list took it out of the app entirely.
+   */
+  realised(): Promise<{
+    total: number;
+    bySymbol: {
+      symbol: string;
+      realised: number;
+      unitsSold: number;
+      proceeds: number;
+      /** Some of what was sold had no recorded cost, so the figure understates the outcome. */
+      basisIncomplete: boolean;
+    }[];
+  }>;
 }
 
 export interface ActivityRepository {

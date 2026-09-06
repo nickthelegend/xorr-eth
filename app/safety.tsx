@@ -10,7 +10,7 @@
  * "Takes effect in under a second across every device" becomes true by construction, because the
  * authority is revoked at the chain, not at a server we have to fan out from.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -33,9 +33,33 @@ export default function Safety() {
   const killed = useStore((s) => s.killed);
   const setKilled = useStore((s) => s.setKilled);
   const setDelegation = useStore((s) => s.setDelegation);
+  // Read it as well as write it: the two parties are rendered below, and a screen that stores the
+  // delegation and then cannot see it is why they were never shown in the first place.
+  const delegation = useStore((s) => s.delegation);
 
   const cap = useStore((s) => s.cap);
   const [localError, setLocalError] = useState<string>();
+
+  /*
+   * Load the permission when the screen opens.
+   *
+   * The store only ever held a delegation written by a grant or a revoke performed in this
+   * session, so a user who simply navigated here saw nothing about the permission that is
+   * governing their money right now. On a screen whose subject IS that permission, that is the
+   * wrong default.
+   */
+  useEffect(() => {
+    let alive = true;
+    void repos.wallet
+      .delegation()
+      .then((d) => {
+        if (alive) setDelegation(d);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [setDelegation]);
   // Signed by the user, on-chain. This is why "under a second across every device" is true
   // without any server needing to be reachable.
   const { grant: signGrant, revoke: signRevoke, busy, error: txError } = useGrantDelegation();
@@ -130,7 +154,28 @@ export default function Safety() {
           <Consequence dot={pnl.up} label="Open positions" detail="Left exactly as they are" />
         </View>
 
+        {/*
+          Name the two parties.
+          This screen is entirely about who may do what with the user's money, and it never said
+          who either party was. `Row` truncates a long value, and two addresses that differ only
+          in the middle truncate identically — so the address is shown in full, small, and a
+          Basename is used instead wherever one exists.
+        */}
         <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 18 }}>
+          <Party
+            label="Your wallet"
+            name={delegation?.ownerName}
+            address={delegation?.ownerPubkey}
+          />
+          <Party
+            label="The bot's key"
+            name={delegation?.delegateName}
+            address={delegation?.delegatePubkey}
+            note="Can trade inside your limits. Cannot withdraw, ever."
+          />
+        </SheetCard>
+
+        <SheetCard radius={radius.xl} padding={16} style={{ marginTop: 12 }}>
           <Row primary="Face ID for every payout" value="On" valueColor={ink.i55} height={52} />
           <Row
             primary="Withdrawal allowlist"
@@ -178,6 +223,41 @@ export default function Safety() {
         Stopping is not selling. Sell everything into cash ›
       </Text>
     </Screen>
+  );
+}
+
+/**
+ * One side of the permission: what it is called, and exactly which address it is.
+ *
+ * The address is rendered in full rather than truncated, because the reason to show it at all is
+ * so a person can compare it with an explorer — and a truncation defeats that. A Basename, when
+ * there is one, is the headline; the address stays underneath rather than being replaced by it,
+ * since a name is a claim about an address and the app should not ask anyone to take it on faith.
+ */
+function Party({
+  label,
+  name,
+  address,
+  note,
+}: {
+  label: string;
+  name?: string | null;
+  address?: string;
+  note?: string;
+}) {
+  return (
+    <View style={{ paddingVertical: 12, gap: 3 }}>
+      <Text style={[type.eyebrowSm, { color: ink.i32 }]}>{label.toUpperCase()}</Text>
+      <Text style={[type.rowPrimary, { color: ink.full }]}>
+        {name ?? (address ? 'No Basename' : '—')}
+      </Text>
+      {address ? (
+        <Text style={[type.footnoteSm, { color: ink.i38 }]} selectable>
+          {address}
+        </Text>
+      ) : null}
+      {note ? <Text style={[type.footnote, { color: ink.i32, marginTop: 2 }]}>{note}</Text> : null}
+    </View>
   );
 }
 

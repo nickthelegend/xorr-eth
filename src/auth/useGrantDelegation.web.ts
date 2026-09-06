@@ -136,5 +136,14 @@ export function useGrantDelegation() {
     }
   }, [send]);
 
-  return { grant, revoke, busy, error };
+  /*
+   * `send` is exported too.
+   *
+   * Grant and revoke are the two transactions this hook was built for, but they are not the only
+   * ones the USER signs — withdrawing from Aave is theirs alone, by design, because the bot was
+   * deliberately never given the aToken. Rather than a second hook duplicating the provider
+   * plumbing (which differs between web and native, and is the only part that does), the caller
+   * gets the primitive.
+   */
+  return { grant, revoke, sendTransaction: send, busy, error };
 }

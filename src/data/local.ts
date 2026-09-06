@@ -279,6 +279,19 @@ export const LocalRepositories: Repositories = {
       const b = await api.get<{ usd: number }>('/wallet/balance').catch(() => undefined);
       return b ? b.usd : null;
     },
+    async realised() {
+      // No fallback. An invented profit figure is the single worst number this app could show.
+      return api.get<{
+        total: number;
+        bySymbol: {
+          symbol: string;
+          realised: number;
+          unitsSold: number;
+          proceeds: number;
+          basisIncomplete: boolean;
+        }[];
+      }>('/pnl/realised');
+    },
     async balance() {
       const b = await api
         .get<{ usd: number; cashUsd: number; suppliedUsd?: number }>('/wallet/balance')

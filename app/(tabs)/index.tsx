@@ -176,12 +176,25 @@ export default function Home() {
           onPress={() => router.push(`/asset/${DEFAULT_BUY}`)}
         />
 
-        <NoteStrip kind="acted" style={{ marginTop: 16, marginBottom: 20 }}>
-          {staking.data
-            // `estimatedApy` is a fraction (0.0388); `percent` takes percentage points.
-            ? `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, { digits: 2 }).replace('+', '')} a year on Aave. ${staking.data.note}`
-            : 'Supply rates are unavailable right now, so there is no figure to quote.'}
-        </NoteStrip>
+        {/*
+          Tappable, because it stopped being only a fact.
+          Once tier 4 can put money at Aave, this strip is the only place on the home screen that
+          mentions it — and a user with a supplied balance needs somewhere to go to see it and take
+          it back. A statement about a rate you cannot act on is where the money goes to hide.
+        */}
+        <Pressable
+          onPress={() => router.push('/yield')}
+          accessibilityRole="button"
+          accessibilityLabel="See what you have earning at Aave"
+          style={{ marginTop: 16, marginBottom: 20 }}
+        >
+          <NoteStrip kind="acted">
+            {staking.data
+              // `estimatedApy` is a fraction (0.0388); `percent` takes percentage points.
+              ? `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, { digits: 2 }).replace('+', '')} a year on Aave. ${staking.data.note}`
+              : 'Supply rates are unavailable right now, so there is no figure to quote.'}
+          </NoteStrip>
+        </Pressable>
       </ScrollView>
     </Screen>
   );

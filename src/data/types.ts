@@ -175,7 +175,16 @@ export type Wallet = {
   address: string;
   /** 'embedded' = created in-app with passkey recovery; 'connected' = user brought their own. */
   kind: 'embedded' | 'connected';
-  cluster: 'devnet' | 'mainnet-beta';
+  /**
+   * The chain this wallet was created on — history, and left alone.
+   *
+   * The union used to be `'devnet' | 'mainnet-beta'`, which are Solana clusters left over from
+   * before the pivot. The server has been sending `base-sepolia` and `base-fork` into it ever
+   * since, so the type was asserting something no value had ever satisfied.
+   */
+  cluster: string;
+  /** Where the executor is settling RIGHT NOW. This is what a user means by "which network". */
+  chain?: string;
 };
 
 /**
@@ -186,6 +195,16 @@ export type Delegation = {
   /** The bot's trading authority pubkey. Never has withdraw rights. */
   delegatePubkey: string;
   ownerPubkey: string;
+  /**
+   * Basenames for the two parties, when they have one.
+   *
+   * Null for most addresses, and null is the honest answer rather than a reason to fall back to
+   * something invented. Truncated hex is what these were before, and two addresses that differ
+   * only in the middle look identical truncated — on the one screen where telling them apart is
+   * the entire point.
+   */
+  ownerName?: string | null;
+  delegateName?: string | null;
   /** screen 4 "Daily Spend Cap", $200–$5,000 step $200. Enforced outside the client. */
   dailyCapUsd: number;
   /** screen 4 "Run For" -> a real expiry, unix ms. */

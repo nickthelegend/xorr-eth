@@ -20,6 +20,10 @@ export type PositionRow = {
   leverage: string;
   units: string;
   cost_usd: string;
+  realised_usd: string;
+  units_sold: string;
+  proceeds_usd: string;
+  unbased_units: string;
   opened_at: Date;
 };
 
@@ -39,21 +43,125 @@ export type Position = {
   units: number;
   fundingPaid: number;
   feed: 'live' | 'unavailable';
+  /**
+   * Profit already taken on this symbol, at average cost. Distinct from `unrealised`, which is
+   * what the remaining units are worth on paper — one is money, the other is an opinion.
+   */
+  realised: number;
+  unitsSold: number;
 };
 
-/** Record a fill against the position book. Always called inside the fill's own transaction. */
+/**
+ * Record a fill against the position book. Always called inside the fill's own transaction.
+ *
+ * A buy and a sell are not the same operation with a different sign, and treating them as one was
+ * wrong in a way that only showed up after a profitable partial sale:
+ *
+ *   buy  1 WETH @ $2,000  ->  units 1,   cost $2,000,  entry $2,000
+ *   sell 0.5   @ $3,000   ->  units 0.5, cost $500,    entry $1,000   <- wrong
+ *
+ * Subtracting the PROCEEDS left the remaining half carrying half the cost it actually has, so
+ * every unrealised-gain figure after it was inflated — and the $500 of profit that was genuinely
+ * taken was recorded nowhere.
+ *
+ * Selling therefore removes units at AVERAGE COST and books the difference as realised. That is
+ * ordinary average-cost accounting, and it is what makes "entry" mean the same thing before and
+ * after a sale.
+ */
 export async function applyFill(
   client: PoolClient,
   params: { walletId: string; symbol: string; units: number; usd: number },
 ): Promise<void> {
+  if (params.units >= 0) {
+    await client.query(
+      `INSERT INTO positions (id, wallet_id, symbol, side, units, cost_usd)
+       VALUES ($1,$2,$3,'long',$4,$5)
+       ON CONFLICT (wallet_id, symbol, side) DO UPDATE
+         SET units = positions.units + EXCLUDED.units,
+             cost_usd = positions.cost_usd + EXCLUDED.cost_usd,
+             updated_at = now()`,
+      [randomUUID(), params.walletId, params.symbol, params.units, params.usd],
+    );
+    return;
+  }
+
+  /*
+   * A sale. Lock the row first: two fills for the same symbol landing together would otherwise
+   * each read the same average cost and both book the same realised gain.
+   */
+  const { rows } = await client.query<{ units: string; cost_usd: string }>(
+    `SELECT units, cost_usd FROM positions
+      WHERE wallet_id = $1 AND symbol = $2 AND side = 'long' FOR UPDATE`,
+    [params.walletId, params.symbol],
+  );
+  const existing = rows[0];
+  if (!existing) {
+    /*
+     * Selling something the book has never seen.
+     *
+     * It happens legitimately — a wallet funded outside the app, or a position opened before this
+     * table existed — and there is no cost basis to work from, so the whole proceeds are recorded
+     * as realised rather than invented as a gain against a made-up entry.
+     */
+    await client.query(
+      `INSERT INTO positions (id, wallet_id, symbol, side, units, cost_usd, realised_usd, units_sold, proceeds_usd, unbased_units)
+       VALUES ($1,$2,$3,'long',0,0,0,$4,$5,$4)
+       ON CONFLICT (wallet_id, symbol, side) DO NOTHING`,
+      [randomUUID(), params.walletId, params.symbol, Math.abs(params.units), Math.abs(params.usd)],
+    );
+    return;
+  }
+
+  /*
+   * Clamp at zero before doing any arithmetic.
+   *
+   * Rows written by the old accounting can hold NEGATIVE units — it subtracted proceeds from cost
+   * and units without a floor — and `Math.min(soldUnits, heldUnits)` against a negative held
+   * count returns the negative, which then went into `units_sold` and made the whole symbol
+   * disappear from the realised report. Bad historical data must not be able to produce bad new
+   * data.
+   */
+  const heldUnits = Math.max(Number(existing.units), 0);
+  const heldCost = Math.max(Number(existing.cost_usd), 0);
+  const soldUnits = Math.min(Math.abs(params.units), heldUnits);
+  const proceeds = Math.abs(params.usd);
+
+  /*
+   * No cost basis means no gain can be computed — and saying so beats guessing.
+   *
+   * It happens for real: a wallet funded outside the app, a position that predates this table, or
+   * a book already emptied by the old accounting. The tempting shortcut is `realised = proceeds`,
+   * which reports the entire sale as profit. On a trading app that is not a rounding error, it is
+   * the single most misleading number the screen could show. So the proceeds and the units are
+   * recorded — both are facts — and the realised figure is left alone.
+   */
+  const hasBasis = heldUnits > 0 && heldCost > 0;
+  const avgCost = hasBasis ? heldCost / heldUnits : 0;
+  const costOut = soldUnits * avgCost;
+  const realised = hasBasis ? proceeds - costOut : 0;
+  // What was really sold, even when the book had no record of holding it.
+  const soldForRecord = hasBasis ? soldUnits : Math.abs(params.units);
+
   await client.query(
-    `INSERT INTO positions (id, wallet_id, symbol, side, units, cost_usd)
-     VALUES ($1,$2,$3,'long',$4,$5)
-     ON CONFLICT (wallet_id, symbol, side) DO UPDATE
-       SET units = positions.units + EXCLUDED.units,
-           cost_usd = positions.cost_usd + EXCLUDED.cost_usd,
-           updated_at = now()`,
-    [randomUUID(), params.walletId, params.symbol, params.units, params.usd],
+    `UPDATE positions
+        SET units = GREATEST(units - $3, 0),
+            cost_usd = GREATEST(cost_usd - $4, 0),
+            realised_usd = realised_usd + $5,
+            units_sold = units_sold + $7,
+            proceeds_usd = proceeds_usd + $6,
+            unbased_units = unbased_units + $8,
+            updated_at = now()
+      WHERE wallet_id = $1 AND symbol = $2 AND side = 'long'`,
+    [
+      params.walletId,
+      params.symbol,
+      soldUnits,
+      costOut,
+      realised,
+      proceeds,
+      soldForRecord,
+      hasBasis ? 0 : Math.abs(params.units),
+    ],
   );
 }
 
@@ -102,6 +210,8 @@ export async function listPositions(walletId: string): Promise<Position[]> {
       // Spot carries no funding. A perp position would accrue it; there are none yet.
       fundingPaid: 0,
       feed,
+      realised: Number(r.realised_usd),
+      unitsSold: Number(r.units_sold),
     });
   }
   return out;
@@ -110,4 +220,48 @@ export async function listPositions(walletId: string): Promise<Position[]> {
 export async function getPosition(walletId: string, id: string): Promise<Position | null> {
   const all = await listPositions(walletId);
   return all.find((p) => p.id === id) ?? all[0] ?? null;
+}
+
+/**
+ * Realised profit and loss for a wallet, across every symbol including closed ones.
+ *
+ * `listPositions` filters to `units > 0`, correctly — a closed position is not a holding. But
+ * that also means the money actually MADE on it disappears from the app the moment it is sold,
+ * which is the opposite of what a person wants to see. This reads the whole book.
+ */
+export async function realisedPnl(walletId: string): Promise<{
+  total: number;
+  bySymbol: {
+    symbol: string;
+    realised: number;
+    unitsSold: number;
+    proceeds: number;
+    basisIncomplete: boolean;
+  }[];
+}> {
+  const rows = await query<{
+    symbol: string;
+    realised_usd: string;
+    units_sold: string;
+    proceeds_usd: string;
+    unbased_units: string;
+  }>(
+    `SELECT symbol, realised_usd, units_sold, proceeds_usd, unbased_units
+       FROM positions WHERE wallet_id = $1 AND units_sold > 0
+      ORDER BY realised_usd DESC`,
+    [walletId],
+  );
+  const bySymbol = rows.map((r) => ({
+    symbol: r.symbol,
+    realised: Number(r.realised_usd),
+    unitsSold: Number(r.units_sold),
+    proceeds: Number(r.proceeds_usd),
+    /**
+     * True when some of what was sold had no recorded cost, so the realised figure understates
+     * the outcome. Shown rather than hidden: an incomplete number the reader knows is incomplete
+     * is useful, and one they believe is complete is not.
+     */
+    basisIncomplete: Number(r.unbased_units) > 0,
+  }));
+  return { total: bySymbol.reduce((a, r) => a + r.realised, 0), bySymbol };
 }
