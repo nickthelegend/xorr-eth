@@ -5,6 +5,8 @@
  * rather than "did not throw". Prints PASS/FAIL per item with the observed value on a failure.
  */
 import { execFileSync } from 'node:child_process';
+import { writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const B = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8788';
 const EMAIL = process.env.E2E_PRIVY_EMAIL ?? 'test-8958@privy.io';
@@ -293,6 +295,113 @@ await check('B22', 'the public market surface is rate limited, per caller', asyn
   });
   must(other.status === 200, `a different caller was also limited (${other.status})`);
   return '429 with Retry-After; other callers unaffected';
+});
+
+// ── Tier 4: move idle cash to yield ──────────────────────────────────────────
+
+await check('B23', 'the Aave supply rate is live and plausible', async () => {
+  const r = await req('/yield/supply', {}, false);
+  must(r.status === 200, `status ${r.status}`);
+  const y = await r.json();
+  must(y.feed === 'live', `feed was "${y.feed}"`);
+  // A rate is the entire reason to run tier 4, so an implausible one has to fail loudly rather
+  // than be displayed. Aave returns a zeroed struct for an asset it does not list, and 0.00% is
+  // exactly what that looks like from the outside.
+  must(y.estimatedApy > 0 && y.estimatedApy < 0.5, `implausible APY ${y.estimatedApy}`);
+  must(String(y.source).includes('Aave v3 Pool'), 'no verifiable source cited');
+  return `${(y.estimatedApy * 100).toFixed(2)}% a year, ${y.source}`;
+});
+
+await check('B24', 'the balance separates spendable cash from supplied', async () => {
+  const b = await (await req('/wallet/balance')).json();
+  must(typeof b.cashUsd === 'number', 'no cashUsd');
+  must(typeof b.suppliedUsd === 'number', 'no suppliedUsd — supplied money would vanish from the total');
+  const holdings = (b.holdings ?? []).reduce((a, h) => a + h.usd, 0);
+  // The invariant that makes tier 4 safe to show: supplying moves money between two buckets and
+  // must never change the total. Without suppliedUsd in the sum, a sweep looked like a loss.
+  must(
+    Math.abs(b.usd - (b.cashUsd + b.suppliedUsd + holdings)) < 0.01,
+    `total ${b.usd} != cash ${b.cashUsd} + supplied ${b.suppliedUsd} + holdings ${holdings}`,
+  );
+  return `$${b.cashUsd.toFixed(2)} cash, $${b.suppliedUsd.toFixed(2)} earning`;
+});
+
+await check('B25', 'the grant asks for the venues the executor actually uses', async () => {
+  const p = await (await req('/delegation/params')).json();
+  must(Array.isArray(p.venues) && p.venues.length > 0, 'no venues offered');
+  // A tier-4 run calls the Aave Pool. If the grant screen never asks for it, every run reaches the
+  // chain and dies as VenueNotAllowed — for a permission the user was never given the chance to
+  // give. One list feeds both, so this check is what keeps them from drifting apart.
+  const pool = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5'.toLowerCase();
+  must(
+    p.venues.some((v) => v.toLowerCase() === pool),
+    `the Aave Pool is not in the grant: ${p.venues.join(', ')}`,
+  );
+  return p.venues.join(', ');
+});
+
+await check('B26', 'the allowlist shown is the one on chain, not the one we would ask for', async () => {
+  const d = await (await req('/delegation')).json();
+  if (d === null) return 'no delegation granted for this wallet — nothing to compare';
+  must(Array.isArray(d.venueAllowlist), 'no venueAllowlist');
+  /*
+   * A `.mts` file, not `tsx -e` and not a `.ts` in the temp directory.
+   *
+   * The eval form compiles as CJS, and a `.ts` outside the project resolves its module format from
+   * the nearest package.json — which in /var/folders is none, so also CJS. Both refuse the
+   * top-level await this needs. The `.mts` extension settles it wherever the file lives.
+   */
+  const probe = `${tmpdir()}/xorr-venues-${process.pid}.mts`;
+  writeFileSync(
+    probe,
+    `import { allowedVenues } from '${process.cwd()}/server/src/evm/delegation.js';\n` +
+      `console.log((await allowedVenues('${d.ownerPubkey}')).join(','));\n`,
+  );
+  let chain;
+  try {
+    chain = execFileSync('npx', ['tsx', probe], { encoding: 'utf8' }).trim();
+  } finally {
+    rmSync(probe, { force: true });
+  }
+  must(
+    d.venueAllowlist.join(',').toLowerCase() === chain.toLowerCase(),
+    `API said [${d.venueAllowlist}], chain says [${chain}]`,
+  );
+  return `${d.venueAllowlist.length} venue(s), matching the chain`;
+});
+
+await check('B27', 'a strategy kind with no executor is refused at creation', async () => {
+  const r = await req('/strategies', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind: 'grid', state: 'live', label: 'should not exist', symbol: 'WETH',
+      params: {}, cadence: 'daily', dailyAllocationUsd: 5,
+    }),
+  });
+  // Accepting this creates a strategy that looks live on the list and is blocked at every single
+  // run. Refusing it costs the user one error message while someone is still there to read it.
+  must(r.status === 400, `status ${r.status} — an unrunnable strategy was accepted`);
+  const body = await r.json();
+  must(JSON.stringify(body).includes('grid') || JSON.stringify(body).includes('runnable'), `unhelpful error: ${JSON.stringify(body)}`);
+  return '400 with the runnable kinds named';
+});
+
+await check('B28', 'a yield-rotation strategy can be created and comes back', async () => {
+  const r = await req('/strategies', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind: 'yield-rotation', state: 'live', label: 'QA idle cash to Aave', symbol: 'USDC',
+      params: { usd: 30, keepCashUsd: 50, minMoveUsd: 25 }, cadence: 'daily', dailyAllocationUsd: 30,
+    }),
+  });
+  // Read the body ONCE. `await r.text()` inside the failure message consumed it, so the check
+  // failed with "Body has already been read" instead of whatever the server actually said.
+  const created = await r.json().catch(() => null);
+  must(r.status === 200 || r.status === 201, `status ${r.status}: ${JSON.stringify(created)}`);
+  const list = await (await req('/strategies')).json();
+  must(list.some((s) => s.id === created.id), 'created but not in the list');
+  await req(`/strategies/${created.id}`, { method: 'DELETE' });
+  return `${created.id} created, listed, removed`;
 });
 
 console.log(`\n${pass} passed, ${failures.length} failed`);

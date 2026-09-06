@@ -14,7 +14,6 @@ import { base } from 'viem/chains';
 
 const RPC = process.env.FORK_RPC ?? 'http://127.0.0.1:8545';
 const USDC: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const ROUTER: Address = '0x111111125421cA6dc452d289314280a0f8842A65';
 const WETH: Address = '0x4200000000000000000000000000000000000006';
 
 const chain = { ...base, rpcUrls: { default: { http: [RPC] }, public: { http: [RPC] } } };
@@ -40,6 +39,7 @@ async function main() {
   if (!owner || !delegation) throw new Error('usage: fork-grant.ts <owner> [capUsd]; DELEGATION_ADDRESS must be set');
 
   const { delegatePublicKey } = await import('./evm/delegation.js');
+  const { SETTLEMENT_VENUES } = await import('./evm/chains.js');
   const bot = delegate ?? (delegatePublicKey as Address);
 
   await rpc('anvil_impersonateAccount', [owner]);
@@ -47,9 +47,21 @@ async function main() {
   const w = createWalletClient({ account: owner, chain, transport: http(RPC) });
 
   const cap = parseUnits(String(capUsd), 6);
+  /*
+   * The venues come from the shared list, not a literal.
+   *
+   * This granted only the 1inch router, so a tier-4 run reached the chain and died inside `spend()`
+   * as VenueNotAllowed — for a permission the app's own grant screen says it asks for. One list,
+   * read here and by `/delegation/params`, is what keeps the fork honest about what a real user
+   * would have signed.
+   *
+   * The expiry is taken from the CHAIN's clock: the contract compares against `block.timestamp`,
+   * and a fork's clock is wherever the last test left it.
+   */
+  const chainNow = (await pub.getBlock()).timestamp;
   const h1 = await w.writeContract({
     address: delegation, abi: ABI, functionName: 'grant',
-    args: [bot, cap, BigInt(Math.floor(Date.now() / 1000) + 7 * 86_400), [ROUTER]],
+    args: [bot, cap, chainNow + BigInt(7 * 86_400), [...SETTLEMENT_VENUES]],
   });
   await pub.waitForTransactionReceipt({ hash: h1 });
 

@@ -53,7 +53,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "TOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nAgents\n1 hired\nMomentum Scout\nActive\nEarnings Desk\nActive\nCoins\nWETH\nWrapped Ether · not held\n$2,508.14\n+2.22%\nIdle USDC can earn about 3.77% a year on Aave. Supplying USDC to Aave v3 on Base. The rate floats; it is not a promise.\nHome\nMarkets\nBot\nStrategies\nAssets"
+  "text": "TOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nAgents\n1 hired\nMomentum Scout\nActive\nEarnings Desk\nActive\nCoins\nWETH\nWrapped Ether · not held\n$2,499.32\n+1.89%\nIdle USDC can earn about 3.79% a year on Aave. Supplying USDC to Aave v3 on Base. The rate floats; it is not a promise.\nHome\nMarkets\nBot\nStrategies\nAssets"
  },
  {
   "stem": "08-markets",
@@ -69,7 +69,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$79,956\n+0.50%\nETH\nEthereum · Perp · 100x\n$2,505\n+2.12%\nSOL\nSolana · Spot · Perp\n$104.19\n+2.26%\nXRP\nXRP · Perp · 50x\n$1.42\n+1.50%\nDOGE\nDogecoin · Perp · 50x\n$0.0908\n+7.22%\nHYPE\nHyperliquid · Spot · Perp\n$85.37\n+1.44%\nAAVE\nAave · Spot · Perp\n$139.54\n+7.22%\nLINK\nChainlink · Perp · 50x\n$12.33\n+6.04%\nTON\nToncoin "
+  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$79,904\n+0.43%\nETH\nEthereum · Perp · 100x\n$2,502\n+2.03%\nSOL\nSolana · Spot · Perp\n$104.41\n+2.44%\nXRP\nXRP · Perp · 50x\n$1.42\n+1.42%\nDOGE\nDogecoin · Perp · 50x\n$0.0909\n+7.41%\nHYPE\nHyperliquid · Spot · Perp\n$85.66\n+1.83%\nAAVE\nAave · Spot · Perp\n$135.31\n+3.53%\nLINK\nChainlink · Perp · 50x\n$12.24\n+4.68%\nTON\nToncoin "
  },
  {
   "stem": "10-markets-stocks",
@@ -77,7 +77,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$231.92\nAAPLc\nApple · Tokenized share\n$322.95\nTSLAc\nTesla · Tokenized share\n$358.17\nMETAc\nMeta · Tokenized share\n$617.80\nMSFTc\nMicrosoft · Tokenized share\n$516.38\nAMZNc\nAmazon · Tokenized share\n$279.77\nGOOGLc\nAlphabet · Tokenized share\n$341.11\nMSTRc\nMicroStrategy · Tokenized share\n$143.63"
+  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$231.94\nAAPLc\nApple · Tokenized share\n$322.95\nTSLAc\nTesla · Tokenized share\n$358.11\nMETAc\nMeta · Tokenized share\n$617.79\nMSFTc\nMicrosoft · Tokenized share\n$515.23\nAMZNc\nAmazon · Tokenized share\n$282.19\nGOOGLc\nAlphabet · Tokenized share\n$340.40\nMSTRc\nMicroStrategy · Tokenized share\n$143.60"
  },
  {
   "stem": "11-markets-commodities",
@@ -109,7 +109,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$358.17\nSOL\n$104.19\n+2.26%\nHYPE\n$85.37\n+1.44%"
+  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$358.11\nSOL\n$104.41\n+2.44%\nHYPE\n$85.66\n+1.83%"
  },
  {
   "stem": "15-search",
@@ -117,7 +117,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$79,956\n+0.50%\nETH\nEthereum · Perp · 100x\n$2,505\n+2.12%\nSOL\nSolana · Spot · Perp\n$104.19\n+2.26%\nXRP\nXRP · Perp · 50x\n$1.42\n+1.50%\nDOGE\nDogecoin · Perp · 50x\n$0.0908\n+7.22%\nHYPE\nHyperliquid · Spot · Perp\n$85.37\n+1.44%\nAAVE\nAave · Spot · Perp\n$139.54\n+7.22%\nLINK\nChainlink · Perp · 50x\n$12.33\n+6.04%\nTON\nToncoin · Spot · Perp\n$1.43\n+1.85%\nNVDAc\nNvidia · Tokenized share"
+  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$79,904\n+0.43%\nETH\nEthereum · Perp · 100x\n$2,502\n+2.03%\nSOL\nSolana · Spot · Perp\n$104.41\n+2.44%\nXRP\nXRP · Perp · 50x\n$1.42\n+1.42%\nDOGE\nDogecoin · Perp · 50x\n$0.0909\n+7.41%\nHYPE\nHyperliquid · Spot · Perp\n$85.66\n+1.83%\nAAVE\nAave · Spot · Perp\n$135.31\n+3.53%\nLINK\nChainlink · Perp · 50x\n$12.24\n+4.68%\nTON\nToncoin · Spot · Perp\n$1.42\n+1.45%\nNVDAc\nNvidia · Tokenized share"
  },
  {
   "stem": "16-asset",
@@ -133,7 +133,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Nvidia\n$231.93\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Nvidia\n$231.94\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "18-chart",
@@ -141,7 +141,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "BTC/USD\n$79,922\n+0.30%\n+$236.00 today\n$79,922\n80.3K\n80.0K\n79.8K\n79.6K\n79.3K\n15m\n1H\n4H\n1D\n1W\n4 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
+  "text": "BTC/USD\n$79,922\n+0.48%\n+$383.00 today\n$79,922\n80.3K\n80.0K\n79.8K\n79.6K\n79.3K\n15m\n1H\n4H\n1D\n1W\n8 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
  },
  {
   "stem": "19-order",
@@ -149,7 +149,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "WETH\nBuy\nSell\n$250\n0.0999 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of WETH\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
+  "text": "WETH\nBuy\nSell\n$250\n0.1000 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of WETH\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
  },
  {
   "stem": "20-order-stock",
@@ -165,7 +165,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$250.08\nWETH\nYOU RECEIVE\n$250.22\nat least $249.47 after slippage\nUSDC\nRoute\nBest of 3 venues\nFee (0.25%)\n$0.63\nPrice impact\nNaN%\nMax slippage\n0.30%\nReview swap"
+  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$250.40\nWETH\nYOU RECEIVE\n$249.58\nat least $248.83 after slippage\nUSDC\nRoute\nBest of 3 venues\nFee (0.25%)\n$0.62\nPrice impact\nNaN%\nMax slippage\n0.30%\nReview swap"
  },
  {
   "stem": "22-perp",
@@ -173,7 +173,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "BTC/USDT\n$79,944\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$65,234\nFunding\n—\nA 18% move against you wipes the margin.\nOpen interest\n—\n24h volume\n—\nMark vs index\n+$0.00\nNext funding\n05:59:14\nShort\nLong"
+  "text": "BTC/USDT\n$79,908\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$65,205\nFunding\n—\nA 18% move against you wipes the margin.\nOpen interest\n—\n24h volume\n—\nMark vs index\n+$0.00\nNext funding\n04:54:27\nShort\nLong"
  },
  {
   "stem": "23-position",
@@ -237,7 +237,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nReturn\n+33.8%\nMax DD\n−12.6%\nSharpe\n3.6\nTrades\n13\nIf you'd started with\n−\n$5,000\n+\n$6,690.00\n+$1,690.00\nRun this strategy live"
+  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nReturn\n+34.3%\nMax DD\n−12.6%\nSharpe\n3.6\nTrades\n13\nIf you'd started with\n−\n$5,000\n+\n$6,715.00\n+$1,715.00\nRun this strategy live"
  },
  {
   "stem": "31-strategies",
@@ -256,12 +256,20 @@
   "text": "Recurring buy\nWETH\nCBBTC\nUSDC\n$50\nof WETH, weekly\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nNEXT THREE RUNS\nSun, Sep 13\n$50\nSun, Sep 20\n$50\nSun, Sep 27\n$50\nBuy $50 of WETH, weekly\nRuns on schedule inside your daily cap. Pause or cancel any time."
  },
  {
+  "stem": "32b-strategy-yield",
+  "route": "/strategy/yield",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "text": "Idle cash to yield\nAAVE V3 · USDC SUPPLY\nFloats with the pool. Not a promise.\n3.79%\n$250\nswept at most, daily\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nALWAYS KEEP SPENDABLE\n$50\n$100\n$250\n$500\nIF IT RAN NOW\nSpendable cash\n$0.00\nKept back\n$100.00\nWould move\nnothing\nBelow $25 it leaves the cash alone — the gas costs more than the yield.\nNEXT THREE RUNS\nMon, Sep 7\nup to $250\nTue, Sep 8"
+ },
+ {
   "stem": "33-holdings",
   "route": "/holdings",
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Assets\nPORTFOLIO VALUE\n$0.00\nALLOCATION\nBlue-chip crypto\n55%\nTokenized equities\n30%\nStable yield\n15%\nHoldings\nNothing held yet. A recurring buy is the simplest way to start.\nWALLET\n0x78d78455e33fBC18e59bD1399bdd3638dd17d7bf\nConnected · base-fork\nHome\nMarkets\nBot\nStrategies\nAssets"
+  "text": "Assets\nPORTFOLIO VALUE\n$0.00\nALLOCATION\nBlue-chip crypto\n55%\nTokenized equities\n30%\nStable yield\n15%\nHoldings\nNothing held yet. A recurring buy is the simplest way to start.\nWALLET\n0xFa8b7C563AAF38Bf472f22f9725A2cD71B2AF0E7\nConnected · base-fork\nHome\nMarkets\nBot\nStrategies\nAssets"
  },
  {
   "stem": "34-activity",
@@ -285,7 +293,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Briefing\nUpdated 18m ago\nOnly what moved your book, and what each agent did about it.\nON-CHAIN\n8h\nWhy crypto experts say buying and holding bitcoin easily beats trying to time the market\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n9h\nDollar-backed stablecoins can push local currencies lower, Bank of Korea study finds\nEverything is inside its limits. There is nothing fo"
+  "text": "Briefing\nUpdated 18m ago\nOnly what moved your book, and what each agent did about it.\nON-CHAIN\n9h\nWhy crypto experts say buying and holding bitcoin easily beats trying to time the market\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n10h\nDollar-backed stablecoins can push local currencies lower, Bank of Korea study finds\nEverything is inside its limits. There is nothing f"
  },
  {
   "stem": "37-inbox",
@@ -309,7 +317,7 @@
   "ok": true,
   "errors": [],
   "network": [],
-  "text": "Settings\nWALLET\nAddress\n0x78…d7bf\nNetwork\nbase-fork\nRecovery phrase\nNot backed up\nWHAT THE BOT MAY DO\nStatus\nLive\nDaily cap\n$1,600/day\nWithdrawal allowlist\n2 addresses\nHOW THE BOT TALKS\nDry\nSharp\nFlat\nUnderstated. States what it did and why, with the occasional flat aside.\nThis changes how the bot writes, never what it reports. Prices, sizes and limits read the same on every setting.\nALERTS\nNotifi"
+  "text": "Settings\nWALLET\nAddress\n0xFa…F0E7\nNetwork\nbase-fork\nRecovery phrase\nNot backed up\nWHAT THE BOT MAY DO\nStatus\nLive\nDaily cap\n$1,600/day\nWithdrawal allowlist\n2 addresses\nHOW THE BOT TALKS\nDry\nSharp\nFlat\nUnderstated. States what it did and why, with the occasional flat aside.\nThis changes how the bot writes, never what it reports. Prices, sizes and limits read the same on every setting.\nALERTS\nNotifi"
  },
  {
   "stem": "40-alerts",

@@ -22,6 +22,7 @@ import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { priceOf } from '../market/prices.js';
+import { send } from '../notifications/push.js';
 import { PLANNERS, type TradeIntent } from './kinds/index.js';
 import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 
@@ -317,22 +318,38 @@ export async function runStrategy(
       );
     }
 
-    const price = await priceOf(intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol);
+    /*
+     * Some legs are not swaps.
+     *
+     * Supplying to a lending pool has no route to quote and no market price to look up: the
+     * planner already built the calldata, and the receipt is 1:1 with what went in. Asking 1inch
+     * to price "aUSDC" would 400 on a symbol it has never heard of, and `priceOf` would throw
+     * before the trade got anywhere near the chain.
+     */
+    const price = intent.direct
+      ? intent.direct.unitPriceUsd
+      : await priceOf(intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol);
     // How many units of the ASSET this leg moves — bought on a buy, sold on a close.
     const units = intent.outSymbol === 'USDC' ? intent.amountIn : intent.usd / price;
 
     // Real 1inch calldata. The delegation contract pulls the input and forwards this to the router
     // inside one transaction, so the user's funds are never parked anywhere in between — and the
     // bought token is delivered straight to the user's own wallet, never to the contract.
-    const swap = await buildSwap({
-      inSymbol: intent.inSymbol,
-      outSymbol: intent.outSymbol,
-      // In the INPUT token's units. Passing dollars here scaled a position into wei and the
-      // router refused a trade orders of magnitude too large.
-      amount: intent.amountIn,
-      from: DELEGATION_FROM,
-      receiver: owner,
-    });
+    //
+    // A direct leg skips this entirely: the delegation forwards the planner's calldata to the
+    // venue under exactly the same pull-approve-call-unapprove sequence, and the pool credits the
+    // owner rather than us because `supply()` takes the recipient explicitly.
+    const swap = intent.direct
+      ? { to: intent.direct.venue, data: intent.direct.data }
+      : await buildSwap({
+          inSymbol: intent.inSymbol,
+          outSymbol: intent.outSymbol,
+          // In the INPUT token's units. Passing dollars here scaled a position into wei and the
+          // router refused a trade orders of magnitude too large.
+          amount: intent.amountIn,
+          from: DELEGATION_FROM,
+          receiver: owner,
+        });
 
     /*
      * Buying and closing are different transactions.
@@ -345,7 +362,9 @@ export async function runStrategy(
     const payToken = VENUE_TOKENS[intent.inSymbol];
     if (!payToken) throw new Error(`No token registry entry for ${intent.inSymbol}`);
 
-    const isClose = intent.outSymbol === 'USDC';
+    // A direct leg is never a close: it puts capital to work rather than taking it off the table,
+    // so it spends against the cap like any other outflow.
+    const isClose = !intent.direct && intent.outSymbol === 'USDC';
     const signature = isClose
       ? await closeAsDelegate({
           owner,
@@ -394,12 +413,14 @@ export async function runStrategy(
         {
           walletId,
           agent: 'Yield Keeper',
-          action:
-            intent.outSymbol === 'USDC'
-              ? `Sold ${units.toFixed(4)} ${intent.inSymbol}`
-              : `Bought ${units.toFixed(4)} ${intent.outSymbol}`,
-          detail: `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
-          kind: 'trade',
+          action: describeLeg(intent, units),
+          detail: intent.direct
+            ? `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} moved. ${intent.because}`
+            : `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
+          // Putting cash to work is not a trade, and the audit schema has had a 'yield' category
+          // from the start that nothing ever wrote. Filing a supply as a trade makes the activity
+          // filter lie about what the bot has been doing.
+          kind: intent.direct ? 'yield' : 'trade',
           signature,
           payload: {
             runId,
@@ -421,6 +442,23 @@ export async function runStrategy(
         ]);
       }
     });
+
+    /*
+     * Tell the user.
+     *
+     * The bot trading while they are asleep is the product; them finding out is the other half of
+     * it, and that half was never connected — `send()` existed and only `/notify/test` called it.
+     * Deliberately outside the transaction and deliberately not awaited for correctness: a push
+     * that fails must never roll back a trade that settled.
+     */
+    void send(walletId, {
+      title: describeLeg(intent, units),
+      body: intent.direct
+        ? intent.because
+        : `${units.toFixed(4)} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
+      route: '/activity',
+      kind: 'dca-executed',
+    }).catch(() => undefined);
 
     return { status: 'filled', runId, signature, units, price };
   } catch (e) {
@@ -444,6 +482,22 @@ export async function runStrategy(
     });
     return { status: 'failed', runId, error };
   }
+}
+
+/**
+ * What this leg did, in the words a person would use.
+ *
+ * "Bought 100.0000 aUSDC" is technically what the receipt token says and tells the user nothing.
+ * The action line in the activity log is the only place some people ever read what the bot did, so
+ * it names the thing that happened, not the token that moved.
+ */
+function describeLeg(intent: TradeIntent, units: number): string {
+  if (intent.direct) {
+    return `Supplied $${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${intent.inSymbol} to Aave`;
+  }
+  return intent.outSymbol === 'USDC'
+    ? `Sold ${units.toFixed(4)} ${intent.inSymbol}`
+    : `Bought ${units.toFixed(4)} ${intent.outSymbol}`;
 }
 
 /**
@@ -509,6 +563,21 @@ async function finishBlocked(
       client,
     );
   });
+
+  /*
+   * A blocked run is the notification that matters most.
+   *
+   * "Your cap stopped a trade" and "your permission expired" are the two things a user needs to
+   * hear without opening the app — they are the moments the safety layer did its job, and silence
+   * would look identical to the bot simply not trying.
+   */
+  void send(walletId, {
+    title: 'A trade was not placed',
+    body: detail,
+    route: '/activity',
+    kind: 'strategy-blocked',
+  }).catch(() => undefined);
+
   return { status: 'blocked', runId, reason, detail };
 }
 

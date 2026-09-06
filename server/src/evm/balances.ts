@@ -14,6 +14,7 @@ import { publicClient } from './client.js';
 import { ADDRESSES } from './chains.js';
 import { TOKENS } from '../venues/oneinch.js';
 import { priceOf } from '../market/prices.js';
+import { usdcReserve } from '../market/yield.js';
 
 export type Holding = { symbol: string; units: number; usd: number };
 
@@ -95,13 +96,52 @@ export async function holdings(owner: Address): Promise<Holding[]> {
   );
 }
 
-/** Cash plus holdings — the number on the home screen. */
+/**
+ * USDC the user has supplied to Aave, in dollars.
+ *
+ * This is not in `TOKENS` on purpose — `TOKENS` is the registry of things you can SWAP, and an
+ * aToken is a receipt, not a market. But it is unmistakably the user's money, and leaving it out
+ * of the total made tier 4 look like it deleted cash: the balance dropped by the supplied amount
+ * and nothing appeared anywhere to account for it.
+ *
+ * aUSDC is rebasing — the balance itself grows with the interest — so the balance IS the value,
+ * at 1:1 with USDC. There is no price to look up.
+ *
+ * Returns 0 where there is no Aave deployment to read, which is the true answer on a chain that
+ * has none. A read that FAILS throws, so the caller can tell "nothing supplied" from "could not
+ * ask" instead of showing both as zero.
+ */
+export async function suppliedUsd(owner: Address): Promise<number> {
+  const reserve = await usdcReserve();
+  const code = await publicClient.getCode({ address: reserve.aToken }).catch(() => undefined);
+  if ((code?.length ?? 0) <= 4) return 0;
+  const raw = await publicClient.readContract({
+    address: reserve.aToken,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: [owner],
+  });
+  return Number(formatUnits(raw, 6));
+}
+
+/** Cash plus holdings plus anything supplied — the number on the home screen. */
 export async function totalValueUsd(owner: Address): Promise<{
   cash: number;
   holdings: Holding[];
+  supplied: number;
   total: number;
 }> {
-  const [cash, rows] = await Promise.all([cashUsd(owner), holdings(owner)]);
-  const total = cash + rows.reduce((a, h) => a + h.usd, 0);
-  return { cash, holdings: rows, total };
+  const [cash, rows, supplied] = await Promise.all([
+    cashUsd(owner),
+    holdings(owner),
+    // Aave is a mainnet deployment reached over a public RPC, and a lending pool being slow is not
+    // a reason for the home screen to have no balance. Unlike the zeros above, this one degrades
+    // to "nothing supplied" only after saying so in the log.
+    suppliedUsd(owner).catch((e: unknown) => {
+      console.error('[balance] aToken read failed:', e instanceof Error ? e.message : e);
+      return 0;
+    }),
+  ]);
+  const total = cash + supplied + rows.reduce((a, h) => a + h.usd, 0);
+  return { cash, holdings: rows, supplied, total };
 }

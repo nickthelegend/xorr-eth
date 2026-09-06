@@ -8,10 +8,16 @@ import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
 import { evaluate, spentToday } from '../rules/engine.js';
-import { runStrategy, SELF_SIZING_KINDS, type StrategyRow } from '../executor/run.js';
+import { runStrategy, EXECUTABLE_KINDS, SELF_SIZING_KINDS, type StrategyRow } from '../executor/run.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
-import { CHAIN_KEY, explorerTx, ADDRESSES } from '../evm/chains.js';
-import { delegatePublicKey, readPolicy, waitForTx, DELEGATION_ADDRESS } from '../evm/delegation.js';
+import { CHAIN_KEY, explorerTx, ADDRESSES, SETTLEMENT_VENUES } from '../evm/chains.js';
+import {
+  allowedVenues,
+  delegatePublicKey,
+  readPolicy,
+  waitForTx,
+  DELEGATION_ADDRESS,
+} from '../evm/delegation.js';
 import { requireUser } from '../auth/middleware.js';
 import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
@@ -105,7 +111,7 @@ routes.get('/wallet/balance', async (c) => {
     totalValueUsd(w.address as Address).catch((e: unknown) => {
       // A zero that came from a failed read looks exactly like a zero balance. Say which.
       console.error('[balance] chain read failed:', e instanceof Error ? e.message : e);
-      return { cash: 0, holdings: [], total: 0 };
+      return { cash: 0, holdings: [], supplied: 0, total: 0 };
     }),
   ]);
   // Balance is what the user holds; the policy tells us what the bot may touch of it.
@@ -113,6 +119,8 @@ routes.get('/wallet/balance', async (c) => {
     usd: value.total,
     cashUsd: value.cash,
     holdings: value.holdings,
+    /** USDC earning yield on Aave. Part of the total, but not spendable until withdrawn. */
+    suppliedUsd: value.supplied,
     dailyCapUsd: policy?.dailyCapUsd ?? 0,
     remainingTodayUsd: policy?.remainingTodayUsd ?? 0,
   });
@@ -125,12 +133,20 @@ routes.get('/delegation', async (c) => {
   if (!w) return c.json(null);
   const policy = await readPolicy(w.address as Address).catch(() => null);
   if (!policy) return c.json(null);
+  /*
+   * What the user ACTUALLY allowed, asked of the contract.
+   *
+   * This was the list we would have asked them to sign, which is a different question and answers
+   * it wrongly for anyone who granted before a venue was added — the safety screen would have
+   * shown them a permission they never gave. The chain knows; ask it.
+   */
+  const allowed = await allowedVenues(w.address as Address).catch(() => []);
   return c.json({
     delegatePubkey: policy.delegate,
     ownerPubkey: w.address,
     dailyCapUsd: policy.dailyCapUsd,
     expiresAt: policy.expiresAt,
-    venueAllowlist: [ADDRESSES.oneInchRouter],
+    venueAllowlist: allowed,
     withdrawalAllowlist: [],
     revoked: policy.revoked,
     onChainRemainingUsd: policy.remainingTodayUsd,
@@ -149,7 +165,7 @@ routes.get('/delegation/params', async (c) => {
   return c.json({
     contract: DELEGATION_ADDRESS,
     delegate: delegatePublicKey,
-    venues: [ADDRESSES.oneInchRouter],
+    venues: SETTLEMENT_VENUES,
     token: ADDRESSES.usdcBase,
     chain: CHAIN_KEY,
   });
@@ -243,7 +259,18 @@ routes.post('/delegation/revoke', async (c) => {
 // ── Strategies ───────────────────────────────────────────────────────────────
 
 const StrategyInput = z.object({
-  kind: z.string(),
+  /**
+   * A kind the executor can actually run.
+   *
+   * Same argument as `symbol` below, and it was missing for the same reason — the UI only offers
+   * buildable tiers, so nothing ever sent a bad one. But the API is the boundary: `kind: 'grid'`
+   * was accepted, scheduled forever, and blocked at every single run with "nothing here knows how
+   * to run a grid strategy". A strategy that can never act should be refused when it is created,
+   * while there is still someone to tell.
+   */
+  kind: z.string().refine((v) => EXECUTABLE_KINDS.has(v), {
+    message: `not runnable yet — one of: ${[...EXECUTABLE_KINDS].join(', ')}`,
+  }),
   state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']),
   label: z.string(),
   /**

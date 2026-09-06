@@ -80,7 +80,24 @@ export type SupplyYield = {
   note: string;
 };
 
-export async function usdcSupplyYield(): Promise<SupplyYield> {
+/**
+ * The live USDC reserve, as Aave reports it.
+ *
+ * Split out from the display rate because tier 4 needs more than a number: it needs to know the
+ * reserve exists and which aToken the user will end up holding. Reading the aToken from the
+ * reserve rather than hardcoding it means the strategy cannot quietly credit the wrong receipt
+ * token if Aave ever migrates one.
+ */
+export type UsdcReserve = {
+  /** Compounded APY as a fraction, e.g. 0.043 for 4.3%. */
+  apy: number;
+  /** The receipt token the supplier holds. */
+  aToken: Address;
+  asset: Address;
+  pool: Address;
+};
+
+export async function usdcReserve(): Promise<UsdcReserve> {
   const data = await client.readContract({
     address: AAVE_V3_POOL,
     abi: POOL_ABI,
@@ -92,7 +109,10 @@ export async function usdcSupplyYield(): Promise<SupplyYield> {
   // second; the linear rate is the conservative of the two, so quote that.
   // Aave returns a zeroed struct for an asset it does not list, so a zero rate means "no reserve",
   // not "0% today". Treat it as missing data rather than quoting it.
-  if (data.lastUpdateTimestamp === 0 || data.aTokenAddress === '0x0000000000000000000000000000000000000000') {
+  if (
+    data.lastUpdateTimestamp === 0 ||
+    data.aTokenAddress === '0x0000000000000000000000000000000000000000'
+  ) {
     throw new Error(`Aave has no USDC reserve at ${AAVE_V3_POOL}`);
   }
   const rateRay = data.currentLiquidityRate;
@@ -106,9 +126,14 @@ export async function usdcSupplyYield(): Promise<SupplyYield> {
     throw new Error(`Implausible Aave USDC rate: ${apy}`);
   }
 
+  return { apy, aToken: data.aTokenAddress, asset: USDC_BASE_MAINNET, pool: AAVE_V3_POOL };
+}
+
+export async function usdcSupplyYield(): Promise<SupplyYield> {
+  const reserve = await usdcReserve();
   return {
     symbol: 'USDC',
-    estimatedApy: apy,
+    estimatedApy: reserve.apy,
     feed: 'live',
     source: `Aave v3 Pool ${AAVE_V3_POOL} on Base`,
     note: 'Supplying USDC to Aave v3 on Base. The rate floats; it is not a promise.',

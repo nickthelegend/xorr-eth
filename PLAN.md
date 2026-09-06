@@ -73,7 +73,9 @@ deployments on a Base mainnet fork.
 | A real close | Take-profit sold the whole 0.6020 WETH position, and the daily spend cap did not move |
 | Agents | Persisted rows; "2 of 4 hired" read from Postgres in the running app |
 
-**Not done, and why:** SwapVM's Aqua subgraph slug (a Studio dashboard click), the native iOS build
+**Not done, and why:** the Aqua subgraph slug (a Studio dashboard click — the subgraph builds and
+uploads to IPFS, then fails with "Subgraph not found", and it cannot be folded into the existing
+`xorr` subgraph because that one indexes `base-sepolia` and this one indexes `base`), the native iOS build
 (no Xcode on this machine), the deployed executor (billable), the LLM voice measurement (no funded
 model key), ladder tiers 4-7 (correctly marked unavailable in the UI), and the OKX and Monad repos
 (separate hackathons, deliberately deferred).
@@ -174,7 +176,7 @@ Today `toggleHire` is zustand state in the browser. Hiring an agent persists not
 | 4.1 | Make `runStrategy` dispatch on `strategy.kind` with an explicit `default:` that fails loudly rather than silently buying. Today every kind executes as a DCA buy.| **DONE** |
 | 4.2 | **Tier 2 — Rebalance.** `kind: 'rebalance'`. Executor: read positions, compare to target weights in `params`, emit the smallest set of trades that closes the drift beyond a threshold. Screen: `app/strategy/rebalance.tsx` with weight steppers summing to 100.| **DONE** |
 | 4.3 | **Tier 3 — Take profit / stop loss.** `kind: 'auto-close'`. Executor: on each tick, compare mark to the TP/SL bands and close the position when crossed. Screen exists at `app/auto-close/[id].tsx` but the ladder routes to `/auto-close/current`, which is not a real id — fix the route to pick the position.| **DONE** |
-| 4.4 | **Tier 4 — Idle cash to yield.** `kind: 'yield'`. Supply idle USDC to Aave v3 on Base; `server/src/market/yield.ts` already reads the rate. Flip `available: true` only once the executor branch exists.| **NOT STARTED** — correctly marked `available: false` in the ladder, so nothing in the UI claims otherwise |
+| 4.4 | **Tier 4 — Idle cash to yield — DONE.** `kind: 'yield-rotation'`. `planYieldRotation` sizes the sweep from live cash minus the user's buffer; `server/src/venues/aave.ts` builds `supply()` calldata with the OWNER as recipient; the executor routes it through the same `spend()` as every other trade, so the daily cap, the expiry and the venue allowlist all apply unchanged. `app/strategy/yield.tsx` is the setup screen and `available: true` was flipped only after the executor ran. The bot is supply-only: the exit needs no permission from anyone, so it was never granted. Proved by `server/src/fork-yield.ts` (18/18 on a mainnet fork, stable over 12 runs) and `server/src/fork-tier4.ts` (11/11 through the real executor). | **DONE** |
 | 4.5 | **Tier 5 — Range accumulation.** `kind: 'range'`. Buy on a band touch, sized from `decide()`'s remaining cap.| **NOT STARTED** — correctly marked `available: false` in the ladder, so nothing in the UI claims otherwise |
 | 4.6 | **Tier 6 — Momentum.** `kind: 'momentum'`. The backtest engine in `server/src/backtest/engine.ts` already replays real history; reuse its signal for live execution.| **NOT STARTED** — correctly marked `available: false` in the ladder, so nothing in the UI claims otherwise |
 | 4.7 | **Tier 7 — Events and earnings.** `kind: 'event'`. Gate on the news feed in `server/src/news/feed.ts`.| **NOT STARTED** — correctly marked `available: false` in the ladder, so nothing in the UI claims otherwise |
@@ -224,8 +226,8 @@ Each currently 404s and the screen degrades. They are silent holes.
 | # | Task | Status |
 |---|---|---|
 | 8.1 | Stale comment in `src/data/local.ts:4` still says "CoinGecko + Jupiter". Jupiter was removed with the Solana pivot.| **DONE** |
-| 8.2 | **BLOCKED** — this machine has Command Line Tools, not Xcode (`xcodebuild` errors on the active developer directory). Needs a full Xcode install and `xcode-select`, which requires the user's password. Nothing native has been run. |
-| 8.3 | **BLOCKED** by 8.2 — the checks pass as unit tests and have still never been seen on a device. |
+| 8.2 | **ANDROID DONE, iOS BLOCKED.** The app now builds to a real APK and runs on an emulator: Privy signs in, an embedded wallet is created on the device, and live prices and the live Aave rate render. Three bugs existed only on this path — `jose` resolving its Node build (fixed with the repo's first `metro.config.js`), Privy's polyfills never installed (fixed with an `index.js` entry ahead of `expo-router/entry`), and `motionDuration` called across the worklet boundary (fixed with a `'worklet'` directive). iOS is still blocked: this machine has Command Line Tools, not Xcode (`xcrun simctl` exits 72), and installing it needs the user's password. iOS is unverified and is not claimed. |
+| 8.3 | **DONE on Android.** Now that 8.2 runs, the checks have been seen on a device: onboarding, the strategy ladder with tier 4 live, and the tier-4 setup screen previewing correctly against an empty wallet. See `docs/screens/android/` and QA-PLAN section G. Still unseen on iOS. |
 | 8.4 | **NOT DONE** — the test still reports the quota is exhausted and passes without measuring. It needs a funded model key, which does not exist in the env. |
 | 8.5 | Rate limiting on the executor's public `/market/*` routes — they are unauthenticated and proxy a rate-limited upstream.| **DONE** |
 | 8.6 | `DELEGATE_PRIVATE_KEY` lives in a file (`server/.keys/delegate.key`). `server/src/evm/client.ts` says this is inadequate beyond a local fork; document the KMS path in `docs/SECURITY.md` before any mainnet use.| **DONE** |
@@ -278,7 +280,7 @@ Every gap ties to the task it blocks. Found by reading the code and running it, 
 ### 4.4 Verification gaps
 | Gap | Evidence | Blocks |
 |---|---|---|
-| Nothing has run on a real device | `@privy-io/expo` native path never executed | 8.2 |
+| ~~Nothing has run on a real device~~ | **CLOSED for Android** — `@privy-io/expo` executes natively, creates a wallet on device, and the app renders live data. iOS remains unrun. | 8.2 |
 | LLM voice contract not measurable | Free-tier quota exhausted; the test passes without measuring | 8.4 |
 | No route-coverage test | Three 404s reached production-shaped code undetected | 7.5 |
 | No screenshots exist | `ui/mobile-ui/reference` holds 2 files, neither an image | 0.3, 0.4 |

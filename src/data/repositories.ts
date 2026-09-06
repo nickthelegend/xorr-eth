@@ -88,6 +88,14 @@ export interface PortfolioRepository {
   sleeves(): Promise<Sleeve[]>;
   /** `null` means the balance could not be read — never render that as zero. */
   balanceUsd(): Promise<number | null>;
+  /**
+   * The same total, broken into what it is made of.
+   *
+   * Cash and supplied are different money: one can be spent today, the other is earning and has to
+   * be withdrawn first. A screen that sweeps idle cash has to know which is which, and a single
+   * total cannot tell it. `null` for the same reason as above.
+   */
+  balance(): Promise<{ total: number; cash: number; supplied: number } | null>;
 }
 
 export interface ActivityRepository {

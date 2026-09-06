@@ -113,6 +113,25 @@ export const QUOTE_ADDRESSES = BASE_MAINNET_ADDRESSES;
 /** True where the tokenized equities and Aqua actually exist. */
 export const IS_BASE_MAINNET_STATE = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-fork';
 
+/** Aave v3 Pool on Base. Not deployed at this address on Base Sepolia. */
+export const AAVE_V3_POOL = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5' as const;
+
+/**
+ * Every contract the delegation is allowed to call, for this chain.
+ *
+ * One list, read by the grant the user signs AND by the screen that shows them what they granted.
+ * They were separate literals, both spelling out the 1inch router, which was fine only for as long
+ * as there was exactly one venue: the moment tier 4 needed the Aave Pool, a grant that included it
+ * and a safety screen that did not would have disagreed about what the user had actually allowed.
+ *
+ * Aave is left out where it has no deployment rather than granted against an address with no code.
+ * Permission to call nothing is not dangerous, but it is a claim on the safety screen that is not
+ * true, and this screen is the one that has to be exactly true.
+ */
+export const SETTLEMENT_VENUES: readonly `0x${string}`[] = IS_BASE_MAINNET_STATE
+  ? [ADDRESSES.oneInchRouter, AAVE_V3_POOL]
+  : [ADDRESSES.oneInchRouter];
+
 export function explorerTx(hash: string): string {
   // A fork shares mainnet's history up to the fork block, so an explorer link is right for a
   // pre-fork tx and wrong for one we just mined. Label it rather than link to a 404.

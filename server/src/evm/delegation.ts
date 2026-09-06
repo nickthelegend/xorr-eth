@@ -6,7 +6,7 @@
  */
 import { parseUnits, formatUnits, type Address, type Hex } from 'viem';
 import { publicClient, walletClient, delegateAccount } from './client.js';
-import { ADDRESSES } from './chains.js';
+import { ADDRESSES, SETTLEMENT_VENUES } from './chains.js';
 import 'dotenv/config';
 
 export const DELEGATION_ADDRESS = (process.env.DELEGATION_ADDRESS ??
@@ -73,6 +73,16 @@ export const DELEGATION_ABI = [
     stateMutability: 'view',
     inputs: [{ name: 'owner', type: 'address' }],
     outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'isVenueAllowed',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'venue', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
   },
   {
     type: 'function',
@@ -158,6 +168,25 @@ export async function isVenueAllowed(owner: Address, venue: Address): Promise<bo
  * Spend as the delegate. This is the ONLY thing the executor's key can do with user capital, and
  * the contract rejects it the moment it breaches the cap, the expiry or the venue allowlist.
  */
+/**
+ * Head-room on the gas limit for a delegated call.
+ *
+ * The estimate is taken against the state as it is NOW, and the transaction executes at least one
+ * block later. That gap is not free: a lending pool accrues interest on the way through and writes
+ * a slot the estimate never priced, and a router's route can touch a pool whose tick has since
+ * moved. Measured on a Base fork, an Aave withdraw estimated at 172,488 and used 177,503 — a 3%
+ * shortfall, which is an out-of-gas revert, not a slow trade.
+ *
+ * An out-of-gas revert is the worst failure this executor can have, because it looks exactly like
+ * the venue refusing the trade and tells the user nothing true. Gas is refunded when unused, so
+ * the only cost of the head-room is a slightly higher balance requirement on the bot's own wallet.
+ */
+const GAS_HEADROOM_PCT = 30n;
+
+function withHeadroom(estimate: bigint): bigint {
+  return (estimate * (100n + GAS_HEADROOM_PCT)) / 100n;
+}
+
 export async function spendAsDelegate(params: {
   owner: Address;
   token?: Address;
@@ -165,7 +194,7 @@ export async function spendAsDelegate(params: {
   usd: number;
   data: Hex;
 }): Promise<Hex> {
-  const { request } = await publicClient.simulateContract({
+  const call = {
     account: delegateAccount,
     address: DELEGATION_ADDRESS,
     abi: DELEGATION_ABI,
@@ -177,8 +206,33 @@ export async function spendAsDelegate(params: {
       usdToUnits(params.usd),
       params.data,
     ],
+  } as const;
+  // Simulate first, so a policy violation is caught before anything is signed and surfaces as the
+  // contract's own named error rather than as a mined failure.
+  const { request } = await publicClient.simulateContract(call);
+  const gas = withHeadroom(await publicClient.estimateContractGas(call));
+  return walletClient.writeContract({ ...request, gas });
+}
+
+/**
+ * Which of this chain's venues this owner has actually allowed.
+ *
+ * The mapping is not enumerable on chain — by design, since an unbounded array in storage is a gas
+ * trap — so this asks about each venue we could possibly route through. That is the honest shape
+ * of the question anyway: the safety screen is telling the user what THIS app can do with their
+ * permission, not auditing every address they have ever allowed.
+ */
+export async function allowedVenues(owner: Address): Promise<Address[]> {
+  const results = await publicClient.multicall({
+    allowFailure: false,
+    contracts: SETTLEMENT_VENUES.map((venue) => ({
+      address: DELEGATION_ADDRESS,
+      abi: DELEGATION_ABI,
+      functionName: 'isVenueAllowed' as const,
+      args: [owner, venue] as const,
+    })),
   });
-  return walletClient.writeContract(request);
+  return SETTLEMENT_VENUES.filter((_, i) => results[i] === true) as Address[];
 }
 
 export const delegatePublicKey = delegateAccount.address;
@@ -219,12 +273,14 @@ export async function closeAsDelegate(params: {
   amount: bigint;
   data: Hex;
 }): Promise<Hex> {
-  const { request } = await publicClient.simulateContract({
+  const call = {
     account: delegateAccount,
     address: DELEGATION_ADDRESS,
     abi: DELEGATION_ABI,
     functionName: 'closePosition',
     args: [params.owner, params.token, params.venue, params.amount, params.data],
-  });
-  return walletClient.writeContract(request);
+  } as const;
+  const { request } = await publicClient.simulateContract(call);
+  const gas = withHeadroom(await publicClient.estimateContractGas(call));
+  return walletClient.writeContract({ ...request, gas });
 }

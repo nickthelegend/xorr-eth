@@ -279,6 +279,13 @@ export const LocalRepositories: Repositories = {
       const b = await api.get<{ usd: number }>('/wallet/balance').catch(() => undefined);
       return b ? b.usd : null;
     },
+    async balance() {
+      const b = await api
+        .get<{ usd: number; cashUsd: number; suppliedUsd?: number }>('/wallet/balance')
+        .catch(() => undefined);
+      if (!b) return null;
+      return { total: b.usd, cash: b.cashUsd, supplied: b.suppliedUsd ?? 0 };
+    },
   },
 
   activity: {

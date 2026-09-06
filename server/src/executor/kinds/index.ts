@@ -12,7 +12,12 @@
  */
 import { priceOf } from '../../market/prices.js';
 import { holdings, cashUsd } from '../../evm/balances.js';
-import type { Address } from 'viem';
+import { usdcReserve } from '../../market/yield.js';
+import { supplyCalldata, AAVE_POOL } from '../../venues/aave.js';
+import { publicClient } from '../../evm/client.js';
+import { usdToUnits } from '../../evm/delegation.js';
+import { ADDRESSES } from '../../evm/chains.js';
+import type { Address, Hex } from 'viem';
 
 /**
  * One leg.
@@ -30,6 +35,16 @@ export type TradeIntent = {
   usd: number;
   /** Shown in the activity log, so a user can see WHY this trade happened. */
   because: string;
+  /**
+   * Not every leg is a swap.
+   *
+   * Supplying to a lending pool moves the same capital under the same daily cap, but there is no
+   * router to quote and no output token to price — the calldata is the whole trade. When this is
+   * set the executor calls `venue` with `data` instead of asking 1inch for a route, and takes
+   * `unitPriceUsd` as the price rather than looking one up. Leaving it undefined is the swap path,
+   * unchanged.
+   */
+  direct?: { venue: Address; data: Hex; unitPriceUsd: number };
 };
 
 export type PlanContext = {
@@ -152,6 +167,76 @@ export function planDca(ctx: PlanContext): TradeIntent {
   };
 }
 
+/**
+ * Tier 4 — move idle cash to yield.
+ *
+ * Idle USDC earns nothing. This supplies it to Aave v3 and the user holds the aToken directly,
+ * because `supply()` takes the recipient as an argument — so the delegation is a conduit for one
+ * transaction and holds nothing afterwards. That is the only reason this venue belongs inside a
+ * non-custodial permission at all.
+ *
+ * Three things must be true before it moves anything, and each of them has stopped a real run:
+ *
+ *  - The reserve has to answer. Aave returns a ZEROED struct for an asset it does not list rather
+ *    than reverting, so "0.00% a year" is what a wrong address looks like. Moving cash into a
+ *    venue whose rate we could not read is the exact opposite of what this tier is for.
+ *  - The pool has to have code on the chain we settle on. Aave v3 is not at this address on Base
+ *    Sepolia; without this check the run would reach the chain and die inside `spend()` as an
+ *    opaque VenueCallFailed, which reads to a user as "your trade broke" rather than "this
+ *    network has no lending pool".
+ *  - There has to be genuinely idle cash. `keepCashUsd` is the buffer the user does not want
+ *    swept, and it defaults to leaving something behind rather than to zero: a strategy that
+ *    empties the spendable balance stops every other strategy the account has.
+ */
+export async function planYieldRotation(ctx: PlanContext): Promise<TradeIntent | null> {
+  const keepCashUsd = Number(ctx.params.keepCashUsd ?? 25);
+  const minMoveUsd = Math.max(Number(ctx.params.minMoveUsd ?? 25), MIN_TRADE_USD);
+
+  const reserve = await usdcReserve();
+
+  // Aave's USDC reserve is a mainnet deployment. A fork of mainnet has it; a testnet does not, and
+  // finding that out inside the delegation call would surface as an unexplained venue failure.
+  const code = await publicClient.getCode({ address: AAVE_POOL }).catch(() => undefined);
+  if ((code?.length ?? 0) <= 4) return null;
+
+  // Same reason the yield module pins mainnet USDC: supplying the wrong asset to a real pool is
+  // not a failure that reverts cleanly.
+  if (ADDRESSES.usdcBase.toLowerCase() !== reserve.asset.toLowerCase()) return null;
+
+  const cash = await cashUsd(ctx.owner);
+  const idle = cash - keepCashUsd;
+  if (idle < minMoveUsd) return null;
+
+  const size = Math.min(idle, ctx.budgetUsd);
+  if (size < minMoveUsd) return null;
+
+  /*
+   * The calldata amount and the amount `spend()` pulls have to be the SAME number.
+   *
+   * `spend()` pulls `usdToUnits(usd)` and approves the venue for exactly that, so calldata asking
+   * for a rounded-up amount would exceed the approval and revert, and a rounded-down one would
+   * strand dust in the delegation contract. Deriving both from one function is what keeps them
+   * equal; `usd` below is deliberately the round-tripped value, not the raw float.
+   */
+  const amountRaw = usdToUnits(size);
+  const usd = Number(amountRaw) / 1e6;
+
+  return {
+    inSymbol: 'USDC',
+    outSymbol: 'aUSDC',
+    amountIn: usd,
+    usd,
+    because: `${(reserve.apy * 100).toFixed(2)}% a year on Aave v3, and this cash was sitting idle.`,
+    direct: {
+      venue: reserve.pool,
+      data: supplyCalldata({ asset: reserve.asset, amountRaw, owner: ctx.owner }),
+      // A dollar of USDC supplied is a dollar of aUSDC. The receipt is 1:1 at supply; the yield
+      // arrives as the balance growing, not as the price moving.
+      unitPriceUsd: 1,
+    },
+  };
+}
+
 /** Every kind that has a planner. A kind not listed here cannot run, and run.ts says so. */
 export const PLANNERS: Record<string, (ctx: PlanContext) => Promise<TradeIntent | null> | TradeIntent | null> = {
   dca: planDca,
@@ -159,4 +244,5 @@ export const PLANNERS: Record<string, (ctx: PlanContext) => Promise<TradeIntent 
   'recurring-buy': planDca,
   rebalance: planRebalance,
   'exit-rules': planExitRules,
+  'yield-rotation': planYieldRotation,
 };

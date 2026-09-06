@@ -53,6 +53,7 @@ const ROUTES = [
   ['30-bot-backtest', '/bot/momentum/backtest'],
   ['31-strategies', '/strategies'],
   ['32-strategy-dca', '/strategy/dca'],
+  ['32b-strategy-yield', '/strategy/yield'],
   ['33-holdings', '/holdings'],
   ['34-activity', '/activity'],
   ['35-history', '/history'],

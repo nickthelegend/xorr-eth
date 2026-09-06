@@ -57,8 +57,9 @@ Nothing in this repo is claimed to work in an environment where it was not run.
 | **Privy** | Auth + embedded wallets. The identity and the wallet that signs are one object, so there is no second account system — and the wallet Privy creates is the `owner` in the on-chain policy. | **Done.** Real login → real embedded wallet → real signed grant, revoke and approval |
 | **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. | **Done.** 22 fork tests against `0x1111113CCf…` with real ERC-20 movement |
 | **1inch — Aggregator** | Swap routing and execution. The Route row names the protocols actually routed through. | **Done.** Real fills on a Base mainnet fork |
-| **1inch — SwapVM** | — | **Not built.** The one deliberate gap |
+| **1inch — SwapVM** | `XorrSwapVMBook` compiles the terms of a trade into SwapVM program bytecode — a deadline, a slippage floor, a fee, a salt — so the *rules* of the fill are enforced inside the VM rather than trusted to whoever submits it. | **Done.** 10 fork tests, including behavioural guards that prove the deadline really expires and the fee really costs |
 | **The Graph** | Two independent subgraphs, joined. One indexes our delegation contract (what you permitted); one indexes 1inch Aqua on Base mainnet (what liquidity exists). The **join picks the venue** — neither index can see the other's half. | Delegation index **deployed + synced**; Aqua index **built, awaiting a Studio slug** |
+| **Aave v3** | Tier 4's venue. Idle USDC is supplied through the same delegation, under the same daily cap and the same venue allowlist — and the aToken goes straight to the user, because `supply()` names the recipient. | **Done.** 18 fork assertions, including that the bot *cannot* withdraw |
 | **Base** | Everything settles here. Tokenized equities, cbBTC, Aave, 1inch — all Base-native. | **Done** |
 
 ## The core primitive
@@ -122,7 +123,7 @@ Regenerate with `node tools/shoot.mjs`.
 | | | | |
 |---|---|---|---|
 | **Strategies** `/strategies`<br/><img src="docs/screens/31-strategies.png" width="180"/> | **Recurring buy**<br/><img src="docs/screens/32-strategy-dca.png" width="180"/> | **Assets** `/holdings`<br/><img src="docs/screens/33-holdings.png" width="180"/> | **Activity** `/activity`<br/><img src="docs/screens/34-activity.png" width="180"/> |
-| **History** `/history`<br/><img src="docs/screens/35-history.png" width="180"/> | **Briefing** `/briefing`<br/><img src="docs/screens/36-briefing.png" width="180"/> | **Inbox** `/inbox`<br/><img src="docs/screens/37-inbox.png" width="180"/> | |
+| **Idle cash to yield** `/strategy/yield`<br/><img src="docs/screens/32b-strategy-yield.png" width="180"/> | **History** `/history`<br/><img src="docs/screens/35-history.png" width="180"/> | **Briefing** `/briefing`<br/><img src="docs/screens/36-briefing.png" width="180"/> | **Inbox** `/inbox`<br/><img src="docs/screens/37-inbox.png" width="180"/> |
 
 ### Safety and settings
 | | | | |
@@ -134,6 +135,23 @@ Regenerate with `node tools/shoot.mjs`.
 | | |
 |---|---|
 | **Components** `/_dev/components`<br/><img src="docs/screens/46-dev-components.png" width="180"/> | **Fidelity** `/_dev/fidelity`<br/><img src="docs/screens/47-dev-fidelity.png" width="180"/> |
+
+### On a real Android build
+
+The shots above are the web build. These are the same app compiled to a native APK and running on
+an emulator — same routes, same code, and a genuine Privy embedded wallet created on the device.
+It is worth showing separately because three bugs existed **only** here: `jose` resolving its Node
+build under React Native, Privy's polyfills never being installed, and `motionDuration` being
+called across the worklet boundary. None of them can happen on web.
+
+| | | | |
+|---|---|---|---|
+| **Welcome**<br/><img src="docs/screens/android/01-launch.png" width="150"/> | **Sign in**<br/><img src="docs/screens/android/07-otp.png" width="150"/> | **Wallet created**<br/><img src="docs/screens/android/08-wallet.png" width="150"/> | **Home**<br/><img src="docs/screens/android/10-home.png" width="150"/> |
+| **Ladder**<br/><img src="docs/screens/android/12-tier4.png" width="150"/> | **Idle cash to yield**<br/><img src="docs/screens/android/13-yield-setup.png" width="150"/> | | |
+
+The last one is worth reading closely: the wallet is brand new, so spendable cash is $0.00 and the
+preview says **"would move: nothing"** rather than showing the configured $250. That is the screen
+telling the truth about a wallet it cannot sweep.
 
 ## Running it
 

@@ -224,3 +224,47 @@ Every item additionally requires: no console error from this codebase, no failed
 | E8 | Revoke mid-flight | The next run is blocked with the revoked reason. | **PASS** |
 | E9 | Graph index for another deployment | The agent declines to read permission from it and says so. | **PASS** |
 | E10 | No spot feed | No chart, and the screen says why. | **PASS** |
+
+## F — Tier 4: move idle cash to yield
+
+Added after the ladder's fourth rung shipped. The contract-level rows run in
+`server/src/fork-yield.ts`, the executor rows in `server/src/fork-tier4.ts`, and the API rows are
+B23–B28 in `tools/qa-api.mjs`. Every one is a command anyone can re-run.
+
+| # | Item | Correct means | Result |
+|---|---|---|---|
+| F1 | Aave lists a live USDC reserve | A non-zero `lastUpdateTimestamp` and a real aToken address. A zeroed struct is what a wrong address looks like, and it must not read as "0% today". | **PASS** |
+| F2 | The pool is on the owner's allowlist | `isVenueAllowed(owner, pool)` is true after the grant, and a venue they did not grant is false. | **PASS** |
+| F3 | The delegate supplies through `spend()` | The transaction succeeds and USDC leaves the wallet. | **PASS** |
+| F4 | The aToken lands in the USER's wallet | 1:1 to within Aave's integer rounding — a tolerance loose enough for two `rayDiv`/`rayMul` units and far too tight to hide a fee. | **PASS** |
+| F5 | The delegation contract keeps nothing | Zero USDC and zero aUSDC afterwards. | **PASS** |
+| F6 | The daily cap decrements | Supplying is spending: capital leaves the wallet, so the cap must see it. | **PASS** |
+| F7 | The supplied balance earns | A year of fork time, then the balance is larger. Without this the test proves only that money moved. | **PASS** |
+| F8 | The time warp is not left behind | `evm_increaseTime` is not scoped to the caller; the clock must be where it was found. | **PASS** |
+| F9 | A supply past the cap reverts | The cap is a wall, not a label. | **PASS** |
+| F10 | The same supply to an ungranted venue is refused | `VenueNotAllowed`, before any money moves. This is what makes "only venues you approved" true. | **PASS** |
+| F11 | The user can withdraw without the bot | A direct call to the Pool, one signature, no delegation in the path. | **PASS** |
+| F12 | The bot cannot withdraw for them | No aToken approval was ever granted, so `closePosition` on the position reverts. Supply-only is a property, not a promise. | **PASS** |
+| F13 | The executor fills a real `yield-rotation` run | Real strategy row, real planner, real signature. | **PASS** |
+| F14 | Cash down, supplied up, cash+supplied unchanged | The invariant that makes the tier safe to show. Money moved between two buckets; it did not disappear. Deliberately not the whole portfolio — a scheduled DCA running alongside converts USDC into WETH, which would move a total this row is not about. | **PASS** |
+| F15 | The activity log says it in plain language | "Supplied $120 USDC to Aave", filed as `yield` rather than `trade`. | **PASS** |
+| F16 | A second run in the same period is refused | `already_ran_this_period`. Idempotence holds for every kind, not just DCA. | **PASS** |
+| F17 | With nothing idle it does nothing | `nothing_to_do`, not an error. Most days this is the correct answer. | **PASS** |
+| F18 | The grant asks for the venues the executor uses | One list feeds both the grant and the safety screen, so they cannot drift. | **PASS** |
+| F19 | The allowlist shown is the one on chain | `/delegation` asks the contract, not our own intentions. | **PASS** |
+| F20 | An unrunnable kind is refused at creation | `kind: 'grid'` returns 400 with the runnable kinds named, instead of creating a strategy blocked at every run. | **PASS** |
+| F21 | The setup screen previews against the real balance | "Would move" reflects live cash minus the buffer, and says "nothing" below the floor. | **PASS** — verified on web ($74,233.86 cash → $250) and on a native Android build with an empty wallet ($0.00 → nothing) |
+
+## G — Native Android
+
+The app compiled to an APK and run on an emulator. Three bugs lived only here.
+
+| # | Item | Correct means | Result |
+|---|---|---|---|
+| G1 | The bundle builds for Android | No unresolved modules. `jose` must take its WebCrypto entry, not the Node one that imports `zlib`. | **PASS** — needed the repo's first `metro.config.js` |
+| G2 | The app boots | No import-time crash. Privy's SDK needs `crypto` and `TextEncoder` to exist before it loads. | **PASS** — needed a polyfill entry ahead of `expo-router/entry` |
+| G3 | Animated components render | `useAnimatedStyle` bodies run on the UI runtime and may not call across it. | **PASS** — needed `'worklet'` on `motionDuration` |
+| G4 | Privy sign-in works on device | A real OTP round trip against Privy's API. | **PASS** — needed the app id added to Privy's native allowlist |
+| G5 | An embedded wallet is created on device | All four onboarding checks go green. | **PASS** |
+| G6 | Live data reaches the device | Real WETH price and the live Aave rate on the home screen. | **PASS** |
+| G7 | Push registration | A token, or a stated reason. | **UNTESTED — blocked.** Registration runs and fails with "Unable to get Firebase Messaging instance"; delivery needs a Firebase `google-services.json` that does not exist in this repo. The failure is logged rather than swallowed. |
