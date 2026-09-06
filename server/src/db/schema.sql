@@ -202,3 +202,27 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 
 CREATE INDEX IF NOT EXISTS alerts_wallet_idx ON alerts (wallet_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Deployed-agent identities.
+--
+-- Every other route on this server is behind a verified Privy USER, which is right for
+-- everything a person does and wrong for the one thing a person is not doing: the trading
+-- loop runs unattended and has no session to present. "Whoever can reach the port" is not an
+-- identity; a row here is.
+--
+-- The token is stored as a **sha256 digest only**, so a database dump is not a set of live
+-- credentials. Scopes are narrow on purpose — two deployed workers hold one side of the book
+-- each, so a leaked entry key cannot close your stops and a leaked exit key cannot open a
+-- position. See `server/src/auth/agentKeys.ts`.
+CREATE TABLE IF NOT EXISTS agent_keys (
+  id           TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  token_hash   TEXT NOT NULL UNIQUE,
+  -- 'read' | 'trade:open' | 'trade:close' | 'admin'
+  scopes       TEXT[] NOT NULL DEFAULT '{}',
+  revoked      BOOLEAN NOT NULL DEFAULT false,
+  last_seen_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS agent_keys_live_idx ON agent_keys(token_hash) WHERE revoked = false;

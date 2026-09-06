@@ -6,6 +6,7 @@ import { routes } from './routes/index.js';
 import { extra } from './routes/extra.js';
 import { market, warmMarketCache } from './routes/market.js';
 import { agents } from './agents/routes.js';
+import { agentSurface } from './routes/agent.js';
 import { alerts } from './routes/alerts.js';
 import { verifyRoutes } from './routes/verify.js';
 import { panic } from './routes/panic.js';
@@ -18,7 +19,7 @@ import { inFlightRuns } from './executor/run.js';
 import { reconcileInterruptedRuns } from './executor/reconcile.js';
 import { CHAIN_KEY, rpcUrl } from './evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
-import { authMiddleware } from './auth/middleware.js';
+import { authMiddleware, WrongPrincipalError } from './auth/middleware.js';
 import { DATABASE_URL, pool } from './db/index.js';
 
 const app = new Hono();
@@ -102,6 +103,16 @@ app.onError((err, c) => {
   if (err instanceof SyntaxError) {
     return c.json({ error: 'invalid_json', detail: err.message }, 400);
   }
+  /*
+   * A valid credential, of the wrong kind for this route.
+   *
+   * 403 rather than 500: an agent key on a user-scoped route is a misconfiguration the caller
+   * can fix, and retrying cannot help. A 500 here reads as the server being broken.
+   */
+  if (err instanceof WrongPrincipalError) {
+    return c.json({ error: 'wrong_principal', detail: err.message }, 403);
+  }
+
   // Everything else is ours. Surface the real message: a trading server that hides its errors is
   // worse than one that fails.
   log.error(err.message, err.stack?.split('\n')[1]?.trim() ?? '');
@@ -157,6 +168,7 @@ app.use('*', authMiddleware);
 app.use('*', idempotency);
 
 app.route('/', routes);
+app.route('/', agentSurface);
 app.route('/', extra);
 app.route('/', market);
 app.route('/', agents);

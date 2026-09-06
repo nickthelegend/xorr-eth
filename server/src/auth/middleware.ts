@@ -8,6 +8,7 @@
 import type { Context, Next } from 'hono';
 import { log } from '../http/request-id.js';
 import { UnauthorizedError, verifyToken, type AuthedUser } from './privy.js';
+import { agentFor, can, operatorFor, type Principal, type Scope } from './agentKeys.js';
 
 /**
  * Routes reachable without a token. Deliberately tiny.
@@ -60,13 +61,41 @@ export const publicSurface = {
 declare module 'hono' {
   interface ContextVariableMap {
     user: AuthedUser;
+    /** A deployed agent or the operator, when the caller is not a person. */
+    principal: Principal;
   }
 }
+
+/** `/agent/*` is the machine surface. A Privy session is not a valid credential for it. */
+const AGENT_PREFIX = '/agent/';
 
 export async function authMiddleware(c: Context, next: Next) {
   const isPublic =
     PUBLIC_PATHS.has(c.req.path) || PUBLIC_PREFIXES.some((p) => c.req.path.startsWith(p));
   if (isPublic || c.req.method === 'OPTIONS') return next();
+
+  /*
+   * Two kinds of caller, and they do not overlap.
+   *
+   * A person presents a Privy token. A deployed worker presents an agent key. `/agent/*` is
+   * the machine surface: it is reached with a key or not at all, so a stolen phone session
+   * cannot drive the trading loop, and an agent key cannot read someone's wallet through the
+   * user routes. Checking the key FIRST also means a `/agent/*` request never spends a
+   * round-trip on Privy verification that could not have applied to it.
+   */
+  const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/i, '').trim();
+  if (bearer) {
+    const principal = operatorFor(bearer) ?? (await agentFor(bearer));
+    if (principal) {
+      c.set('principal', principal);
+      return next();
+    }
+  }
+
+  if (c.req.path.startsWith(AGENT_PREFIX)) {
+    log.warn(`401 ${c.req.method} ${c.req.path}: not a known agent key`);
+    return c.json({ error: 'unauthorized', detail: 'This surface needs an agent key.' }, 401);
+  }
 
   try {
     const user = await verifyToken(c.req.header('authorization'));
@@ -90,6 +119,58 @@ export async function authMiddleware(c: Context, next: Next) {
 /** The ONLY way a route learns who is calling. */
 export function requireUser(c: Context): AuthedUser {
   const user = c.get('user');
-  if (!user) throw new UnauthorizedError('No authenticated user on this request.');
-  return user;
+  if (user) return user;
+  /*
+   * A machine reached a route that is about a person.
+   *
+   * `/positions` and friends are scoped to a wallet, and an agent key is not attached to
+   * one — so this is not "who are you", it is "you are the wrong kind of caller". Saying
+   * that costs nothing and it is the difference between a fixable misconfiguration and a
+   * 500 that reads as the server being broken.
+   */
+  if (c.get('principal')) {
+    throw new WrongPrincipalError(
+      'This route belongs to a signed-in user. An agent key cannot stand in for one.',
+    );
+  }
+  throw new UnauthorizedError('No authenticated user on this request.');
+}
+
+/** A valid credential, of the wrong kind for this route. 403, never 401 — retrying will not help. */
+export class WrongPrincipalError extends Error {
+  readonly status = 403;
+  constructor(detail: string) {
+    super(detail);
+    this.name = 'WrongPrincipalError';
+  }
+}
+
+/** The principal behind a machine request, if there is one. */
+export function principalOf(c: Context): Principal | undefined {
+  return c.get('principal');
+}
+
+/**
+ * Gate a route on a scope.
+ *
+ * The refusal says which scope was missing. That is deliberate: the caller is a deployed
+ * worker we provisioned, not an attacker probing — telling it "you need trade:close" is the
+ * difference between a fixable misconfiguration and an afternoon of guessing.
+ */
+export function requireScope(scope: Scope) {
+  return async (c: Context, next: Next) => {
+    const principal = principalOf(c);
+    if (!can(principal, scope)) {
+      return c.json(
+        {
+          error: 'forbidden',
+          detail: principal
+            ? `${principal.name} does not hold ${scope}.`
+            : 'This route needs an agent key.',
+        },
+        403,
+      );
+    }
+    return next();
+  };
 }
