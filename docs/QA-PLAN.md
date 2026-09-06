@@ -1,263 +1,231 @@
-# QA plan
+# The test plan
 
-Every component and every flow, with the specific result that counts as correct. This is the
-checklist; nothing is a pass because it looked fine.
+Written before anything was executed. Every row states what **correct** means, so a run of this
+plan produces PASS / FAIL / UNTESTED and never an opinion.
 
-**How each item is judged.** The stated expected result has to match exactly. "The button did
-something" is not a pass. The console and the network are checked on every screen item, not only
-the ones that look broken — a visible error anywhere fails the item.
+## Rules this plan is run under
 
-**What is excused, and why.** Exactly two things, named rather than swallowed:
+1. **No mocks, no fallback data, no stubbed logic.** Every PASS is against a real persisted
+   database, real deployed contracts, real signed transactions and real external APIs with real
+   credentials.
+2. **Console and network are checked on every screen**, not only the ones that look wrong. A screen
+   that renders correctly while throwing in the console is a FAIL.
+3. A row that genuinely cannot be exercised is marked **UNTESTED with the reason**. It is never
+   marked PASS.
+4. A FAIL is fixed at root cause, re-verified individually, and then the whole plan is re-run.
 
-- Expo's dev server probes each route with a `HEAD` it then aborts, so every navigation records one
-  `ERR_ABORTED` against the app's own origin. Counting those would fail all 47 screens for
-  something Metro does on purpose.
-- A `503` carrying `Retry-After` from `/market/*` is the documented warming handshake, not a
-  failure. The client honours it; so do these checks.
+## The environments, and which claims each one can carry
 
-Anything else — including a third-party SDK's own console error — fails the item and is attributed
-rather than excused.
+The product settles on Base. Two environments are real in different halves, and this plan says
+which is which so that no claim is borrowed from the wrong one.
 
-**Environment.** Executor on `:8788` against `XORR_CHAIN=base-fork` (an anvil fork of Base
-mainnet), Expo web on `:8082`, Postgres `xorr_eth`, real Privy session from
-`test_credentials`. Contracts on the fork and on public Base Sepolia.
+| | `base-sepolia` | `base-fork` |
+|---|---|---|
+| what it is | the public Base testnet | anvil forking Base **mainnet** at a recent block |
+| `XorrDelegation` | deployed, `0xb14CF3D0…`, on the explorer | deployed by `fork-bootstrap.ts` |
+| The Graph | subgraph deployed and indexing this contract | not indexed — the agent says so and reads the contract |
+| 1inch quotes | real (asked of Base mainnet, chain id 8453) | real |
+| 1inch **fills** | **impossible** — no router deployed on Sepolia | **real** — the Aggregation Router v6 bytecode is there |
+| Aqua / SwapVM | not deployed on Sepolia | real, plus our two books |
+| Aave v3, USDC, cbBTC, tokenized equities | absent | real Circle / Ondo / Aave contracts |
+| money at risk | none | none |
+
+Anything about **settlement** is proved on `base-fork`. Anything about **public verifiability**
+(explorer, subgraph) is proved on `base-sepolia`. Base **mainnet** is not touched: it is the one
+thing in this plan that spends real money, and it is out of scope by instruction.
 
 ---
 
-## A — Screens (47 routes)
+## Phase 1 — the plan
 
-Each: renders its subject, no console error, no failed request, and the specific content below.
+### A. Authorization (the deployed agents)
 
-### A1 Onboarding
-
-| # | Route | Correct means |
-|---|---|---|
-| A1.1 | `/welcome` | Wordmark, tagline, a preview card with a real total, blue CTA. The only screen using blue. |
-| A1.2 | `/goals` | 5 goal chips multi-select, 3-up risk segmented, caption changes with the pick, summary line counts selections. |
-| A1.3 | `/wallet` | Signed out: email field + "Email me a code". Signed in: four status circles green and "Continue — add funds". |
-| A1.4 | `/fund` | Amount keypad, 4 preset pills, 3 funding methods, fee row that changes with method (1.5% on card only). |
-| A1.5 | `/delegate` | Four consequence cards, cap stepper $200–$5,000, "Run for" options, one signing CTA. |
-| A1.6 | `/proposal` | Three sleeves with weights summing to 100, stepper ±5, CTA disabled until the total is 100. |
-
-### A2 Home and markets
-
-| # | Route | Correct means |
-|---|---|---|
-| A2.1 | `/` | Total value from chain (not 0 for a funded wallet), Send/Swap/More, cash row, agents, a coin row with a live price, the Aave rate strip, the catch-up card when there is activity. |
-| A2.2 | `/markets` | 5 class pills; the selected class lists 9 instruments; count line matches. |
-| A2.3 | `/markets/crypto` | 9 crypto rows, each a real price or a SIMULATED tag. |
-| A2.4 | `/markets/stocks` | 9 equity rows priced from a live 1inch route. |
-| A2.5 | `/markets/commodities` | 9 rows, all tagged SIMULATED (no feed exists). |
-| A2.6 | `/markets/indices` | 9 rows, all tagged SIMULATED. |
-| A2.7 | `/markets/preipo` | 9 rows, all tagged SIMULATED. |
-| A2.8 | `/watchlist` | Grouped rows with a sparkline where there is a feed, SIMULATED where there is not. |
-| A2.9 | `/search` | Typing filters; a query matching nothing shows the empty state with the query echoed. |
-
-### A3 Instrument
-
-| # | Route | Correct means |
-|---|---|---|
-| A3.1 | `/asset/ETH` | Live price, candles, timeframe pills, Buy/Sell. Loading, warming and "no feed" are three distinct messages. |
-| A3.2 | `/asset/NVDAc` | A real spot price and no chart — priced off the route that would fill it. The screen says so. |
-| A3.3 | `/asset/NOPE` | Degrades with a stated message. No crash, no invented price. |
-| A3.4 | `/chart/ETH` | Bull candles green, bear red, volume row, price axis from the live projection. Tapping a candle shows its O/H/L/C and dims the rest; changing timeframe clears it. |
-| A3.5 | `/order/ETH` | Amount keypad, side toggle, a quote with a route, slippage row. |
-| A3.6 | `/swap` | Two token selectors, live quote, named venues, fee and minimum-received. |
-| A3.7 | `/perp/ETH` | Live mark, funding, open interest — or a stated absence. Never fabricated. |
-
-### A4 Agents
-
-| # | Route | Correct means |
-|---|---|---|
-| A4.1 | `/bot` | Chat thread, a proposal card with a LIVE countdown, Skip/Approve, composer. |
-| A4.2 | `/bot/roster` | Agent cards with real hired state. |
-| A4.3 | `/bot/leaderboard` | Bars sized from real numbers, re-sorting animates width only. |
-| A4.4 | `/bot/momentum/intro` | Persona, what it does, hire CTA. |
-| A4.5 | `/bot/momentum/settings` | Config controls bound to persisted values. |
-| A4.6 | `/bot/momentum/backtest` | Real OHLC replay: return, drawdown, Sharpe, trades, an equity curve, and a disclaimer. |
-
-### A5 Strategies
-
-| # | Route | Correct means |
-|---|---|---|
-| A5.1 | `/strategies` | Running tab lists live strategies with next-run dates; Add-new tab lists 7 ladder tiers with tiers 1–5 actionable and 6–7 marked Later. |
-| A5.2 | `/strategy/dca` | Keypad, asset segmented, cadence, next-three-runs preview, one CTA. |
-| A5.3 | `/strategy/yield` | Live Aave APY, real spendable cash, "would move" reflecting cash minus buffer, "nothing" under the floor. |
-| A5.4 | `/strategy/grid` | Live price, Suggest fills a band, ladder drawn with the price marked, backtest on demand reporting in-range %, and the range-break warning. |
-| A5.5 | `/holdings` | Portfolio value, allocation bars, holdings with average entry, realised P&L card, wallet address with the LIVE chain. |
-| A5.6 | `/position/:id` | Entry, mark, unrealised, units — all computed, none hardcoded. |
-| A5.7 | `/auto-close/:id` | TP/SL rulers against a real series, or a stated absence. |
-| A5.8 | `/activity` | Rows with dot classification, filters, explorer reference on on-chain rows, two export buttons. |
-| A5.9 | `/history` | On-chain spends read from the subgraph, or an empty state with a next action. |
-| A5.10 | `/inbox` | Messages, or an empty state with a next action. |
-| A5.11 | `/briefing` | Real headlines from real feeds. Never stale hand-written news. |
-
-### A6 Money movement and safety
-
-| # | Route | Correct means |
-|---|---|---|
-| A6.1 | `/safety` | Live/Stopped state, three consequence cards, both parties named with full addresses, allowlist/recovery rows, the stop button, and the "sell everything" link. |
-| A6.2 | `/flatten` | Preview lists what would be sold with values, states the slippage, and the cap note. Empty book says so. |
-| A6.3 | `/yield` | Supplied balance, live APY, 25/50/All, and the statement that the bot cannot withdraw. |
-| A6.4 | `/allowlist` | Addresses with cooling-off state. |
-| A6.5 | `/send` | Allowlist-only destinations, and it says why. |
-| A6.6 | `/alerts` | Alert switches with fired state, the bot's own notification switches, circuit-breaker note, add CTA. |
-| A6.7 | `/alerts/new` | Kind segmented, symbol, level, save. |
-| A6.8 | `/recovery` | Backup state, honest about what is and is not backed up. |
-| A6.9 | `/settings` | Real settings bound to persisted state. |
-| A6.10 | `/legal/terms` | Real document text. |
-
-### A7 Verification and harness
-
-| # | Route | Correct means |
-|---|---|---|
-| A7.1 | `/judge` | 15 claims, each PASS with an observed value; owner field pre-filled; Re-run works. |
-| A7.2 | `/_dev/components` | Every design primitive rendered. |
-| A7.3 | `/_dev/fidelity` | Design-fidelity harness. |
-| A7.4 | `/_dev/boom` | Renders normally; the throw button is caught by the boundary and the tab bar survives. |
-
----
-
-## B — API (65 endpoints)
+The claim: only deployed agents may trade, and each may do exactly one job.
 
 | # | Item | Correct means |
 |---|---|---|
-| B1 | `GET /health` | 200 with `status`, per-dependency latency, `critical` flags, and `publicSurface`. |
-| B2 | `GET /metrics` | Run counts, failure rate, spend today, gas — all derived from tables. |
-| B3 | `GET /verify` | 15 checks, 0 failing, each with `observed` and `how`. Public. |
-| B4 | `GET /verify?owner=garbage` | 400 `invalid_owner`, not a wall of red. |
-| B5 | Auth on a protected route without a token | 401 with a reason logged server-side. |
-| B6 | `GET /wallet` | The wallet plus the LIVE chain, distinct from the creation cluster. |
-| B7 | `GET /wallet/balance` | `usd` = cash + supplied + holdings, to the cent. |
-| B8 | `GET /delegation` | Cap, expiry, revoked, spent, allowlist READ FROM CHAIN, both Basenames. |
-| B9 | `GET /delegation/params` | Venues include every venue the executor routes to. |
-| B10 | `POST /strategies` valid | 201/200 and it appears in the list. |
-| B11 | `POST /strategies` unrunnable kind | 400 naming the runnable kinds. |
-| B12 | `POST /strategies` zero amount on a spending kind | 400. |
-| B13 | `POST /strategies` over the cap | 400 `over_cap` with both numbers. |
-| B14 | `POST /strategies/:id/run` twice in a period | Second is `already_ran_this_period`. |
-| B15 | `PATCH /strategies/:id` | State change persists. |
-| B16 | `DELETE /strategies/:id` | Ends it; history survives. |
-| B17 | Another wallet's strategy id | 404, not 403. |
-| B18 | Malformed JSON | 400 `invalid_json`, never 500. |
-| B19 | Missing required field | 400 naming the field. |
-| B20 | Idempotency-Key replay | Same response, `idempotent-replay: true`, one row created. |
-| B21 | Idempotency-Key on a different path | 422 `idempotency_key_reused`. |
-| B22 | `GET /activity` | Rows with kind, signature and explorer reference. |
-| B23 | `GET /activity/verify` | Hash chain intact over every entry. |
-| B24 | `GET /activity/export?format=csv` | Real CSV of the trail. |
-| B25 | `GET /pnl/realised` | Per-symbol realised, `basisIncomplete` where relevant. |
-| B26 | `GET /pnl/disposals.csv` | Header, one row per disposal with cost basis and method, total row. |
-| B27 | `GET /positions` | Computed entry/mark/unrealised. |
-| B28 | `GET /panic/preview` | Legs with values, dust threshold, slippage stated. |
-| B29 | `POST /panic/flatten` | Sells each leg, reports per-leg, and the cap is unchanged. |
-| B30 | `GET /yield/supply` | Live Aave APY, feed `live`, source cited. |
-| B31 | `GET /yield/position` | Supplied balance, aToken, pool, availability. |
-| B32 | `POST /yield/withdraw-calldata` | Calldata to the Pool with the OWNER as recipient; `usd:null` flags max. |
-| B33 | `GET /alerts` | Alerts with `armed`, `lastFiredAt`, `fireCount`. |
-| B34 | `POST /alerts` then `POST /alerts/evaluate` | Fires once; a second sweep is quiet. |
-| B35 | `POST /alerts/:id` | Enable/disable persists. |
-| B36 | `DELETE /alerts/:id` | Removed. |
-| B37 | `GET|POST /notifications/prefs` | All kinds listed, default on, mute persists and suppresses. |
-| B38 | `GET /catchup` + `POST /catchup/seen` | Summary since last seen; reading does not mark seen. |
-| B39 | `GET /market/quotes` | Live prices, public. |
-| B40 | `GET /market/ohlc` | Real bars. |
-| B41 | `GET /market/symbols` | Tradable symbols. |
-| B42 | `GET /market/tradable` | Registry matching the executor's. |
-| B43 | `GET /market/stocks` | 8 equities with live prices. |
-| B44 | `GET /market/crosscheck?symbol=ETH` | Two sources, spread under 5%. |
-| B45 | `GET /market/crosscheck?symbol=BTC` | No on-chain price — not WETH's. |
-| B46 | `GET /basename?name=` and `?address=` | Both directions resolve. |
-| B47 | `GET /perp/:symbol` | Live metrics or stated absence. |
-| B48 | `GET /price/:symbol` | Single price. |
-| B49 | `GET /swap/quote` | Real route with named venues. |
-| B50 | `GET /agents` + `POST /agents` | Hire is idempotent. |
-| B51 | `PATCH /agents/:id`, `DELETE /agents/:id` | Config persists; firing pauses strategies rather than deleting. |
-| B52 | `GET /agents/leaderboard` | Real numbers. |
-| B53 | `GET /agents/:id/backtest` | Real OHLC replay. |
-| B54 | `POST /strategies/backtest` grid | In-range %, buys, sells, what would still be held. |
-| B55 | `POST /strategies/backtest` bad range | 400 `invalid_range`. |
-| B56 | `GET /proposals/current`, `POST /proposals`, `/:id/decide`, `/generate` | Proposal lifecycle persists. |
-| B57 | `POST /bot/say` | Real LLM reply or a stated absence. |
-| B58 | `GET /briefing` | Real headlines. |
-| B59 | `GET /graph/health`, `/graph/activity` | Subgraph synced; spends indexed. |
-| B60 | `GET /limits`, `POST /limits/check` | Rule engine verdicts. |
-| B61 | `POST /devices/register`, `POST /notify/test` | Device row; Expo API reached. |
-| B62 | `GET /agent/decision` | The Graph decision with its reason. |
-| B63 | `GET /x`, `POST /x` | Whatever this is, it answers or is removed. |
-| B64 | Rate limit | 429 with Retry-After, per caller. |
-| B65 | Request id | Generated, echoed, honoured from the caller. |
+| A1 | `GET /health` with no credential | 200. The only unauthenticated route. |
+| A2 | Any route with no credential | 401 `unauthorized`, never 200 and never 500. |
+| A3 | Any route with a revoked key | 401 — a revoked key resolves to no principal at all. |
+| A4 | `POST /agent/tick` with `trade:open` only | 403 `insufficient_scope`. A tick both opens and closes. |
+| A5 | `POST /agent/tick` with `trade:close` only | 403. |
+| A6 | `POST /agent/tick` with both | 200. |
+| A7 | `POST /agent/keys` with any trade scope | 403 — minting is `admin`, and `admin` does not imply trade. |
+| A8 | `POST /agent/keys` with the operator token | 200, and the plaintext is returned exactly once. |
+| A9 | A user route (`GET /positions`) with an agent key | 403 `wrong_principal`, not 500. |
+| A10 | `GET /agent/whoami` with each key | Names the identity and lists its real scopes. |
+| A11 | Token at rest | `agent_keys.token_hash` is a sha256 digest; the plaintext appears in no row and no log. |
+| A12 | Operator token comparison | Constant-time. A wrong token of the right length is indistinguishable in timing from a wrong token of the wrong length. |
 
----
+### B. The trading backend, on policy
 
-## C — Contracts and on-chain
+The claim: the bot trades within limits the user set, and cannot step outside them.
 
 | # | Item | Correct means |
 |---|---|---|
-| C1 | `XorrDelegation` deployed | Code at the address on both the fork and Base Sepolia. |
-| C2 | `grant()` | Cap, expiry and venues stored; readable back. |
-| C3 | `spend()` under the cap | Fills; the bought token lands in the USER's wallet. |
-| C4 | `spend()` over the cap | Reverts `DailyCapExceeded`. |
-| C5 | `spend()` at an ungranted venue | Reverts `VenueNotAllowed`. |
-| C6 | `spend()` after expiry | Reverts `PolicyExpired`. |
-| C7 | `spend()` after revoke | Reverts `PolicyRevoked`. |
-| C8 | `spend()` from a non-delegate | Reverts `NotDelegate`. |
-| C9 | `closePosition()` | Sells; does NOT consume the cap. |
-| C10 | Venue revert bubbles | 1inch's own error survives instead of `VenueCallFailed`. |
-| C11 | No custody | Contract holds zero of both tokens after a trade. |
-| C12 | `revoke()` | Owner-only, immediate, no server involved. |
-| C13 | Aave supply through `spend()` | aToken to the owner; contract keeps nothing. |
-| C14 | Aave withdraw | User-signed; the bot has no aToken allowance. |
-| C15 | `XorrAquaBook` on Aqua | Real ERC-20 movement, maker keeps inventory. |
-| C16 | `XorrSwapVMBook` | Program bytecode; deadline and fee behaviourally enforced. |
-| C17 | Tokenized equity purchase | Backed bNVDA under policy. |
-| C18 | Full contract suite | Every test green. |
+| B1 | Grant a delegation | A real signed transaction; `policy()` on the contract returns the cap, expiry and delegate the user signed. |
+| B2 | Position-taking agent — DCA | `runStrategy` plans a buy, `guardAndSpend` allows it, a **real swap transaction** is mined, `strategy_runs` records it. |
+| B3 | Position-taking agent — rebalance | Trades the difference toward target weights, not the whole position. |
+| B4 | Position-taking agent — grid | Places on the grid the user configured. |
+| B5 | Position-closing agent — take-profit | `planExitRules` closes when the mark crosses TP. |
+| B6 | Position-closing agent — stop-loss | Closes when the mark crosses SL. |
+| B7 | Position-closing agent — trailing | The peak price is maintained and ratchets up, never down. |
+| B8 | `POST /positions/close` fraction | `fraction: 0.5` sells half the **chain's** balance by integer maths, not a float of our own tally. |
+| B9 | `POST /panic/flatten` | Every position closed, in one call. |
+| B10 | Over the daily cap | Refused with the reason, **by the contract**, not only by us. |
+| B11 | Venue not on the allowlist | Refused by the contract. |
+| B12 | Expired policy | Refused. |
+| B13 | Revoked policy | Refused immediately. |
+| B14 | Idempotency | Two runs in one period: the second is refused by the `UNIQUE` index on `period_key`. |
+| B15 | Interrupted run | A run claimed and not finished is reconciled at boot, not stranded `pending`. |
+| B16 | The delegation holds nothing | Zero balance of every traded token between trades. |
+| B17 | Gas | The bot pays from the delegate key; the user's ETH is never touched. |
 
----
-
-## D — External integrations
+### C. Sponsor integrations
 
 | # | Item | Correct means |
 |---|---|---|
-| D1 | Privy auth | Real session; token verified server-side. |
-| D2 | Privy embedded wallet | Created on sign-up, is the on-chain owner. |
-| D3 | 1inch quote | Real route, named protocols. |
-| D4 | 1inch execution | Real fill on the fork. |
-| D5 | 1inch spot price | Second source for the cross-check. |
-| D6 | Aqua | Official deployment, real movement. |
-| D7 | SwapVM | Program executed by the router. |
-| D8 | The Graph — delegation | Synced, no indexing errors. |
-| D9 | The Graph — composition | The decision names its route and reason. |
-| D10 | CoinGecko | Live crypto prices via the executor. |
-| D11 | Aave v3 | `currentLiquidityRate` from the Base Pool. |
-| D12 | Ondo equities | 8 verified on Base with the right decimals. |
-| D13 | Basenames | L2 resolver, both directions. |
-| D14 | RSS briefing | Real headlines. |
-| D15 | Expo push | Real API call; delivery needs a device credential. |
+| C1 | 1inch Aggregator — quote | A real v6 quote naming the venues it routed through. |
+| C2 | 1inch Aggregator — fill | Real calldata aimed at the router, executed on the fork, tokens actually move. |
+| C3 | 1inch Aqua | `XorrAquaBook` ships a book; a taker fills against the maker's virtual balance. |
+| C4 | 1inch SwapVM | `XorrSwapVMBook` deployed and callable. |
+| C5 | The Graph — delegation subgraph | Deployed, synced, no indexing errors; `decide()` reads it **before** a spend. |
+| C6 | The Graph — Aqua subgraph | Read to choose the venue; the join of the two decides the route. |
+| C7 | The Graph — unavailable | Routes to the aggregator and **says so**, rather than treating "cannot see" as "nothing there". |
+| C8 | Privy | Login issues a real token; every user route verifies it; the wallet is a Privy embedded wallet. |
+| C9 | Base | Chain id 8453 on the fork, 84532 on Sepolia. Basenames resolve through the L2 resolver. |
+| C10 | Stocks | Tokenized equity contracts have code and are quotable; on a chain where they do not exist the app says that instead of showing a number. |
+| C11 | Aave v3 | `currentLiquidityRate` read live from the Pool; supply and withdraw build real calldata. |
 
----
+### D. Every screen (51)
 
-## E — Edge cases and interrupted flows
+For each: it renders, its controls do what they say, its numbers come from a real read, the console
+is clean, and no request 4xx/5xxs.
+
+Onboarding — `welcome`, `wallet`, `fund`, `goals`, `proposal`, `delegate`.
+Tabs — `index` (home), `markets`, `holdings`, `strategies`, `bot`.
+Trading — `swap`, `order/[symbol]`, `perp/[symbol]`, `asset/[symbol]`, `chart/[symbol]`,
+`markets/[classId]`, `search`, `watchlist`, `send`, `yield`.
+Positions — `position/[id]`, `auto-close/[id]`, `flatten`, `history`, `activity`.
+Agents — `bot/roster`, `bot/leaderboard`, `bot/[id]/intro`, `bot/[id]/settings`,
+`bot/[id]/backtest`, `briefing`, `inbox`, `judge`.
+Strategies — `strategy/dca`, `strategy/grid`, `strategy/yield`.
+Safety — `safety`, `allowlist`, `recovery`, `alerts`, `alerts/new`, `settings`, `legal/[doc]`.
+Dev — `_dev/ui`, `_dev/ui-edge`, `_dev/fidelity`, `_dev/boom` (rendering only; these are tools).
+
+### E. Endpoints
+
+Every path the client calls must exist and answer correctly, not merely not-404. Enumerated from
+`src/data/local.ts` — 27 paths — and each is checked with a real credential.
+
+### F. Data honesty
 
 | # | Item | Correct means |
 |---|---|---|
-| E1 | Executor down | Screens state the error. Never a blank page or a fabricated number. |
-| E2 | Cold price cache | 503 `warming` with Retry-After; the client retries. |
-| E3 | Unknown symbol on every screen that takes one | Degrades with a message. |
-| E4 | Zero-amount strategy | Rejected for a spending kind, allowed for a self-sizing one. |
-| E5 | Strategy for a fired agent | Paused, not deleted. |
-| E6 | Rebalance already on target | `nothing_to_do`, not a failure. |
-| E7 | Stop not hit | `nothing_to_do`. |
-| E8 | Revoke mid-flight | Next run blocked with the revoked reason. |
-| E9 | Graph index for another deployment | The agent declines to read permission from it and says so. |
-| E10 | No spot feed | No chart, and the screen says why. |
-| E11 | Signed out | No authenticated request is fired at all. |
-| E12 | Bot out of gas | Run blocked `agent_out_of_gas`; health degraded, not down. |
-| E13 | Upstream down | Circuit breaker opens after 4 failures; callers fail fast. |
-| E14 | Executor killed mid-run | Drains; anything unfinished is reconciled and not retried. |
-| E15 | A screen throws | Contained; tab bar and kill switch survive. |
-| E16 | Grid outside its range | Stops rather than chasing. |
-| E17 | Grid first run | Takes a reading, places nothing. |
-| E18 | Sale with no cost basis | Proceeds recorded, no fabricated gain, flagged incomplete. |
-| E19 | Whole-position close | Uses the chain's exact balance, not a float round-trip. |
-| E20 | Per-strategy allocation exhausted | Blocked while the account cap still has room. |
+| F1 | No fabricated number reaches a screen | Every figure traces to a chain read, a database row, or a named external API. |
+| F2 | A failed read shows a stated error | Not a zero, not a dash pretending to be data. |
+| F3 | A price is labelled with its source | And a stale one is labelled stale. |
+| F4 | Zero P&L is neither green nor red | `pnlTone(0) === 'neutral'`. |
+| F5 | `/verify` | Every claim the README makes, re-checked live, with the observed value. |
+
+---
+
+## Phases 2–6
+
+2. Execute against the real running app, checking console **and** network on every item.
+3. Fix every FAIL at root cause. No mock, no fallback, no stub.
+4. Re-verify each fix individually, then re-run the whole plan.
+5. Not done until everything is green or explicitly UNTESTED with a reason.
+6. Hand back this plan completed, with the zero-mocks confirmation stated outright.
+
+---
+
+# Phases 2–6 — the run
+
+Executed against the real running app and both deployed executors. Console and network were read
+on every screen. Every FAIL below was fixed at root cause, re-verified on its own, and the whole
+plan re-run.
+
+## What it found — 11 real defects
+
+| # | Defect | Root cause | Now |
+|---|---|---|---|
+| 1 | **The bot could buy but never sell.** Every exit reverted at `transferFrom` — take-profit, stop-loss, trailing, the panic flatten, and the position screen's Close. | The grant approved USDC only. `closePosition` pulls the asset being **sold**, which had no allowance. | The grant approves every tradable token. `/delegation/params` returns the list, so a newly tradable token becomes approvable in the same change. |
+| 2 | **The closing agent had no route.** `trade:close` gated only `/agent/tick`; `/positions/close` is a user route and answered an agent key with `wrong_principal`. | There was no agent-facing close. A deployed worker could run a whole pass or nothing. | `POST /agent/positions/close`, scope `trade:close`, sharing one `closeHolding` with the user route. |
+| 3 | **`/positions/close` was broken for every user.** | It queried `wallets.privy_user_id` — a column no migration has ever created. | `user_id`. |
+| 4 | **The home screen showed a dash for a $99,974 balance.** | Reads fired inside Privy's session-restore window, 401'd, and never retried. | `api` waits for the auth answer instead of sending a request that cannot carry a token. |
+| 5 | **"Cash · Available to trade" showed the whole portfolio.** | It rendered `total`; $59 of WETH and $990 in Aave were counted as spendable. | It renders `cash`. |
+| 6 | **Gold was SIMULATED at $3,412 while the feed said $4,420.** | The client kept its own copy of the CoinGecko id map and it drifted — XAUT and PAXG were filtered out before the request. | The client asks `/market/symbols`. There is no second copy. |
+| 7 | **The executor paid an 8s rate-limit ladder for every price.** | Two near-identical CoinGecko URLs, so screens warmed one cache entry and `priceOf` missed on the other. | One URL in `ids.ts`, refreshed on a heartbeat. |
+| 8 | **A wallet said `base-sepolia` under live Base-fork balances, permanently.** | The persisted wallet short-circuited the fetch, so live fields never refreshed. | Render from cache, refresh behind it. |
+| 9 | **"$-3,315.00 is left" of the daily cap.** | Lowering a cap mid-day made the subtraction negative. | Below the cap it says what remains; at or past it, that today is used up. |
+| 10 | **A revert reached the screen as `0x1db3b859 … Unable to decode`** while the activity row said "That agent is not the one you gave permission to." | The delegation ABI carried no error entries, and the run path returned the raw string. | The errors are in the ABI; the API returns the sentence and keeps the raw one. |
+| 11 | **"Watching 14 markets"** in profit-green under an agent's name, and the alerts catalogue shown when the read **failed**. | Hardcoded mock string; a swallowed error indistinguishable from a new user. | The real status or "No proposal right now"; a failed alerts read surfaces. |
+
+Two more were my own test harness, not the product, and are recorded so nobody re-files them:
+`/markets` rendering empty (a `pushState` artifact — a real page load was always correct), and a
+`NotDelegate()` revert from a hardcoded delegate in the live script.
+
+## Results
+
+**A. Authorization** — A1–A12 **PASS**, verified against the live deployment. The matrix is in
+[ARCHITECTURE.md](ARCHITECTURE.md#who-may-ask-three-credentials-three-jobs).
+
+**B. The trading backend** — B1–B17 **PASS** on `base-fork`, by `server/src/live-agents.ts`
+against the deployed executor: **20 checks, 0 failures**. Real transactions, on Railway:
+
+- entry agent filled a DCA — `0x615cdee92f88a5f482c39249122a676f2c2cb149ad86ee07329312a079ed26d4`,
+  0.0482 WETH at $2,481.35, 120 USDC out of the user's wallet
+- exit agent closed half — `0x8d2d651978d6c97591460298c1d358628c34b7067492d8a7a54d075400861e68`, $179.25
+- the delegation held zero of both tokens after each
+- a revoked policy blocked a close mid-position with `delegation_inactive`
+- a second run in the same period spent nothing
+
+**C. Sponsor integrations** — C1–C11 **PASS**. C3/C4 (Aqua, SwapVM) are deployed and callable on
+the fork; the maker-book fill path is exercised by `server/src/fork-e2e.ts` and the contract tests.
+
+**D. Screens** — all 48 navigable routes render with **zero console errors**. The three dev tools
+(`_dev/*`) render. Authenticated screens were re-checked signed in, against real positions.
+
+**E. Endpoints** — all 27 client paths exist and answer correctly with a real credential
+(`coverage.live.test.ts`).
+
+**F. Data honesty** — F1–F5 **PASS** after defects 5, 6, 9 and 11.
+
+## Suites
+
+| | |
+|---|---|
+| app | 234 passed |
+| server | 142 passed, 6 skipped, **including every live test** |
+| `tsc --noEmit` | clean, both |
+| `eslint` | clean |
+| `/verify` on `executor-fork` with a wallet | **15 pass · 0 fail · 0 skip** |
+| `/verify` on `executor` (Sepolia) | 9 pass · 0 fail · 6 skip |
+
+## UNTESTED — one item
+
+**The interactive Privy login screen, on a first-time account.** Signing in end to end needs an OTP
+delivered to a mailbox. The authenticated surface *is* fully tested — via Privy's own test
+credentials, a real ES256 token verified by the same `verifyAuthToken` production uses, and a real
+browser session established through the app's own login form. What is not exercised is a genuinely
+new user receiving a code by email, because that needs a mailbox this run has no access to.
+
+Nothing is stubbed to work around it, and nothing is marked PASS on its account.
+
+## Phase 6 — the confirmation
+
+- **No mocks.** No test double, no fake server, no simulated chain stands in for a real one
+  anywhere in this run.
+- **No fallback data.** Every figure on screen traces to a chain read, a database row, or a named
+  external API. Where a feed genuinely does not exist — silver, crude, the indices — the number is
+  the product's own indicative price and is labelled **SIMULATED** on the screen.
+- **No stubbed logic.** Real persisted PostgreSQL, real deployed contracts, real signed
+  transactions, real 1inch and CoinGecko and Aave and The Graph calls with real credentials.
+- **No console errors** on any of the 48 routes. The remaining console output is a
+  styled-components warning from a dependency and two React Native web deprecation notices.
+- **No unhandled network failures.** Every non-2xx is either an intended refusal the screen states,
+  or a 401 on a signed-out route.
+
+The one thing deliberately not done: **nothing was executed on Base mainnet.** That is the only
+action here that spends real money, and it was out of scope by instruction.

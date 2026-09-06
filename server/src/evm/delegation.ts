@@ -101,6 +101,30 @@ export const DELEGATION_ABI = [
     ],
     outputs: [{ name: '', type: 'bool' }],
   },
+
+  /*
+   * The contract's own errors, so a refusal arrives as a sentence.
+   *
+   * These were missing, and viem can only decode a revert it has the ABI for — so a policy whose
+   * delegate is someone else came back as `reverted with the following signature: 0x1db3b859 …
+   * Unable to decode`, four bytes and an apology, on the one path where the contract had already
+   * said exactly what was wrong. `humanFailure` turns a named error into something a user can act
+   * on; it cannot name what it was never given.
+   */
+  { type: 'error', name: 'NotDelegate', inputs: [] },
+  { type: 'error', name: 'PolicyRevoked', inputs: [] },
+  { type: 'error', name: 'PolicyExpired', inputs: [] },
+  { type: 'error', name: 'VenueNotAllowed', inputs: [{ name: 'venue', type: 'address' }] },
+  {
+    type: 'error',
+    name: 'DailyCapExceeded',
+    inputs: [
+      { name: 'requested', type: 'uint256' },
+      { name: 'remaining', type: 'uint256' },
+    ],
+  },
+  { type: 'error', name: 'ZeroAmount', inputs: [] },
+  { type: 'error', name: 'VenueCallFailed', inputs: [] },
 ] as const;
 
 export type OnChainPolicy = {

@@ -282,7 +282,18 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
           entries.map((s) => publicClient.getCode({ address: s.address }).catch(() => undefined)),
         );
         const live = entries.filter((_, i) => (codes[i]?.length ?? 0) > 2);
-        if (live.length === 0) throw new Error('no equity contract has code on this chain');
+        /*
+         * On a chain where they do not exist, this is a SKIP, not a failure.
+         *
+         * The tokenized equities are Base MAINNET contracts. Reporting FAIL on Sepolia said
+         * a true thing — there is no code at those addresses here — in a way that reads as
+         * something being broken, when it is the documented two-environment split doing
+         * exactly what it says. Skipped is still not passed, and the reason names the chain
+         * so nobody mistakes one for the other.
+         */
+        if (live.length === 0) {
+          skip(`No equity contracts on ${CHAIN_KEY}. They are Base mainnet only — see README.`);
+        }
         return `${live.length} of ${entries.length} have code: ${live.map((s) => s.symbol).join(', ')}`;
       },
     },
@@ -324,7 +335,21 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
         const rows = await query<{ status: string; n: string }>(
           `SELECT status, count(*) AS n FROM strategy_runs GROUP BY status ORDER BY n DESC`,
         );
-        if (rows.length === 0) throw new Error('no runs recorded');
+        if (rows.length === 0) {
+          /*
+           * No runs is two different facts, and reporting the wrong one is worse than silence.
+           *
+           * With strategies live and none of them run, the scheduler is broken and this is a
+           * FAIL. With no strategies at all, nothing has been asked of it — a fresh deployment
+           * reported a red row for working exactly as it should. Say which.
+           */
+          const [live] = await query<{ n: string }>(
+            `SELECT count(*) AS n FROM strategies WHERE state IN ('live','watch')`,
+          );
+          const n = Number(live?.n ?? 0);
+          if (n > 0) throw new Error(`${n} live strateg${n === 1 ? 'y' : 'ies'} and no runs recorded`);
+          skip('No strategies on this deployment yet, so the scheduler has had nothing to run.');
+        }
         return rows.map((r) => `${r.n} ${r.status}`).join(', ');
       },
     },

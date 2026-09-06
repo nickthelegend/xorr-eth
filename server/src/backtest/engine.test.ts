@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { curvePoints, maxDrawdown, sharpeRatio } from './engine.js';
+import { daily, curvePoints, maxDrawdown, sharpeRatio } from './engine.js';
 
 describe('12.22 backtest maths', () => {
   it('max drawdown is the worst peak-to-trough, as a negative percentage', () => {
@@ -41,5 +41,40 @@ describe('12.22 backtest maths', () => {
 
   it('an empty series gives no points rather than a fabricated one', () => {
     expect(curvePoints([])).toEqual([]);
+  });
+});
+
+describe('daily sampling', () => {
+  const DAY = 86_400_000;
+
+  it('keeps one point per UTC day — the last, which is that day\'s close', () => {
+    const pts: [number, number][] = [
+      [DAY * 10, 1],
+      [DAY * 10 + 3_600_000, 2],
+      [DAY * 10 + 7_200_000, 3],
+      [DAY * 11, 4],
+    ];
+    expect(daily(pts)).toEqual([
+      [DAY * 10 + 7_200_000, 3],
+      [DAY * 11, 4],
+    ]);
+  });
+
+  it('leaves an already-daily series alone', () => {
+    /*
+     * The whole point: past 90 days CoinGecko returns daily points, under it hourly. One code
+     * path has to serve both, or a 90-day backtest runs twenty-four times the trades a weekly
+     * schedule should — which is exactly what happened when the granularity was left to the API.
+     */
+    const pts: [number, number][] = [
+      [DAY * 1, 1],
+      [DAY * 2, 2],
+      [DAY * 3, 3],
+    ];
+    expect(daily(pts)).toEqual(pts);
+  });
+
+  it('is empty for an empty series rather than inventing a day', () => {
+    expect(daily([])).toEqual([]);
   });
 });

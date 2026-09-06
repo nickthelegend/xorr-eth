@@ -57,12 +57,24 @@ const STOCK_SYMBOLS = new Set(
 export const LocalRepositories: Repositories = {
   markets: {
     async listClasses(): Promise<AssetClass[]> {
-      // Crypto is priced off CoinGecko; the tokenized equities off a real 1inch route, because
-      // that is the venue that would actually fill them. Everything else stays labelled simulated.
+      /*
+       * Ask for EVERY symbol, not just the crypto class.
+       *
+       * This asked only for `crypto`, so an instrument filed under another class kept the
+       * fixture's price however real its feed was. Gold is the case that made it visible: XAUT
+       * has a genuine `tether-gold` feed on the server, and the commodities tab showed the
+       * handoff's $3,412.10 under a SIMULATED tag while gold traded near $4,420. The tag was
+       * honest and the number was a thousand dollars wrong, which is the failure the tag exists
+       * to prevent, not an acceptable use of it.
+       *
+       * `/market/quotes` already drops symbols it has no feed for, so asking for all of them
+       * costs nothing — it is one cache hit on one URL — and everything genuinely unpriced
+       * (silver, crude, the indices) still falls through to its indicative price and keeps the
+       * label. The tokenized equities come from a real 1inch route instead, because that is the
+       * venue that would actually fill them.
+       */
       const [live, stocks] = await Promise.all([
-        fetchQuotes(
-          assetClasses.find((c) => c.id === 'crypto')?.instruments.map((i) => i.sym) ?? [],
-        ).catch((): Record<string, Quote> => ({})),
+        fetchQuotes(allInstruments.map((i) => i.sym)).catch((): Record<string, Quote> => ({})),
         fetchStockQuotes().catch((): Record<string, StockQuote> => ({})),
       ]);
       return assetClasses.map((c) => ({
@@ -379,11 +391,18 @@ export const LocalRepositories: Repositories = {
 
   alerts: {
     async list(): Promise<Alert[]> {
-      // The user's own alerts, persisted. The catalogue below is the starting set for someone who
-      // has never made one — it is product config, not a stand-in for saved state.
-      const remote = await api.get<Alert[]>('/alerts').catch(() => undefined);
-      if (remote && remote.length > 0) return remote;
-      return alertFixtures;
+      /*
+       * The user's own alerts, persisted. The catalogue is the starting set for someone who has
+       * never made one — product config, not a stand-in for saved state.
+       *
+       * Which is only true if we can tell the two apart. This swallowed the error and returned
+       * the catalogue, so a failed read rendered five alerts and a confident "2 of 5 on" for a
+       * user whose real alerts we had not managed to fetch — and if any of theirs were off, the
+       * screen said the opposite of the truth. An empty list is a new user; a thrown request is
+       * an outage, and the screen already knows how to say so.
+       */
+      const remote = await api.get<Alert[]>('/alerts');
+      return remote.length > 0 ? remote : alertFixtures;
     },
     async create(input: {
       kind: 'price' | 'agent' | 'risk';

@@ -36,6 +36,28 @@ describe('limits are enforced outside the client', () => {
     }
   });
 
+  it('never claims a negative amount is left', async () => {
+    /*
+     * Lowering the cap mid-day, or re-granting a smaller one, puts today's spend above it. That
+     * is the cap working. The refusal used to subtract anyway and say "$-3,315.00 is left",
+     * which is not a sentence about money anyone can act on.
+     */
+    const v = await evaluate({ ...base, usd: 120, dailyCapUsd: 1000 }, client(4315));
+    expect(v.allowed).toBe(false);
+    if (!v.allowed) {
+      expect(v.reason).toBe('daily_cap');
+      expect(v.detail).not.toMatch(/-|−/);
+      expect(v.detail).toContain('used up');
+      expect(v.detail).toContain('$4,315.00'); // what actually went out
+    }
+  });
+
+  it('says what is left when something still is', async () => {
+    const v = await evaluate({ ...base, usd: 900 }, client(1000));
+    expect(v.allowed).toBe(false);
+    if (!v.allowed) expect(v.detail).toContain('600.00 is left');
+  });
+
   it('allows a spend that exactly reaches the cap', async () => {
     const v = await evaluate({ ...base, usd: 600 }, client(1000));
     expect(v.allowed).toBe(true);

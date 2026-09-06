@@ -15,7 +15,7 @@
  */
 import { Hono } from 'hono';
 import { getJson, staleValue } from '../http/get.js';
-import { COINGECKO_IDS } from '../market/ids.js';
+import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../market/ids.js';
 import { TOKENS, quote } from '../venues/oneinch.js';
 import { STOCKS } from '../venues/stocks.js';
 import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
@@ -116,17 +116,12 @@ class ColdFetchPending extends Error {
 const COLD_DEADLINE_MS = 8_000;
 
 /**
- * Every symbol we have a feed for, in ONE upstream call.
- *
- * The cache is keyed by URL, so asking for {BTC,ETH} and {BTC,ETH,SOL} used to be two different
- * URLs, two cache entries and two trips through the rate limiter — and every new combination a
- * screen asked for started cold. One URL for the whole list means the first request warms every
- * subsequent one, whatever subset it wants.
+ * Every symbol we have a feed for, in ONE upstream call — and it is the SAME call the
+ * executor's `priceOf` makes. `ids.ts` owns the string; see the note there for what having two
+ * of them cost. The cache in `http/get.ts` is keyed by URL, so sharing it means a chart refresh
+ * warms the price a scheduled buy is about to fill at.
  */
-const ALL_IDS_URL =
-  `${COINGECKO}/simple/price` +
-  `?ids=${[...new Set(Object.values(COINGECKO_IDS))].join(',')}` +
-  `&vs_currencies=usd&include_24hr_change=true`;
+const ALL_IDS_URL = COINGECKO_PRICE_URL;
 
 /** GET /market/quotes?symbols=BTC,ETH — spot + 24h change. Unknown symbols are omitted. */
 market.get('/market/quotes', async (c) => {
@@ -137,9 +132,7 @@ market.get('/market/quotes', async (c) => {
     .filter((s) => COINGECKO_IDS[s]);
   if (symbols.length === 0) return c.json({});
 
-  const data = await getWithStale<Record<string, { usd?: number; usd_24h_change?: number }>>(
-    ALL_IDS_URL,
-  );
+  const data = await getWithStale<CoingeckoPrices>(ALL_IDS_URL);
 
   const out: Record<string, { price: number; change24h: number; source: string }> = {};
   for (const sym of symbols) {
@@ -319,10 +312,37 @@ export function warmMarketCache(): void {
     if (pending.size > 0) setTimeout(() => void sweep(), WARM_RETRY_MS).unref?.();
   };
   void sweep();
+  keepPricesFresh();
 }
 
 /** How long to wait before another go at whatever has not warmed yet. */
 const WARM_RETRY_MS = 20_000;
+
+/**
+ * The price URL is a heartbeat, not a one-shot.
+ *
+ * Warming once at boot is only enough while someone is looking. `http/get.ts` treats a cache entry
+ * as fresh for 30s, so on an idle server the entry aged out and the very next caller went upstream
+ * cold — straight into the rate-limit ladder. For a screen that is a spinner; for `priceOf` it was
+ * the 8s deadline, a fallback to the last good value, and a claim that took 8009ms to report a
+ * price the process had had in memory the whole time.
+ *
+ * Refreshing the single price URL just inside the freshness window means every caller — a chart, a
+ * leaderboard, a scheduled buy about to be filled — reads it from memory. It costs two requests a
+ * minute to one URL, which is what asking for all fourteen symbols at once bought us.
+ *
+ * Only the price URL. The OHLC windows are per symbol per timeframe; refreshing those on a timer
+ * would be forty-eight requests through a 1.1s-spaced queue and would starve this one.
+ */
+const PRICE_REFRESH_MS = 25_000;
+
+function keepPricesFresh(): void {
+  const tick = () => {
+    // `0` TTL forces the fetch rather than reading the entry we are trying to replace.
+    void getJson(ALL_IDS_URL, 0).catch(() => undefined);
+  };
+  setInterval(tick, PRICE_REFRESH_MS).unref?.();
+}
 
 
 /**

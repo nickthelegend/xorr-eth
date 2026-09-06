@@ -33,6 +33,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
+import { closeHolding, CloseInput } from './panic.js';
 import { principalOf, requireScope } from '../auth/middleware.js';
 import { createAgentKey, listAgentKeys, revokeAgentKey, type Scope } from '../auth/agentKeys.js';
 import { tick } from '../executor/scheduler.js';
@@ -78,6 +79,47 @@ agentSurface.post('/agent/strategies/:id/run', requireScope('trade:open'), async
   if (!row) return c.json({ error: 'not_found' }, 404);
   const outcome = await runStrategy(row);
   return c.json(outcome, outcome.status === 'failed' ? 502 : 200);
+});
+
+/**
+ * Close part or all of ONE holding, for ONE owner — the closing agent's own route.
+ *
+ * `/positions/close` is a USER route: it resolves the wallet from the session, so an agent key
+ * hitting it gets `wrong_principal`. That left `trade:close` a scope with nothing but `/agent/tick`
+ * behind it — a deployed closing agent could run a whole pass or nothing, and had no way to act on
+ * one position. Which is the shape of every real exit: a stop fires on ONE holding.
+ *
+ * The owner is named in the body rather than taken from a session, because that is the honest
+ * difference between the two callers: a user closes their own position, a deployed worker closes a
+ * position it is responsible for. Nothing widens: `closeHolding` reads the policy from the chain
+ * on every call, and `closeAsDelegate` is refused by the contract unless this delegate is the one
+ * the owner named.
+ */
+const AgentCloseInput = CloseInput.extend({
+  owner: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+});
+
+agentSurface.post('/agent/positions/close', requireScope('trade:close'), async (c) => {
+  const body = AgentCloseInput.parse(await c.req.json());
+  const w = await one<{ id: string; address: string }>(
+    `SELECT id, address FROM wallets WHERE lower(address) = lower($1) LIMIT 1`,
+    [body.owner],
+  );
+  if (!w) {
+    return c.json(
+      { status: 'blocked', reason: 'no_wallet', detail: `${body.owner} is not a wallet we serve.` },
+      404,
+    );
+  }
+  const p = principalOf(c);
+  const out = await closeHolding({
+    wallet: w,
+    symbol: body.symbol,
+    fraction: body.fraction,
+    // The audit row names the agent that actually did it, not a generic "bot".
+    actor: p?.name ?? 'agent',
+  });
+  return c.json(out.body, out.status as 200 | 404 | 409 | 502);
 });
 
 /** What the loop would pick up on its next pass. Read-only, for a worker's own health check. */

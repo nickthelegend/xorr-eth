@@ -34,3 +34,26 @@ export const COINGECKO_IDS: Record<string, string> = {
 export function knownSymbols(): string[] {
   return Object.keys(COINGECKO_IDS);
 }
+
+/**
+ * The one upstream URL, for the same reason there is one id map.
+ *
+ * There were two. `routes/market.ts` asked for `…&include_24hr_change=true` and
+ * `market/prices.ts` asked for the same ids without it — two URLs, and `http/get.ts` keys
+ * its cache, its in-flight dedupe and its stale-value window by URL. So the screens warmed
+ * one entry and the executor's `priceOf` missed on the other, went upstream every single
+ * time, and paid the rate-limit ladder: ~1.1s spacing, then 1.6s and 3.2s of backoff behind
+ * two 429s. Measured from Railway that is 8.4s per price, which is how a check with an 8s
+ * deadline came back `price deadline for BTC` while `/market/quotes` answered in 0.4s.
+ *
+ * The 24h change is a superset — the body carries `usd` either way — so one URL serves both
+ * and halves what we ask of a tier that rate-limits us. A screen refreshing a chart now warms
+ * the price the scheduler is about to fill at.
+ */
+export const COINGECKO_PRICE_URL =
+  'https://api.coingecko.com/api/v3/simple/price' +
+  `?ids=${[...new Set(Object.values(COINGECKO_IDS))].join(',')}` +
+  '&vs_currencies=usd&include_24hr_change=true';
+
+/** The shape that URL returns. */
+export type CoingeckoPrices = Record<string, { usd?: number; usd_24h_change?: number }>;

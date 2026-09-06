@@ -58,16 +58,23 @@ export default function Home() {
   const hired = useStore((s) => s.hired);
   const toggleHire = useStore((s) => s.toggleHire);
 
-  const balance = useAsync(() => repos.portfolio.balanceUsd(), []);
+  const balance = useAsync(() => repos.portfolio.balance(), []);
   const agents = useAsync(() => repos.bot.listAgents(), []);
   const featured = useAsync(() => repos.markets.quotes([DEFAULT_BUY]), []);
   // The held quantity was hardcoded at 1,750.30. It comes from the position book now.
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const staking = useAsync(() => repos.yield.staking(), []);
 
-  // null means the balance could not be read. A dash, never a confident $0.00 for a funded
-  // wallet.
-  const total = balance.data ?? null;
+  /*
+   * null means the balance could not be read. A dash, never a confident $0.00 for a funded wallet.
+   *
+   * `cash` is a separate number from `total` and the screen needs both: the hero is everything
+   * the wallet is worth, the Cash row is what is actually spendable. It rendered `total` in both,
+   * so a wallet with $59 in WETH and $990 supplied to Aave reported all of it as "Available to
+   * trade" — money that is not available, on the row whose entire job is to say what is.
+   */
+  const total = balance.data?.total ?? null;
+  const cash = balance.data?.cash ?? null;
   const featuredQuote = featured.data?.[DEFAULT_BUY];
   const held = positions.data ?? [];
   const featuredHeld = held.find((p) => p.symbol === DEFAULT_BUY);
@@ -157,7 +164,7 @@ export default function Home() {
             left={<AssetMark gradient={{ c1: '#B58CFF', c2: '#6E3ED8' }} size={size.markSm} />}
             title="Cash"
             secondary="Available to trade"
-            value={<Price>{total === null ? '—' : money(total)}</Price>}
+            value={<Price>{cash === null ? '—' : money(cash)}</Price>}
             height={size.hit}
           />
 

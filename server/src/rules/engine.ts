@@ -93,10 +93,24 @@ export async function evaluate(ctx: RuleContext, client?: PoolClient): Promise<R
   const spent = await spentToday(ctx.walletId, client);
   const remaining = ctx.dailyCapUsd - spent;
   if (ctx.usd > remaining) {
+    /*
+     * Never say a negative amount is "left".
+     *
+     * Lowering the cap mid-day, or re-granting a smaller one, puts today's spend above it — which
+     * is the cap working, not a bug. But the refusal read "$-3,315.00 is left", which is not a
+     * sentence about money anyone can act on. Below the cap the number is what remains; at or
+     * past it the honest statement is that today is done, with the figure that made it so.
+     */
+    const money = (n: number) =>
+      `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const cap = `$${ctx.dailyCapUsd.toLocaleString('en-US')}`;
     return {
       allowed: false,
       reason: 'daily_cap',
-      detail: `That would take today past your $${ctx.dailyCapUsd.toLocaleString('en-US')} cap. $${remaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} is left.`,
+      detail:
+        remaining > 0
+          ? `That would take today past your ${cap} cap. ${money(remaining)} is left.`
+          : `Today's ${cap} cap is used up — ${money(spent)} already went out. Nothing more until tomorrow.`,
     };
   }
   return { allowed: true, spentTodayUsd: spent, remainingUsd: remaining - ctx.usd };

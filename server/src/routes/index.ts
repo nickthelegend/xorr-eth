@@ -200,6 +200,22 @@ routes.get('/delegation/params', async (c) => {
     delegate: delegatePublicKey,
     venues: SETTLEMENT_VENUES,
     token: ADDRESSES.usdcBase,
+    /*
+     * EVERY token the delegation may need to pull, not just the one it spends.
+     *
+     * The grant approved USDC alone, which is the buy side. `closePosition` pulls the asset being
+     * SOLD, so with no WETH allowance the contract's `transferFrom` reverted with "pull failed" —
+     * and that is every exit: take-profit, stop-loss, trailing, the panic flatten and the position
+     * screen's own Close button. A wallet could be bought into and never sold out of, and the only
+     * symptom was a generic "the transaction did not go through".
+     *
+     * Native ETH is excluded: it has no allowance to give, and the delegation trades the wrapped
+     * form. The list follows the routing registry, so a token that becomes tradable becomes
+     * approvable in the same change rather than two releases later.
+     */
+    tokens: Object.entries(TOKENS)
+      .filter(([symbol]) => symbol !== 'ETH')
+      .map(([symbol, t]) => ({ symbol, address: t.address })),
     chain: CHAIN_KEY,
   });
 });

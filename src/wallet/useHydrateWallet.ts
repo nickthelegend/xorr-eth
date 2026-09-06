@@ -17,7 +17,7 @@
  *
  * So the wallet is fetched once per signed-in session, from the one place that actually knows.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '@/auth/useAuth';
 import { repos } from '@/data';
 import { useStore } from '@/state/store';
@@ -25,7 +25,21 @@ import { setAuthKnowledge } from '@/auth/authState';
 
 export function useHydrateWallet(): void {
   const { ready, authenticated } = useAuth();
-  const wallet = useStore((s) => s.wallet);
+  /*
+   * READ through a ref, never a dependency.
+   *
+   * Subscribing to `wallet` and listing it as a dependency makes this effect its own trigger:
+   * it fetches, `setWallet` changes the value, the effect re-runs, it fetches again — a loop
+   * that put several thousand `/wallet` requests through the executor in seconds and starved
+   * every other read on the screen, so the home screen showed a dash for a balance the server
+   * was answering correctly the whole time. The effect wants to know whether a wallet is
+   * already cached; it does not want to hear about it changing.
+   */
+  const walletRef = useRef(useStore.getState().wallet);
+  useEffect(
+    () => useStore.subscribe((s) => { walletRef.current = s.wallet; }),
+    [],
+  );
   const setWallet = useStore((s) => s.setWallet);
   const setWalletChecked = useStore((s) => s.setWalletChecked);
 
@@ -54,12 +68,21 @@ export function useHydrateWallet(): void {
       return;
     }
 
-    // Already have it — the persisted store is the fast path, and re-fetching on every mount
-    // would put a request on the critical path of every navigation for no new information.
-    if (wallet) {
-      setWalletChecked(true);
-      return;
-    }
+    /*
+     * The persisted copy is the fast path, and it is also a snapshot that can go stale.
+     *
+     * This returned early whenever anything was cached, so `/wallet` was read once and never
+     * again — and the row carries live facts, not just the address. `chain` is the one that
+     * showed: a wallet created while the executor settled on Sepolia kept saying
+     * "Connected · base-sepolia" underneath live Base-fork balances, for good, because the
+     * only code that could have corrected it had decided it already knew.
+     *
+     * So: render from the cache immediately — nothing waits, the gate opens on the same tick as
+     * before — and refresh behind it. The address is the part that must not flicker, and it is
+     * the part that never changes.
+     */
+    const cached = Boolean(walletRef.current);
+    if (cached) setWalletChecked(true);
 
     let alive = true;
     void repos.wallet
@@ -76,11 +99,14 @@ export function useHydrateWallet(): void {
          * Marking it checked anyway would redirect a signed-in user to onboarding because the
          * executor was briefly unreachable — destroying their session state to recover from a
          * network blip. Leaving it unchecked keeps the gate waiting, which is the honest state.
+         *
+         * Unless we already had one: a background refresh that fails leaves the cached wallet
+         * exactly as it was, and must not close a gate it did not open.
          */
-        if (alive) setWalletChecked(false);
+        if (alive && !cached) setWalletChecked(false);
       });
     return () => {
       alive = false;
     };
-  }, [ready, authenticated, wallet, setWallet, setWalletChecked]);
+  }, [ready, authenticated, setWallet, setWalletChecked]);
 }

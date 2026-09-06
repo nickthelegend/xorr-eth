@@ -6,7 +6,7 @@
  */
 import { accessToken } from '@/auth/token';
 import { isPublicPath } from './publicPaths';
-import { authKnowledge } from '@/auth/authState';
+import { authKnowledge, whenAuthKnown } from '@/auth/authState';
 import { API_BASE } from './apiBase';
 
 export { API_BASE };
@@ -47,8 +47,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
    * window were dropped silently and the screen kept its empty state for good. While the answer is
    * unknown the request goes out — a 401 is visible and recoverable; silence is neither.
    */
-  if (!isPublicPath(path) && authKnowledge() === 'signed-out') {
-    throw new NotSignedIn(path);
+  if (!isPublicPath(path)) {
+    // While the answer is unknown, wait for it rather than sending a request that cannot carry a
+    // token. See `whenAuthKnown` for why an un-retried 401 was worse than a short wait.
+    const know = authKnowledge() === 'unknown' ? await whenAuthKnown() : authKnowledge();
+    if (know === 'signed-out') throw new NotSignedIn(path);
   }
 
   const res = await fetch(`${API_BASE}${path}`, {

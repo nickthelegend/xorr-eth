@@ -165,8 +165,17 @@ export default function BotChat() {
         <AssetMark gradient={agentGradient(agentName)} size={size.mark} />
         <View style={{ flex: 1 }}>
           <Text variant="rowPrimaryLg">{agentName}</Text>
-          <Text variant="footnote" color={colors.up}>
-            {proposal?.status ?? 'Watching 14 markets'}
+          <Text variant="footnote" color={proposal ? colors.up : colors.ink40}>
+            {/*
+              The agent's real status, or nothing.
+
+              This said "Watching 14 markets" whenever there was no proposal — a specific number
+              from the design mock, in profit-green, describing work no part of this app had
+              done. Fourteen was never counted; the crypto class has nine. A confident invented
+              figure under an agent's name is exactly the claim this product exists to argue
+              against, so when there is no proposal the line says so plainly instead.
+            */}
+            {proposal?.status ?? 'No proposal right now'}
           </Text>
         </View>
         <IconButton

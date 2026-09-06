@@ -236,79 +236,85 @@ panic.post('/panic/flatten', async (c) => {
 });
 
 /**
- * Sell part or all of ONE holding — screen 22's "Close {n}%", and the sell side of the
- * order ticket.
+ * The close itself, with the wallet already resolved.
  *
- * The same route out as `/panic/flatten` and for the same reason: it goes through
- * `closeAsDelegate`, never `spend`, so the daily cap cannot silence it. A cap is a limit on
- * putting capital AT risk; a cap that can block an exit is a cap that traps you.
+ * Split out because there are two legitimate callers that authenticate differently: the
+ * signed-in user on `/positions/close`, and the deployed closing agent on
+ * `/agent/positions/close`. Duplicating it would duplicate the exit path — the one path that
+ * has to behave identically no matter who asked.
  *
- * A `fraction` rather than an amount, because that is what the screen actually asks — and
- * because a full close has to move the balance the CHAIN holds, not a float round-trip of
- * it. `h.raw` is the chain's own number; the fraction is applied to it in integer maths so a
- * 100% close is exactly the balance and never eight wei over it.
+ * It goes through `closeAsDelegate`, never `spend`, so the daily cap cannot silence it. A cap
+ * is a limit on putting capital AT risk; a cap that can block an exit is a cap that traps you.
+ *
+ * A `fraction` rather than an amount, because that is what the screen asks — and because a
+ * full close has to move the balance the CHAIN holds, not a float round-trip of it. `h.raw` is
+ * the chain's own number and the fraction is applied to it in integer maths, so a 100% close is
+ * exactly the balance and never eight wei over it.
  */
-const CloseInput = z.object({
-  symbol: z.string().min(1).max(12),
-  /** 0 < fraction <= 1. Screen 22's pills send 0.25 / 0.5 / 0.75 / 1. */
-  fraction: z.number().gt(0).max(1).default(1),
-});
-
-panic.post('/positions/close', async (c) => {
-  const u = requireUser(c);
-  const w = await one<{ id: string; address: string }>(
-    `SELECT id, address FROM wallets WHERE privy_user_id = $1 LIMIT 1`,
-    [u.userId],
-  );
-  if (!w) return c.json({ status: 'blocked', reason: 'no_wallet' }, 409);
+export async function closeHolding(params: {
+  wallet: { id: string; address: string };
+  symbol: string;
+  fraction: number;
+  /** Whose name goes in the audit row: the user pressed it, or an agent's rule fired. */
+  actor: string;
+}): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { wallet: w, fraction, actor } = params;
   const owner = w.address as Address;
-
-  const body = CloseInput.parse(await c.req.json());
-  const symbol = body.symbol.toUpperCase();
+  const symbol = params.symbol.toUpperCase();
 
   const policy = await readPolicy(owner);
   if (!policy || policy.revoked || policy.expiresAt <= Date.now()) {
-    return c.json(
-      {
+    return {
+      status: 409,
+      body: {
         status: 'blocked',
         reason: 'delegation_inactive',
         detail:
           'The trading permission is revoked or expired, so the bot cannot sell on your behalf. Renew it, or move the funds yourself — they never left your wallet.',
       },
-      409,
-    );
+    };
   }
 
   const h = (await holdings(owner)).find((x) => x.symbol === symbol && x.units > 0);
   if (!h) {
-    return c.json({ status: 'blocked', reason: 'not_held', detail: `No ${symbol} to sell.` }, 409);
+    return {
+      status: 409,
+      body: { status: 'blocked', reason: 'not_held', detail: `No ${symbol} to sell.` },
+    };
   }
 
   const token = TOKENS[symbol];
   if (!token) {
-    return c.json(
-      { status: 'blocked', reason: 'no_route', detail: `${symbol} cannot be sold on this chain.` },
-      409,
-    );
+    return {
+      status: 409,
+      body: {
+        status: 'blocked',
+        reason: 'no_route',
+        detail: `${symbol} cannot be sold on this chain.`,
+      },
+    };
   }
 
   // Integer maths on the chain's own number. A full close is EXACTLY the balance.
-  const full = body.fraction >= 0.999999;
-  const raw = full ? h.raw : (h.raw * BigInt(Math.round(body.fraction * 1e6))) / 1_000_000n;
+  const full = fraction >= 0.999999;
+  const raw = full ? h.raw : (h.raw * BigInt(Math.round(fraction * 1e6))) / 1_000_000n;
   if (raw <= 0n) {
-    return c.json({ status: 'blocked', reason: 'dust', detail: 'That is too small to sell.' }, 409);
+    return {
+      status: 409,
+      body: { status: 'blocked', reason: 'dust', detail: 'That is too small to sell.' },
+    };
   }
-  const units = full ? h.units : h.units * body.fraction;
-  const usd = full ? h.usd : h.usd * body.fraction;
+  const units = full ? h.units : h.units * fraction;
+  const usd = full ? h.usd : h.usd * fraction;
   if (usd < DUST_USD) {
-    return c.json(
-      {
+    return {
+      status: 409,
+      body: {
         status: 'blocked',
         reason: 'dust',
         detail: `Worth less than $${DUST_USD} — the gas would cost more than the sale returns.`,
       },
-      409,
-    );
+    };
   }
 
   try {
@@ -319,9 +325,9 @@ panic.post('/positions/close', async (c) => {
       amountRaw: raw,
       from: DELEGATION_ADDRESS,
       receiver: owner,
-      // A user-initiated exit is not a panic, and it is not a scheduled buy either: the
-      // person is watching and wants it done. `stop` is the middle tier for exactly this —
-      // an exit that must not fail because the market moved while it was being signed.
+      // A deliberate exit is not a panic, and it is not a scheduled buy either: somebody is
+      // watching and wants it done. `stop` is the middle tier for exactly that — an exit that
+      // must not fail because the market moved while it was being signed.
       slippagePct: SLIPPAGE.stop,
     });
     const signature = await closeAsDelegate({
@@ -337,20 +343,51 @@ panic.post('/positions/close', async (c) => {
       await append(
         {
           walletId: w.id,
-          agent: 'You',
-          action: full ? `Sold all ${symbol}` : `Sold ${Math.round(body.fraction * 100)}% of ${symbol}`,
+          agent: actor,
+          action: full ? `Sold all ${symbol}` : `Sold ${Math.round(fraction * 100)}% of ${symbol}`,
           detail: `${units.toFixed(6)} ${symbol} to USDC.`,
           kind: 'trade',
           signature,
-          payload: { symbol, units, usd, fraction: body.fraction, explorer: explorerTx(signature) },
+          payload: { symbol, units, usd, fraction, explorer: explorerTx(signature) },
         },
         client,
       );
     });
 
-    return c.json({ status: 'closed', symbol, units, usd, txHash: signature });
+    return { status: 200, body: { status: 'closed', symbol, units, usd, txHash: signature } };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    return c.json({ status: 'failed', symbol, error: humanFailure(error) }, 502);
+    return { status: 502, body: { status: 'failed', symbol, error: humanFailure(error) } };
   }
+}
+
+/**
+ * Sell part or all of ONE holding — screen 22's "Close {n}%", and the sell side of the order
+ * ticket.
+ */
+export const CloseInput = z.object({
+  symbol: z.string().min(1).max(12),
+  /** 0 < fraction <= 1. Screen 22's pills send 0.25 / 0.5 / 0.75 / 1. */
+  fraction: z.number().gt(0).max(1).default(1),
+});
+
+panic.post('/positions/close', async (c) => {
+  const u = requireUser(c);
+  /*
+   * `user_id`, which is the column that exists.
+   *
+   * This asked for `privy_user_id` — a column no migration has ever created — so every call to
+   * the route the position screen's "Close" button makes died in Postgres, for every user, on
+   * every asset. It was never caught because nothing exercised the route against a real
+   * database with a real session: the coverage test only asks whether a path 404s.
+   */
+  const w = await one<{ id: string; address: string }>(
+    `SELECT id, address FROM wallets WHERE user_id = $1 LIMIT 1`,
+    [u.userId],
+  );
+  if (!w) return c.json({ status: 'blocked', reason: 'no_wallet' }, 409);
+
+  const body = CloseInput.parse(await c.req.json());
+  const out = await closeHolding({ wallet: w, symbol: body.symbol, fraction: body.fraction, actor: 'You' });
+  return c.json(out.body, out.status as 200 | 409 | 502);
 });

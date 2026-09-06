@@ -15,20 +15,41 @@ import type { Bar, Candles, Timeframe } from './types';
 import { API_BASE } from './apiBase';
 
 /** The symbols with a real feed. Kept in sync with server/src/market/ids.ts, which is the source. */
-export const COINGECKO_IDS: Record<string, string> = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  XRP: 'ripple',
-  DOGE: 'dogecoin',
-  HYPE: 'hyperliquid',
-  AAVE: 'aave',
-  LINK: 'chainlink',
-  TON: 'the-open-network',
-  WETH: 'weth',
-  USDC: 'usd-coin',
-  CBBTC: 'coinbase-wrapped-btc',
-};
+/**
+ * Which symbols have a real price feed — asked of the server, never restated here.
+ *
+ * This was a second copy of `server/src/market/ids.ts`, and it drifted exactly as that file's
+ * own comment warns: XAUT and PAXG were given real gold feeds on the server and never added
+ * here, so `fetchQuotes` filtered them out before the request and the commodities tab kept
+ * showing the fixture's $3,412.10 for gold while the feed said $4,420. A symbol being
+ * priceable is a fact about the server's configuration; asking is the only way to not be
+ * wrong about it.
+ *
+ * One call, cached for the session. Until it answers, nothing is filtered out — the server
+ * omits symbols it cannot price anyway, so the cost of guessing wrong in this direction is a
+ * slightly longer query string, and in the other direction it was a year-old price on screen.
+ */
+let feedSymbols: Set<string> | undefined;
+let feedSymbolsInFlight: Promise<Set<string>> | undefined;
+
+export async function pricedSymbols(): Promise<Set<string>> {
+  if (feedSymbols) return feedSymbols;
+  feedSymbolsInFlight ??= getJson<string[]>('/market/symbols', 10 * 60_000)
+    .then((list) => (feedSymbols = new Set(list)))
+    .catch(() => {
+      feedSymbolsInFlight = undefined;
+      // Unknown, not empty. Returning an empty set here would filter every symbol out and turn
+      // one failed request into a screen with no prices at all.
+      return new Set<string>();
+    });
+  return feedSymbolsInFlight;
+}
+
+/** Testing only. */
+export function resetPricedSymbols(): void {
+  feedSymbols = undefined;
+  feedSymbolsInFlight = undefined;
+}
 
 export type Quote = { price: number; change24h: number; source: 'coingecko' };
 
@@ -119,7 +140,8 @@ export function clearMarketDataCache(): void {
  * seconds away as unavailable is the more expensive of the two mistakes.
  */
 export async function fetchQuotes(symbols: string[]): Promise<Record<string, Quote>> {
-  const known = symbols.filter((s) => COINGECKO_IDS[s]);
+  const priced = await pricedSymbols();
+  const known = priced.size === 0 ? symbols : symbols.filter((s) => priced.has(s));
   if (known.length === 0) return {};
   return getJson<Record<string, Quote>>(
     `/market/quotes?symbols=${encodeURIComponent(known.join(','))}`,
@@ -164,7 +186,8 @@ export function aggregateBars(raw: Bar[], count = CANDLE_COUNT): Bar[] {
 
 /** Real OHLC for a symbol at a timeframe, folded to the 12 candles the design draws. */
 export async function fetchCandles(symbol: string, timeframe: Timeframe): Promise<Candles | null> {
-  if (!COINGECKO_IDS[symbol]) return null;
+  const priced = await pricedSymbols();
+  if (priced.size > 0 && !priced.has(symbol)) return null;
   const plan = TIMEFRAME_PLAN[timeframe];
   const { rows } = await getJson<{ rows: [number, number, number, number, number][] }>(
     `/market/ohlc?symbol=${encodeURIComponent(symbol)}&days=${plan.days}`,

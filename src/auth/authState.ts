@@ -16,9 +16,44 @@ export type AuthKnowledge = 'unknown' | 'signed-in' | 'signed-out';
 
 let state: AuthKnowledge = 'unknown';
 
+/** Resolved the moment the answer stops being 'unknown'. */
+let settled: (() => void) | undefined;
+const known = new Promise<void>((resolve) => {
+  settled = resolve;
+});
+
 /** Set from Privy's own `ready` / `authenticated`, which is the only thing that actually knows. */
 export function setAuthKnowledge(next: AuthKnowledge): void {
   state = next;
+  if (next !== 'unknown') settled?.();
+}
+
+/**
+ * Wait, briefly, for the answer.
+ *
+ * The reason 'unknown' exists is that Privy takes a moment to restore a session, and a request
+ * fired inside that moment carries no token. Letting it go anyway produced a 401 — visible and
+ * honest, and never retried, because a screen reads once on mount. So a cold load of the home
+ * screen showed a dash for the balance of a wallet holding $99,974, permanently, for a user who
+ * was in fact signed in.
+ *
+ * Waiting is not the same as dropping: the request still goes, a few hundred milliseconds later,
+ * with the credential it needed. The timeout is the backstop for a Privy that never answers at
+ * all — then the request goes out as it used to and 401s, which is still better than hanging.
+ */
+const SETTLE_TIMEOUT_MS = 5_000;
+
+export async function whenAuthKnown(timeoutMs = SETTLE_TIMEOUT_MS): Promise<AuthKnowledge> {
+  if (state !== 'unknown') return state;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    known,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutMs);
+    }),
+  ]);
+  clearTimeout(timer);
+  return state;
 }
 
 export function authKnowledge(): AuthKnowledge {
@@ -28,4 +63,5 @@ export function authKnowledge(): AuthKnowledge {
 /** Testing only. */
 export function resetAuthKnowledge(): void {
   state = 'unknown';
+  settled = undefined;
 }

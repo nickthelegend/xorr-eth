@@ -43,11 +43,17 @@ type DelegationParams = {
   contract: Address;
   delegate: Address;
   venues: Address[];
+  /** The settlement token. Approved to the cap, because that IS what the bot may spend. */
   token: Address;
+  /** Every token the delegation may need to pull, including the ones it only ever sells. */
+  tokens?: { symbol: string; address: Address }[];
   chain: string;
 };
 
 const USDC_DECIMALS = 6;
+
+/** An allowance, not a limit. The daily cap on-chain is the limit, and the user set it. */
+const MAX_UINT256 = (1n << 256n) - 1n;
 
 export function useGrantDelegation() {
   const { wallets } = useWallets();
@@ -76,17 +82,39 @@ export function useGrantDelegation() {
         const cap = parseUnits(dailyCapUsd.toFixed(USDC_DECIMALS), USDC_DECIMALS);
         const expiresAt = BigInt(Math.floor((Date.now() + durationMs) / 1000));
 
-        // Two signatures, and the order matters: the ERC-20 approval lets the delegation contract
-        // pull funds AT THE MOMENT OF A TRADE, and the grant is what bounds how much and where.
-        // Approving without granting gives the bot nothing.
-        await send(
-          params.token,
-          encodeFunctionData({
-            abi: DELEGATION_ABI,
-            functionName: 'approve',
-            args: [params.contract, cap * 30n],
-          }),
-        );
+        /*
+         * Approve EVERY tradable token, not only the one the bot spends.
+         *
+         * The approvals let the delegation contract pull funds at the moment of a trade, and the
+         * grant is what bounds how much and where — approving without granting gives the bot
+         * nothing. This used to approve USDC alone, which authorised the buy side and nothing
+         * else: `closePosition` pulls the asset being SOLD, so with no allowance on it every exit
+         * reverted at `transferFrom`. A user could be bought into WETH and then find that
+         * take-profit, stop-loss, the panic flatten and the Close button all silently failed.
+         *
+         * The order matters — approvals first, grant last — so a run that stops half way leaves a
+         * wallet the bot cannot touch rather than one it can spend from but not exit.
+         *
+         * `max uint256` on the non-settlement tokens on purpose: the amount that will need
+         * selling is whatever the bot bought, which is not knowable here, and an allowance is not
+         * a spending limit — the daily cap on-chain is, and it is the one the user set. A smaller
+         * number here would not cap anything, it would just make some future exit fail.
+         */
+        const settlement = params.token.toLowerCase();
+        const approvable = params.tokens?.length
+          ? params.tokens
+          : [{ symbol: 'USDC', address: params.token }];
+        for (const t of approvable) {
+          const amount = t.address.toLowerCase() === settlement ? cap * 30n : MAX_UINT256;
+          await send(
+            t.address,
+            encodeFunctionData({
+              abi: DELEGATION_ABI,
+              functionName: 'approve',
+              args: [params.contract, amount],
+            }),
+          );
+        }
 
         const txHash = await send(
           params.contract,

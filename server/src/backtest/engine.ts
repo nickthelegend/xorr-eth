@@ -64,15 +64,39 @@ async function history(symbol: string, days: number): Promise<[number, number][]
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.prices;
 
+  /*
+   * No `interval=daily` — the granularity is ours to impose.
+   *
+   * `interval=daily` is a paid-plan parameter on CoinGecko's public API: a keyless caller sending
+   * it is making a request it is not entitled to, which is one more way for a lookback to fail
+   * that has nothing to do with the data being available.
+   *
+   * But it was doing real work. Without it the API granulates by range — hourly from 2 to 90
+   * days, daily beyond — so a 90-day backtest silently became 2,160 hourly points and ran
+   * twenty-four times as many buys as a weekly schedule should. Asking for the range and taking
+   * one sample per day gives the same series the parameter would have, from data we are allowed
+   * to ask for.
+   */
   const json = await getJson<{ prices?: [number, number][] }>(
-    `${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${days}&interval=daily`,
+    `${COINGECKO}/coins/${id}/market_chart?vs_currency=usd&days=${days}`,
     // History changes once a day; caching it hard is both correct and kind to the upstream.
     10 * 60_000,
   );
-  const prices = json.prices ?? [];
+  const prices = daily(json.prices ?? []);
   if (prices.length < 5) throw new Error(`not enough history for ${symbol}`);
   cache.set(key, { at: Date.now(), prices });
   return prices;
+}
+
+/**
+ * One sample per UTC day — the last of each, which is that day's close.
+ *
+ * A no-op on a series that is already daily, so the same code serves every lookback.
+ */
+export function daily(points: [number, number][]): [number, number][] {
+  const byDay = new Map<number, [number, number]>();
+  for (const p of points) byDay.set(Math.floor(p[0] / 86_400_000), p);
+  return [...byDay.values()].sort((a, b) => a[0] - b[0]);
 }
 
 /**

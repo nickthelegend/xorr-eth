@@ -8,7 +8,7 @@
  * Run with: npm run test:live   (excluded from the default suite so CI stays hermetic)
  */
 import { describe, expect, it } from 'vitest';
-import { COINGECKO_IDS, aggregateBars, fetchCandles, fetchQuotes } from './marketData';
+import { aggregateBars, fetchCandles, fetchQuotes, pricedSymbols } from './marketData';
 import { assetClasses } from './fixtures/markets';
 import type { Bar } from './types';
 
@@ -90,8 +90,18 @@ describe('bar aggregation', () => {
     expect(aggregateBars(raw, 12)).toEqual(raw);
   });
 
-  it('every mapped id is a non-empty string, and the Base assets are present', () => {
-    for (const v of Object.values(COINGECKO_IDS)) expect(v.length).toBeGreaterThan(0);
-    for (const sym of ['WETH', 'USDC', 'CBBTC']) expect(COINGECKO_IDS[sym]).toBeTruthy();
+  it('the priceable symbols come from the SERVER, and include the ones we trade', async () => {
+    /*
+     * The point of this test changed with the code it covers. It used to assert that a
+     * client-side copy of the id map was well-formed — which it always was, right up to the
+     * moment it drifted from the server's and started filtering gold out of its own price
+     * request. There is no copy now, so what is worth asserting is that the real list arrives
+     * and carries the assets the app actually trades.
+     */
+    const priced = await pricedSymbols();
+    expect(priced.size).toBeGreaterThan(0);
+    for (const sym of ['WETH', 'USDC', 'CBBTC', 'BTC', 'ETH']) expect(priced.has(sym)).toBe(true);
+    // The two that drifted. A real gold feed exists; the commodities tab must be able to ask.
+    for (const sym of ['XAUT', 'PAXG']) expect(priced.has(sym)).toBe(true);
   });
 });

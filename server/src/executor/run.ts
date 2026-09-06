@@ -94,7 +94,15 @@ export type RunOutcome =
   /** Watch mode: what the strategy WOULD have done. No capital moved. PLAN.md 9.12. */
   | { status: 'watch'; runId: string; units: number; price: number }
   | { status: 'blocked'; runId: string; reason: string; detail: string }
-  | { status: 'failed'; runId: string; error: string }
+  /**
+   * `error` is the sentence a person reads; `raw` is the one an engineer needs.
+   *
+   * They were the same string, and it was the raw one — so a policy granted to a different
+   * delegate reached the screen as `reverted with the following signature: 0x1db3b859 … Unable to
+   * decode`, while the activity row for the very same event said "That agent is not the one you
+   * gave permission to." Two accounts of one failure, and the user met the useless one first.
+   */
+  | { status: 'failed'; runId: string; error: string; raw: string }
   | { status: 'skipped'; reason: 'already_ran_this_period' | 'nothing_to_do' };
 
 export type StrategyRow = {
@@ -237,7 +245,7 @@ async function runStrategyInner(
           [runId, error],
         );
       });
-      return { status: 'failed', runId, error };
+      return { status: 'failed', runId, error: humanFailure(error), raw: error };
     }
   }
 
@@ -714,7 +722,7 @@ async function runStrategyInner(
         client,
       );
     });
-    return { status: 'failed', runId, error };
+    return { status: 'failed', runId, error: humanFailure(error), raw: error };
   }
 }
 
