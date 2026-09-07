@@ -353,3 +353,77 @@ regression would be.
 Everything from the first plan — A (screens), B (API), C (on-chain), D (integrations),
 E (edge cases) — re-executed against the current build, since eleven commits have landed since it
 last passed.
+
+## Third-plan results — 2026-09-07
+
+**Every item PASS. Zero FAILs, so nothing needed fixing in this run** — the first pass of these six
+phases where that was true.
+
+### N — the changed surface, 15 of 15 PASS
+
+| # | Result |
+|---|---|
+| N1 | PASS — 4 real NVDAc readings, `observedSince` set, note names when the series began |
+| N2 | PASS — `NVDAC` and `nvdac` both resolve to `NVDAc` and return the same series |
+| N3 | PASS — `WETH` → 404 `"WETH is not a tokenized equity"`, not an empty series |
+| N4 | PASS — 200 on both deployments. Sepolia: `observedRemainingUsd: 1600` **from the subgraph**. Fork: correctly declines `index_is_for_another_deployment` |
+| N5 | PASS — 20/20 market reads returned 200; the 54-route sweep never 429'd |
+| N6 | PASS — the limiter bit at exactly the budget, `retry-after: 36`, and `/health` answered 200 throughout |
+| N7 | PASS — momentum creates and runs, declining `nothing_to_do` (no breakout) |
+| N8 | PASS — event-driven creates and runs, declining (NVDAc reports ~79 days out) |
+| N9 | PASS — `8 filings, last 2026-08-26, next ~2026-11-25 ±7d (projected from a 91-day median)` |
+| N10 | PASS — SKIPs with the real reason, where it used to PASS on a code-length check |
+| N11 | PASS — `{price_moved: 5, other: 4, venue_could_not_fill: 3}` and `{1inch: 28, aqua: 5}` |
+| N12 | PASS — create, list, PATCH (→ paused), DELETE (→ ended) all work through the moved module |
+| N13 | PASS — real fill `0x802e9f48480df5f938ae071cea729527284acb0042eb168c3fa79db2045b0472`, 0.0199 WETH at $2,507.45, units measured from the chain by the extracted module |
+| N14 | PASS — `NVDAc`/`NVDAC`/`nvdac` all → `{"symbol":"NVDAc","price":233.216,"source":"1inch"}` |
+| N15 | PASS — a live `TF` revert now reads *"The route could not be filled — the venue it went through could not move the token"*, distinct from the HTTP-refusal sentence |
+
+### A — screens, 47 routes + 54 sweep entries
+
+PASS. Every route rendered, **zero console errors and zero failed requests** across the whole sweep.
+Screenshot sweep 54/54 with no content assertions failing.
+
+### B — API
+
+PASS. 19/19 protected routes 401 without a token. 11 public endpoints healthy (sparklines 9/9).
+24 authenticated endpoints all 200 with real data.
+
+### C — on-chain
+
+PASS, including a full signed cycle run for real in this pass:
+
+- `revoke()` signed in the app → **`revoked: true`** read directly from Base Sepolia
+- `grant()` + two token approvals → **`revoked: false`**, delegate `0xC38f38f4…`, cap $1,600/day
+- `policyOf` and `isVenueAllowed` pass with a control address correctly denied
+
+### D — integrations
+
+PASS. Privy policy owned by key quorum `zixx49ik3ngslu9oay54q4li`; Privy refusal proven live;
+1inch aggregator quoting; 1inch spot cross-check `compared: true` at a 0.12% spread; The Graph
+synced with no indexing errors; Aave 3.78%; CoinGecko live; SEC EDGAR live.
+
+### E — edge cases
+
+PASS. Empty submit disabled; double-tap creates exactly one; resubmit refused with *"already on the
+list"*; back mid-flow always lands somewhere rendered; refresh with a signing modal open recovers to
+the true on-chain state with no stuck modal; unknown id says *"This position is no longer open."*
+
+### Confirmations
+
+- **Zero mocks, zero stubs.** One `mock|stub|fake|TODO` hit in all of `src/`, `app/` and
+  `server/src/`: `src/test/react-native-stub.ts`, a Node shim used only by unit tests.
+- **Zero console errors, zero failed requests** across 47 routes.
+- 361 client + 178 server tests, both typechecks clean.
+- Fork `/verify` **18 pass / 0 fail / 1 skip**; Sepolia 16 / 1 / 2.
+
+### The two that are not PASS, and are not claimed as such
+
+**`audit-chain` on Base Sepolia — FAIL, permanently.** Two writers claimed one predecessor before
+`append` took a per-wallet lock. New forks are impossible now and the fork deployment's chain is
+unbroken across 154 entries, which is the evidence the fix works. This one cannot be repaired: the
+trail is append-only by trigger, and a log that can be rewritten to look correct proves nothing.
+
+**`equities` — SKIP on both.** The tokens answer `totalSupply()` on real Base and revert on an anvil
+fork of the same block, so there is nothing to trade against in any environment this project runs.
+Marked untested rather than passed.
