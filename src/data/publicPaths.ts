@@ -20,6 +20,7 @@ export const PUBLIC_PATHS: readonly string[] = [
   '/market/symbols',
   '/market/tradable',
   '/market/stocks',
+  '/market/stocks/history',
   '/market/crosscheck',
   '/yield/supply',
 ];
