@@ -79,8 +79,8 @@ export const STRATEGY_LADDER: LadderEntry[] = [
     what: 'Buys strength on liquid majors, with a stop attached to every entry.',
     judgement:
       'The first strategy that needs the bot to be right about the future. Ships asking first.',
-    available: false,
-    cta: 'Later',
+    available: true,
+    cta: 'Set it up',
     route: '/strategies',
   },
   {

@@ -11,6 +11,7 @@
  * as an error in the activity log.
  */
 import { priceOf } from '../../market/prices.js';
+import { daily, history } from '../../backtest/engine.js';
 import { holdings, cashUsd } from '../../evm/balances.js';
 import { usdcReserve } from '../../market/yield.js';
 import { supplyCalldata, AAVE_POOL } from '../../venues/aave.js';
@@ -366,6 +367,45 @@ export async function planYieldRotation(ctx: PlanContext): Promise<TradeIntent |
 }
 
 /** Every kind that has a planner. A kind not listed here cannot run, and run.ts says so. */
+/**
+ * The other half of tier 6: the stop actually firing.
+ *
+ * `planMomentum` attaches a stop at entry and would be worthless without something that acts on
+ * it. Rather than a second strategy the user has to remember to create, the same kind handles
+ * both sides — hold nothing, look for a breakout; hold something, watch the stop.
+ *
+ * It only ever SELLS here, so it belongs in `CLOSE_ONLY_KINDS` for the same reason exit-rules
+ * does: a stop that the daily cap can silence is not a stop.
+ */
+async function planMomentumExit(ctx: PlanContext): Promise<TradeIntent | null> {
+  const stop = Number(ctx.params.stopPrice ?? Number.NaN);
+  const entry = Number(ctx.params.openEntryPrice ?? Number.NaN);
+  if (!(stop > 0) || !(entry > 0)) return null;
+
+  const held = (await holdings(ctx.owner)).find((h) => h.symbol === ctx.symbol);
+  if (!held || held.usd < MIN_TRADE_USD) return null;
+
+  const price = await priceOf(ctx.symbol);
+  if (!(price > 0) || price > stop) return null;
+
+  return {
+    inSymbol: ctx.symbol,
+    outSymbol: 'USDC',
+    amountIn: held.units,
+    amountInRaw: held.raw,
+    usd: held.usd,
+    because: `${ctx.symbol} fell to ${price.toFixed(2)}, through the ${stop.toFixed(2)} stop set when this entry opened.`,
+    // The position is closed; forget it so the next breakout can be taken on its own merits.
+    stateAfter: { openEntryPrice: 0, stopPrice: 0 },
+  };
+}
+
+/** Entry or exit, decided by whether this strategy already holds a position. */
+async function planMomentumBoth(ctx: PlanContext): Promise<TradeIntent | null> {
+  const open = Number(ctx.params.openEntryPrice ?? 0) > 0;
+  return open ? planMomentumExit(ctx) : planMomentum(ctx);
+}
+
 export const PLANNERS: Record<string, (ctx: PlanContext) => Promise<TradeIntent | null> | TradeIntent | null> = {
   dca: planDca,
   buy: planDca,
@@ -374,6 +414,7 @@ export const PLANNERS: Record<string, (ctx: PlanContext) => Promise<TradeIntent 
   'exit-rules': planExitRules,
   'yield-rotation': planYieldRotation,
   grid: planGrid,
+  momentum: planMomentumBoth,
 };
 
 /**
@@ -430,4 +471,84 @@ export async function observationFor(
   }
 
   return null;
+}
+
+/**
+ * Tier 6 — momentum and breakouts.
+ *
+ * The ladder's own words: *"Buys strength on liquid majors, with a stop attached to every entry.
+ * The first strategy that needs the bot to be right about the future. Ships asking first."* All
+ * three of those constrain the implementation, so all three are honoured here rather than
+ * paraphrased.
+ *
+ * **Buys strength.** A Donchian breakout: price closes above the highest close of the lookback
+ * window. Deterministic, defined entirely by observable history, and the oldest published
+ * definition of a breakout — which matters because the alternative is a threshold someone invented
+ * and cannot defend.
+ *
+ * **On liquid majors.** Restricted to symbols with a real settlement route. A breakout on
+ * something the executor cannot fill is a signal it cannot act on, and acting on it anyway is how
+ * a strategy books slippage instead of a position.
+ *
+ * **A stop attached to every entry.** The intent carries `stateAfter` describing the stop, so the
+ * position is never open without one. A momentum entry with no exit is the single most expensive
+ * shape in this whole ladder.
+ *
+ * **Ships asking first.** `requiresApprovalByDefault` already returns true for tier ≥ 6, so this
+ * proposes rather than executes unless the user explicitly turns that off. Nothing here overrides
+ * that, deliberately.
+ *
+ * A trend filter sits on top of the breakout: the fast average must be above the slow one. Without
+ * it a single spike in a falling market triggers an entry, which is precisely the trade this
+ * strategy is worst at surviving.
+ */
+export async function planMomentum(ctx: PlanContext): Promise<TradeIntent | null> {
+  const lookbackDays = Math.floor(Number(ctx.params.lookbackDays ?? 20));
+  const stopPct = Number(ctx.params.stopPct ?? 8);
+  const size = Math.min(Number(ctx.params.usdPerEntry ?? ctx.budgetUsd), ctx.budgetUsd);
+  if (!(lookbackDays >= 5) || !(stopPct > 0) || !(size >= MIN_TRADE_USD)) return null;
+
+  /*
+   * Already in this trade? Then there is nothing to add.
+   *
+   * Momentum re-entering its own open position is how a "strategy" becomes a way to buy the same
+   * breakout four times on the way up and hold four times the intended size into the reversal.
+   */
+  if (ctx.params.openEntryPrice !== undefined && Number(ctx.params.openEntryPrice) > 0) return null;
+
+  // The same series the backtests read, so a live entry and a backtested one see one history.
+  const points = daily(await history(ctx.symbol, Math.max(lookbackDays * 2, 60)));
+  const closes = points.map(([, p]) => p).filter((p) => Number.isFinite(p) && p > 0);
+  // A window plus the bar being tested, plus enough left over for the slow average to mean
+  // anything. Too little history is "unknown", not "no breakout".
+  if (closes.length < lookbackDays + 2) return null;
+
+  const price = await priceOf(ctx.symbol);
+  if (!(price > 0)) return null;
+
+  // The window EXCLUDES the current price — comparing it to a high it set itself always breaks out.
+  const window = closes.slice(-lookbackDays - 1, -1);
+  const high = Math.max(...window);
+  if (!(price > high)) return null;
+
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const fast = mean(closes.slice(-Math.max(3, Math.floor(lookbackDays / 4))));
+  const slow = mean(closes.slice(-lookbackDays));
+  if (!(fast > slow)) return null;
+
+  return {
+    inSymbol: 'USDC',
+    outSymbol: ctx.symbol === 'ETH' ? 'WETH' : ctx.symbol,
+    amountIn: size,
+    usd: size,
+    because:
+      `${ctx.symbol} closed above its ${lookbackDays}-day high of ${high.toFixed(2)} at ` +
+      `${price.toFixed(2)}, with the short average above the long one. Stop set ${stopPct}% below entry.`,
+    stateAfter: {
+      openEntryPrice: price,
+      // The stop travels with the position from the moment it opens, not from a later run.
+      stopPrice: price * (1 - stopPct / 100),
+      openedAt: Date.now(),
+    },
+  };
 }

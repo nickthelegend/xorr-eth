@@ -57,7 +57,14 @@ export type BacktestResult = {
 const cache = new Map<string, { at: number; prices: [number, number][] }>();
 const TTL_MS = 10 * 60_000;
 
-async function history(symbol: string, days: number): Promise<[number, number][]> {
+/**
+ * Daily closes for a symbol, cached and sliced from one long fetch.
+ *
+ * Exported because tier 6 needs the same series this file already fetches, and a second fetcher
+ * would be a second answer to "what did this asset do" — two components disagreeing about history
+ * is worse than either being slightly stale.
+ */
+export async function history(symbol: string, days: number): Promise<[number, number][]> {
   const id = IDS[symbol];
   if (!id) throw new Error(`No price history for ${symbol}`);
   const key = `${id}:${days}`;

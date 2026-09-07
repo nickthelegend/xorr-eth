@@ -171,6 +171,34 @@ export const SELF_SIZING_KINDS = new Set(['exit-rules', 'rebalance']);
 export const CLOSE_ONLY_KINDS = new Set(['exit-rules']);
 
 /**
+ * Kinds that can BOTH open and close, and whose closing side must not be capped.
+ *
+ * Momentum opens on a breakout and closes on its own stop. Treating the whole kind as close-only
+ * would exempt its entries from the daily cap, which is the opposite of safe; treating it as
+ * cap-bound would let a spent cap silence a stop, which is the failure `CLOSE_ONLY_KINDS` exists
+ * to prevent. So the decision is made per INTENT — see `reducesRiskOnly` — rather than per kind.
+ */
+export const DUAL_SIDED_KINDS = new Set(['momentum']);
+
+/**
+ * Will this run only ever reduce exposure?
+ *
+ * The cap gate gets asked before the planner has looked, so it cannot read the intent. For a kind
+ * that is always a close the answer is the kind itself. For a dual-sided one it is in the
+ * strategy's own state: momentum holding a position is going to check its stop, and momentum
+ * holding nothing is going to look for a breakout. The same field `planMomentumBoth` branches on,
+ * read one step earlier.
+ *
+ * Getting this wrong in either direction is expensive — exempt an entry from the cap and the limit
+ * means nothing; cap a stop and a spent allowance silences it.
+ */
+export function reducesRiskOnly(kind: string, params: Record<string, unknown>): boolean {
+  if (CLOSE_ONLY_KINDS.has(kind)) return true;
+  if (!DUAL_SIDED_KINDS.has(kind)) return false;
+  return Number(params.openEntryPrice ?? 0) > 0;
+}
+
+/**
  * How many runs are on chain right now.
  *
  * Shutdown waits on this. A SIGTERM in the middle of a fill used to leave the `strategy_runs` row
@@ -316,7 +344,7 @@ async function runStrategyInner(
      * `closePosition` on chain never touches the cap either. This is the third place that had to
      * agree and did not.
      */
-    reducesRiskOnly: CLOSE_ONLY_KINDS.has(strategy.kind),
+    reducesRiskOnly: reducesRiskOnly(strategy.kind, (strategy.params ?? {}) as Record<string, unknown>),
   });
 
   if (!verdict.allowed) {
