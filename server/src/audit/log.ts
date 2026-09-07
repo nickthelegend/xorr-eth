@@ -178,14 +178,40 @@ export async function list(walletId: string, limit = 200): Promise<AuditRow[]> {
  * Verify the chain. Returns the first break, if any — which is what makes the export defensible:
  * anyone can re-run this over the exported file and see for themselves.
  */
-export async function verify(walletId: string): Promise<{ ok: boolean; brokenAtSeq?: string; checked: number }> {
+export type VerifyResult = {
+  ok: boolean;
+  brokenAtSeq?: string;
+  checked: number;
+  /**
+   * WHICH property failed, because they are not the same claim.
+   *
+   * `content` — a row's stored hash does not match its own fields. Something edited the trail.
+   * That is tampering, and it is the alarm this whole structure exists to raise.
+   *
+   * `link` — a row does not point at its predecessor. Rows fork instead of forming a line. That
+   * is what the pre-lock `append` race produced: two writers read the same tail and both claimed
+   * it. It is damage, it is permanent because the trail is append-only by design, and it is not
+   * evidence that anyone altered a record.
+   *
+   * The check reported both as one flat failure, so "chain broken at entry 2" read exactly like
+   * "someone edited your audit log". Different facts deserve different words.
+   */
+  kind?: 'link' | 'content';
+  /** Rows whose own contents still hash to their stored hash, break or no break. */
+  intact: number;
+};
+
+export async function verify(walletId: string): Promise<VerifyResult> {
   const rows = await query<AuditRow>(
     `SELECT * FROM audit_log WHERE wallet_id = $1 ORDER BY seq ASC`,
     [walletId],
   );
   let prev = GENESIS;
+  let brokenAtSeq: string | undefined;
+  let kind: 'link' | 'content' | undefined;
+  let intact = 0;
+
   for (const r of rows) {
-    if (r.prev_hash !== prev) return { ok: false, brokenAtSeq: r.seq, checked: rows.length };
     const expected = hashEntry({
       prevHash: r.prev_hash,
       walletId: r.wallet_id,
@@ -198,10 +224,29 @@ export async function verify(walletId: string): Promise<{ ok: boolean; brokenAtS
       signature: r.signature,
       payload: r.payload,
     });
-    if (expected !== r.hash) return { ok: false, brokenAtSeq: r.seq, checked: rows.length };
+
+    /*
+     * Content is checked for EVERY row, not up to the first break.
+     *
+     * The loop used to return at the first mismatch of either sort, so one link break hid the
+     * tamper state of every row after it — the one question the trail exists to answer, left
+     * unanswered by the lesser fault. Content tampering also outranks a link break: if both are
+     * present, the alarm is the one that gets reported.
+     */
+    if (expected === r.hash) intact += 1;
+    else if (kind !== 'content') {
+      kind = 'content';
+      brokenAtSeq = r.seq;
+    }
+
+    if (r.prev_hash !== prev && kind === undefined) {
+      kind = 'link';
+      brokenAtSeq = r.seq;
+    }
     prev = r.hash;
   }
-  return { ok: true, checked: rows.length };
+
+  return { ok: kind === undefined, brokenAtSeq, checked: rows.length, kind, intact };
 }
 
 const CSV_COLUMNS = [

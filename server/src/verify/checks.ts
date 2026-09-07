@@ -232,8 +232,8 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
     },
     {
       id: 'audit',
-      claim: 'The audit trail is tamper-evident: every row hashes its predecessor.',
-      how: 'GET /activity/verify — re-hashes the whole chain',
+      claim: 'Nothing in the audit trail has been edited: every row hashes to its own contents.',
+      how: 'GET /activity/verify — re-hashes every row and compares it to the stored hash',
       run: async () => {
         if (!owner) skip('No wallet on this request.');
         const rows = await query<{ id: string }>(
@@ -243,8 +243,53 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
         const walletId = rows[0]?.id;
         if (!walletId) skip('This address has no wallet row yet.');
         const r = await verifyAudit(walletId);
+        /*
+         * This check is the ALARM, and it asks one question: has a record been altered?
+         *
+         * It used to fail on a link break too, so "chain broken at entry 2" — rows forking after
+         * a concurrency race we have since fixed — read exactly like "someone edited your audit
+         * log". Conflating those made the loud claim quiet: a permanent, documented, harmless
+         * artefact and actual tampering produced the same red word.
+         */
+        if (r.kind === 'content') {
+          throw new Error(
+            `entry ${r.brokenAtSeq} does not hash to its own contents — it has been altered`,
+          );
+        }
+        return `${r.checked} entries re-hashed, all ${r.intact} match their contents`;
+      },
+    },
+    {
+      id: 'audit-chain',
+      claim: 'The trail is one unbroken line: every row points at the one before it.',
+      how: 'GET /activity/verify — walks prev_hash from genesis',
+      run: async () => {
+        if (!owner) skip('No wallet on this request.');
+        const rows = await query<{ id: string }>(
+          `SELECT id FROM wallets WHERE lower(address)=lower($1)`,
+          [owner],
+        );
+        const walletId = rows[0]?.id;
+        if (!walletId) skip('This address has no wallet row yet.');
+        const r = await verifyAudit(walletId);
+        /*
+         * A break here is real and it is reported as a failure, because it is one.
+         *
+         * `append` now serialises per wallet with an advisory lock and migration 008 adds the
+         * unique index, so no new fork can form. What the old race already wrote cannot be
+         * repaired: the trail is append-only by trigger, and a log that can be rewritten to look
+         * correct proves nothing. So the damage stays visible and named rather than tidied away —
+         * that is the same property working, not an inconvenience to be hidden.
+         */
+        if (r.kind === 'link') {
+          throw new Error(
+            `forks at entry ${r.brokenAtSeq} — two writers claimed one predecessor before the ` +
+              'append lock existed. Permanent: the trail is append-only, so it cannot be ' +
+              `rewritten to look clean. All ${r.intact} rows are individually unaltered.`,
+          );
+        }
         if (!r.ok) throw new Error(`chain broken at entry ${r.brokenAtSeq}`);
-        return `${r.checked} entries re-hashed, chain intact`;
+        return `${r.checked} entries, unbroken from genesis`;
       },
     },
     {

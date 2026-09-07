@@ -144,7 +144,20 @@ const EXPECT = {
   '32c-strategy-grid': { must: [/Range accumulation/, /\$[\d,]+/, /leaves the range it stops/] },
   '32d-yield-position': { must: [/Aave|lending pool/, /not the bot|never given/] },
   '32e-flatten': { must: [/Sell everything/, /does not use your daily cap/] },
-  '32f-judge': { must: [/Check it yourself/, /\d+\/\d+/, /PASS/], never: [/FAIL/] },
+  /*
+   * `never: [/FAIL/]` was wrong, and it was wrong in the direction that matters.
+   *
+   * This wallet's trail forks at entry 2 — two writers claimed one predecessor before `append`
+   * took a per-wallet lock. That is real, it is reported, and it is PERMANENT: the trail is
+   * append-only by trigger, so it cannot be rewritten to look clean, which is the whole reason
+   * anyone should believe it. Asserting the page never says FAIL asks the console to hide a true
+   * result, and a console that goes quiet when something is broken is worth nothing.
+   *
+   * So the assertion is about the claim that would actually be damning: no row has been ALTERED.
+   * A fork is visible damage from a fixed bug; an edited record is the thing this whole structure
+   * exists to detect, and that one must never appear.
+   */
+  '32f-judge': { must: [/Check it yourself/, /\d+\/\d+/, /PASS/], never: [/has been altered/] },
   '33-holdings': { must: [/PORTFOLIO VALUE/, /ALLOCATION/, /0x[0-9a-fA-F]{40}/] },
   '34-activity': { must: [/Activity/, /Export audit trail/, /Disposals/] },
   '35-history': { must: [/History|settled|spend/i] },
