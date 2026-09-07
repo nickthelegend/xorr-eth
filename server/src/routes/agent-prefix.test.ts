@@ -19,7 +19,15 @@ import path from 'node:path';
 const ROUTES = path.resolve(import.meta.dirname);
 
 /** Files whose routes are reached with a Privy session rather than an agent key. */
-const USER_SURFACES = ['extra.ts', 'index.ts', 'market.ts', 'alerts.ts', 'privy.ts', 'catchup.ts'];
+const USER_SURFACES = [
+  'extra.ts',
+  'index.ts',
+  'strategies.ts',
+  'market.ts',
+  'alerts.ts',
+  'privy.ts',
+  'catchup.ts',
+];
 
 describe('the machine surface and the user surface do not overlap', () => {
   it('no user-surface route is registered under the /agent/ prefix', () => {

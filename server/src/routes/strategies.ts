@@ -1,0 +1,476 @@
+/**
+ * The strategy ladder's API surface: create, list, amend, end, run, backtest.
+ *
+ * Split out of `routes/index.ts`, which had grown to 1,098 lines covering wallets, delegation,
+ * strategies, positions, the audit trail, limits and prices — seven concerns whose only relation
+ * was having been written on the same day. This is the largest of them and the one that changes
+ * most, since every ladder tier lands here.
+ *
+ * A pure move: the handlers, their validation and their comments are unchanged, and the shared
+ * wallet lookup now comes from `wallet-context.ts` rather than being duplicated. `server/index.ts`
+ * mounts this the same way it already mounts `market`, `alerts` and the rest.
+ */
+import { randomUUID } from 'node:crypto';
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { one, query } from '../db/index.js';
+import { append } from '../audit/log.js';
+import {
+  runStrategy,
+  CLOSE_ONLY_KINDS,
+  EXECUTABLE_KINDS,
+  SELF_SIZING_KINDS,
+  type StrategyRow,
+} from '../executor/run.js';
+import { TOKENS as VENUE_TOKENS, TOKENS, canonicalSymbol } from '../venues/oneinch.js';
+import { nextRuns, type Cadence } from '../executor/schedule.js';
+import { CHAIN_KEY } from '../evm/chains.js';
+import { readPolicy } from '../evm/delegation.js';
+import type { Address } from 'viem';
+import { currentWallet, requireWallet } from './wallet-context.js';
+
+export const strategyRoutes = new Hono();
+
+
+const StrategyInput = z.object({
+  /**
+   * A kind the executor can actually run.
+   *
+   * Same argument as `symbol` below, and it was missing for the same reason — the UI only offers
+   * buildable tiers, so nothing ever sent a bad one. But the API is the boundary: `kind: 'grid'`
+   * was accepted, scheduled forever, and blocked at every single run with "nothing here knows how
+   * to run a grid strategy". A strategy that can never act should be refused when it is created,
+   * while there is still someone to tell.
+   */
+  kind: z.string().refine((v) => EXECUTABLE_KINDS.has(v), {
+    message: `not runnable yet — one of: ${[...EXECUTABLE_KINDS].join(', ')}`,
+  }),
+  state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']),
+  label: z.string(),
+  /**
+   * Must be a symbol the executor can actually route and settle. The UI already only offers these,
+   * but the API is the boundary that matters: without this check a client could create a strategy
+   * that schedules forever and fails every run, and the failure would look like our bug rather
+   * than an impossible request.
+   */
+  symbol: z
+    .string()
+    .refine((v) => canonicalSymbol(v) in TOKENS, {
+      message: `not tradable on this chain — one of: ${Object.keys(TOKENS).join(', ')}`,
+    }),
+  params: z.record(z.string(), z.unknown()).default({}),
+  cadence: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
+  nextRunAt: z.number().optional(),
+  dailyAllocationUsd: z.number().nonnegative(),
+  /** Which hired agent runs this. Optional: a user can set a strategy up themselves. */
+  agentId: z.string().uuid().optional(),
+});
+
+function toApi(r: StrategyRow) {
+  return {
+    id: r.id,
+    kind: r.kind,
+    state: r.state,
+    label: r.label,
+    symbol: r.symbol,
+    params: r.params,
+    cadence: r.cadence ?? undefined,
+    nextRunAt: r.next_run_at ? new Date(r.next_run_at).getTime() : undefined,
+    dailyAllocationUsd: Number(r.daily_allocation_usd),
+    createdAt: Date.now(),
+  };
+}
+
+strategyRoutes.get('/strategies', async (c) => {
+  const w = await currentWallet(c);
+  if (!w) return c.json([]);
+  const rows = await query<StrategyRow>(
+    `SELECT * FROM strategies WHERE wallet_id=$1 ORDER BY created_at DESC`,
+    [w.id],
+  );
+  return c.json(rows.map(toApi));
+});
+
+/**
+ * Run one strategy now.
+ *
+ * A cadence is the point of the product, but it is useless for showing someone what the bot does:
+ * "come back on Sunday" is not a demo, and it is not a way to test a change either. This runs the
+ * same `runStrategy` the scheduler runs, with the same period claim — so triggering it twice in a
+ * period is a no-op rather than a double buy, which is the property that makes it safe to expose.
+ */
+/**
+ * Pause, resume or retire a strategy.
+ *
+ * There was no way to stop one. A user could add strategies until they hit the cap and then had
+ * no route out — which also meant the cap, working correctly, read as the app being broken. The
+ * commitment total only counts `live` and `watch`, so pausing frees the allowance immediately.
+ */
+strategyRoutes.patch('/strategies/:id', async (c) => {
+  const body = z
+    .object({ state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']) })
+    .parse(await c.req.json());
+  const w = await requireWallet(c);
+
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = $3 WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id, body.state],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `${body.state === 'paused' ? 'Paused' : body.state === 'live' ? 'Resumed' : 'Set'} ${row.label}`,
+    detail:
+      body.state === 'paused'
+        ? 'It will not run again until you resume it. Nothing was sold.'
+        : `Now ${body.state}.`,
+    kind: 'risk',
+    payload: { strategyId: row.id, state: body.state },
+  });
+  return c.json(toApi(row));
+});
+
+/**
+ * Retire a strategy.
+ *
+ * Marks it `ended` rather than deleting the row: the runs and audit entries that reference it are
+ * the user's own history, and a delete would take them with it.
+ */
+strategyRoutes.delete('/strategies/:id', async (c) => {
+  const w = await requireWallet(c);
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = 'ended', next_run_at = NULL
+     WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `Ended ${row.label}`,
+    detail: 'It will not run again. Your history and any position it opened are untouched.',
+    kind: 'risk',
+    payload: { strategyId: row.id },
+  });
+  return c.json({ ok: true });
+});
+
+/**
+ * A market order the user placed themselves — screen 14's "Buy ${amount} of {symbol}".
+ *
+ * ## Why this reuses `runStrategy` rather than adding a second spend path
+ *
+ * Everything that spends the user's money goes through one place: the period claim, the
+ * policy engine, the on-chain cap read, the venue allowlist, the 1inch route and the
+ * `spendAsDelegate` call. A "place this order now" endpoint that re-implemented any of that
+ * would be a second door into the same room, and the second door is the one nobody
+ * remembers to lock.
+ *
+ * So a manual order is a one-shot strategy: a `buy` row with no cadence, run immediately and
+ * retired. It inherits every guard by construction, it shows up in the strategy list and the
+ * audit trail like anything else, and there is exactly one code path that can move money.
+ *
+ * ## Why the app may call this at all
+ *
+ * `POST /orders` is not the bot acting on its own — it is the user exercising the authority
+ * they already granted, and every limit on that authority is enforced server-side and
+ * on-chain. A compromised phone can spend up to the cap at an allowlisted venue, which is
+ * exactly the risk the cap describes and exactly what the kill switch ends in one tap. It
+ * cannot withdraw, cannot name a destination, and cannot pick a price.
+ */
+/** The order's own label. `toLocaleString` so a four-figure order keeps its separator. */
+function money(usd: number): string {
+  return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+const OrderInput = z.object({
+  symbol: z.string().min(1).max(12),
+  usd: z.number().positive().max(1_000_000),
+});
+
+strategyRoutes.post('/orders', async (c) => {
+  const w = await requireWallet(c);
+  const body = OrderInput.parse(await c.req.json());
+  // Equities are `NVDAc`/`TSLAc`; uppercasing loses the suffix and the venue lookup misses.
+  const symbol = canonicalSymbol(body.symbol);
+
+  if (!VENUE_TOKENS[symbol]) {
+    return c.json(
+      {
+        status: 'blocked',
+        reason: 'not_tradable',
+        detail: `${symbol} cannot be settled on ${CHAIN_KEY}, so there is no order to place.`,
+      },
+      409,
+    );
+  }
+
+  // The same on-chain permission check `/strategies` does at creation. Read from the CHAIN:
+  // absent permission has to mean refuse, not allow.
+  const policy = await readPolicy(w.address as Address);
+  if (!policy || policy.revoked) {
+    return c.json(
+      {
+        status: 'blocked',
+        reason: 'no_delegation',
+        detail: 'No active trading permission on-chain. Grant one before placing an order.',
+      },
+      409,
+    );
+  }
+  if (policy.expiresAt <= Date.now()) {
+    return c.json(
+      {
+        status: 'blocked',
+        reason: 'delegation_expired',
+        detail: 'The trading permission has expired. Renew it before placing an order.',
+      },
+      409,
+    );
+  }
+
+  // A one-shot `buy`: no cadence, so `advance()` never reschedules it.
+  const row = await one<StrategyRow>(
+    `INSERT INTO strategies (id, wallet_id, kind, state, label, symbol, params, cadence, next_run_at, daily_allocation_usd)
+     VALUES ($1,$2,'buy','live',$3,$4,$5,NULL,NULL,$6) RETURNING *`,
+    [
+      randomUUID(),
+      w.id,
+      `${money(body.usd)} of ${symbol}`,
+      symbol,
+      JSON.stringify({ usd: body.usd, manual: true }),
+      body.usd,
+    ],
+  );
+
+  const outcome = await runStrategy(row!);
+
+  // Retire it either way. A one-shot that stays `live` would sit on the strategy list
+  // holding allowance against the cap for a trade that has already happened.
+  await query(`UPDATE strategies SET state='ended' WHERE id=$1`, [row!.id]);
+
+  return c.json(
+    { ...outcome, orderId: row!.id },
+    outcome.status === 'failed' ? 502 : outcome.status === 'blocked' ? 409 : 200,
+  );
+});
+
+strategyRoutes.post('/strategies/:id/run', async (c) => {
+  const w = await requireWallet(c);
+  const row = await one<StrategyRow>(
+    `SELECT * FROM strategies WHERE id = $1 AND wallet_id = $2`,
+    [c.req.param('id'), w.id],
+  );
+  // Scoped to the caller's own wallet: an id from another user must look like a missing strategy,
+  // not like a permission error, because the latter confirms it exists.
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  const outcome = await runStrategy(row);
+  return c.json(outcome, outcome.status === 'failed' ? 502 : 200);
+});
+
+strategyRoutes.post('/strategies', async (c) => {
+  const body = StrategyInput.parse(await c.req.json());
+  const w = await requireWallet(c);
+
+  /*
+   * PLAN.md 9.2: the sum of live strategies can never exceed the delegation's daily cap, enforced
+   * at CREATION so a user cannot quietly over-commit by adding one more.
+   *
+   * Read from the CHAIN. This used to read a `delegations` row written by /delegation/record, and
+   * a row that was never written meant `del` was null and the whole check was skipped — a wallet
+   * with a real $1,600 on-chain cap accepted a $999,999/day strategy, because the guard's failure
+   * mode was to wave everything through. Absent permission has to mean refuse, not allow.
+   */
+  const policy = await readPolicy(w.address as Address);
+  if (!policy || policy.revoked) {
+    return c.json(
+      {
+        error: 'no_delegation',
+        message: 'No active trading permission on-chain. Grant one before creating a strategy.',
+      },
+      400,
+    );
+  }
+  if (policy.expiresAt <= Date.now()) {
+    return c.json(
+      { error: 'delegation_expired', message: 'The trading permission has expired. Renew it first.' },
+      400,
+    );
+  }
+
+  /*
+   * A strategy that can only CLOSE commits nothing, so the cap has nothing to say about it.
+   *
+   * The commitment check refused an `exit-rules` strategy whose own allocation was zero, because
+   * the strategies already live summed past the cap — so a user whose day was committed could not
+   * add a stop-loss, which is exactly the moment they would want one. Same mistake as the runtime
+   * gate: a limit on putting capital at risk was being applied to the thing that takes it off.
+   *
+   * The sum still counts every spending strategy, and this one adds nothing to it.
+   */
+  const closeOnly = CLOSE_ONLY_KINDS.has(body.kind);
+  const sums = await query<{ sum: string | null }>(
+    `SELECT SUM(daily_allocation_usd) AS sum FROM strategies
+      WHERE wallet_id=$1 AND state IN ('live','watch') AND kind <> ALL($2::text[])`,
+    [w.id, [...CLOSE_ONLY_KINDS]],
+  );
+  const committed = Number(sums[0]?.sum ?? 0) + (closeOnly ? 0 : body.dailyAllocationUsd);
+  if (!closeOnly && committed > policy.dailyCapUsd) {
+    return c.json(
+      {
+        error: 'over_cap',
+        message: `That would commit $${committed.toLocaleString('en-US')} a day against a $${policy.dailyCapUsd.toLocaleString('en-US')} cap. Raise the cap or lower this strategy.`,
+      },
+      400,
+    );
+  }
+
+  /*
+   * A spending strategy needs an amount; a self-sizing one decides its own.
+   *
+   * "Buy $0 of WETH every week" was accepted and would then be blocked at every single run — a
+   * strategy that looks live on the list and can never do anything. A rebalance or a stop is
+   * different: it is sized by looking, so zero is the correct configuration for it.
+   */
+  if (!SELF_SIZING_KINDS.has(body.kind) && !(body.dailyAllocationUsd > 0)) {
+    return c.json(
+      {
+        error: 'invalid_request',
+        detail: `dailyAllocationUsd: a ${body.kind} strategy needs an amount above zero.`,
+      },
+      400,
+    );
+  }
+
+  const nextRunAt = body.nextRunAt
+    ? new Date(body.nextRunAt)
+    : body.cadence
+      ? nextRuns(body.cadence as Cadence, 1)[0]!
+      : null;
+
+  // An agent id from another wallet must not be attachable. Verified here rather than trusted,
+  // because the alternative is a strategy that reports to an agent its owner cannot see or fire.
+  let agentId: string | null = null;
+  let agentName = 'Yield Keeper';
+  if (body.agentId) {
+    const agent = await one<{ id: string; name: string }>(
+      `SELECT id, name FROM agents WHERE id = $1 AND wallet_id = $2 AND hired = true`,
+      [body.agentId, w.id],
+    );
+    if (!agent) {
+      return c.json(
+        { error: 'unknown_agent', message: 'That agent is not one you have hired.' },
+        400,
+      );
+    }
+    agentId = agent.id;
+    agentName = agent.name;
+  }
+
+  const row = await one<StrategyRow>(
+    `INSERT INTO strategies (id, wallet_id, kind, state, label, symbol, params, cadence, next_run_at, daily_allocation_usd, agent_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [
+      randomUUID(),
+      w.id,
+      body.kind,
+      body.state,
+      body.label,
+      body.symbol,
+      JSON.stringify(body.params),
+      body.cadence ?? null,
+      nextRunAt,
+      body.dailyAllocationUsd,
+      agentId,
+    ],
+  );
+
+  await append({
+    walletId: w.id,
+    agent: agentName,
+    action: `Created ${body.label}`,
+    detail: nextRunAt ? `First run ${nextRunAt.toDateString()}.` : 'Ready to run.',
+    kind: 'risk',
+    payload: { strategyId: row!.id },
+  });
+
+  return c.json(toApi(row!));
+});
+
+for (const [path, state] of [
+  ['pause', 'paused'],
+  ['resume', 'live'],
+  ['end', 'ended'],
+] as const) {
+  strategyRoutes.post(`/strategies/:id/${path}`, async (c) => {
+    const id = c.req.param('id');
+    const row = await one<StrategyRow>(
+      `UPDATE strategies SET state=$2 WHERE id=$1 RETURNING *`,
+      [id, state],
+    );
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    return c.json(toApi(row));
+  });
+}
+
+/** Run a strategy now. Idempotent per period — a second call in the same period is a no-op. */
+/**
+ * Pause, resume or retire a strategy.
+ *
+ * There was no way to stop one. A user could add strategies until they hit the cap and then had
+ * no route out — which also meant the cap, working correctly, read as the app being broken. The
+ * commitment total only counts `live` and `watch`, so pausing frees the allowance immediately.
+ */
+strategyRoutes.patch('/strategies/:id', async (c) => {
+  const body = z
+    .object({ state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']) })
+    .parse(await c.req.json());
+  const w = await requireWallet(c);
+
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = $3 WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id, body.state],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `${body.state === 'paused' ? 'Paused' : body.state === 'live' ? 'Resumed' : 'Set'} ${row.label}`,
+    detail:
+      body.state === 'paused'
+        ? 'It will not run again until you resume it. Nothing was sold.'
+        : `Now ${body.state}.`,
+    kind: 'risk',
+    payload: { strategyId: row.id, state: body.state },
+  });
+  return c.json(toApi(row));
+});
+
+/**
+ * Retire a strategy.
+ *
+ * Marks it `ended` rather than deleting the row: the runs and audit entries that reference it are
+ * the user's own history, and a delete would take them with it.
+ */
+strategyRoutes.delete('/strategies/:id', async (c) => {
+  const w = await requireWallet(c);
+  const row = await one<StrategyRow>(
+    `UPDATE strategies SET state = 'ended', next_run_at = NULL
+     WHERE id = $1 AND wallet_id = $2 RETURNING *`,
+    [c.req.param('id'), w.id],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    action: `Ended ${row.label}`,
+    detail: 'It will not run again. Your history and any position it opened are untouched.',
+    kind: 'risk',
+    payload: { strategyId: row.id },
+  });
+  return c.json({ ok: true });
+});

@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import 'dotenv/config';
 import { ZodError } from 'zod';
 import { routes } from './routes/index.js';
+import { strategyRoutes } from './routes/strategies.js';
 import { extra } from './routes/extra.js';
 import { market, warmMarketCache } from './routes/market.js';
 import { agents } from './agents/routes.js';
@@ -179,6 +180,7 @@ app.use('*', idempotency);
 app.use('*', rateLimit);
 
 app.route('/', routes);
+app.route('/', strategyRoutes);
 app.route('/', agentSurface);
 app.route('/', extra);
 app.route('/', market);
