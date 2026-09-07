@@ -95,11 +95,24 @@ export default function Settings() {
           <Eyebrow small style={{ marginTop: space.s26 }}>
             What the bot may do
           </Eyebrow>
+          {/*
+            "Live · $1,600/day" for a wallet that has granted nothing.
+
+            `cap` is the value the SLIDER is sitting on — a preference the user has not signed —
+            and `stopped` is only true once a delegation exists and is revoked. So before any
+            grant this section read "Status Live, Daily cap $1,600/day" under a heading that says
+            "What the bot may do". The bot may do nothing; there is no permission. Same mistake as
+            the two dashes on Safety, in the opposite direction: there it said too little, here it
+            claimed something that was not true.
+          */}
           <Row
             title="Status"
             value={
-              <Text variant="rowPrimary" color={stopped ? colors.ink55 : colors.up}>
-                {stopped ? 'Stopped' : 'Live'}
+              <Text
+                variant="rowPrimary"
+                color={!delegation ? colors.ink55 : stopped ? colors.ink55 : colors.up}
+              >
+                {!delegation ? 'Not granted' : stopped ? 'Stopped' : 'Live'}
               </Text>
             }
             height={SETTING_ROW}
@@ -107,7 +120,15 @@ export default function Settings() {
           />
           <Row
             title="Daily cap"
-            value={<Price color={colors.ink55}>{capLabel(cap)}</Price>}
+            value={
+              delegation ? (
+                <Price color={colors.ink55}>{capLabel(cap)}</Price>
+              ) : (
+                <Text variant="rowPrimary" color={colors.ink38}>
+                  —
+                </Text>
+              )
+            }
             height={SETTING_ROW}
           />
           <Row

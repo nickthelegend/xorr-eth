@@ -14,7 +14,6 @@ export type SwapQuoteResult = {
   priceImpactPct: number;
   slippageBps: number;
   venues: string[];
-  feeUsd: number;
   route: string;
 };
 

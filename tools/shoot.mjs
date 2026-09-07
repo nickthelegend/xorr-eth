@@ -153,7 +153,15 @@ const EXPECT = {
   '38-safety': { must: [/Agents are live|Agents are stopped/, /YOUR WALLET/, /THE BOT'S KEY/, /0x[0-9a-fA-F]{40}/, /Stopping is not selling/] },
   '39-settings': { must: [/Settings/] },
   '40-alerts': { must: [/Alerts/, /What the bot tells you/, /Circuit breakers/] },
-  '41-alerts-new': { must: [/Price|Agent|Risk/] },
+  /*
+   * Not the kind selector — it is gone.
+   *
+   * This asserted /Price|Agent|Risk/, which passed because the screen offered three kinds and
+   * built only one of them: choosing Agent or Risk changed nothing on screen and POSTed an alert
+   * the executor could not evaluate. The assertion was holding the broken control in place. What
+   * has to be true is that the screen collects a symbol and a level.
+   */
+  '41-alerts-new': { must: [/New alert/, /SYMBOL/, /ABOVE/] },
   // Either real 0x destinations the user added, or an honest empty state. Never the invented
   // base58 pair the handoff seeded, which were not even addresses on this chain.
   '42-allowlist': { must: [/Allowlist/], never: [/[13-9A-HJ-NP-Za-km-z]{40,}/] },

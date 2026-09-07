@@ -51,7 +51,17 @@ export type SwapQuote = {
   slippagePct: number;
   /** The protocols 1inch actually routed through — screen 19's Route row. */
   venues: string[];
-  feeUsd: number;
+  /**
+   * What the user is guaranteed at worst, in the OUTPUT token.
+   *
+   * Replaces `feeUsd`, which was `outAmount * 0.0025` — an "app fee" xorr does not charge,
+   * multiplied by a quantity in the output token's own units rather than dollars. For USDC→WETH
+   * that made the order ticket read "Fee $0.00" on every size: an invented charge, computed
+   * wrongly, displaying as nothing. Three ways to be wrong about one number.
+   *
+   * The real protections on a swap are the route, the slippage limit and this floor, and this is
+   * the one a user can check against what actually arrives.
+   */
   route: string;
 };
 
@@ -80,9 +90,6 @@ export const SLIPPAGE = {
   stop: 1,
   panic: 2,
 } as const;
-/** Screen 19's stated app fee. */
-export const SWAP_FEE_PCT = 0.0025;
-
 type QuoteResponse = {
   dstAmount: string;
   protocols?: { name: string }[][][];
@@ -157,7 +164,6 @@ export async function quote(params: {
     minimumOut: outAmount * (1 - slippagePct / 100),
     slippagePct,
     venues,
-    feeUsd: outAmount * SWAP_FEE_PCT,
     route: routeLabel(venues),
   };
 }

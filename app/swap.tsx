@@ -204,8 +204,14 @@ export default function Swap() {
             height={50}
           />
           <Row
-            title="Fee (0.25%)"
-            value={<Price>{swap.data ? money(swap.data.feeUsd) : '—'}</Price>}
+            title="You receive at least"
+            // The floor, not a fee: xorr charges none, and this is the number a user can hold
+            // the fill against. See `SwapQuote.minimumOut`.
+            value={
+              <Price>
+                {swap.data ? `${quantity(swap.data.minimumOut)} ${RECEIVE}` : '—'}
+              </Price>
+            }
             height={50}
           />
           <Row

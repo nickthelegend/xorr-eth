@@ -30,7 +30,8 @@ import {
   size,
   space,
 } from '@/ui';
-import { orderCta, orderFee, slPnl, tpPnl } from '@/state/derived';
+import { orderCta, slPnl, tpPnl } from '@/state/derived';
+import { api } from '@/data/api';
 import { unitsFor, usePrice } from '@/data/usePrices';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -84,6 +85,33 @@ export default function OrderTicket() {
   const heldUsd = held?.notional;
 
   const amount = parseFloat(orderAmt || '0') || 0;
+
+  /*
+   * The REAL cost of this trade, from the route that would fill it.
+   *
+   * This row said "Fee (0.1%)" and showed `amount * 0.001` — a number nobody charges. xorr takes
+   * no fee, and 1inch's cost is whatever the route costs, which varies by size and by venue.
+   * A confident $0.25 on the ticket is the same class of invention as a stale price: specific,
+   * plausible and untrue.
+   *
+   * `/swap/quote` is a real 1inch v6 quote. It is asked for the amount actually entered, so the
+   * number moves with the size the way a real cost does — and when it cannot be answered the row
+   * says so rather than falling back to arithmetic.
+   */
+  const quoteFor = amount > 0 && symbol ? `${side}:${symbol}:${amount}:${held?.mark ?? 0}` : '';
+  const routeQuote = useAsync(
+    () =>
+      amount > 0 && (side === 'buy' || (held?.mark ?? 0) > 0)
+        ? api.get<{ minimumOut: number; venues: string[]; slippagePct: number }>(
+            side === 'buy'
+              ? `/swap/quote?in=USDC&out=${encodeURIComponent(symbol)}&amount=${amount}`
+              : // A sell is entered in dollars; the route is quoted in units, so it needs the
+                // mark. Only a held position can be sold, and a held position has one.
+                `/swap/quote?in=${encodeURIComponent(symbol)}&out=USDC&amount=${amount / (held?.mark || 1)}`,
+          )
+        : Promise.resolve(null),
+    [quoteFor],
+  );
   const ceiling = side === 'buy' ? availableUsd : heldUsd;
   const overBalance = ceiling !== undefined && amount > ceiling;
 
@@ -209,10 +237,16 @@ export default function OrderTicket() {
         }}
       >
         <Text variant="secondary" color={colors.sheet.muted}>
-          Fee (0.1%)
+          {routeQuote.data?.venues?.length
+            ? `At worst, via ${routeQuote.data.venues.slice(0, 2).join(', ')}`
+            : 'At worst'}
         </Text>
         <Price variant="secondary" color={colors.sheet.ink}>
-          {money(orderFee(amount))}
+          {routeQuote.loading
+            ? '…'
+            : routeQuote.data
+              ? `${quantity(routeQuote.data.minimumOut)} ${side === 'buy' ? symbol : 'USDC'}`
+              : '—'}
         </Price>
       </View>
 
