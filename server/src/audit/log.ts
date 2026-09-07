@@ -11,7 +11,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { one, pool, query } from '../db/index.js';
+import { one, pool, query, tx } from '../db/index.js';
 
 export type AuditKind = 'trade' | 'risk' | 'block' | 'yield';
 
@@ -96,7 +96,36 @@ async function lastHash(walletId: string, client?: PoolClient): Promise<string> 
   return rows[0]?.hash ?? GENESIS;
 }
 
+/**
+ * Only one append per wallet at a time.
+ *
+ * `lastHash` reads the tail and `append` then writes a row committing to it — a read-modify-write
+ * with nothing in between. Two appends for the same wallet in flight together both read the same
+ * tail and both write rows claiming it as their predecessor, so the second one's `prev_hash` no
+ * longer matches the first one's `hash` and the chain is broken from that point on, permanently.
+ *
+ * It is not hypothetical and it is not rare: a fill writes a position and an audit row, the
+ * scheduler and a manual run can overlap, and `/verify` on a real wallet reported
+ * **"chain broken at entry 2"** — the tamper-evidence claim failing for a reason that had nothing
+ * to do with tampering.
+ *
+ * A transaction-scoped advisory lock keyed on the wallet serialises them. It costs one round trip
+ * on a path that already writes, releases automatically when the transaction ends however it ends,
+ * and is per wallet, so two users never wait on each other.
+ */
+async function lockWallet(walletId: string, client: PoolClient): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [walletId]);
+}
+
 export async function append(entry: AuditEntry, client?: PoolClient): Promise<AuditRow> {
+  /*
+   * The read and the write have to be in ONE transaction, or the lock protects nothing.
+   *
+   * Most callers already pass a client because they are writing the fill and the audit row
+   * together; the ones that do not get a transaction opened for them here.
+   */
+  if (!client) return tx((c) => append(entry, c));
+  await lockWallet(entry.walletId, client);
   const prevHash = await lastHash(entry.walletId, client);
   const at = new Date().toISOString();
   const amount = entry.amount ?? '';
