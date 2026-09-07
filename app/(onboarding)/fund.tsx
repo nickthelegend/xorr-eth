@@ -57,11 +57,21 @@ const METHODS = [
     lands: () => 'After 1 confirmation',
   },
   {
+    /*
+     * Listed, and honestly unavailable.
+     *
+     * There is no on-ramp integration in this build, and this option quoted a **1.5% fee** for
+     * it — $37.50 on a $2,500 deposit, invented, on the screen where a user decides how to pay.
+     * Selecting it did nothing except change that number. Either the fee is real and the flow
+     * exists, or the row says so; a made-up price for a service that cannot be bought is the
+     * worst of the three options.
+     */
     name: 'Card on-ramp',
-    detail: 'Third-party provider',
-    tag: 'Instant',
-    feePct: 1.5,
-    lands: () => 'Right away',
+    detail: 'Not enabled in this build',
+    tag: 'Soon',
+    feePct: 0,
+    lands: () => '—',
+    unavailable: true,
   },
 ] as const;
 
@@ -120,7 +130,9 @@ export default function Fund() {
               detail={opt.detail}
               tag={opt.tag}
               selected={i === method}
-              onPress={() => setMethod(i)}
+              // A card that cannot be chosen gets no handler, so `RadioCard` renders it disabled
+              // rather than accepting a tap that changes nothing.
+              onPress={'unavailable' in opt && opt.unavailable ? undefined : () => setMethod(i)}
             />
           ))}
         </View>

@@ -178,13 +178,45 @@ export default function Safety() {
           small, and a Basename is used as the headline wherever one exists.
         */}
         <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s18 }}>
-          <Party label="Your wallet" name={delegation?.ownerName} address={delegation?.ownerPubkey} />
-          <Party
-            label="The bot's key"
-            name={delegation?.delegateName}
-            address={delegation?.delegatePubkey}
-            note="Can trade inside your limits. Cannot withdraw, ever."
-          />
+          {/*
+            No permission is a SENTENCE, not two dashes.
+
+            Before a grant exists `/delegation` is null, so both rows rendered "—" on the one
+            screen whose entire subject is who may do what with the user's money. Two blank
+            fields under "Your wallet" and "The bot's key" read as the screen having failed to
+            load, and the honest answer — nobody has been given anything yet — is also the
+            reassuring one. It links to the grant, because that is what the reader will want next.
+          */}
+          {delegation ? (
+            <>
+              <Party
+                label="Your wallet"
+                name={delegation.ownerName}
+                address={delegation.ownerPubkey}
+              />
+              <Party
+                label="The bot's key"
+                name={delegation.delegateName}
+                address={delegation.delegatePubkey}
+                note="Can trade inside your limits. Cannot withdraw, ever."
+              />
+            </>
+          ) : (
+            <View style={{ paddingVertical: space.s12, gap: space.s6 }}>
+              <Eyebrow small>The permission</Eyebrow>
+              <Text variant="rowPrimary">Nothing is granted yet</Text>
+              <Text variant="footnote" color={colors.ink32}>
+                No bot can touch this wallet until you sign a permission, and there is nothing to
+                stop because nothing has started.
+              </Text>
+              <Button
+                label="Set the limits"
+                variant="ghost"
+                onPress={() => router.push('/delegate')}
+                style={{ marginTop: space.s10 }}
+              />
+            </View>
+          )}
         </SheetCard>
 
         <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s12 }}>
