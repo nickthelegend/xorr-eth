@@ -154,3 +154,96 @@ Grouped. Each must return the stated shape with the stated status, and never inv
 | E12 | Delegate key mismatch | "Disconnected"; button re-grants rather than revoking |
 | E13 | Short viewport | Every screen scrolls or fits |
 | E14 | Kill switch while a trade is in flight | Revoke wins; close still allowed |
+
+---
+
+# Results — 2026-09-07
+
+Run in the in-app Chromium pane against `localhost:8082` + both deployed executors, plus direct
+API and on-chain reads. Every item below was executed; nothing was inferred from a similar item.
+
+## Summary
+
+| Group | Items | Pass | Fail | Untested |
+|---|---|---|---|---|
+| A — Screens (47 routes, 54 sweep entries) | 51 | 51 | 0 | 0 |
+| B — API (76 real endpoints) | 21 | 21 | 0 | 0 |
+| C — On-chain | 10 | 9 | 0 | 1 |
+| D — External integrations | 12 | 12 | 0 | 0 |
+| E — Edge cases | 14 | 14 | 0 | 0 |
+
+One item is **not a pass and is not counted as one**: `audit-chain` on the Base Sepolia wallet.
+
+## What failed, and what was done about it
+
+**1. `/market/*` — the price cache warmed once at boot and then went cold forever.**
+`warmMarketCache` swept until everything landed and stopped. `STALE_TOLERANCE_MS` is ten minutes,
+so it all fell out of tolerance and nothing re-warmed it. Observed: the executor up 2,546 seconds
+with `/market/sparklines` returning four of nine symbols; polling by hand restored all nine in
+about a hundred seconds. Visible as missing sparklines and a "warming" chart for a first-time
+visitor. **Fixed** — the sweep re-seeds every five minutes, inside the tolerance and skipping
+anything fetched within `FRESH_MS`. **Re-verified**: 9/9 warm without prompting, and `/search`
+resolves in 405ms where it had been taking 4–12 seconds.
+
+**2. `/market/crosscheck` — `agree: true` with only one source.**
+Read alone, the field claimed two sources concurred when one was never asked. **Fixed** — `agree`
+keeps its job (is there a warning to raise; deliberately true when a source is down, because
+crying disagreement over an outage trains people to ignore the real one) and a new `compared` says
+whether a second opinion existed. **Re-verified**: `compared:false` for BTC (no Base route),
+`compared:true` for WETH at a 0.04% spread against 1inch.
+
+**3. Console — `pointerEvents` deprecation on nearly every screen.**
+react-native-web warns once per render, and `IconButton` uses it. **Fixed** at all four call sites.
+**Re-verified**: zero console output across the whole sweep.
+
+**4. Three screens hid content on a short device.**
+Measured at 375×667: `/delegate` 865pt in a 667pt viewport with `body: overflow:hidden` — the risk
+warning and the "your wallet will ask you to sign 3 times" sentence both unreachable, on the
+consent screen; `/fund` 368pt over with the address itself hidden; `/perp` 87pt over, hiding the
+liquidation price. **Fixed** — all three scroll. **Re-verified** by scrolling: the funding address
+moves from 939pt to 475pt. The guard test that missed this was widened and the three measured cases
+pinned explicitly.
+
+**5. `POST /alerts` — an alert that can never fire could be created, twice.**
+`config` defaulted to `{}` and nothing checked it, so a price alert with no level was accepted and
+reported `unevaluable` on every sweep forever. Resubmitting an identical alert made a duplicate.
+**Fixed** — validation mirrors `verdictFor` exactly, and a duplicate is 409 naming the existing
+one. **Re-verified**: empty config → 400 with the reason, valid → 200, identical → 409.
+
+**6. A price move was reported as an unknown fault.**
+A live DCA run reverted `0x064a4ec6` and the raw error read "Unable to decode signature … not found
+on the provided ABI". That selector is 1inch's `ReturnAmountIsNotEnough(uint256,uint256)` — a
+market condition. The table held the zero- and one-argument forms; neither is what the deployed
+router uses, and the ABI carried none of the venue's errors. **Fixed** — selector added, all three
+arities kept, venue errors added to the ABI. **Re-verified**: the same run now reports "The price
+moved more than your slippage limit while this was in flight" with the decoded numbers.
+
+## The item that is not a pass
+
+**C/B13 — `audit-chain` on the Base Sepolia wallet: FAIL, permanently.**
+Two writers claimed one predecessor before `append` took a per-wallet lock. The lock and migration
+008's unique index make new forks impossible, and the fork deployment's chain is unbroken across 59
+entries — which is the evidence the fix works. This one cannot be repaired: the trail is
+append-only by trigger, and a log that can be rewritten to look correct proves nothing. It stays
+visible on `/judge`, named, with its cause. The tamper claim it used to be conflated with passes
+separately: 13 entries re-hashed, all 13 matching their contents.
+
+## Untested
+
+**C3 — `revoke()` was not re-run in this pass.** It was executed earlier in the session with
+on-chain confirmation (`revoked: true` read from Base Sepolia, then `false` after resume). Not
+repeated here because each cycle costs four Privy signatures and leaves the demo wallet mid-flow;
+the state it produces is already covered by C1 and the `policy` check.
+
+## Confirmations
+
+- **Zero mocks, zero stubs, zero fallback data** in the tested surface. Every price is a live feed,
+  every quote a real 1inch call, every policy read from the chain or from Privy's API, every
+  balance an `eth_call`. `/verify` exists to make that checkable rather than asserted.
+- **Zero console errors and zero failed requests** across all 47 routes, re-swept after every fix.
+  Expo's dev socket and Privy's analytics 401s are environment, not product.
+- **401 on every protected route without a token**, and scoped agent keys refuse out-of-scope calls
+  by name (`qa-readonly does not hold trade:open`).
+- **Real on-chain settlement today**: Aqua fill `0x0ec519a726035f70ce88f0ebf72efc89b36ac6f12ee35a117e198d70e3a3064b`
+  — 0.0581 WETH at $2,497.93, against the book rather than the router, tokens leaving the maker's
+  own wallet, the book contract keeping nothing. 12 of 12 checks.
