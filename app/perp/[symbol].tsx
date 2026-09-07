@@ -9,7 +9,7 @@
  * Short and Long had no `onPress`; they open the order ticket now.
  */
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View  } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
@@ -145,7 +145,14 @@ export default function PerpContract() {
         </View>
       )}
 
+      {/*
+        Scrolls. Measured at 375×667: 87pt of overflow, two elements below the fold.
+
+        A leverage screen that hides part of itself is hiding risk disclosure by definition — the
+        liquidation price and the margin warning are the point of the screen.
+      */}
       <Fill style={{ marginTop: space.s16 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
         <SheetCard borderRadius={radius.panel} padding={space.s16}>
           <View
             style={{
@@ -208,6 +215,7 @@ export default function PerpContract() {
             { label: 'Next funding', value: m ? countdown(fundingIn) : '—' },
           ]}
         />
+        </ScrollView>
       </Fill>
 
       <ButtonPair

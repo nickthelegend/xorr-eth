@@ -293,11 +293,44 @@ describe('13.9 device matrix — every screen has an answer for a short device',
     for (const f of screenFiles) {
       const src = fs.readFileSync(f, 'utf8');
       const scrolls = /ScrollView|FlashList|FlatList|KeyboardAvoidingView/.test(src);
-      // A rough proxy for "tall": how many direct content blocks the screen renders.
-      const blocks = (src.match(/<(SheetCard|Row|NoteStrip|Segmented|Stepper)\b/g) ?? []).length;
+      /*
+       * A cheap proxy for "tall", widened to include the cards `/delegate` is built from.
+       *
+       * It counted five component names, none of which that screen uses, so it scored three and
+       * passed — while measuring 865pt of content in a 667pt viewport with `body` at
+       * `overflow: hidden`. Unreachable on that device: the risk warning, and the sentence saying
+       * the wallet is about to ask for three signatures. On the consent screen.
+       *
+       * Counting `<Text>` too was tried and over-flags badly: eight screens tripped it that
+       * measure FITS in a real 375×667 browser, because a chart or a list inside `Fill` absorbs
+       * the height. A static count cannot tell intrinsic height from flex-anchored height, so
+       * this stays a warning and the measured cases are pinned separately below.
+       */
+      const blocks = (src.match(
+        /<(SheetCard|Row|NoteStrip|Segmented|Stepper|ConsequenceCard|Party|Pill)\b/g,
+      ) ?? []).length;
       if (!scrolls && blocks > 6) offenders.push(`${rel(f)} (${blocks} blocks, no scroll)`);
     }
     expect(offenders, `unscrollable tall screens:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  /*
+   * The three screens measured overflowing in a real browser at 375×667 — an iPhone SE, the
+   * shortest device the design supports. A static block count cannot predict runtime height, so
+   * what was actually observed is pinned here instead of inferred:
+   *
+   *   /delegate  865pt of content, body overflow:hidden — risk warning and the "3 signatures"
+   *              sentence both unreachable
+   *   /fund      368pt over, three elements hidden including the ADDRESS, on the screen whose
+   *              only job is handing someone an address
+   *   /perp      87pt over, two elements hidden — on a leverage screen, which means the
+   *              liquidation price and the margin warning
+   */
+  it('the screens measured overflowing on a short device can scroll', () => {
+    for (const f of ['(onboarding)/delegate.tsx', '(onboarding)/fund.tsx', 'perp/[symbol].tsx']) {
+      const src = fs.readFileSync(path.join(APP, f), 'utf8');
+      expect(/ScrollView|FlashList|FlatList/.test(src), `${f} must scroll — measured overflowing at 375x667`).toBe(true);
+    }
   });
 
   it('no screen hardcodes the design width or height', () => {

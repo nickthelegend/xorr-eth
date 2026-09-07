@@ -14,7 +14,7 @@
  * the button says what it actually does.
  */
 import React from 'react';
-import { View } from 'react-native';
+import { ScrollView, View  } from 'react-native';
 import { useRouter } from 'expo-router';
 import { activeChain } from '@/chain';
 import { AddressQR } from '@/ui/AddressQR';
@@ -123,7 +123,15 @@ export default function Fund() {
         How you are paying
       </Eyebrow>
 
+      {/*
+        Scrolls. The QR made this screen taller than a short phone.
+
+        Measured at 375×667: 368pt of overflow with three elements unreachable, including the
+        address itself — on the screen whose entire job is handing someone an address. The code is
+        worth the height; the height has to be reachable.
+      */}
       <Fill style={{ marginTop: space.s12 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
         <View style={{ gap: space.s10 }}>
           {METHODS.map((opt, i) => (
             <RadioCard
@@ -186,6 +194,7 @@ export default function Fund() {
             rail to move it for you.
           </Text>
         </View>
+        </ScrollView>
       </Fill>
 
       <Button label="Continue — set the limits" onPress={() => router.push('/delegate')} />

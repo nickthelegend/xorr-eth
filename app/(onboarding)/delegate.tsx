@@ -10,7 +10,7 @@
  * Voice per copy.md: name the consequence, not the feature. Second person, present tense.
  */
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
@@ -95,7 +95,19 @@ export default function GrantDelegation() {
         can and cannot do before you sign it.
       </Text>
 
+      {/*
+        Scrolls, because the two things this screen exists to say were below the fold.
+
+        Measured on a 375×667 viewport — an iPhone SE, which is the shortest device the design
+        supports — the content runs to 865pt with `body` at `overflow: hidden`. Unreachable: the
+        risk warning ("a bot with permission to trade can lose money inside these limits") and the
+        sentence telling the user their wallet is about to ask for three signatures.
+
+        Both are on the screen where someone decides whether to give a bot access to their money,
+        and a consent screen whose warning cannot be read is not consent.
+      */}
       <Fill style={{ marginTop: space.s22 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space.s16 }}>
         <View style={{ gap: space.s10 }}>
           <ConsequenceCard
             tone="up"
@@ -181,6 +193,7 @@ export default function GrantDelegation() {
             {error}
           </Text>
         ) : null}
+        </ScrollView>
       </Fill>
 
       <Button

@@ -13,7 +13,7 @@
  * delegation policy. The CTA signs a transaction, it does not save a setting.
  */
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -105,7 +105,14 @@ export default function TradeSettings() {
         You can change these anytime. The agent always stays within these limits.
       </Text>
 
+      {/*
+        Scrolls. This one measures FITS at 375×667 today and is one row from not doing.
+
+        A limits screen is exactly the surface that grows — another control, another explanation —
+        and the failure mode is a user unable to reach the cap they came to change.
+      */}
       <Fill style={{ marginTop: space.s20 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
         <SheetCard borderRadius={radius.panel} padding={space.s16}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12 }}>
             <AssetMark gradient={agentGradients.Strategist} size={size.mark} />
@@ -207,6 +214,7 @@ export default function TradeSettings() {
             {error}
           </Text>
         ) : null}
+        </ScrollView>
       </Fill>
 
       <Button label={runLabel(auto)} loading={busy} onPress={commit} />
