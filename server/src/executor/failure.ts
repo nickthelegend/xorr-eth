@@ -40,6 +40,18 @@ export function humanFailure(error: string): string {
      */
     '0x9a446475': 'The price moved more than your slippage limit while this was in flight. Nothing was placed.', // ReturnAmountIsNotEnough(uint256)
     '0xf32bec2f': 'The price moved more than your slippage limit while this was in flight. Nothing was placed.', // ReturnAmountIsNotEnough()
+    /*
+     * The two-argument form, which is the one the deployed router actually reverts with.
+     *
+     * Both zero-arg and one-arg variants were in this table and neither ever matched. A live DCA
+     * run failed with `0x064a4ec6` and the user was shown the generic "the transaction did not go
+     * through", while the log carried "Unable to decode signature 0x064a4ec6 as it was not found
+     * on the provided ABI" — a price move reported as an unknown fault.
+     *
+     * All three stay: which arity a router uses is a property of its version, not something to
+     * rediscover the next time one is deployed.
+     */
+    '0x064a4ec6': 'The price moved more than your slippage limit while this was in flight. Nothing was placed.', // ReturnAmountIsNotEnough(uint256,uint256)
     '0xf4059071': 'The venue could not collect the token — the approval was short or withdrawn.', // SafeTransferFromFailed()
     '0x28ebf247': 'The route came back with nothing, so there was no trade to make.', // ZeroReturnAmount()
   };

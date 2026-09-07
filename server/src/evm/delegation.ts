@@ -125,6 +125,27 @@ export const DELEGATION_ABI = [
   },
   { type: 'error', name: 'ZeroAmount', inputs: [] },
   { type: 'error', name: 'VenueCallFailed', inputs: [] },
+  /*
+   * The VENUE's errors, so viem can decode what `spend` bubbles up.
+   *
+   * `spend` forwards a venue revert rather than masking it, which is right — but the ABI listed
+   * only this contract's own errors, so viem answered a real 1inch slippage revert with
+   *
+   *   Unable to decode signature "0x064a4ec6" as it was not found on the provided ABI
+   *
+   * The information was on the wire and thrown away at the last step. These are 1inch's, not
+   * ours; they belong here because this is the ABI the call is decoded against.
+   */
+  {
+    type: 'error',
+    name: 'ReturnAmountIsNotEnough',
+    inputs: [
+      { name: 'result', type: 'uint256' },
+      { name: 'minReturn', type: 'uint256' },
+    ],
+  },
+  { type: 'error', name: 'ZeroReturnAmount', inputs: [] },
+  { type: 'error', name: 'SafeTransferFromFailed', inputs: [] },
 ] as const;
 
 export type OnChainPolicy = {

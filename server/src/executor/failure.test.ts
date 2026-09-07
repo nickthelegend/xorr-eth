@@ -44,3 +44,34 @@ describe('revert reasons, in plain language', () => {
     );
   });
 });
+
+
+describe('the router error the deployed venue actually reverts with', () => {
+  /*
+   * A live DCA run on the fork failed with `0x064a4ec6`. The table held the zero-argument and
+   * one-argument forms of `ReturnAmountIsNotEnough` and neither matched, so a price move was
+   * reported as "the transaction did not go through" while the log said
+   *
+   *   Unable to decode signature "0x064a4ec6" as it was not found on the provided ABI
+   *
+   * The difference the user cares about is "try again" versus "something is broken".
+   */
+  it('decodes the two-argument ReturnAmountIsNotEnough', () => {
+    const raw =
+      'The contract function "spend" reverted with the following signature:\n0x064a4ec6\n\n' +
+      'Unable to decode signature "0x064a4ec6" as it was not found on the provided ABI.';
+    expect(humanFailure(raw)).toContain('slippage limit');
+    expect(humanFailure(raw)).not.toContain('0x064a4ec6');
+  });
+
+  it('still decodes the other two arities', () => {
+    expect(humanFailure('reverted with the following signature: 0x9a446475')).toContain('slippage');
+    expect(humanFailure('reverted with the following signature: 0xf32bec2f')).toContain('slippage');
+  });
+
+  it('does not mistake a delegation error for a venue one', () => {
+    // Selectors are matched exactly; a prefix collision here would blame the wrong party.
+    expect(humanFailure('reverted with the following signature: 0x430f7460')).toContain('revoked');
+    expect(humanFailure('reverted with the following signature: 0x3e814127')).toContain('cap');
+  });
+});
