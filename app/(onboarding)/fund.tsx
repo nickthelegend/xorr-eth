@@ -16,6 +16,8 @@
 import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { activeChain } from '@/chain';
+import { AddressQR } from '@/ui/AddressQR';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
@@ -158,6 +160,24 @@ export default function Fund() {
           }}
         >
           <Eyebrow small>Send USDC to</Eyebrow>
+          {/*
+            A code, because the sending wallet is on the other device.
+            
+            Every rail on this screen ends with USDC arriving at this address, and the person
+            doing the sending is almost always looking at a different phone or an exchange in a
+            browser. Retyping 42 hex characters between two screens is the step where funding
+            actually fails, and a mistyped address on Base is money that is simply gone.
+
+            EIP-681 rather than the bare address: a wallet that understands the URI opens
+            pre-filled on the right chain, and one that does not still reads the address out of
+            it. Only rendered once there IS an address — a QR of the empty string is a code that
+            scans to nothing.
+          */}
+          {wallet?.address ? (
+            <View style={{ alignItems: 'center', paddingVertical: space.s12 }}>
+              <AddressQR value={`ethereum:${wallet.address}@${activeChain.id}`} size={168} />
+            </View>
+          ) : null}
           <Text variant="body" selectable>
             {wallet?.address ?? 'Finish signing in to see your address.'}
           </Text>
