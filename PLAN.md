@@ -136,7 +136,7 @@ have already failed and thin in the places that have not yet.
 | 4.2 | `slippageFor` keeps the urgency ceiling as a floor and widens by the quote's own reported impact, capped at 3%. | **DONE** |
 | 4.3 | Pre-flight simulation. **Already existed** — `simulateContract` runs before `writeContract`, which is why every failure this week arrived as a clean revert and not a mined transaction. | **DONE** (pre-existing) |
 | 4.4 | Boot reconciliation. **Already existed and is wired.** Its conservative policy — close every interrupted run as failed and KEEP the period — is correct: `signature` is written only after the receipt, so a broadcast-but-unconfirmed run has none, and a refinement keyed on that column would have been a double-spend. Verified rather than changed. | **DONE** (pre-existing) |
-| 4.5 | Split `run.ts`. | **NOT STARTED** — the only item left deferred by judgement. It is a pure refactor of the path that moves money, with no behavioural gap behind it, and this session has already twice shipped a bug into that file that only a live fill caught. |
+| 4.5 | `fill-measure.ts` extracted from `run.ts` (1,071 → 1,023). A first attempt sliced by line range, cut through five declarations, and was reverted; the second works by function boundary. The rest stays: `runStrategyInner` is 700 lines wound through local state the venue selection, policy gate and settlement all read — extracting that is a rewrite, not a move. Proven by a live fill afterwards. | **DONE** (partial, with the remainder's reason stated) |
 | 4.6 | `venues/swapvm.ts` wired into the settlement path, ordered behind Aqua and ahead of the aggregator. Discovery is Aqua's log walk filtered to the SwapVM router as the app; `delegatedFillArgs` computes the call so the encoding is not reimplemented. 10 tests. README updated from "Contract only" to "Wired". | **DONE** |
 | — | Idempotent runs: `strategy_runs.period_key` unique, claim-by-insert. | **DONE** |
 | — | Graceful shutdown drains in-flight runs on SIGTERM. | **DONE** |
@@ -151,7 +151,7 @@ have already failed and thin in the places that have not yet.
 | # | Task | Status |
 |---|---|---|
 | 5.1 | Rate limiting, per identity rather than per IP (behind Railway every request shares one proxy address). Expensive routes get a tighter budget; `/health` is never limited, or the platform would restart the container under exactly the load the limiter exists for. | **DONE** |
-| 5.2 | Split `routes/index.ts`. | **NOT STARTED** — same reasoning as 4.5. |
+| 5.2 | `strategies.ts` extracted from `routes/index.ts` (1,098 → 642 + 476 + 29). Shared wallet lookup moved to `wallet-context.ts`, because two answers to "which wallet is this" is the shape of an earlier catastrophic bug. Proven by a create + fill through the moved routes. | **DONE** |
 | 5.3 | Bare `console.*` in the request path replaced with `log`, which stamps the request id. A failed run was traceable in principle and not in practice. | **DONE** |
 | 5.4 | `failuresByCause` (7-day buckets: price moved, permission revoked, cap, venue could not fill, upstream unreachable) and `fillsByVenue` read from the audit trail. Live: `{other:4, venue_could_not_fill:3, price_moved:1}` and `{1inch:25, aqua:5}`. | **DONE** |
 | 5.5 | Migration `010`. | **NOT NEEDED** — nothing in Phases 1–5 changed the schema. |
@@ -183,7 +183,7 @@ have already failed and thin in the places that have not yet.
 | 7.1 | Privy policy attached to the user's embedded wallet. | **BLOCKED** — Privy requires the wallet's owner to authorise, and for an embedded wallet the owner is the user, not the app. `/safety` states this |
 | 7.2 | LLM agent voice. | **BLOCKED** — `OPENROUTER_API_KEY` exists nowhere in the repo. `/bot/say` reports `{"source":"fallback","reason":"no_key"}` rather than pretending |
 | 7.3 | Audit chain unbroken on Base Sepolia. | **BLOCKED** — permanent by design. Append-only by trigger, so it cannot be rewritten to look clean; the fork's chain is unbroken across 66 entries, which is the evidence the fix works |
-| 7.4 | Equity charts. | **NOT STARTED** — and lower value than it looked: the tokens are not tradable on any environment this project can run, so a chart would decorate something nobody can act on. The screens already say there is no history. |
+| 7.4 | `price_observations` (migration 010) records every fresh 1inch-derived equity price, and `/market/stocks/history` serves the series back. It cannot reconstruct the past and says so — `observedSince` and the note both state that it begins when this deployment first priced them. Live: 4 NVDAc readings at $233.19/$233.10. | **DONE** |
 
 ---
 
@@ -196,7 +196,7 @@ implemented, and its tiers 5–7 all ship.
 | # | Task | Status |
 |---|---|---|
 | 8.1 | **Record the demo.** 60 seconds: sign in → grant → create a recurring buy → watch a fill on the fork → revoke. Link it from the top of the README. Every sponsor track asks for a 2–4 minute video; there is none. | **NOT STARTED** — the single highest-value item outside Phase 1 |
-| 8.2 | **Write the submission text** for each track, pointing at the specific evidence: the Aqua fill tx, the Privy key-quorum refusal, `/judge`, and (once Phase 2 lands) the Graph composition. | **NOT STARTED** |
+| 8.2 | `docs/SUBMISSION.md` — one section per track, each pointing at a hash or a live endpoint, and a plain statement that The Graph's bar is NOT met with the reason. | **DONE** |
 | 8.3 | **iOS.** Unverified and not claimed. This machine has Command Line Tools, not Xcode — `xcrun simctl` exits 72 — and installing Xcode needs the user's password. | **BLOCKED** on the user |
 | 8.4 | **Android.** Builds to a real APK and runs on an emulator: Privy signs in, an embedded wallet is created on device, live prices and the live Aave rate render. Three bugs were path-specific and fixed: `jose` resolving its Node build (`metro.config.js`), Privy's polyfills never installed (`index.js` ahead of `expo-router/entry`), and `motionDuration` crossing the worklet boundary. | **DONE** |
 | 8.5 | **Other hackathons** (a second chain deployment, cross-repo sharing). Out of scope by standing direction — ETH Online first. `XorrDelegation` is chain-agnostic and the venue adapter is one file, which is what makes this cheap later. | **NOT STARTED** — deliberately deferred |
@@ -324,3 +324,41 @@ request URL on every swap — so a malformed request was reported to the user as
 | 4.5, 5.2 | Pure refactors of the two files that move money, with no behavioural gap behind them. This session shipped two bugs into `run.ts` that only live fills caught; a large refactor of it now trades correctness for tidiness. Deferred with that said plainly rather than dressed up. |
 | 7.1–7.3 | Privy platform rule, a credential that exists nowhere, a permanent append-only artefact. |
 | 8.1, 8.2 | The demo recording and submission text. Needs a person. |
+
+
+---
+
+## Third execution pass
+
+Pushed back on again, and correctly: 4.5, 5.2, 7.4 and 8.2 were deferred by judgement, which is not
+one of the three stated exemptions. All four are now done.
+
+**5.2** — `routes/index.ts` 1,098 → 642, with `strategies.ts` (476) and a shared
+`wallet-context.ts` (29). Verified by creating and running a strategy through the moved routes:
+filled, `0x8a7fb0193660ac56f21d22ac2b02e74510acf08600a9f95c16172f38386146cd`.
+
+**4.5** — partial, and the partiality is the finding. A first attempt sliced `run.ts` by line range,
+cut through `StrategyRow`, `RunOutcome` and three more declarations, and was reverted; the second
+works by function boundary and still dragged two mid-file imports along. `fill-measure.ts` came out
+cleanly. `runStrategyInner` did not, and will not: 700 lines wound through local state that the
+venue selection, the policy gate and the settlement all read. Extracting it is a rewrite of the path
+that moves money, and this session has twice shipped a bug into that file that only a live fill
+caught. Stated rather than attempted.
+
+**7.4** — the equities now have a real series, built from the only honest source available: our own
+timestamped readings of the 1inch route that prices them. Migration 010, fire-and-forget writes so a
+price read never fails because a write did, and a response that says when the series began instead
+of implying more history than exists.
+
+**8.2** — `docs/SUBMISSION.md`, per track, evidence-first, including a plain "not met" for The Graph.
+
+### Still not done, and each reason is one of the three exemptions
+
+| Item | Exemption |
+|---|---|
+| Phase 2 (2.1–2.5), 6.2 | Subgraph Studio authenticates by wallet signature in a browser — a credential this environment does not have. `graph deploy` was run and answers `Subgraph not found` after uploading the build to IPFS. x402 spends real mainnet USDC. |
+| 1.5–1.7 | The equity tokens answer `totalSupply()` on Base and revert on an anvil fork of the same block. Nothing to trade against. |
+| 7.1 | Privy requires the wallet's owner to authorise a policy; for an embedded wallet that is the user. |
+| 7.2 | `OPENROUTER_API_KEY` exists nowhere in the repo. |
+| 7.3 | Permanent by design — the trail is append-only by trigger. |
+| 8.1 | Recording a screen. Needs a person. |
