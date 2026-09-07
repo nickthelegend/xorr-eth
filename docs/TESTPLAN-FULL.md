@@ -312,3 +312,44 @@ The single FAIL is unchanged and is not counted as a pass: `audit-chain` on the 
 forks at entry 2, from a race fixed before this run began. It cannot be repaired — the trail is
 append-only by trigger, and a log that can be rewritten to look correct proves nothing. The
 rebuilt fork's chain is unbroken across 66 entries, which is the evidence the fix works.
+
+---
+
+# Third plan — 2026-09-07, after the PLAN.md execution passes
+
+The surface has changed enough to need its own plan rather than a re-run of the last one:
+**72 routes** (up from 70 — `/market/stocks/history` and `/graph/decision` are new),
+**48 screens**, **all seven ladder tiers now available** (momentum and event-driven shipped), plus
+rate limiting, adaptive slippage, per-run retry, a SwapVM venue, and two module splits.
+
+*Claude in Chrome reports no connected browser (`list_connected_browsers` → `[]`), so this runs in
+the in-app Chromium pane against the same running app. Stated, not hidden.*
+
+## N — What is new or changed since the last plan
+
+Each of these is untested against a written expectation. They come first because they are where a
+regression would be.
+
+| # | Item | Correct means |
+|---|---|---|
+| N1 | `/market/stocks/history?symbol=NVDAc` | Real observed readings with timestamps, `observedSince`, and a note that says the series begins when this deployment first priced them |
+| N2 | Same, case-insensitive (`NVDAC`, `nvdac`) | Resolves to `NVDAc` and returns the same series |
+| N3 | Same, non-equity (`WETH`) | 404 with a reason naming the symbol — not an empty series |
+| N4 | `/graph/decision` | 200 for a signed-in user, with `observedRemainingUsd` sourced from the subgraph. Was unreachable by any principal before |
+| N5 | Rate limiting — normal use | A burst of market reads and a full screen sweep never 429 |
+| N6 | Rate limiting — abuse | Exceeding the upstream budget returns 429 with `retry-after`, and `/health` still answers |
+| N7 | Ladder tier 6 (momentum) creatable and runnable | `POST /strategies` accepts `kind: 'momentum'`; a run either fills or declines with a stated reason |
+| N8 | Ladder tier 7 (event-driven) creatable and runnable | Accepts `kind: 'event-driven'`; declines outside the entry window rather than erroring |
+| N9 | `/verify` `earnings-calendar` | Reports filing count, last report, projected next date and the company's own cadence margin |
+| N10 | `/verify` `equities` | SKIPs with the real reason (tokens answer on Base, revert on a fork) — must not PASS on a code-length check |
+| N11 | `/metrics` `failuresByCause` and `fillsByVenue` | Real buckets and real venue counts, not empty objects |
+| N12 | Strategy routes after the module split | Create, list, patch, run and delete all still work through the moved module |
+| N13 | Executor after the `fill-measure` split | A real fill produces a signature and units measured from the chain |
+| N14 | Symbol casing at every boundary | `NVDAc`, `NVDAC`, `nvdac` all resolve on `/price/:symbol`, `/swap/quote`, `/market/stocks/history` |
+| N15 | `TF` and HTTP failures humanised | A venue revert and a 400 produce different, accurate sentences |
+
+## Re-run in full
+
+Everything from the first plan — A (screens), B (API), C (on-chain), D (integrations),
+E (edge cases) — re-executed against the current build, since eleven commits have landed since it
+last passed.

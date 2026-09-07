@@ -60,7 +60,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nIN THE LAST DAY\nGot it\n15 stopped by your limits · 6 risk checks\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nand 18 more ›\nAgents ›\n1 hired\nDrawdown Guard\nAct"
+  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nIN THE LAST DAY\nGot it\n16 stopped by your limits · 6 risk checks\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nand 19 more ›\nAgents ›\n1 hired\nDrawdown Guard\nAct"
  },
  {
   "stem": "08-markets",
@@ -69,7 +69,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\n$4,394\n−0.59%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nP"
+  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\n$4,399\n−0.50%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nP"
  },
  {
   "stem": "09-markets-crypto",
@@ -78,7 +78,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$79,539\n−0.50%\nETH\nEthereum · Perp · 100x\n$2,504\n+0.19%\nSOL\nSolana · Spot · Perp\n$105.59\n−1.03%\nXRP\nXRP · Perp · 50x\n$1.41\n−0.68%\nDOGE\nDogecoin · Perp · 50x\n$0.0913\n+1.79%\nHYPE\nHyperliquid · Spot · Perp\n$88.16\n−1.34%\nAAVE\nAave · Spot · Perp\n$134.91\n+0.18%\nLINK\nChainlink · Perp · 50x\n$13.26\n+7.43%\nTON\nToncoin "
+  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$79,598\n−0.39%\nETH\nEthereum · Perp · 100x\n$2,508\n+0.38%\nSOL\nSolana · Spot · Perp\n$105.65\n−1.00%\nXRP\nXRP · Perp · 50x\n$1.41\n−0.58%\nDOGE\nDogecoin · Perp · 50x\n$0.0912\n+1.53%\nHYPE\nHyperliquid · Spot · Perp\n$87.91\n−1.53%\nAAVE\nAave · Spot · Perp\n$134.80\n+0.03%\nLINK\nChainlink · Perp · 50x\n$13.29\n+7.80%\nTON\nToncoin "
  },
  {
   "stem": "10-markets-stocks",
@@ -87,7 +87,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$233.19\nAAPLc\nApple · Tokenized share\n$321.48\nTSLAc\nTesla · Tokenized share\n$356.10\nMETAc\nMeta · Tokenized share\n$615.20\nMSFTc\nMicrosoft · Tokenized share\n$506.04\nAMZNc\nAmazon · Tokenized share\n$281.75\nGOOGLc\nAlphabet · Tokenized share\n$339.98\nMSTRc\nMicroStrategy · Tokenized share\n$144.84"
+  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$233.22\nAAPLc\nApple · Tokenized share\n$321.48\nTSLAc\nTesla · Tokenized share\n$356.11\nMETAc\nMeta · Tokenized share\n$615.22\nMSFTc\nMicrosoft · Tokenized share\n$506.03\nAMZNc\nAmazon · Tokenized share\n$281.75\nGOOGLc\nAlphabet · Tokenized share\n$339.98\nMSTRc\nMicroStrategy · Tokenized share\n$144.87"
  },
  {
   "stem": "11-markets-commodities",
@@ -96,7 +96,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\n$4,394\n−0.59%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot feed\nSIMULATED\n$"
+  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\n$4,398\n−0.52%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot feed\nSIMULATED\n$"
  },
  {
   "stem": "12-markets-indices",
@@ -123,7 +123,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$356.09\nSOL\n$105.59\n−1.03%\nHYPE\n$88.16\n−1.34%"
+  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$356.11\nSOL\n$105.65\n−1.00%\nHYPE\n$87.91\n−1.53%"
  },
  {
   "stem": "15-search",
@@ -132,7 +132,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$79,568\n−0.44%\nETH\nEthereum · Perp · 100x\n$2,505\n+0.31%\nSOL\nSolana · Spot · Perp\n$105.61\n−1.06%\nXRP\nXRP · Perp · 50x\n$1.41\n−0.52%\nDOGE\nDogecoin · Perp · 50x\n$0.0913\n+1.75%\nHYPE\nHyperliquid · Spot · Perp\n$88.20\n−1.20%\nAAVE\nAave · Spot · Perp\n$134.98\n+0.26%\nLINK\nChainlink · Perp · 50x\n$13.30\n+7.81%\nTON\nToncoin · Spot · Perp\n$1.42\n−0.62%\nNVDAc\nNvidia · Tokenized share"
+  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$79,598\n−0.39%\nETH\nEthereum · Perp · 100x\n$2,508\n+0.38%\nSOL\nSolana · Spot · Perp\n$105.65\n−1.00%\nXRP\nXRP · Perp · 50x\n$1.41\n−0.58%\nDOGE\nDogecoin · Perp · 50x\n$0.0912\n+1.53%\nHYPE\nHyperliquid · Spot · Perp\n$87.91\n−1.53%\nAAVE\nAave · Spot · Perp\n$134.80\n+0.03%\nLINK\nChainlink · Perp · 50x\n$13.29\n+7.80%\nTON\nToncoin · Spot · Perp\n$1.42\n−0.70%\nNVDAc\nNvidia · Tokenized share"
  },
  {
   "stem": "16-asset",
@@ -141,7 +141,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Bitcoin\n$79,568\ndown 0.4% today\n$79,519\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Bitcoin\n$79,598\ndown 0.4% today\n$79,595\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "17-asset-stock",
@@ -150,7 +150,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Nvidia\n$233.20\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Nvidia\n$233.22\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "18-chart",
@@ -159,7 +159,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USD\n$79,519\n−0.56%\n−$451.00 today\n80.6K\n80.2K\n79.8K\n79.4K\n79.0K\n$79,519\n15m\n1H\n4H\n1D\n1W\n6 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
+  "text": "BTC/USD\n$79,595\n−0.41%\n−$324.00 today\n80.6K\n80.2K\n79.8K\n79.4K\n79.0K\n$79,595\n15m\n1H\n4H\n1D\n1W\n5 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
  },
  {
   "stem": "19-order",
@@ -168,7 +168,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "WETH\nBuy\nSell\n$250\n0.0998 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst, via Dodo V2\n0.0992 WETH\nBuy $250 of WETH\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
+  "text": "WETH\nBuy\nSell\n$250\n0.0997 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst, via Uniswap V3\n0.0991 WETH\nBuy $250 of WETH\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
  },
  {
   "stem": "20-order-stock",
@@ -186,7 +186,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$250.40\nWETH\nYOU RECEIVE\n$249.78\nat least $249.03 after slippage\nUSDC\nRoute\nBest of 4 venues\nYou receive at least\n249.0280 USDC\nPrice impact\n0.255%\nMax slippage\n0.30%\nReview swap"
+  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$250.54\nWETH\nYOU RECEIVE\n$250.17\nat least $249.42 after slippage\nUSDC\nRoute\nBest of 2 venues\nYou receive at least\n249.4243 USDC\nPrice impact\n0.154%\nMax slippage\n0.30%\nReview swap"
  },
  {
   "stem": "22-perp",
@@ -195,7 +195,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USDT\n$79,572\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$64,931\nFunding\n—\nA 18% move against you wipes the margin.\nOPEN INTEREST\n—\n24H VOLUME\n—\nMARK VS INDEX\n+$0.00\nNEXT FUNDING\n02:52:50\nShort\nLong"
+  "text": "BTC/USDT\n$79,588\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$64,944\nFunding\n—\nA 18% move against you wipes the margin.\nOPEN INTEREST\n—\n24H VOLUME\n—\nMARK VS INDEX\n+$0.00\nNEXT FUNDING\n02:43:27\nShort\nLong"
  },
  {
   "stem": "23-position",
@@ -303,7 +303,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,504.24\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
+  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,506.25\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
  },
  {
   "stem": "32d-yield-position",
@@ -330,7 +330,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n16/19\nverified · 1 failing\n2 skipped — those need a wallet address, and none was given. Skipped is not passed.\nPASS\nThe app is talking to a real chain.\nchain 84532 (base-sepolia) at block 46509155\nPASS\nXorrDelegation is deployed and has c"
+  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n16/19\nverified · 1 failing\n2 skipped — those need a wallet address, and none was given. Skipped is not passed.\nPASS\nThe app is talking to a real chain.\nchain 84532 (base-sepolia) at block 46509423\nPASS\nXorrDelegation is deployed and has c"
  },
  {
   "stem": "33-holdings",
@@ -348,7 +348,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nMomentum Scout · 01:07 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nMomentum Scout · 12:43 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nMomentum Scout · 12:41 PM\nProposed "
+  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nMomentum Scout · 01:17 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nMomentum Scout · 01:07 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nMomentum Scout · 12:43 PM\nProposed "
  },
  {
   "stem": "35-history",
@@ -366,7 +366,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Briefing\nLoaded 6:40 PM\nOnly what moved your book, and what each agent did about it.\nMACRO\n16m\nHere’s what happened in crypto today\nEverything is inside its limits. There is nothing for me to do.\nMACRO\n39m\nZcash hits highest price since 2016 as market cap tops $20B\nEverything is inside its limits. There is nothing for me to do.\nMACRO\n1h\nYen intervention meets US inflation data: Five things to know"
+  "text": "Briefing\nLoaded 6:49 PM\nOnly what moved your book, and what each agent did about it.\nMACRO\n25m\nHere’s what happened in crypto today\nEverything is inside its limits. There is nothing for me to do.\nMACRO\n48m\nZcash hits highest price since 2016 as market cap tops $20B\nEverything is inside its limits. There is nothing for me to do.\nMACRO\n1h\nYen intervention meets US inflation data: Five things to know"
  },
  {
   "stem": "37-inbox",
@@ -375,7 +375,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing. · 01:07 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing. · 12:43 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing. · 12:41 PM\nProposed nothing\nSOL is mid-range, so there is nothing w"
+  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing. · 01:17 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing. · 01:07 PM\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing. · 12:43 PM\nProposed nothing\nSOL is mid-range, so there is nothing w"
  },
  {
   "stem": "38-safety",
