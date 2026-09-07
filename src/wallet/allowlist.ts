@@ -35,7 +35,24 @@ const SEED: AllowlistEntry[] = [];
  * get their money out.
  */
 export function isValidAddress(address: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(address.trim());
+  return /^0x[0-9a-fA-F]{40}$/.test(normaliseAddress(address));
+}
+
+/**
+ * What the user pasted, as an address.
+ *
+ * Trim, and accept a `0X` prefix. Both are the same address, and the screen rejected the second
+ * with **"That is not a Base address. It should start 0x and be 42 characters."** — about a string
+ * that starts with 0x and is 42 characters. A confidently wrong error on the one screen someone
+ * reaches while trying to get their money out, and the second time this screen has refused valid
+ * destinations (it used to require base58, so no Base address could pass at all).
+ *
+ * The hex body keeps its casing: EIP-55 encodes a checksum in it, and comparisons downstream
+ * lowercase both sides anyway.
+ */
+export function normaliseAddress(address: string): string {
+  const t = address.trim();
+  return t.startsWith('0X') ? `0x${t.slice(2)}` : t;
 }
 
 export function isUsable(entry: AllowlistEntry, now: number = Date.now()): boolean {
@@ -57,7 +74,7 @@ export function useAllowlist() {
     if (!isValidAddress(address)) {
       throw new Error('That is not a Base address. It should start 0x and be 42 characters.');
     }
-    const clean = address.trim();
+    const clean = normaliseAddress(address);
     setAddresses((prev) => {
       /*
        * The duplicate check belongs HERE, where `prev` is authoritative.

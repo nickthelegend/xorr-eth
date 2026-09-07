@@ -3,7 +3,13 @@
  * both of its rules are tested rather than trusted to the screen that renders them.
  */
 import { describe, expect, it } from 'vitest';
-import { COOLING_OFF_HOURS, isUsable, isValidAddress, type AllowlistEntry } from './allowlist';
+import {
+  COOLING_OFF_HOURS,
+  isUsable,
+  isValidAddress,
+  normaliseAddress,
+  type AllowlistEntry,
+} from './allowlist';
 
 const entry = (addedAt: number): AllowlistEntry => ({
   label: 'Cold storage',
@@ -29,6 +35,24 @@ describe('a destination has to be an address on THIS chain', () => {
     expect(isValidAddress('9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM')).toBe(false);
   });
 
+  it('accepts a 0X prefix, which is the same address', () => {
+    /*
+     * The screen refused this with "That is not a Base address. It should start 0x and be 42
+     * characters." — about a string that starts with 0x and is 42 characters. A confidently wrong
+     * error on the screen someone reaches while trying to get their money out, and the second
+     * time this screen has rejected valid destinations.
+     */
+    expect(isValidAddress('0X95A0b368588713011a15f4b1041423f31B08e615')).toBe(true);
+    expect(isValidAddress('  0X95A0b368588713011a15f4b1041423f31B08e615  ')).toBe(true);
+    expect(normaliseAddress('  0X95A0b368588713011a15f4b1041423f31B08e615  ')).toBe(
+      '0x95A0b368588713011a15f4b1041423f31B08e615',
+    );
+    // The hex body keeps its casing — EIP-55 encodes a checksum in it.
+    expect(normaliseAddress('0Xabcdef0123456789012345678901234567890ABC')).toBe(
+      '0xabcdef0123456789012345678901234567890ABC',
+    );
+  });
+
   it('rejects the near-misses', () => {
     expect(isValidAddress('')).toBe(false);
     expect(isValidAddress('0x')).toBe(false);
@@ -40,6 +64,8 @@ describe('a destination has to be an address on THIS chain', () => {
     expect(isValidAddress('0xZZA0b368588713011a15f4b1041423f31B08e615')).toBe(false);
     // No prefix.
     expect(isValidAddress('95A0b368588713011a15f4b1041423f31B08e615')).toBe(false);
+    // Normalising the prefix must not smuggle a wrong-length body through.
+    expect(isValidAddress('0X95A0b368588713011a15f4b1041423f31B08e61')).toBe(false);
   });
 });
 

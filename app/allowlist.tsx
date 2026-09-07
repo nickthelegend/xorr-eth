@@ -27,7 +27,7 @@ import {
   space,
   typeScale,
 } from '@/ui';
-import { COOLING_OFF_HOURS, isValidAddress, useAllowlist } from '@/wallet/allowlist';
+import { COOLING_OFF_HOURS, isValidAddress, normaliseAddress, useAllowlist } from '@/wallet/allowlist';
 
 /*
  * The validator lives in the store, and there is exactly one of it.
@@ -47,8 +47,10 @@ export default function Allowlist() {
   const [label, setLabel] = useState('');
   const [address, setAddress] = useState('');
 
-  const trimmed = address.trim();
-  const duplicate = addresses.some((a) => a.address === trimmed);
+  const trimmed = normaliseAddress(address);
+  // Case-insensitively, because `0xAB…` and `0xab…` are one address — and the store dedupes that
+  // way, so an exact-match check here disagreed with the refusal the user actually got.
+  const duplicate = addresses.some((a) => a.address.toLowerCase() === trimmed.toLowerCase());
   const valid = isValidAddress(trimmed) && label.trim().length > 0 && !duplicate;
 
   const problem = !trimmed
