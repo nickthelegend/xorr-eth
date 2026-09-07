@@ -33,6 +33,7 @@ import {
 import { delegateUnusable, killCta, killExplanation, killTitle } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { useAllowlist } from '@/wallet/allowlist';
+import { useApprovals } from '@/wallet/useApprovals';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -80,6 +81,16 @@ export default function Safety() {
    * Privy holds the key and refuses anything outside its policy before a signature exists.
    */
   const privy = useAsync(() => repos.wallet.privyPolicy(), []);
+
+  /*
+   * The standing allowances, which survive a revoke.
+   *
+   * Stopping the agents revokes the DELEGATION, and `spend` checks that before moving anything —
+   * so the bot is genuinely stopped. The ERC-20 approvals are a separate grant to the same
+   * contract and are untouched by it. On the screen where someone goes to disengage, showing one
+   * and not the other means "I revoked everything" is true only of the half they can see.
+   */
+  const { approvals, revoke: revokeApproval, revoking } = useApprovals();
 
   /*
    * Load the permission when the screen opens.
@@ -301,6 +312,54 @@ export default function Safety() {
               onPress={() => router.push('/judge')}
               style={{ marginTop: space.s10 }}
             />
+          </SheetCard>
+        ) : null}
+
+        {/*
+          What the contract can still pull, and the button that takes it back.
+
+          Only rendered when something is actually approved: four zero rows on a fresh wallet is
+          noise on a screen that has to be scannable in a second.
+        */}
+        {approvals && approvals.tokens.some((t) => !t.none) ? (
+          <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s10 }}>
+            <View style={{ gap: space.s6 }}>
+              <Eyebrow small>Token approvals</Eyebrow>
+              <Text variant="rowPrimary">What the contract can still pull</Text>
+              <Text variant="footnote" color={colors.ink32}>
+                Separate from the permission above, and they outlive it. Stopping your agents does
+                not remove them — the bot cannot use them while it is stopped, but they stay until
+                you take them back.
+              </Text>
+            </View>
+            <View style={{ gap: space.s10, marginTop: space.s12 }}>
+              {approvals.tokens
+                .filter((t) => !t.none)
+                .map((t) => (
+                  <View
+                    key={t.address}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: space.s10,
+                    }}
+                  >
+                    <View style={{ flexShrink: 1 }}>
+                      <Text variant="rowPrimary">{t.symbol}</Text>
+                      <Text variant="footnote" color={colors.ink32}>
+                        {t.unlimited ? 'No limit' : 'Limited'}
+                      </Text>
+                    </View>
+                    <Button
+                      label={revoking === t.symbol ? 'Taking it back…' : 'Take it back'}
+                      variant="ghost"
+                      loading={revoking === t.symbol}
+                      onPress={() => revokeApproval(t, approvals.spender)}
+                    />
+                  </View>
+                ))}
+            </View>
           </SheetCard>
         ) : null}
 

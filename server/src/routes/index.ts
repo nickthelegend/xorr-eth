@@ -27,6 +27,7 @@ import {
   DELEGATION_ADDRESS,
 } from '../evm/delegation.js';
 import { requireUser } from '../auth/middleware.js';
+import { erc20Abi } from 'viem';
 import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
@@ -257,6 +258,53 @@ async function approvableTokens(): Promise<{ symbol: string; address: Address }[
     .filter((_, i) => (codes[i]?.length ?? 0) > 2)
     .map(([symbol, address]) => ({ symbol, address }));
 }
+
+/**
+ * GET /approvals — what the delegation contract is currently allowed to pull, per token.
+ *
+ * The grant approves each tradable token for MAX_UINT256, which is what makes a fill possible
+ * without a second signature per trade. It is also, on its own, an unlimited standing allowance
+ * that nothing in the product ever showed and nothing could take back. Revoking the DELEGATION
+ * stops the bot — `spend` checks the policy — but the ERC-20 approvals survive it, so a wallet
+ * whose owner believed they had fully disengaged still had live allowances to a contract.
+ *
+ * Read from the token contracts rather than from our record of what we asked the user to sign:
+ * an allowance the user set elsewhere, or revoked elsewhere, is the truth and our record is not.
+ */
+routes.get('/approvals', async (c) => {
+  const w = await requireWallet(c);
+  const owner = w.address as Address;
+  const tokens = await approvableTokens();
+  const allowances = await Promise.all(
+    tokens.map((t) =>
+      publicClient
+        .readContract({
+          address: t.address,
+          abi: erc20Abi,
+          functionName: 'allowance',
+          args: [owner, DELEGATION_ADDRESS],
+        })
+        .catch(() => 0n),
+    ),
+  );
+  const MAX = (1n << 256n) - 1n;
+  return c.json({
+    spender: DELEGATION_ADDRESS,
+    tokens: tokens.map((t, i) => ({
+      symbol: t.symbol,
+      address: t.address,
+      /*
+       * A string, because this is a uint256 and JSON has no such thing.
+       *
+       * Sending it as a number silently rounds MAX_UINT256 to 1.157920892373162e+77, and a
+       * screen comparing that to anything is comparing a lie.
+       */
+      allowance: (allowances[i] ?? 0n).toString(),
+      unlimited: (allowances[i] ?? 0n) === MAX,
+      none: (allowances[i] ?? 0n) === 0n,
+    })),
+  });
+});
 
 routes.get('/delegation/params', async (c) => {
   requireUser(c);
