@@ -52,6 +52,22 @@ const COINGECKO = 'https://api.coingecko.com/api/v3';
 const STALE_TOLERANCE_MS = 10 * 60_000;
 
 /**
+ * History keeps far longer than a price does.
+ *
+ * `STALE_TOLERANCE_MS` is the right answer for a spot quote — ten minutes is already generous for
+ * a number someone might trade on. It is the wrong answer for a day of candles, and applying it to
+ * both is what made the re-warm unwinnable: roughly 27 upstream URLs, spaced 1.1s apart and backing
+ * off on every 429, cannot all be refreshed inside ten minutes on a rate-limited tier. Measured on
+ * the deployed executor, `/market/sparklines` oscillated between five and nine of nine symbols
+ * while the sweep chased a cliff it could not outrun.
+ *
+ * A 1-day OHLC series twenty minutes old is the same picture; the last candle moves and nothing
+ * else does. Serving it beats serving a gap, and the sweep gets room to work instead of racing.
+ * The spot price is unaffected and still has its own ten minutes.
+ */
+const HISTORY_STALE_TOLERANCE_MS = 60 * 60_000;
+
+/**
  * Stale-while-revalidate.
  *
  * The public price tier rate-limits, and `http/get.ts` answers that with spaced retries and
@@ -99,8 +115,12 @@ function sharedFetch<T>(url: string, timeoutMs: number): Promise<T> {
   return p;
 }
 
-async function getWithStale<T>(url: string, timeoutMs = 12_000): Promise<T> {
-  const cached = staleValue<T>(url, STALE_TOLERANCE_MS);
+async function getWithStale<T>(
+  url: string,
+  timeoutMs = 12_000,
+  staleToleranceMs = STALE_TOLERANCE_MS,
+): Promise<T> {
+  const cached = staleValue<T>(url, staleToleranceMs);
   const fresh = staleValue<T>(url, FRESH_MS);
   if (fresh) return fresh;
 
@@ -123,7 +143,7 @@ async function getWithStale<T>(url: string, timeoutMs = 12_000): Promise<T> {
   try {
     return await Promise.race([fetching, deadline]);
   } catch (e) {
-    const last = staleValue<T>(url, STALE_TOLERANCE_MS);
+    const last = staleValue<T>(url, staleToleranceMs);
     if (last) return last;
     throw e;
   } finally {
@@ -192,6 +212,8 @@ market.get('/market/ohlc', async (c) => {
   try {
     const rows = await getWithStale<[number, number, number, number, number][]>(
       `${COINGECKO}/coins/${id}/ohlc?vs_currency=usd&days=${days}`,
+      12_000,
+      HISTORY_STALE_TOLERANCE_MS,
     );
     return c.json({ symbol, days, rows });
   } catch (e) {
@@ -228,6 +250,8 @@ market.get('/market/sparklines', async (c) => {
       try {
         const rows = await getWithStale<[number, number, number, number, number][]>(
           `${COINGECKO}/coins/${COINGECKO_IDS[sym]}/ohlc?vs_currency=usd&days=1`,
+          12_000,
+          HISTORY_STALE_TOLERANCE_MS,
         );
         // Closes only, thinned to what a 90px glyph can actually show.
         const closes = rows.map((r) => r[4]).filter((n) => Number.isFinite(n));
