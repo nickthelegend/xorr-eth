@@ -156,21 +156,46 @@ export default function AutoClose() {
     }
   }
 
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text variant="sheetTitle" color={colors.sheet.ink}>
+        Auto Close
+      </Text>
+      <IconButton
+        name="close"
+        accessibilityLabel="Close"
+        onPress={() => goBack()}
+        background="none"
+        color={colors.sheet.ink}
+        glyph={20}
+      />
+    </View>
+  );
+
+  /*
+   * No position, no stop to arm.
+   *
+   * The screen rendered its whole ticket for an id that resolves to nothing: `symbol` fell back
+   * to `'BTC'` and `notional` to 0, so it drew a live BTC chart with working steppers and an
+   * enabled Set — and Set creates a real `exit-rules` strategy. Arming a stop on a holding the
+   * user does not have, from a screen reached by a stale link, a closed position or a mistyped
+   * URL. `/position/:id` already answers this correctly; this one is reached the same ways.
+   *
+   * Waiting on the fetch is not the same as knowing there is nothing, so only a settled query
+   * with no row says so.
+   */
+  if (!position.loading && !position.data) {
+    return (
+      <Screen light gutter="sheet">
+        {header}
+        <EmptyState text="This position is no longer open, so there is no stop to set on it." />
+      </Screen>
+    );
+  }
+
   return (
     <Screen light gutter="sheet">
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="sheetTitle" color={colors.sheet.ink}>
-          Auto Close
-        </Text>
-        <IconButton
-          name="close"
-          accessibilityLabel="Close"
-          onPress={() => goBack()}
-          background="none"
-          color={colors.sheet.ink}
-          glyph={20}
-        />
-      </View>
+      {header}
 
       {/* THE LAYOUT LAW: flex:1 goes to the chart, never to a spacer. */}
       <Fill style={{ minHeight: CHART_MIN, marginTop: space.s18 }}>
