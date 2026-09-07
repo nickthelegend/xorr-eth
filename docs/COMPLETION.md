@@ -187,3 +187,79 @@ switch that works without the server. That is the whole thesis, and it runs.
 The missing 15% is three unbuilt strategy tiers and six deployment steps that need money, a
 dashboard click, or hardware. None of it is mocked, stubbed, or hidden — which was the point of
 counting this way.
+
+---
+
+# Re-measured 2026-09-07 (second pass)
+
+100% is still defined by the project's own claims: the design handoff's 26 screens, the strategy
+ladder's 7 tiers ("do not reorder this"), the README's sponsor table, and the infrastructure the
+product needs to exist. Measured by running it. A feature that exists but is mocked, stubbed or
+unreachable counts as NOT done.
+
+**46 items. 40 verified. 87%.** (Before this pass: 39 of 46 — **85%**.)
+
+## What moved
+
+**Ladder tier 6 — momentum — built and verified on chain.** It was `available: false` with no
+planner. It is now a Donchian breakout with a trend filter and a stop attached at entry, plus the
+exit side that acts on that stop. Verified with real transactions on the rebuilt fork: bought
+0.0238 WETH (`0xc4b42021…`), and the stop sold exactly that position (`0x6bfe5de2…`) with the
+activity log reading *"WETH fell to 2509.76, through the 2600.00 stop set when this entry opened."*
+The UI now offers it; tier 7 still correctly reads "Later".
+
+## What was verified this pass, not assumed
+
+All five previously-available tiers were re-run end to end on the fork, and three that answered
+`nothing_to_do` were re-tested with conditions forced, so a polite decline could not hide a broken
+planner:
+
+| Tier | Kind | Transaction |
+|---|---|---|
+| 1 | dca | `0x2de21ca5…` 0.01596 WETH @ $2,507.64 |
+| 2 | rebalance | `0x8f0f25b3…` 0.03176 WETH |
+| 3 | exit-rules | `0x0148bcf5…` 0.07967 WETH, plus the trailing stop `0x47db5129…` |
+| 4 | yield-rotation | `0x8c78a442…` 100 USDC supplied to Aave |
+| 5 | grid | `0x9164bfe5…` 0.01198 WETH @ $2,507.79 |
+| 6 | momentum | `0x6bfe5de2…` stop fired |
+
+Tiers 6 and 7 were refused by the API before this pass with `"not runnable yet"` — honest, and now
+only true of tier 7.
+
+**Mock sweep:** 8 hits in shipped code, every one prose *disclaiming* a mock ("Not a mock: market
+data is REAL…", "NOT a silent fallback to fake personality") plus one Node shim used only by unit
+tests. Zero mocked data, zero stubbed logic, zero TODOs.
+
+**Fixtures:** `local.ts` imports four. All are catalogues — instruments, personas, alert types,
+portfolio sleeves — with live data merged over them and invented metrics explicitly stripped when
+the server is unreachable. None stands in for saved state.
+
+**Database:** Postgres, real and durable — it survived a full fork rebuild today with the audit
+trail intact at 66 entries.
+
+## The six that are not done
+
+| # | Item | Why |
+|---|---|---|
+| 1 | **Ladder tier 7 — event-driven** | Not built. No planner. Honestly marked "Later" and refused by the API. The last tier by the ladder's own ordering: *"most judgement, most ways to be wrong."* |
+| 2 | **Privy policy attached to the user's embedded wallet** | **Platform constraint.** Privy requires the wallet's *owner* to authorise it, and for an embedded wallet the owner is the user, not the app. The policy exists, is owned by a key quorum, and its refusal is proven — it simply cannot be attached server-side, and `/safety` says so. |
+| 3 | **1inch SwapVM wired into the product** | Contract written, deployed, 10 fork tests — and the running executor never calls it. Aqua is the wired venue. The README's status now says "Contract only" rather than "Done", because "Done" reads as "the app uses it". |
+| 4 | **The Graph — second subgraph queried** | **Blocked on a dashboard action.** `subgraph-aqua/` is built and IPFS-pinned; the `xorr-aqua` Studio slug was never created, and `subgraph_create` is not exposed by the deploy API (`Method not found`). Creating it needs Subgraph Studio in a browser with the deployer wallet. |
+| 5 | **Audit chain unbroken on Base Sepolia** | **Permanent by design.** A fork at entry 2 from a race fixed before this run. The trail is append-only by trigger and cannot be rewritten to look clean — which is the property it exists for. The rebuilt fork's chain is unbroken across 66 entries. |
+| 6 | **LLM agent voice** | **Missing credential.** `OPENROUTER_API_KEY` is not set anywhere in the repo. `/bot/say` answers honestly rather than pretending: `{"source":"fallback","reason":"no_key","detail":"OPENROUTER_API_KEY is not set."}` and the facts half of every message is rendered from real records by code regardless. |
+
+Three of the six are blocked by something outside the code: a Privy platform rule, a Studio
+dashboard action, and a credential that does not exist. Two are deliberate design outcomes. One —
+tier 7 — is genuinely unbuilt.
+
+## Re-measured after the change
+
+| Check | Result |
+|---|---|
+| Screen sweep | 54/54 |
+| Browser sweep, 47 routes | zero console errors, zero failed requests |
+| Fork `/verify` | **18 pass / 0 fail / 0 skip** |
+| Sepolia `/verify` | 15 pass / 1 fail / 2 skip |
+| Client tests | 302 |
+| Server tests | 119 |
+| Typecheck | clean, both projects |
