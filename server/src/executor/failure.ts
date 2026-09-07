@@ -58,6 +58,22 @@ export function humanFailure(error: string): string {
   const selector = /(?:custom error|reverted with|signature)[^0-9a-fx]*(0x[0-9a-f]{8})\b/.exec(e)?.[1];
   if (selector && BY_SELECTOR[selector]) return BY_SELECTOR[selector];
 
+  /*
+   * `TF` — a bare revert STRING, not a selector, from inside a pool.
+   *
+   * Uniswap and several adapters revert with two-character reasons. `TF` is a failed token
+   * transfer, and on a fork it means the route touched a pool that cannot serve it: the quote was
+   * built against one set of protocols and the fill against another, so 1inch produced a path
+   * through liquidity that is not there. Every tokenized-equity fill produced this for a week and
+   * the user was told only "the transaction did not go through".
+   *
+   * Matched exactly and word-bounded: `TF` appears inside plenty of longer words, and a substring
+   * match here would blame a routing failure for something else entirely.
+   */
+  if (/reverted with the following reason:\s*TF\b/.test(error) || /\breason:\s*"?TF"?\b/.test(error)) {
+    return 'The route could not be filled — the venue it went through could not move the token. Nothing was placed.';
+  }
+
   // Named errors, when the RPC decodes them for us.
   if (e.includes('dailycapexceeded')) return BY_SELECTOR['0x3e814127']!;
   if (e.includes('policyrevoked')) return BY_SELECTOR['0x430f7460']!;

@@ -56,6 +56,22 @@ export const TOKENS: Record<string, { address: Address; decimals: number }> = {
  * Case-insensitive lookup against the registry's own spelling, so `nvdac`, `NVDAC` and `NVDAc`
  * all resolve, and an unknown symbol comes back unchanged for the caller's own error to report.
  */
+/**
+ * THE RULE, in one place, so nobody re-derives it:
+ *
+ *   1. Crypto symbols are uppercase — `WETH`, `USDC`, `CBBTC`.
+ *   2. Tokenized equities carry a lowercase `c` — `NVDAc`, `TSLAc`. The suffix is what distinguishes
+ *      the token from the company, and it is not decoration.
+ *   3. **No boundary may uppercase a caller's symbol.** Resolve through `canonicalSymbol` instead.
+ *
+ * Rule 3 exists because breaking it is invisible: uppercasing works perfectly for every crypto
+ * symbol, which is everything anyone checks by hand. Three separate production bugs in one week
+ * came from it — `/swap/quote` 502'd on every equity, `/price/:symbol` answered "No price feed for
+ * NVDAC", and `crosscheck` reported eight tradable assets as "not routable on Base".
+ *
+ * The one legitimate exception is a lookup into `COINGECKO_IDS`, which is all-caps crypto with no
+ * equities in it. Those call sites say so.
+ */
 const CANONICAL = new Map(Object.keys(TOKENS).map((k) => [k.toUpperCase(), k]));
 
 export function canonicalSymbol(raw: string): string {
@@ -180,14 +196,37 @@ export async function quote(params: {
    */
   skipPriceImpact?: boolean;
 }): Promise<SwapQuote> {
-  const from = TOKENS[params.inSymbol];
-  const to = TOKENS[params.outSymbol];
+  /*
+   * Canonicalise HERE, not at each call site.
+   *
+   * `canonicalSymbol` existed and was applied at some route boundaries and never at this one, so
+   * every caller had to remember — and three shipped bugs in one week came from one that did not.
+   * A raw `TOKENS[...]` lookup is case-sensitive and the lowercase `c` on a tokenized equity is
+   * exactly what a caller loses.
+   */
+  const inSymbol = canonicalSymbol(params.inSymbol);
+  const outSymbol = canonicalSymbol(params.outSymbol);
+  const from = TOKENS[inSymbol];
+  const to = TOKENS[outSymbol];
   if (!from || !to) throw new Error(`No route for ${params.inSymbol} -> ${params.outSymbol}`);
 
   const slippagePct = params.slippagePct ?? DEFAULT_SLIPPAGE_PCT;
   const raw = scale(params.amount, from.decimals);
+  /*
+   * The quote is restricted exactly as the fill is.
+   *
+   * It was not, and on a fork that made every quoted price a number the executor could not honour:
+   * `/quote` picked the best route on real Base — for a tokenized equity, Elfomofi — while
+   * `buildSwap` applied `AMM_ONLY` and got something else entirely. The app displayed one price,
+   * attempted another, and reverted.
+   *
+   * A price is only worth showing if it is the price you would get, so both calls now ask the same
+   * question. On a real network `AMM_ONLY` is empty and this is the unrestricted quote it always
+   * was.
+   */
   const res = await authed(
-    `${BASE}/${ONEINCH_CHAIN_ID}/quote?src=${from.address}&dst=${to.address}&amount=${raw}&includeProtocols=true`,
+    `${BASE}/${ONEINCH_CHAIN_ID}/quote?src=${from.address}&dst=${to.address}&amount=${raw}` +
+      `&includeProtocols=true${AMM_ONLY}`,
   );
 
   const outAmount = unscale(res.dstAmount, to.decimals);
@@ -196,9 +235,10 @@ export async function quote(params: {
   return {
     priceImpactPct: params.skipPriceImpact
       ? null
-      : await priceImpact(params.inSymbol, params.outSymbol, params.amount, outAmount),
-    inSymbol: params.inSymbol,
-    outSymbol: params.outSymbol,
+      : await priceImpact(inSymbol, outSymbol, params.amount, outAmount),
+    // The registry's spelling, not the caller's — so anything reading this back resolves.
+    inSymbol,
+    outSymbol,
     inAmount: params.amount,
     outAmount,
     // The floor the user is shown. 1inch applies the same bound when the swap executes.
@@ -281,6 +321,17 @@ const FORK_AMMS = [
   'BASE_SOLIDLY_V3',
   'BASE_BALANCER_V2',
   'BASE_CURVE',
+  /*
+   * The venue that actually holds the tokenized equities.
+   *
+   * Without it this list is crypto-only, and the two halves of the app disagreed: `quote()` asks
+   * 1inch with no protocol restriction, so `USDC → NVDAc` came back routed through Elfomofi with a
+   * real price, while `buildSwap()` applied this allowlist and got a route through AMMs holding no
+   * NVDAc liquidity. Every equity fill reverted `TF` inside the pool — a plain DCA into NVDAc
+   * failed identically to tier 7's entry, which is what proved it was the venue and not the
+   * strategy. Eight tokenized stocks on the markets screen, none of them fillable.
+   */
+  'BASE_ELFOMOFI',
 ].join(',');
 
 const AMM_ONLY =
@@ -330,8 +381,9 @@ export async function buildSwap(params: {
         `Base mainnet); settlement needs XORR_CHAIN=base-fork or base.`,
     );
   }
-  const src = TOKENS[params.inSymbol];
-  const dst = TOKENS[params.outSymbol];
+  // Same rule as `quote`: resolve the casing at the venue boundary, not at every call site.
+  const src = TOKENS[canonicalSymbol(params.inSymbol)];
+  const dst = TOKENS[canonicalSymbol(params.outSymbol)];
   if (!src || !dst) throw new Error(`No route for ${params.inSymbol} -> ${params.outSymbol}`);
 
   const raw = params.amountRaw ?? scale(params.amount, src.decimals);

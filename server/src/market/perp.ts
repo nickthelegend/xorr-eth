@@ -11,6 +11,7 @@
  * rather than filled with a plausible number.
  */
 import { priceOf } from './prices.js';
+import { isStock } from '../venues/stocks.js';
 import { COINGECKO_IDS } from './ids.js';
 
 export type PerpMetrics = {
@@ -42,7 +43,14 @@ export async function perpMetrics(symbol: string): Promise<PerpMetrics | null> {
   const upper = symbol.toUpperCase();
   const at = nextFundingAt();
 
-  // No spot feed means no mark, and a perp screen with no mark has nothing true to show.
+  /*
+   * No spot feed means no mark, and a perp screen with no mark has nothing true to show.
+   *
+   * Uppercasing is correct here — `COINGECKO_IDS` is all-caps crypto — but it means a tokenized
+   * equity falls through as a plain `null`, indistinguishable from a symbol nobody has heard of.
+   * There is no perpetual market for these, which is a real answer and a different one.
+   */
+  if (isStock(symbol)) return null;
   if (!COINGECKO_IDS[upper]) return null;
 
   const px = await priceOf(upper).catch(() => 0);

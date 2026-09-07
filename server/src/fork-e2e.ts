@@ -24,8 +24,8 @@ import {
 } from 'viem';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { base } from 'viem/chains';
-import { buildSwap, TOKENS } from './venues/oneinch.js';
-import { STOCKS } from './venues/stocks.js';
+import { buildSwap, canonicalSymbol, TOKENS } from './venues/oneinch.js';
+import { STOCKS, stockKey } from './venues/stocks.js';
 
 const RPC = process.env.FORK_RPC ?? 'http://127.0.0.1:8545';
 const USDC: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -89,7 +89,8 @@ const DELEGATION_ABI = [
 ] as const;
 
 async function main() {
-  const token = TOKENS[SYMBOL] ?? STOCKS[SYMBOL];
+  // Canonical on both sides: this script is run by hand and the symbol comes off the command line.
+  const token = TOKENS[canonicalSymbol(SYMBOL)] ?? STOCKS[stockKey(SYMBOL) ?? SYMBOL];
   if (!token) throw new Error(`Unknown symbol ${SYMBOL}`);
 
   /*

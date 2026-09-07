@@ -16,7 +16,7 @@
  */
 import { getJson } from '../http/get.js';
 import { ONEINCH_CHAIN_ID } from '../evm/chains.js';
-import { TOKENS } from '../venues/oneinch.js';
+import { canonicalSymbol, TOKENS } from '../venues/oneinch.js';
 import { priceOf } from './prices.js';
 
 const API_KEY = process.env.ONEINCH_API_KEY ?? '';
@@ -79,7 +79,12 @@ export async function crossCheck(symbol: string): Promise<CrossCheck> {
    * this app is not allowed to produce. A symbol with nothing to price against has no second
    * opinion, and saying that is the correct answer.
    */
-  const token = TOKENS[symbol === 'ETH' ? 'WETH' : symbol] ?? TOKENS[symbol.toUpperCase()];
+  /*
+   * The fallback used to be `TOKENS[symbol.toUpperCase()]`, which is backwards: uppercasing is
+   * precisely what loses the lowercase `c` on a tokenized equity, so it could never resolve one and
+   * every equity silently reported "not routable on Base" — for assets that route on Base daily.
+   */
+  const token = TOKENS[canonicalSymbol(symbol === 'ETH' ? 'WETH' : symbol)];
   if (!token) {
     return {
       symbol,

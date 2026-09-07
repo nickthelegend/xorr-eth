@@ -29,7 +29,7 @@ import { humanFailure } from './failure.js';
 import { priceOf } from '../market/prices.js';
 import { send } from '../notifications/push.js';
 import { PLANNERS, observationFor, type TradeIntent } from './kinds/index.js';
-import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
+import { canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 
 /**
  * Our XorrAquaBook deployment, when there is one. Aqua only exists on Base mainnet, so on Sepolia
@@ -385,7 +385,9 @@ async function runStrategyInner(
      * a cap already consumed by a trade we did not make, or realised flow that says the book is
      * being picked off.
      */
-    const outToken = TOKENS[strategy.symbol === 'ETH' ? 'WETH' : strategy.symbol];
+    // `canonicalSymbol` because this is a value out of the database, written by whatever created
+    // the strategy — a raw lookup here misses any equity whose casing was normalised on the way in.
+    const outToken = TOKENS[canonicalSymbol(strategy.symbol === 'ETH' ? 'WETH' : strategy.symbol)];
     const graphCall = await decide({
       owner,
       wantUsd: usd,
