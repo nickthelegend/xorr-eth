@@ -40,6 +40,7 @@ import {
 } from '@/state/derived';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 
 const DOT = 8;
@@ -81,6 +82,8 @@ export default function Activity() {
   const actFilter = useStore((s) => s.actFilter);
   const setActFilter = useStore((s) => s.setActFilter);
   const { data, loading, error, reload } = useAsync(() => repos.activity.list(), []);
+  // Pulling down is the gesture people already try on a list of things that keep changing.
+  const refresh = useRefreshControl(reload);
   const [exporting, setExporting] = useState(false);
   const [exportingTax, setExportingTax] = useState(false);
   const [exportError, setExportError] = useState<string>();
@@ -147,7 +150,7 @@ export default function Activity() {
             onAction={() => router.push('/strategy/dca')}
           />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
             {rows.map((r) => {
               const credit = activityAmountIsCredit(r.amount);
               return (

@@ -31,6 +31,7 @@ import {
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 import { weightBarPct } from '@/state/derived';
 
@@ -41,6 +42,7 @@ export default function Assets() {
   const wallet = useStore((s) => s.wallet);
   const balance = useAsync(() => repos.portfolio.balanceUsd(), []);
   const sleeves = useAsync(() => repos.portfolio.sleeves(), []);
+  const refresh = useRefreshControl(() => Promise.all([balance.reload(), sleeves.reload()]));
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const realised = useAsync(() => repos.portfolio.realised(), []);
 
@@ -53,7 +55,7 @@ export default function Assets() {
     <Screen tabBar>
       <Text variant="screenTitle">Assets</Text>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: space.s20 }}>
+      <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false} style={{ flex: 1, marginTop: space.s20 }}>
         <Eyebrow small>Portfolio value</Eyebrow>
         {/* `money(balance.data ?? 0)` reported "$0.00" whenever the executor was
             unreachable — a confident number for a question we never got to ask. An em dash

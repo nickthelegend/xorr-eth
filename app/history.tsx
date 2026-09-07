@@ -28,6 +28,7 @@ import {
   space,
 } from '@/ui';
 import { useAsync } from '@/data/useAsync';
+import { useRefreshControl } from '@/ui/useRefreshControl';
 import { spendsFor, unitsToUsd } from '@/data/subgraph';
 import { useStore } from '@/state/store';
 
@@ -39,6 +40,8 @@ export default function History() {
     () => (wallet?.address ? spendsFor(wallet.address) : Promise.resolve([])),
     [wallet?.address],
   );
+  // Pulling down is the gesture people already try on a list of things that keep changing.
+  const refresh = useRefreshControl(reload);
   const onChain = data ?? [];
 
   return (
@@ -69,7 +72,7 @@ export default function History() {
             onAction={() => router.push('/judge')}
           />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
             {onChain.map((r) => (
               <Row
                 key={r.id}

@@ -31,6 +31,7 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useRefreshControl } from '@/ui/useRefreshControl';
 
 /** screens.md gives this one: 40pt, radius 20. Taller than a filter pill — it is a decision. */
 const HIRE_H = 40;
@@ -39,6 +40,8 @@ export default function Roster() {
   const router = useRouter();
   const goBack = useGoBack();
   const { data, loading, reload } = useAsync(() => repos.bot.listAgents(), []);
+  // Pulling down is the gesture people already try on a list of things that keep changing.
+  const refresh = useRefreshControl(reload);
   // Which card is mid-flight. Hiring is a write, and a button that does nothing visible
   // while it travels reads as broken.
   const [busy, setBusy] = useState<string>();
@@ -88,7 +91,7 @@ export default function Roster() {
         {loading && !data ? (
           <LoadingRows count={4} height={92} />
         ) : (
-          <ScrollView
+          <ScrollView refreshControl={refresh}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ gap: space.s12 }}
           >

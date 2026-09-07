@@ -32,6 +32,7 @@ import {
 import { quantity } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useRefreshControl } from '@/ui/useRefreshControl';
 import { STRATEGY_LADDER } from '@/strategies/ladder';
 import type { Strategy } from '@/data/types';
 
@@ -49,6 +50,8 @@ export default function Strategies() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('running');
   const { data, loading, error, reload } = useAsync(() => repos.strategies.list(), []);
+  // Pulling down is the gesture people already try on a list of things that keep changing.
+  const refresh = useRefreshControl(reload);
 
   const all = data ?? [];
   const live = all.filter((s) => s.state === 'live' || s.state === 'watch');
@@ -80,7 +83,7 @@ export default function Strategies() {
       <Segmented options={TABS} value={tab} onChange={setTab} style={{ marginTop: space.s18 }} />
 
       <Fill style={{ marginTop: space.s8 }}>
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
           {tab === 'running' ? (
             loading && !data ? (
               <LoadingRows count={3} />

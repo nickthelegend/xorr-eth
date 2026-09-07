@@ -23,6 +23,7 @@ import {
 import { activityDot } from '@/state/derived';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useRefreshControl } from '@/ui/useRefreshControl';
 import { routeFor, type AlertKind } from '@/notifications/routes';
 
 const DOT = 8;
@@ -39,7 +40,8 @@ function kindFor(action: string, kind: string): AlertKind {
 export default function Inbox() {
   const router = useRouter();
   const goBack = useGoBack();
-  const { data, loading } = useAsync(() => repos.activity.list(), []);
+  const { data, loading, reload } = useAsync(() => repos.activity.list(), []);
+  const refresh = useRefreshControl(reload);
 
   return (
     <Screen>
@@ -67,7 +69,7 @@ export default function Inbox() {
             onAction={() => router.push('/safety')}
           />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
             {(data ?? []).map((r) => (
               <Row
                 key={r.id}

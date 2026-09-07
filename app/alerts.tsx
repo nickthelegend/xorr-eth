@@ -22,6 +22,7 @@ import {
 import { repos } from '@/data';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
+import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 import type { Alert } from '@/data/types';
 
@@ -59,8 +60,10 @@ export default function Alerts() {
   const router = useRouter();
   const alerts = useStore((s) => s.alerts);
   const toggleAlert = useStore((s) => s.toggleAlert);
-  const { data, loading } = useAsync(() => repos.alerts.list(), []);
+  const { data, loading, reload } = useAsync(() => repos.alerts.list(), []);
   const prefs = useAsync(() => api.get<Pref[]>('/notifications/prefs'), []);
+  // Both halves of this screen come from the server, so both are refreshed by the gesture.
+  const refresh = useRefreshControl(() => Promise.all([reload(), prefs.reload()]));
   /** Optimistic local state, reverted if the server disagrees. */
   const [pushOn, setPushOn] = useState<Record<string, boolean>>({});
 
@@ -91,7 +94,7 @@ export default function Alerts() {
         {loading && !data ? (
           <LoadingRows count={5} height={ROW_H} />
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
             {(data ?? []).map((a) => {
               const on = alerts[a.name] ?? a.default;
               return (
