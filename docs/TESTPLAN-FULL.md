@@ -247,3 +247,68 @@ the state it produces is already covered by C1 and the `policy` check.
 - **Real on-chain settlement today**: Aqua fill `0x0ec519a726035f70ce88f0ebf72efc89b36ac6f12ee35a117e198d70e3a3064b`
   — 0.0581 WETH at $2,497.93, against the book rather than the router, tokens leaving the maker's
   own wallet, the book contract keeping nothing. 12 of 12 checks.
+
+
+---
+
+# Second run — after the fork rebuild
+
+The fork was re-forked at head and rebuilt on request. That closed the one item the first run had
+to report as environmental, and exposed two more.
+
+## The fork rebuild
+
+Before: fork at block 50,970,123 against live Base at 50,983,233 — **13,110 blocks, about 7.3
+hours**. 1inch quotes against live state while execution happens against the fork's, so a swap
+built from a live quote could not be satisfied by the frozen pools and the aggregator reverted
+`ReturnAmountIsNotEnough`. Aqua fills were unaffected: a book is quoted from its own on-chain
+state, so there is nothing to drift against.
+
+Rebuilt: re-forked at 50,983,245, three contracts redeployed, the owner funded with 25,000 real
+USDC taken from a real holder, granted at $2,810/day.
+
+| | |
+|---|---|
+| `XorrDelegation` | `0xabe6f2bbe7471c4976128f0dc13a7f83499e9a23` |
+| `XorrAquaBook` | `0xddcf22a0a212dbf5467a57b075049bcf3f74c9ac` |
+| `XorrSwapVMBook` | `0x6cc8379b893d0239392720368f901b56c0f51e53` |
+| grant tx | `0xe2a9d7f250e496f6f92cf71febcc22a03599d51a27c19ce85978053a5fbb3d80` |
+
+**C6 now passes on the aggregator path too.** The exact run that failed before — a $50 WETH DCA —
+filled: 0.0200 WETH at $2,494.33, tx
+`0x65f9d59bafdc51fd92491d8d4a955c7002f725339f42d2ddf59684ccaf5e40c1`.
+
+## Two more gaps, found by doing the rebuild
+
+**7. `fork-bootstrap` silently skipped funding.**
+The wallet to fund was read from `argv[2]` alone. Invoking it the natural way — every other setting
+already in the environment — funded nothing and still printed a successful-looking run: contracts
+deployed, delegate funded, env written. The owner wallet had zero USDC and zero ETH, which only
+surfaces later as a trade that cannot pay for itself. **Fixed** — falls back to `OWNER_ADDRESS`,
+and says so loudly when there is nothing to fund. The RUNBOOK now carries the rebuild procedure,
+which did not exist.
+
+**8. The five-minute re-warm was not enough on its own.**
+`/market/sparklines` still oscillated between five and nine of nine at 42 minutes uptime. One
+`STALE_TOLERANCE_MS` governed both a spot quote and a day of candles, and ~27 upstream URLs spaced
+1.1s apart with 429 backoff cannot all be refreshed inside ten minutes. **Fixed** — history gets an
+hour, the spot price keeps its ten minutes. A 1-day OHLC series twenty minutes old is the same
+picture; serving it beats serving a gap. **Re-verified**: 4/9 at 32s, 9/9 by 228s, and steady at
+9/9 through 1,225s — past the cliff that used to reclaim it.
+
+## Final state
+
+| Check | Result |
+|---|---|
+| Screen sweep | **54/54**, no console or network failures |
+| Browser re-sweep, all 47 routes | every route renders, **zero** console errors, **zero** failed requests |
+| Sepolia `/verify` | 15 pass / 1 fail / 2 skip |
+| Fork `/verify` | **18 pass / 0 fail / 0 skip** |
+| Client tests | 292 passed |
+| Server tests | 109 passed |
+| Auth boundary | 17/17 protected routes 401 without a token |
+
+The single FAIL is unchanged and is not counted as a pass: `audit-chain` on the Sepolia wallet
+forks at entry 2, from a race fixed before this run began. It cannot be repaired — the trail is
+append-only by trigger, and a log that can be rewritten to look correct proves nothing. The
+rebuilt fork's chain is unbroken across 66 entries, which is the evidence the fix works.
