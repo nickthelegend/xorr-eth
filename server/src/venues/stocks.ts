@@ -103,6 +103,7 @@ export function isStock(symbol: string): boolean {
  * along; the executor could not reach it.
  */
 import { quote } from './oneinch.js';
+import { query } from '../db/index.js';
 
 /** Big enough that the route is representative, small enough not to move the pool it is measuring. */
 const PROBE_USD = 1_000;
@@ -138,5 +139,47 @@ export async function stockPriceUsd(symbol: string): Promise<number | null> {
   if (!q || !(q.outAmount > 0)) return null;
   const price = PROBE_USD / q.outAmount;
   cache.set(key, { at: Date.now(), price });
+  // Every fresh reading is a data point these assets have no other way of getting.
+  recordObservation(key, price);
   return price;
+}
+
+/**
+ * Record what we saw, so these assets can eventually have a shape.
+ *
+ * The tokenized equities have no CoinGecko series and no free candle source anywhere: the price is
+ * derived from a live 1inch route, which is a spot reading. The asset screen therefore says "no
+ * price history for this market" and shows a number with nothing around it — honest, and not much
+ * use for deciding anything.
+ *
+ * Our own observations are the one real source available. `stockPriceUsd` already computes a price
+ * from a real route; writing it down, timestamped, builds a genuine series. Short at first, and
+ * true from the first row. It cannot reconstruct the past and does not pretend to: the chart starts
+ * when we started watching, and the screen says so.
+ *
+ * Fire-and-forget on purpose. A price read must never fail because a write failed — the number is
+ * what the caller asked for, and the history is a side effect.
+ */
+export function recordObservation(symbol: string, usd: number): void {
+  if (!(usd > 0)) return;
+  void query(`INSERT INTO price_observations (symbol, usd) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [
+    symbol,
+    usd,
+  ]).catch(() => undefined);
+}
+
+/** The series we have actually seen, oldest first. Empty until something has looked. */
+export async function observedHistory(
+  symbol: string,
+  hours = 24 * 30,
+): Promise<{ at: number; usd: number }[]> {
+  const key = stockKey(symbol);
+  if (!key) return [];
+  const rows = await query<{ at: Date; usd: string }>(
+    `SELECT at, usd FROM price_observations
+      WHERE symbol = $1 AND at > now() - ($2 || ' hours')::interval
+      ORDER BY at ASC`,
+    [key, String(hours)],
+  ).catch(() => []);
+  return rows.map((r) => ({ at: new Date(r.at).getTime(), usd: Number(r.usd) }));
 }

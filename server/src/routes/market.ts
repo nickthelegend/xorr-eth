@@ -16,8 +16,8 @@
 import { Hono } from 'hono';
 import { getJson, staleValue } from '../http/get.js';
 import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../market/ids.js';
-import { TOKENS, quote } from '../venues/oneinch.js';
-import { STOCKS } from '../venues/stocks.js';
+import { TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
+import { STOCKS, isStock, observedHistory } from '../venues/stocks.js';
 import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
 import { withdrawCalldata } from '../venues/aave.js';
 import { suppliedUsd } from '../evm/balances.js';
@@ -270,6 +270,30 @@ function thin(series: number[], count: number): number[] {
   const step = (series.length - 1) / (count - 1);
   return Array.from({ length: count }, (_, i) => series[Math.round(i * step)]!);
 }
+
+/**
+ * GET /market/stocks/history?symbol=NVDAc — the series we have actually observed.
+ *
+ * These assets have no feed and no free candle source, so the only honest history is our own
+ * timestamped readings from the route that prices them. It starts when we started watching and the
+ * response says so, rather than back-filling a shape nobody measured.
+ */
+market.get('/market/stocks/history', async (c) => {
+  const symbol = canonicalSymbol(c.req.query('symbol') ?? '');
+  if (!isStock(symbol)) return c.json({ error: `${symbol} is not a tokenized equity` }, 404);
+  const hours = Math.min(Math.max(Number(c.req.query('hours') ?? 720), 1), 24 * 365);
+  const points = await observedHistory(symbol, hours);
+  return c.json({
+    symbol,
+    points,
+    /** Said plainly so a screen never implies more history than exists. */
+    observedSince: points[0]?.at ?? null,
+    note:
+      points.length === 0
+        ? 'No readings yet. These have no market-data feed; the series begins when this deployment first priced them.'
+        : `${points.length} readings since ${new Date(points[0]!.at).toISOString()}.`,
+  });
+});
 
 /** GET /market/symbols — which symbols have a real feed. */
 market.get('/market/symbols', (c) => c.json(Object.keys(COINGECKO_IDS)));
