@@ -263,3 +263,93 @@ tier 7 — is genuinely unbuilt.
 | Client tests | 302 |
 | Server tests | 119 |
 | Typecheck | clean, both projects |
+
+---
+
+# Re-measured 2026-09-07 (third pass) — tier 7
+
+**47 items. 41 verified. 87%.**
+
+The checklist gained an item this pass rather than losing one, because building tier 7 exposed a
+claim the project had been making and I had never measured. The prior number was optimistic on the
+same basis: **40 of 47 — 85%**, not the 87% reported against a 46-item list.
+
+## Tier 7 — events and earnings — built
+
+The ladder is now 7 of 7. The design was settled against the project's own texts before any code:
+*"positions around scheduled events, and flattens before the print"*, run by a persona that is
+*"pedantic and calendar-driven… slightly weary of people who trade into prints."* So it buys the
+run-up and is unconditionally flat when the print lands. The judgement the ladder warns about lives
+in the entry; the exit is a promise, so it is uncapped, sells the **whole** holding in the symbol,
+and fires even when the calendar has failed.
+
+**The calendar is SEC EDGAR** — free, no key, and the authoritative record rather than a vendor's
+copy. A company announcing results files an 8-K with Item 2.02 on the day it reports, so the filing
+history is the past calendar, exactly dated. Two things the raw data does, both found by reading it:
+
+- **Not every Item 2.02 is an earnings print.** Tesla files one for deliveries too, so its raw gaps
+  read `[20, 71, 20, 64, 26, 72]` and a median of those projects six weeks wrong. Filings closer
+  than 60 days are one quarter; TSLA then reads `[91, 84, 98, 91, 92]` like everyone else.
+- **Not every filer is quarterly.** A median outside 80–100 days is a pattern this code does not
+  understand, and it projects nothing rather than guessing.
+
+Verified live against all eight equities: every one maps to a CIK from the SEC's own ticker file and
+resolves to a 90–91 day median. The flatten margin is each company's **own** observed cadence error
+— NVIDIA ±7 days, GOOGL ±11, Apple and Meta ±0 — so the number comes from the filings rather than
+from me. A user who knows the real date pins it, and then there is no margin to add.
+
+21 tests. Tier 7 proposes rather than executes, because `requiresApprovalByDefault` is already true
+for tier ≥ 6.
+
+## Three real bugs found by running it
+
+1. **The executor could not price a single tokenized equity.** `priceOf` keys into CoinGecko's id
+   table, which has no equities, so it threw `No price feed for NVDAc` — and with it went sizing,
+   cap-checking and recording for every equity trade. `/market/stocks` had the number all along;
+   the derivation lived inside a route handler where only the UI could reach it. Extracted.
+2. **Two more places the lowercase `c` was normalised away.** `isStock` compared case-sensitively
+   and `/price/:symbol` uppercased its parameter, so `/price/NVDAc` answered
+   `{"error":"No price feed for NVDAC"}` for an asset on the app's own markets screen. The route
+   also hardcoded `source: 'coingecko'`, false for eight symbols.
+3. **An equity price quoted itself to death.** Mine, from fix 1: the probe quote computed its price
+   impact, which prices both legs with `priceOf`, which came back to the probe. The deployed fork
+   executor reached a 2GB heap and died fifty seconds after boot — `FATAL ERROR: Ineffective
+   mark-compacts near heap limit` — and 502'd until rolled forward. Found by watching the deploy,
+   not by the tests, which passed throughout.
+
+## The new item: equity fills
+
+`/price/NVDAc` now returns `{"price":232.99,"source":"1inch"}` and tier 7's entry reaches the venue
+with a real route. The fill then reverts with `TF`.
+
+A plain DCA into NVDAc **fails identically**, which is the control that matters: this is not a tier 7
+defect, it is that no tokenized equity currently fills on the fork, for any strategy. Same family as
+the aggregator drift — the route is computed against live Base state and executed against the fork's,
+and a thin equity pool is far more sensitive to that than WETH. The README's claim that
+*"Buy $250 of NVDA is the same code path as Buy $250 of WETH"* is true of the code and not yet true
+of the outcome.
+
+So tier 7 is counted as built — its logic verified by 21 tests, its calendar by live SEC data, its
+entry by reaching the venue — and the equity fill is counted as its own open item rather than folded
+into it.
+
+## The six that remain
+
+| # | Item | Why |
+|---|---|---|
+| 1 | **Equity fills** | Quote and price are real; the fill reverts `TF` on the fork for every strategy, not just tier 7. Environmental, and newly measured rather than newly broken. |
+| 2 | Privy policy on the user's embedded wallet | Platform constraint — Privy requires the wallet's owner to authorise, and that is the user. |
+| 3 | 1inch SwapVM wired into the product | Contract, deployed, 10 fork tests; the executor never calls it. README says "Contract only". |
+| 4 | The Graph — second subgraph queried | Blocked on a Studio dashboard action; `subgraph_create` is not in the deploy API. |
+| 5 | Audit chain unbroken on Base Sepolia | Permanent by design — append-only, so it cannot be rewritten to look clean. |
+| 6 | LLM agent voice | `OPENROUTER_API_KEY` exists nowhere. `/bot/say` reports `{"source":"fallback","reason":"no_key"}`. |
+
+## Re-measured whole
+
+| Check | Result |
+|---|---|
+| Fork `/verify` | **18 pass / 0 fail / 0 skip** |
+| Sepolia `/verify` | 15 pass / 1 fail / 2 skip |
+| Client tests | 330 |
+| Server tests | 147 |
+| Typecheck | clean, both projects |
