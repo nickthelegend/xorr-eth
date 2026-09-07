@@ -11,8 +11,15 @@ import { api } from './api';
 export type SwapQuoteResult = {
   outAmount: number;
   minimumOut: number;
-  priceImpactPct: number;
-  slippageBps: number;
+  /** null where it cannot be measured — a dash, never a fabricated zero. See the server. */
+  priceImpactPct: number | null;
+  /*
+   * The server returns `slippagePct`, and this said `slippageBps`. Nothing in the response ever
+   * carried that name, so the row fell through to its default and happened to be right; the
+   * price-impact row next to it fell through to `undefined` and rendered "NaN%". A type that
+   * describes a response the server does not send is not a type, it is a guess.
+   */
+  slippagePct: number;
   venues: string[];
   route: string;
 };

@@ -12,6 +12,7 @@ import 'dotenv/config';
 import { getJson } from '../http/get.js';
 import { STOCKS } from './stocks.js';
 import { CHAIN_KEY, ONEINCH_CHAIN_ID, QUOTE_ADDRESSES } from '../evm/chains.js';
+import { priceOf } from '../market/prices.js';
 import type { Address, Hex } from 'viem';
 
 const BASE = 'https://api.1inch.dev/swap/v6.0';
@@ -51,6 +52,11 @@ export type SwapQuote = {
   slippagePct: number;
   /** The protocols 1inch actually routed through — screen 19's Route row. */
   venues: string[];
+  /**
+   * How far the executed rate sits below the mid, as a percentage — or null when it cannot be
+   * measured, which is not the same as zero.
+   */
+  priceImpactPct: number | null;
   /**
    * What the user is guaranteed at worst, in the OUTPUT token.
    *
@@ -156,6 +162,7 @@ export async function quote(params: {
   const venues = venuesFrom(res.protocols);
 
   return {
+    priceImpactPct: await priceImpact(params.inSymbol, params.outSymbol, params.amount, outAmount),
     inSymbol: params.inSymbol,
     outSymbol: params.outSymbol,
     inAmount: params.amount,
@@ -166,6 +173,42 @@ export async function quote(params: {
     venues,
     route: routeLabel(venues),
   };
+}
+
+
+/**
+ * Price impact, measured rather than asserted.
+ *
+ * The swap screen has always had a "Price impact" row and the server has never returned the field,
+ * so it read `undefined` and rendered **"NaN%"** — the client's type claimed a number the response
+ * did not contain. A NaN on a trade ticket is worse than an empty row: it is a number-shaped thing
+ * that is not a number.
+ *
+ * Impact is the gap between the rate this size actually gets and the rate the market is quoting at
+ * mid, so both halves have to be real: the executed rate comes from the 1inch quote and the mid
+ * from the same price feed every screen uses. Where either is unavailable — a tokenized equity has
+ * no CoinGecko feed — the answer is `null` and the screen shows a dash. Returning 0 there would be
+ * claiming a free trade.
+ */
+async function priceImpact(
+  inSymbol: string,
+  outSymbol: string,
+  inAmount: number,
+  outAmount: number,
+): Promise<number | null> {
+  if (!(inAmount > 0) || !(outAmount > 0)) return null;
+  const [inUsd, outUsd] = await Promise.all([
+    priceOf(inSymbol, 4_000).catch(() => 0),
+    priceOf(outSymbol, 4_000).catch(() => 0),
+  ]);
+  if (!(inUsd > 0) || !(outUsd > 0)) return null;
+
+  // What the trade should return at mid, in the output token, against what it actually returns.
+  const atMid = (inAmount * inUsd) / outUsd;
+  if (!(atMid > 0)) return null;
+  const impact = ((atMid - outAmount) / atMid) * 100;
+  // A tiny negative is the feed and the pool disagreeing by a hair, not a gift. Clamp to zero.
+  return Number.isFinite(impact) ? Math.max(0, impact) : null;
 }
 
 export type SwapCalldata = { to: Address; data: Hex; value: string };

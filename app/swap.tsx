@@ -218,7 +218,7 @@ export default function Swap() {
             title="Price impact"
             value={
               <Price>
-                {swap.data
+                {swap.data && swap.data.priceImpactPct !== null
                   ? percent(swap.data.priceImpactPct, { digits: 3, explicitSign: false })
                   : '—'}
               </Price>
@@ -229,10 +229,7 @@ export default function Swap() {
             title="Max slippage"
             value={
               <Price>
-                {percent((swap.data?.slippageBps ?? 30) / 100, {
-                  digits: 2,
-                  explicitSign: false,
-                })}
+                {percent(swap.data?.slippagePct ?? 0.3, { digits: 2, explicitSign: false })}
               </Price>
             }
             height={50}
