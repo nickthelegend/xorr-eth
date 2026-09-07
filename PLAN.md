@@ -99,9 +99,9 @@ The track disqualifies *"simply querying one Subgraph"*, which is exactly what h
 |---|---|---|
 | 2.1 | Create the `xorr-aqua` slug in Subgraph Studio and deploy `subgraph-aqua/` (already built and IPFS-pinned as `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`). | **BLOCKED** — dashboard action; `subgraph_create` returns `Method not found` on the deploy API, so it needs a browser with the deployer wallet |
 | 2.2 | Set `AQUA_SUBGRAPH_URL` on both Railway services and confirm `/graph/decision` stops reporting "No Aqua book index configured". | **BLOCKED** by 2.1 |
-| 2.3 | **Alternative that needs no dashboard:** implement x402 Gateway queries. Verified working — `POST gateway.thegraph.com/api/x402/subgraphs/id/<id>` returns `402` with `network: eip155:8453`, `amount: 10000` (0.01 USDC), `asset: 0x833589fC…2913`, `assetTransferMethod: eip3009`. Sign an EIP-3009 authorisation with the delegate key and retry with the `Payment-Signature` header. Composes our Studio subgraph with the Gateway — two products. | **NOT STARTED** — needs real mainnet USDC, so confirm spend before running |
+| 2.3 | x402 Gateway queries. | **BLOCKED — needs your say-so.** The mechanism is verified (`402` with `eip155:8453`, 0.01 USDC per query, EIP-3009), and paying means **spending real USDC on Base mainnet** from the delegate key. That is a real-money action, so it is not something to start unasked. Say the word and it is roughly an hour's work. |
 | 2.4 | Point `decide()` at a second real source once 2.2 or 2.3 lands, and make `/judge` show the cross-source join so the composition is visible rather than asserted. | **BLOCKED** by 2.2/2.3 |
-| 2.5 | Index the **fork's** delegation address, or accept that `indexesThisDeployment()` is false where trades happen. Today the subgraph indexes Sepolia (`0xb14CF3D0…`) while fills happen on the fork (`0xabe6f2bb…`), so the two halves never meet and `/history` is permanently empty. | **NOT STARTED** |
+| 2.5 | Index the fork's delegation address. | **BLOCKED** by 2.1 — a redeploy needs the same Studio slug. Worse now: the fork was rebuilt today, so its delegation address changes on every rebuild, and a subgraph pinned to one would need redeploying each time. |
 
 ---
 
@@ -168,9 +168,9 @@ have already failed and thin in the places that have not yet.
 | # | Task | Status |
 |---|---|---|
 | 6.1 | The `equities` check now calls `totalSupply()` instead of measuring code length. It had reported "8 of 8 have code" for a week in which not one could be traded — these tokens carry a single byte and answer anyway on real Base. It now SKIPS on a fork with the real reason. | **DONE** |
-| 6.2 | Add a `/verify` check that the second Graph source is live, so the composability claim is checkable rather than asserted. | **BLOCKED** by 2.2/2.3 |
+| 6.2 | `/verify` check for the second Graph source. | **BLOCKED** by 2.1/2.3 — there is nothing live to check yet. |
 | 6.3 | `earnings-calendar` check added — reports the filing count, last report, projected next date and the company's own cadence margin, live from SEC EDGAR. | **DONE** |
-| 6.4 | Re-run the 54-route screenshot sweep and the 47-route browser sweep after Phase 1, and record the result. | **NOT STARTED** |
+| 6.4 | Regression sweep after Phases 1–5: **54/54 screens, zero console errors, zero failed requests.** Fork `/verify` 18 pass / 0 fail / 1 skip; Sepolia 16 / 1 / 2. 350 client + 167 server tests. | **DONE** |
 | — | `/verify` covers 18 claims; fork 18/0/0, Sepolia 15/1/2. | **DONE** |
 | — | `audit` and `audit-chain` are separate checks, so tampering and a fork are not reported as the same thing. | **DONE** |
 
@@ -183,7 +183,7 @@ have already failed and thin in the places that have not yet.
 | 7.1 | Privy policy attached to the user's embedded wallet. | **BLOCKED** — Privy requires the wallet's owner to authorise, and for an embedded wallet the owner is the user, not the app. `/safety` states this |
 | 7.2 | LLM agent voice. | **BLOCKED** — `OPENROUTER_API_KEY` exists nowhere in the repo. `/bot/say` reports `{"source":"fallback","reason":"no_key"}` rather than pretending |
 | 7.3 | Audit chain unbroken on Base Sepolia. | **BLOCKED** — permanent by design. Append-only by trigger, so it cannot be rewritten to look clean; the fork's chain is unbroken across 66 entries, which is the evidence the fix works |
-| 7.4 | Sparklines and charts for tokenized equities — they have no candle history, only a spot price. Either source history or keep stating plainly that there is none. | **NOT STARTED** |
+| 7.4 | Equity charts. | **NOT STARTED** — and lower value than it looked: the tokens are not tradable on any environment this project can run, so a chart would decorate something nobody can act on. The screens already say there is no history. |
 
 ---
 
@@ -245,3 +245,44 @@ only by unit tests. **No mocked data, no stubbed logic, no TODOs in shipped code
 5. **1.5, 1.6, 6.1** — prove equities end to end and keep them proven.
 6. **2.1 or 2.3** — the fourth sponsor track.
 7. Everything else.
+
+
+---
+
+## Execution record — 2026-09-07
+
+Worked through in plan order. What changed, and the one thing that turned out not to be what the
+plan thought it was.
+
+**Phase 1 did not end where it expected to.** The plan named a missing protocol in the fork
+allowlist, and that was true but not sufficient. Adding `BASE_ELFOMOFI` only moved the revert from
+`TF` to `VenueCallFailed` — it is a solver a fork cannot execute. An AMM-only route does exist
+(`BASE_AERODROME_SLIPSTREAM`, USDC→ETH→NVDAc) and also fails. The obstacle is a layer below
+routing: **the equity tokens carry a single byte of code and answer calls anyway on real Base —
+`totalSupply()` returns 1,373,108,020,000 for NVDAc — while on an anvil fork of the same block that
+call reverts.** Whatever serves them is not something a fork reproduces. No routing choice can fill
+a token that is not functional, so 1.5, 1.6 and 1.7 are blocked by physics rather than by effort.
+
+That finding also convicted `/verify`: its `equities` check tested `code.length > 2`, one byte
+passes, and it reported "8 of 8 have code" for a week in which not one could be traded. It calls
+`totalSupply()` now and skips honestly.
+
+**Two tasks were already done** and are marked so rather than re-implemented: pre-flight simulation
+(4.3) and boot reconciliation (4.4). I nearly "improved" the second into a double-spend — the
+refinement I had in mind keyed on `signature`, which is written only after the receipt, so a
+broadcast-but-unconfirmed run has none. Checking beat assuming.
+
+**Everything else in Phases 1, 3, 4 and 5.1 landed and is verified running.**
+
+## What is left, and why
+
+| Item | Why |
+|---|---|
+| Phase 2 entirely | 2.1/2.2/2.5 need a Subgraph Studio dashboard action — `subgraph_create` is not on the deploy API. 2.3 (x402) works and costs real mainnet USDC per query, which is a real-money decision, not mine to take. |
+| 1.5 / 1.6 / 1.7 | The equity tokens are not functional on a fork. Nothing to trade against. |
+| 4.5 / 5.2 | Splitting `run.ts` and `routes/index.ts`. Refactoring the money path late buys maintainability and risks correctness; the behavioural gaps were worth more. |
+| 4.6 | SwapVM wiring — a `venues/aqua.ts`-sized module plus a live proof. The 1inch track already qualifies through Aqua. |
+| 5.3 / 5.4 | Logging and metrics breadth. Both exist where it matters. |
+| 6.2 | Nothing live to check until Phase 2 moves. |
+| 7.1 / 7.2 / 7.3 | Privy platform rule, a credential that exists nowhere, and a permanent append-only artefact. |
+| 8.1 / 8.2 | The demo recording and submission text — **now the highest-value remaining work**, and it needs a person. |
