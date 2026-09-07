@@ -51,7 +51,7 @@ export function resetPricedSymbols(): void {
   feedSymbolsInFlight = undefined;
 }
 
-export type Quote = { price: number; change24h: number; source: 'coingecko' };
+export type Quote = { price: number; change24h: number; source: 'coingecko' | '1inch' };
 
 /**
  * A short client-side cache on top of the server's own. Two components mounting on the same screen
@@ -142,11 +142,43 @@ export function clearMarketDataCache(): void {
 export async function fetchQuotes(symbols: string[]): Promise<Record<string, Quote>> {
   const priced = await pricedSymbols();
   const known = priced.size === 0 ? symbols : symbols.filter((s) => priced.has(s));
-  if (known.length === 0) return {};
-  return getJson<Record<string, Quote>>(
-    `/market/quotes?symbols=${encodeURIComponent(known.join(','))}`,
-  );
+  /*
+   * The tokenized equities are priced too, just not by the same feed.
+   *
+   * `/market/symbols` lists what CoinGecko covers, which is crypto — so every equity was filtered
+   * out here and `usePrice` returned nothing for them. The market list did not show it, because
+   * it merges `/market/stocks` itself; every other screen did. The order ticket read **"No live
+   * NVDAc price"** directly above "At worst, via Elfomofi — 1.0738 NVDAc", quoting a real route
+   * for an asset it had just called unpriced, on the buy screen for the whole stocks track.
+   *
+   * `/market/stocks` derives its price from a real 1inch route, which is the right number anyway:
+   * what the user pays is what routes on Base, not the NYSE print.
+   */
+  const wantsStocks = symbols.some((s) => !priced.has(s) && STOCK_SUFFIX.test(s));
+  const [live, stocks] = await Promise.all([
+    known.length
+      ? getJson<Record<string, Quote>>(
+          `/market/quotes?symbols=${encodeURIComponent(known.join(','))}`,
+        )
+      : Promise.resolve({} as Record<string, Quote>),
+    wantsStocks ? fetchStockQuotes().catch(() => ({}) as Record<string, StockQuote>) : Promise.resolve({} as Record<string, StockQuote>),
+  ]);
+
+  const out: Record<string, Quote> = { ...live };
+  for (const sym of symbols) {
+    const s = stocks[sym];
+    // A null price means nothing routes right now, which is a real "no price" and stays one.
+    if (!out[sym] && s?.price != null) {
+      // No 24h change: a swap quote is one observation, and deriving a delta from it would be
+      // the same invention the rest of this file exists to avoid.
+      out[sym] = { price: s.price, change24h: 0, source: '1inch' };
+    }
+  }
+  return out;
 }
+
+/** `NVDAc`, `TSLAc` — a ticker with the lowercase suffix that marks the tokenized form. */
+const STOCK_SUFFIX = /^[A-Z]{1,6}c$/;
 
 /**
  * How many days of history each timeframe pill asks for, and how many raw bars to fold into one
