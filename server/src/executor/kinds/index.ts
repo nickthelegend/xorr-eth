@@ -12,6 +12,7 @@
  */
 import { priceOf } from '../../market/prices.js';
 import { daily, history } from '../../backtest/engine.js';
+import { earningsCalendar } from '../../market/edgar.js';
 import { holdings, cashUsd } from '../../evm/balances.js';
 import { usdcReserve } from '../../market/yield.js';
 import { supplyCalldata, AAVE_POOL } from '../../venues/aave.js';
@@ -415,6 +416,7 @@ export const PLANNERS: Record<string, (ctx: PlanContext) => Promise<TradeIntent 
   'yield-rotation': planYieldRotation,
   grid: planGrid,
   momentum: planMomentumBoth,
+  'event-driven': planEventDriven,
 };
 
 /**
@@ -551,4 +553,144 @@ export async function planMomentum(ctx: PlanContext): Promise<TradeIntent | null
       openedAt: Date.now(),
     },
   };
+}
+
+/**
+ * Tier 7 — events and earnings. The Earnings Desk's strategy, and the last rung by design.
+ *
+ * The ladder: *"Positions around scheduled events, and flattens before the print. Most judgement,
+ * most ways to be wrong. Last."* The persona that runs it is *"pedantic and calendar-driven…
+ * slightly weary of people who trade into prints."* Both are honoured literally: it buys the run-up
+ * and it is **flat when the print lands**, every time, without exception.
+ *
+ * The judgement — and the ways to be wrong — live entirely in the entry. The exit is not a view
+ * about anything; it is a promise. So the exit is unconditional, exempt from the daily cap (a
+ * flatten a spent allowance can silence is not a flatten), and sells the WHOLE holding in the
+ * symbol rather than only what this strategy bought. A partial flatten would leave the user exposed
+ * to precisely the event they created this to avoid, while the screen told them they were covered.
+ * That is worse than not having the feature.
+ *
+ * The date comes from SEC EDGAR — the regulator's own record of when a company has reported — and
+ * is PROJECTED from that cadence, never invented. A projection is treated as what it is: the
+ * flatten window widens by the company's own observed cadence error, so NVIDIA's ±7 days buys seven
+ * days of margin and Apple's metronomic 91s buy none. A user who knows the real date pins it, and
+ * then the margin is just the lead time.
+ *
+ * If the calendar cannot be read, or the cadence is not quarterly, or the date has already passed
+ * without this having flattened, it sells and stands down. A calendar strategy that has lost the
+ * calendar has no edge left, and holding on the assumption the date is still right is how it turns
+ * into a position nobody chose.
+ */
+async function planEventEntry(ctx: PlanContext, event: EventWindow): Promise<TradeIntent | null> {
+  const size = Math.min(Number(ctx.params.usdPerEvent ?? ctx.budgetUsd), ctx.budgetUsd);
+  if (size < MIN_TRADE_USD) return null;
+
+  const openFrom = Number(ctx.params.entryFromDays ?? 10);
+  const openUntil = Number(ctx.params.entryUntilDays ?? 2);
+  // The near edge sits ABOVE the flatten window on purpose: buying inside it would be paying a
+  // spread for a position the very next run is obliged to sell.
+  if (!(event.daysAway <= openFrom && event.daysAway >= Math.max(openUntil, event.flattenWithin)))
+    return null;
+
+  return {
+    inSymbol: 'USDC',
+    outSymbol: ctx.symbol,
+    amountIn: size,
+    usd: size,
+    because:
+      `${ctx.symbol} reports ${event.confirmed ? 'on' : 'around'} ${event.dateLabel}, ` +
+      `${event.daysAway} days away. Buying the run-up; this sells before the print.`,
+    stateAfter: { openedForEventAt: event.at, openEntryPrice: 0 },
+  };
+}
+
+async function planEventFlatten(
+  ctx: PlanContext,
+  reason: string,
+): Promise<TradeIntent | null> {
+  const held = (await holdings(ctx.owner)).find((h) => h.symbol === ctx.symbol);
+  if (!held || held.usd < MIN_TRADE_USD) return null;
+  return {
+    inSymbol: ctx.symbol,
+    outSymbol: 'USDC',
+    amountIn: held.units,
+    amountInRaw: held.raw,
+    usd: held.usd,
+    because: reason,
+    stateAfter: { openedForEventAt: 0 },
+  };
+}
+
+type EventWindow = {
+  at: number;
+  daysAway: number;
+  dateLabel: string;
+  confirmed: boolean;
+  /** Days before the event at which this must already be flat: lead time plus projection error. */
+  flattenWithin: number;
+};
+
+export async function planEventDriven(ctx: PlanContext): Promise<TradeIntent | null> {
+  const leadDays = Number(ctx.params.flattenLeadDays ?? 1);
+  const holdingNow = (await holdings(ctx.owner)).find((h) => h.symbol === ctx.symbol);
+  const hasPosition = !!holdingNow && holdingNow.usd >= MIN_TRADE_USD;
+
+  /*
+   * A pinned date is the user's own knowledge and outranks anything derived. It also needs no
+   * error margin: they are not guessing.
+   */
+  const pinned = Number(ctx.params.eventAt ?? Number.NaN);
+  let at: number;
+  let confirmed: boolean;
+  let errorDays = 0;
+
+  if (Number.isFinite(pinned) && pinned > 0) {
+    at = pinned;
+    confirmed = true;
+  } else {
+    const cal = await earningsCalendar(ctx.symbol).catch(() => null);
+    if (!cal || cal.nextAt === null) {
+      // No calendar means no strategy. Do not hold a position on a date nobody can name.
+      return hasPosition
+        ? planEventFlatten(
+            ctx,
+            `No reporting date could be read for ${ctx.symbol}, so this cannot promise to be flat before one. Closing.`,
+          )
+        : null;
+    }
+    at = cal.nextAt;
+    confirmed = false;
+    errorDays = cal.errorDays;
+  }
+
+  const daysAway = Math.round((at - Date.now()) / 86_400_000);
+  const dateLabel = new Date(at).toISOString().slice(0, 10);
+  const flattenWithin = leadDays + errorDays;
+
+  /*
+   * The date has passed and this is still holding. Something was wrong — a moved date, a missed
+   * run — and the promise is already broken. Close, and say so rather than carrying on.
+   */
+  if (daysAway < 0) {
+    return hasPosition
+      ? planEventFlatten(
+          ctx,
+          `${ctx.symbol} was expected to report on ${dateLabel} and that date has passed. Closing rather than holding through an unknown.`,
+        )
+      : null;
+  }
+
+  if (daysAway <= flattenWithin) {
+    return hasPosition
+      ? planEventFlatten(
+          ctx,
+          `${ctx.symbol} reports ${confirmed ? 'on' : 'around'} ${dateLabel}, ${daysAway} days away. ` +
+            `Flat before the print${errorDays > 0 ? `, with ${errorDays} days of margin because that date is projected` : ''}.`,
+        )
+      : null;
+  }
+
+  // Outside the flatten window, holding is the position working. Only add when flat.
+  if (hasPosition) return null;
+  return planEventEntry(ctx, { at, daysAway, dateLabel, confirmed, flattenWithin });
 }

@@ -89,8 +89,8 @@ export const STRATEGY_LADDER: LadderEntry[] = [
     label: 'Events and earnings',
     what: 'Positions around scheduled events, and flattens before the print.',
     judgement: 'Most judgement, most ways to be wrong. Last.',
-    available: false,
-    cta: 'Later',
+    available: true,
+    cta: 'Set it up',
     route: '/strategies',
   },
 ];

@@ -178,7 +178,7 @@ export const CLOSE_ONLY_KINDS = new Set(['exit-rules']);
  * cap-bound would let a spent cap silence a stop, which is the failure `CLOSE_ONLY_KINDS` exists
  * to prevent. So the decision is made per INTENT — see `reducesRiskOnly` — rather than per kind.
  */
-export const DUAL_SIDED_KINDS = new Set(['momentum']);
+export const DUAL_SIDED_KINDS = new Set(['momentum', 'event-driven']);
 
 /**
  * Will this run only ever reduce exposure?
@@ -195,7 +195,14 @@ export const DUAL_SIDED_KINDS = new Set(['momentum']);
 export function reducesRiskOnly(kind: string, params: Record<string, unknown>): boolean {
   if (CLOSE_ONLY_KINDS.has(kind)) return true;
   if (!DUAL_SIDED_KINDS.has(kind)) return false;
-  return Number(params.openEntryPrice ?? 0) > 0;
+  /*
+   * Two dual-sided kinds, two names for "this already holds something".
+   *
+   * Momentum records the price it entered at, because its exit is a level. Event-driven records the
+   * event it opened for, because its exit is a date. Either being set means the next run can only
+   * close, and a close must never be capped — the flatten is the whole promise of tier 7.
+   */
+  return Number(params.openEntryPrice ?? 0) > 0 || Number(params.openedForEventAt ?? 0) > 0;
 }
 
 /**
