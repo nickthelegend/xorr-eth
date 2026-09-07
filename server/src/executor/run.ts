@@ -22,6 +22,7 @@ import { gasStatus } from '../evm/gas.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
 import { buildSwap, quote, slippageFor, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
 import { buildAquaFill } from '../venues/aqua.js';
+import { buildSwapVmFill } from '../venues/swapvm.js';
 import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
@@ -649,8 +650,40 @@ async function runStrategyInner(
           amount: intent.amountIn,
         }).catch(() => null);
 
+    /*
+     * A maker's SwapVM program, when one is shipped and Aqua could not serve the size.
+     *
+     * `XorrSwapVMBook` was deployed and tested and never called, which made it an artefact rather
+     * than a venue. The difference from Aqua is what enforces the terms: an Aqua book quotes from a
+     * curve the book contract evaluates, while a SwapVM maker ships compiled bytecode that the
+     * router executes — the deadline, the floor and the fee live inside the VM instead of being
+     * trusted to whoever submits the fill.
+     *
+     * Needs the quote first, because `delegatedFillArgs` takes a minimum-out and the only honest
+     * source for that is what something else said this trade is worth. Same exclusions as Aqua: not
+     * on a direct leg, and never on a close, where an exit has to be certain.
+     */
+    const swapVm =
+      aqua || intent.direct || isCloseIntent(intent) || preferred === '1inch' || !quoted
+        ? undefined
+        : await buildSwapVmFill({
+            owner,
+            tokenIn: payToken.address,
+            tokenOut: (VENUE_TOKENS[intent.outSymbol]?.address ?? payToken.address) as Address,
+            amountIn:
+              intent.amountInRaw ?? BigInt(Math.round(intent.amountIn * 10 ** payToken.decimals)),
+            slippage: SLIPPAGE.scheduled / 100,
+            quotedOut: BigInt(
+              Math.round(
+                quoted.outAmount * 10 ** (VENUE_TOKENS[intent.outSymbol]?.decimals ?? 18),
+              ),
+            ),
+          }).catch(() => undefined);
+
     const swap = aqua
       ? { to: aqua.venue, data: aqua.data }
+      : swapVm
+      ? { to: swapVm.venue, data: swapVm.data }
       : intent.direct
       ? { to: intent.direct.venue, data: intent.direct.data }
       : await buildSwap({
@@ -803,7 +836,7 @@ async function runStrategyInner(
         {
           walletId,
           agent: 'Yield Keeper',
-          action: describeLeg(intent, filledUnits, aqua ? 'aqua' : '1inch'),
+          action: describeLeg(intent, filledUnits, aqua ? 'aqua' : swapVm ? 'swapvm' : '1inch'),
           detail: intent.direct
             ? `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} moved. ${intent.because}`
             : `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
@@ -935,11 +968,22 @@ function isCloseIntent(intent: TradeIntent): boolean {
  * The action line in the activity log is the only place some people ever read what the bot did, so
  * it names the thing that happened, not the token that moved.
  */
-function describeLeg(intent: TradeIntent, units: number, venue?: 'aqua' | '1inch'): string {
+function describeLeg(
+  intent: TradeIntent,
+  units: number,
+  venue?: 'aqua' | 'swapvm' | '1inch',
+): string {
   if (intent.direct) {
     return `Supplied $${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${intent.inSymbol} to Aave`;
   }
-  const where = venue === 'aqua' ? ' on an Aqua book' : '';
+  // Naming the venue in the activity log is the difference between "the bot bought something" and
+  // a user being able to check where it went.
+  const where =
+    venue === 'aqua'
+      ? ' on an Aqua book'
+      : venue === 'swapvm'
+        ? " against a maker's SwapVM program"
+        : '';
   return intent.outSymbol === 'USDC'
     ? `Sold ${units.toFixed(4)} ${intent.inSymbol}${where}`
     : `Bought ${units.toFixed(4)} ${intent.outSymbol}${where}`;
