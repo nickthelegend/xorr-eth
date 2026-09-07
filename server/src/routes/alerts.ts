@@ -74,10 +74,66 @@ const NewAlert = z.object({
   config: z.record(z.string(), z.unknown()).default({}),
 });
 
+/**
+ * Can this alert ever fire?
+ *
+ * `config` was `.default({})` and nothing checked it, so `POST /alerts` happily created a price
+ * alert with no level. `evaluate` then reports it `unevaluable` on every sweep, forever — which is
+ * the right thing for the sweep to do with a row that already exists, and the wrong thing to allow
+ * anyone to create. The user sees an alert in their list that will never go off, and the only way
+ * to find out is to wait for the thing it was supposed to warn about.
+ *
+ * The rules mirror `verdictFor` exactly, because a second, looser definition of "valid" here is
+ * how the two drift apart and the check stops meaning anything.
+ */
+function unevaluableReason(body: z.infer<typeof NewAlert>): string | undefined {
+  const n = (k: string) => Number(body.config[k] ?? Number.NaN);
+  if (body.kind === 'price') {
+    if (!body.symbol) return 'a price alert needs a symbol';
+    if (!Number.isFinite(n('above')) && !Number.isFinite(n('below'))) {
+      return 'a price alert needs an `above` or `below` level in config';
+    }
+    return undefined;
+  }
+  if (body.kind === 'agent') {
+    return Number.isFinite(n('blockedRuns')) ? undefined : 'an agent alert needs `blockedRuns` in config';
+  }
+  const hasRisk =
+    Number.isFinite(n('capRemainingUsd')) ||
+    Number.isFinite(n('expiresWithinHours')) ||
+    body.config.revoked === true;
+  return hasRisk
+    ? undefined
+    : 'a risk alert needs `capRemainingUsd`, `expiresWithinHours` or `revoked` in config';
+}
+
 alerts.post('/alerts', async (c) => {
   const body = NewAlert.parse(await c.req.json());
   const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
+
+  const dead = unevaluableReason(body);
+  if (dead) return c.json({ error: 'unevaluable_alert', message: dead }, 400);
+
+  /*
+   * The same alert twice is not two alerts.
+   *
+   * Resubmitting an identical one created a second row — two entries in the list that fire
+   * together, notify twice, and have to be deleted twice. A refusal that names the existing one
+   * is more useful than a duplicate, and it makes the create idempotent for a retried request.
+   */
+  const existing = await one<AlertRow>(
+    `SELECT * FROM alerts
+      WHERE wallet_id = $1 AND kind = $2 AND symbol IS NOT DISTINCT FROM $3 AND config = $4::jsonb
+      LIMIT 1`,
+    [id, body.kind, body.symbol ?? null, JSON.stringify(body.config)],
+  );
+  if (existing) {
+    return c.json(
+      { error: 'duplicate_alert', message: `You already have this alert: ${existing.name}.` },
+      409,
+    );
+  }
 
   const row = await one<AlertRow>(
     `INSERT INTO alerts (id, wallet_id, kind, symbol, name, detail, config)
