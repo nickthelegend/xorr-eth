@@ -13,6 +13,7 @@ import { AppPrivyProvider } from '@/auth/PrivyProvider';
 import { colors } from '@/ui';
 import { useRegisterDevice } from '@/notifications/useRegisterDevice';
 import { useHydrateWallet } from '@/wallet/useHydrateWallet';
+import { ReachabilityProvider } from '@/net/Reachability';
 
 /**
  * Hold the splash until the typefaces are ready.
@@ -79,6 +80,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <AppPrivyProvider>
       <SafeAreaProvider>
+        <ReachabilityProvider>
         <WalletHydration />
         <DeviceRegistration />
         {/* The app is true-black by design; the OS theme never gets to change it. */}
@@ -98,6 +100,7 @@ export default function RootLayout() {
           <Stack.Screen name="bot/[id]/settings" options={{ presentation: 'modal' }} />
           <Stack.Screen name="strategy/dca" options={{ presentation: 'modal' }} />
         </Stack>
+        </ReachabilityProvider>
       </SafeAreaProvider>
       </AppPrivyProvider>
     </GestureHandlerRootView>
