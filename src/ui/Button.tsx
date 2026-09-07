@@ -91,6 +91,9 @@ export interface ButtonProps {
  * clears when the handler's promise settles — or immediately for a synchronous handler, which
  * cannot have an in-flight state to protect.
  */
+/** Long enough to absorb a double tap, short enough that a real second press still lands. */
+const DOUBLE_TAP_MS = 800;
+
 function useGuardedPress(
   onPress: (() => void | Promise<unknown>) | undefined,
   loading: boolean,
@@ -104,13 +107,30 @@ function useGuardedPress(
 
   return React.useCallback(() => {
     if (!onPress || inFlight.current) return;
+    inFlight.current = true;
     const result = onPress();
     if (result && typeof (result as Promise<unknown>).finally === 'function') {
-      inFlight.current = true;
       void (result as Promise<unknown>).finally(() => {
         inFlight.current = false;
       });
+      return;
     }
+    /*
+     * A handler that returns nothing still gets a lock, just a short one.
+     *
+     * `onPress={() => void create()}` is a promise thrown away — the work is async and the button
+     * cannot see it. Six call sites did that, including "Create wallet", which is the exact case
+     * this component's docblock warns about. Double-tapping "Alert me when WETH is above $9000"
+     * created two identical alerts even with the promise guard in place, because there was no
+     * promise to guard.
+     *
+     * So a synchronous-looking press is locked for long enough to swallow a double tap and not
+     * long enough to be felt. Deliberate repeats — a keypad digit, a stepper — go through `Press`
+     * and are untouched; this is only the one primary action a screen has.
+     */
+    setTimeout(() => {
+      inFlight.current = false;
+    }, DOUBLE_TAP_MS);
   }, [onPress]);
 }
 

@@ -15,7 +15,6 @@ import {
   IconButton,
   NoteStrip,
   Screen,
-  Segmented,
   Text,
   border,
   colors,
@@ -26,19 +25,11 @@ import {
 import { repos } from '@/data';
 import { DEFAULT_BUY } from '@/data/tradable';
 
-type Kind = 'price' | 'agent' | 'risk';
-
-const KINDS = [
-  { value: 'price', label: 'Price' },
-  { value: 'agent', label: 'Agent' },
-  { value: 'risk', label: 'Risk' },
-] as const satisfies readonly { value: Kind; label: string }[];
 
 const FIELD_H = 48;
 
 export default function NewAlert() {
   const goBack = useGoBack();
-  const [kind, setKind] = useState<Kind>('price');
   const [symbol, setSymbol] = useState<string>(DEFAULT_BUY);
   const [level, setLevel] = useState('95');
   const [busy, setBusy] = useState(false);
@@ -54,7 +45,7 @@ export default function NewAlert() {
     setError(undefined);
     try {
       await repos.alerts.create({
-        kind,
+        kind: 'price',
         symbol: sym,
         name: `${sym} above $${level}`,
         detail: `Notifies you once when ${sym} trades above $${level}.`,
@@ -79,13 +70,20 @@ export default function NewAlert() {
         Alerts interrupt you. Circuit breakers stop the bot. This creates the first kind.
       </Text>
 
-      <Segmented
-        options={KINDS}
-        value={kind}
-        onChange={setKind}
-        style={{ marginTop: space.s18 }}
-      />
+      {/*
+        The kind selector is gone, because it was never real.
 
+        It switched an internal `kind` between price, agent and risk and the form below never
+        changed: the same Symbol and Above fields, the same "Alert me when X is above $Y" button.
+        Tapping Agent or Risk looked like a dead control — nothing on screen moved — and was worse
+        than dead, because it then POSTed `kind: 'agent'` carrying `{ above: 95 }`. The executor
+        evaluates an agent alert by looking for an agent and a risk alert by reading the policy,
+        so either one would have been created successfully and then failed every time it ran.
+
+        This screen builds a price alert, which is what its own first line has always said: "This
+        creates the first kind." Risk alerts come from the catalogue on /alerts, which the
+        executor knows how to evaluate.
+      */}
       <Fill style={{ marginTop: space.s20, gap: space.s14 }}>
         <Field label="Symbol" value={symbol} onChange={setSymbol} autoCapitalize="characters" />
         <Field label="Above" value={level} onChange={setLevel} keyboard="decimal-pad" />
