@@ -24,6 +24,15 @@ export type TokenApproval = {
   address: Address;
   /** A uint256 as a decimal string — JSON has no integer wide enough. */
   allowance: string;
+  /**
+   * The same value in the token's own units, because a raw uint256 is not a quantity.
+   *
+   * Optional: an executor that predates this field sends nothing, and `Number(undefined)` is NaN
+   * — which rendered as "Up to NaN USDC" on the permission screen for the few minutes the two
+   * halves were out of step. Absent has to be a state the screen can show.
+   */
+  display?: string;
+  decimals?: number;
   unlimited: boolean;
   none: boolean;
 };

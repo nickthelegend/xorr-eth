@@ -26,6 +26,7 @@ import {
   SheetCard,
   Text,
   colors,
+  quantity,
   radius,
   size,
   space,
@@ -348,7 +349,15 @@ export default function Safety() {
                     <View style={{ flexShrink: 1 }}>
                       <Text variant="rowPrimary">{t.symbol}</Text>
                       <Text variant="footnote" color={colors.ink32}>
-                        {t.unlimited ? 'No limit' : 'Limited'}
+                        {/*
+                          The number, not the word. "Limited" is technically true of 48,000 USDC
+                          and tells the reader nothing about whether they are comfortable with it.
+                        */}
+                        {t.unlimited
+                          ? 'No limit'
+                          : Number.isFinite(Number(t.display))
+                            ? `Up to ${quantity(Number(t.display))} ${t.symbol}`
+                            : 'Limited'}
                       </Text>
                     </View>
                     <Button

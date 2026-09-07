@@ -27,7 +27,7 @@ import {
   DELEGATION_ADDRESS,
 } from '../evm/delegation.js';
 import { requireUser } from '../auth/middleware.js';
-import { erc20Abi } from 'viem';
+import { erc20Abi, formatUnits } from 'viem';
 import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
@@ -271,6 +271,19 @@ async function approvableTokens(): Promise<{ symbol: string; address: Address }[
  * Read from the token contracts rather than from our record of what we asked the user to sign:
  * an allowance the user set elsewhere, or revoked elsewhere, is the truth and our record is not.
  */
+/**
+ * Decimals for a settlement token.
+ *
+ * `TOKENS` is the routing registry and holds mainnet addresses, which is the wrong ADDRESS for a
+ * Sepolia build — but decimals are a property of the asset rather than of the deployment, and USDC
+ * is 6 everywhere it exists. Eighteen is the ERC-20 default and the right guess for anything not
+ * listed, but a wrong guess here misplaces a decimal point on a permission screen, so an unknown
+ * symbol is reported raw instead.
+ */
+function decimalsFor(symbol: string): number {
+  return TOKENS[canonicalSymbol(symbol)]?.decimals ?? 18;
+}
+
 routes.get('/approvals', async (c) => {
   const w = await requireWallet(c);
   const owner = w.address as Address;
@@ -300,6 +313,15 @@ routes.get('/approvals', async (c) => {
        * screen comparing that to anything is comparing a lie.
        */
       allowance: (allowances[i] ?? 0n).toString(),
+      /*
+       * And in the token's own units, because "48000000000" is not a quantity anyone reads.
+       *
+       * The raw value stays alongside it: it is what the chain holds and what a reader would
+       * check against an explorer, and rounding it away would make this screen unverifiable in
+       * exactly the way the rest of the product refuses to be.
+       */
+      display: formatUnits(allowances[i] ?? 0n, decimalsFor(t.symbol)),
+      decimals: decimalsFor(t.symbol),
       unlimited: (allowances[i] ?? 0n) === MAX,
       none: (allowances[i] ?? 0n) === 0n,
     })),
