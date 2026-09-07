@@ -395,14 +395,30 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
     },
     {
       id: 'equities',
-      claim: 'Tokenized equities are real contracts on Base.',
-      how: 'eth_getCode on each equity address',
+      claim: 'Tokenized equities are real, working tokens on this chain.',
+      how: 'totalSupply() on each equity address — a call, not a code-length check',
       run: async () => {
         const entries = Object.values(STOCKS);
-        const codes = await Promise.all(
-          entries.map((s) => publicClient.getCode({ address: s.address }).catch(() => undefined)),
+        /*
+         * `totalSupply()`, not `eth_getCode`.
+         *
+         * These tokens carry a SINGLE BYTE of code. On real Base they answer calls anyway —
+         * `totalSupply()` returns 1,373,108,020,000 for NVDAc — so whatever serves them lives below
+         * the bytecode. On an anvil fork of the same block that call reverts: a fork copies the byte
+         * and there is nothing behind it.
+         *
+         * So the old check, `code.length > 2`, passed on all eight for a week while not one of them
+         * could be traded, and reported "8 of 8 have code" the whole time. Code length is not the
+         * claim. Answering is.
+         */
+        const supplies = await Promise.all(
+          entries.map((s) =>
+            publicClient
+              .readContract({ address: s.address, abi: erc20Abi, functionName: 'totalSupply' })
+              .catch(() => undefined),
+          ),
         );
-        const live = entries.filter((_, i) => (codes[i]?.length ?? 0) > 2);
+        const live = entries.filter((_, i) => (supplies[i] ?? 0n) > 0n);
         /*
          * On a chain where they do not exist, this is a SKIP, not a failure.
          *
@@ -413,9 +429,13 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
          * so nobody mistakes one for the other.
          */
         if (live.length === 0) {
-          skip(`No equity contracts on ${CHAIN_KEY}. They are Base mainnet only — see README.`);
+          skip(
+            `No working equity tokens on ${CHAIN_KEY}. They answer on Base mainnet and NOT on a ` +
+              `fork of it — they carry one byte of code and whatever serves them is not something ` +
+              `a fork reproduces, so they cannot be traded here. See README.`,
+          );
         }
-        return `${live.length} of ${entries.length} have code: ${live.map((s) => s.symbol).join(', ')}`;
+        return `${live.length} of ${entries.length} answer totalSupply(): ${live.map((s) => s.symbol).join(', ')}`;
       },
     },
     {

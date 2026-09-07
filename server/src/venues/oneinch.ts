@@ -321,18 +321,24 @@ const FORK_AMMS = [
   'BASE_SOLIDLY_V3',
   'BASE_BALANCER_V2',
   'BASE_CURVE',
-  /*
-   * The venue that actually holds the tokenized equities.
-   *
-   * Without it this list is crypto-only, and the two halves of the app disagreed: `quote()` asks
-   * 1inch with no protocol restriction, so `USDC → NVDAc` came back routed through Elfomofi with a
-   * real price, while `buildSwap()` applied this allowlist and got a route through AMMs holding no
-   * NVDAc liquidity. Every equity fill reverted `TF` inside the pool — a plain DCA into NVDAc
-   * failed identically to tier 7's entry, which is what proved it was the venue and not the
-   * strategy. Eight tokenized stocks on the markets screen, none of them fillable.
-   */
-  'BASE_ELFOMOFI',
 ].join(',');
+
+/*
+ * `BASE_ELFOMOFI` is deliberately NOT here, and the reason is worth keeping.
+ *
+ * It is the venue that routes the tokenized equities, so adding it looks like the fix for equity
+ * fills. It is not: with it in the list the revert simply changes from `TF` to `VenueCallFailed`,
+ * because it is a solver whose off-chain state a local fork cannot reproduce — exactly the class
+ * this allowlist exists to exclude.
+ *
+ * The real obstacle is one layer down. On real Base the equity tokens answer `totalSupply()` with a
+ * real number despite carrying a single byte of code; on an anvil fork of the same block that call
+ * REVERTS. Whatever serves them at node level is not something a fork reproduces, so no routing
+ * choice can make an equity fill on a fork — the token itself is not functional there.
+ *
+ * Kept out, therefore, so the fork does not choose a route it definitely cannot execute in
+ * preference to one it merely probably cannot.
+ */
 
 const AMM_ONLY =
   CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet'
