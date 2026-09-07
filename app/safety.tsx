@@ -72,6 +72,16 @@ export default function Safety() {
   const { addresses } = useAllowlist();
 
   /*
+   * The second lock, read from the party that enforces it.
+   *
+   * `XorrDelegation` bounds the BOT and is enforced by a contract. It says nothing about what
+   * this wallet may be asked to sign, so a compromised bundle could still put a transfer to an
+   * attacker in front of the user and the delegation would not care — it governs the delegate.
+   * Privy holds the key and refuses anything outside its policy before a signature exists.
+   */
+  const privy = useAsync(() => repos.wallet.privyPolicy(), []);
+
+  /*
    * Load the permission when the screen opens.
    *
    * The store only ever held a delegation written by a grant or a revoke performed in this
@@ -238,6 +248,61 @@ export default function Safety() {
             </View>
           )}
         </SheetCard>
+
+        {/*
+          Both locks, named, on the screen whose subject is who may do what.
+
+          Showing only the on-chain one understates the protection; claiming "defence in depth"
+          without showing the second layer is the kind of unfalsifiable assertion this whole
+          product argues against. So the policy is read back from Privy and its destinations are
+          listed — and when it is not attached to this wallet, that says so, because Privy makes
+          the wallet's OWNER authorise the attachment and for an embedded wallet that owner is the
+          user. "This control belongs to you, not to us" is a better fact than a green tick.
+        */}
+        {privy.data ? (
+          <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s10 }}>
+            <View style={{ gap: space.s6 }}>
+              <Eyebrow small>Privy policy</Eyebrow>
+              <Text variant="rowPrimary">
+                {privy.data.enforced
+                  ? 'Your wallet can only send to these'
+                  : 'Ready, and yours to switch on'}
+              </Text>
+              <Text variant="footnote" color={colors.ink32}>
+                {privy.data.enforced
+                  ? 'Privy holds the key and refuses anything else before a signature exists — even if this app asks.'
+                  : 'Privy makes the wallet’s owner authorise this, and that owner is you. Nothing we hold can attach it for you.'}
+              </Text>
+            </View>
+            <View style={{ gap: space.s4, marginTop: space.s12 }}>
+              {(privy.data.enforced ? privy.data.allowed : privy.data.wouldAllow).map((d) => (
+                <View
+                  key={d.address}
+                  style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.s10 }}
+                >
+                  <Text variant="footnote" color={colors.ink55} style={{ flexShrink: 1 }}>
+                    {d.label}
+                  </Text>
+                  <Text variant="footnote" color={colors.ink32}>
+                    {d.address.slice(0, 6)}…{d.address.slice(-4)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {privy.data.ownedByQuorum ? (
+              <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s12 }}>
+                Owned by key quorum {privy.data.ownedByQuorum} — this server cannot widen it. Check
+                it on ›
+              </Text>
+            ) : null}
+            <Button
+              label="Check it yourself"
+              variant="ghost"
+              onPress={() => router.push('/judge')}
+              style={{ marginTop: space.s10 }}
+            />
+          </SheetCard>
+        ) : null}
 
         <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s12 }}>
           <Row

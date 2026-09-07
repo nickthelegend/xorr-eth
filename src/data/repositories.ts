@@ -17,6 +17,7 @@ import type {
   Instrument,
   NewsItem,
   Position,
+  PrivyPolicyView,
   Proposal,
   Sleeve,
   Strategy,
@@ -232,6 +233,8 @@ export interface WalletRepository {
   createEmbedded(): Promise<Wallet>;
   connect(address: string): Promise<Wallet>;
   delegation(): Promise<Delegation | null>;
+  /** What Privy enforces on this wallet — read from Privy, not from our own record of it. */
+  privyPolicy(): Promise<PrivyPolicyView | null>;
   /**
    * NOTE: there is deliberately no grant/revoke here.
    *

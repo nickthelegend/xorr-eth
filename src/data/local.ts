@@ -33,6 +33,7 @@ import type {
   Instrument,
   NewsItem,
   Position,
+  PrivyPolicyView,
   Proposal,
   Sleeve,
   Strategy,
@@ -438,6 +439,12 @@ export const LocalRepositories: Repositories = {
     },
     async delegation(): Promise<Delegation | null> {
       return (await api.get<Delegation | null>('/delegation').catch(() => undefined)) ?? null;
+    },
+    async privyPolicy(): Promise<PrivyPolicyView | null> {
+      // Null on failure rather than throwing: this is a second opinion about safety, and a screen
+      // that cannot render because the extra reassurance is unavailable is worse than one that
+      // shows the lock it can read.
+      return (await api.get<PrivyPolicyView>('/privy/policy').catch(() => undefined)) ?? null;
     },
 
     async balance() {

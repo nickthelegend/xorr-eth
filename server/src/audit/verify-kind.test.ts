@@ -30,7 +30,7 @@ function row(seq: number, prev: string, action = `entry ${seq}`) {
     agent: 'test',
     action,
     detail: '',
-    amount: null,
+    amount: '0',
     kind: 'trade',
     signature: null,
     payload: null,

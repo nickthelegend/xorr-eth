@@ -26,6 +26,12 @@ import { priceOf } from '../market/prices.js';
 import { quote } from '../venues/oneinch.js';
 import { health as graphHealth } from '../graph/client.js';
 import { STOCKS } from '../venues/stocks.js';
+import {
+  ensurePolicy as ensurePrivyPolicy,
+  allowedDestinations as privyAllowedDestinations,
+  demoWalletId as privyDemoWalletId,
+  rpcAsWallet as privyRpcAsWallet,
+} from '../auth/privyPolicy.js';
 
 export type CheckStatus = 'pass' | 'fail' | 'skip';
 
@@ -257,6 +263,61 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
           );
         }
         return `${r.checked} entries re-hashed, all ${r.intact} match their contents`;
+      },
+    },
+    {
+      id: 'privy-policy',
+      claim: 'A Privy policy limits where the wallet may send, and we cannot widen it.',
+      how: 'GET /v1/policies/:id on Privy, then an UNSIGNED PATCH that must be refused',
+      timeoutMs: 20_000,
+      run: async () => {
+        const policy = await ensurePrivyPolicy();
+        const dests = privyAllowedDestinations().length;
+        if (!policy.owner_id) {
+          throw new Error(
+            `policy ${policy.id} has ${policy.rules.length} rules but no owner — the app secret ` +
+              'alone could rewrite it, which makes it a comment rather than a control',
+          );
+        }
+        /*
+         * The rules are only half the claim.
+         *
+         * "There is a policy" is worth nothing if the server that reports it can also rewrite it
+         * at will. So this also checks that the policy is OWNED by a key quorum, which is what
+         * makes Privy refuse an unsigned change — including one from us.
+         */
+        return `${policy.rules.length} rules over ${dests} destinations, owned by key quorum ${policy.owner_id}`;
+      },
+    },
+    {
+      id: 'privy-refusal',
+      claim: 'Privy actually refuses a transaction the policy does not allow.',
+      how: 'eth_sendTransaction to an address the policy omits, through Privy',
+      timeoutMs: 25_000,
+      run: async () => {
+        const walletId = await privyDemoWalletId();
+        if (!walletId) skip('No policy-bound wallet on this deployment.');
+        const chainId = CHAIN_KEY === 'base-sepolia' ? 84532 : 8453;
+        try {
+          await privyRpcAsWallet(walletId, {
+            method: 'eth_sendTransaction',
+            caip2: `eip155:${chainId}`,
+            params: {
+              transaction: { to: '0x000000000000000000000000000000000000dEaD', value: '0x0', chain_id: chainId },
+            },
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (/policy violation/i.test(msg)) return 'refused: "RPC request denied due to policy violation"';
+          throw new Error(`refused, but not by the policy: ${msg.slice(0, 160)}`);
+        }
+        /*
+         * Getting through is the failure.
+         *
+         * Every other check here fails when a request errors; this one fails when it succeeds,
+         * because the claim under test is that something is impossible.
+         */
+        throw new Error('the policy let a transaction through to an address it does not name');
       },
     },
     {

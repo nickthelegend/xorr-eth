@@ -12,6 +12,7 @@ import { verifyRoutes } from './routes/verify.js';
 import { panic } from './routes/panic.js';
 import { ops } from './routes/ops.js';
 import { catchup } from './routes/catchup.js';
+import { privyRoutes } from './routes/privy.js';
 import { idempotency } from './http/idempotency.js';
 import { requestId, currentRequestId, log } from './http/request-id.js';
 import { startScheduler } from './executor/scheduler.js';
@@ -177,6 +178,7 @@ app.route('/', verifyRoutes);
 app.route('/', panic);
 app.route('/', ops);
 app.route('/', catchup);
+app.route('/', privyRoutes);
 
 const port = Number(process.env.PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port });

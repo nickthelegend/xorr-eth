@@ -291,3 +291,28 @@ export type WatchlistGroup = {
   tab: string;
   rows: WatchlistRow[];
 };
+
+
+/**
+ * What Privy — the custodian of the key itself — will let this wallet do.
+ *
+ * The second lock, and a different KIND of lock from the delegation. `XorrDelegation` bounds the
+ * bot and is enforced by a contract anyone can read. This bounds the wallet, and is enforced by
+ * the party that holds the key, before a signature exists. Neither substitutes for the other, and
+ * the safety screen shows both because "defence in depth" is a claim until you can see both
+ * layers named.
+ */
+export type PrivyPolicyView = {
+  /** Attached to THIS wallet, as opposed to merely existing. */
+  enforced: boolean;
+  policyId?: string;
+  policyName?: string;
+  walletId?: string;
+  /** Destinations the attached policy names. Empty when nothing is attached. */
+  allowed: { label: string; address: string }[];
+  /** What the policy would allow, whether or not it is attached yet. */
+  wouldAllow: { label: string; address: string }[];
+  /** The key quorum that owns the policy — why we cannot widen it ourselves. */
+  ownedByQuorum: string | null;
+  ownerId: string | null;
+};
