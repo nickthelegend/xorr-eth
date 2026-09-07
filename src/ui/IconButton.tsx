@@ -65,8 +65,13 @@ export function IconButton({
         style,
       ]}
     >
-      {/* The glyph must not swallow the press. */}
-      <View pointerEvents="none">
+      {/*
+        The glyph must not swallow the press.
+
+        `style.pointerEvents`, not the prop: react-native-web deprecated the prop form and warns
+        once per render on every screen that draws an icon button — which is nearly all of them.
+      */}
+      <View style={{ pointerEvents: 'none' }}>
         <Icon name={name} size={glyph} color={color} />
       </View>
     </Press>

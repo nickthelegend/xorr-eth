@@ -219,7 +219,7 @@ export function Candlestick({
           </Svg>
 
           {onSelect && box.width > 0 && hasData ? (
-            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <View style={[StyleSheet.absoluteFill, { pointerEvents: 'box-none' }]}>
               {geometry.map((_, i) => (
                 <Press
                   key={`hit-${i}`}

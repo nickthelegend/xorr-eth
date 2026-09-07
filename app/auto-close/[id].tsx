@@ -410,8 +410,8 @@ function MarkerRow({
   const chip = { bg: color, fg: colors.ink };
   return (
     <View
-      pointerEvents="none"
       style={{
+        pointerEvents: 'none',
         position: 'absolute',
         left: 0,
         right: 0,

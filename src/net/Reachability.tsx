@@ -73,8 +73,8 @@ export function ReachabilityProvider({ children }: { children: React.ReactNode }
 function OfflineBanner() {
   return (
     <View
-      pointerEvents="none"
       style={{
+        pointerEvents: 'none',
         position: 'absolute',
         left: space.s16,
         right: space.s16,
