@@ -19,6 +19,7 @@
  * second silently would leave a user unable to run anything afterwards without understanding why.
  */
 import { Hono } from 'hono';
+import { log } from '../http/request-id.js';
 import { z } from 'zod';
 import type { Address } from 'viem';
 import { requireUser } from '../auth/middleware.js';
@@ -203,7 +204,7 @@ panic.post('/panic/flatten', async (c) => {
        * it, having been told the operation ran.
        */
       const raw = e instanceof Error ? e.message : String(e);
-      console.error(`[panic] ${h.symbol} failed:`, raw);
+      log.error(`[panic] ${h.symbol} failed:`, raw);
       legs.push({
         symbol: h.symbol,
         units: h.units,

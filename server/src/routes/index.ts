@@ -3,6 +3,7 @@
  * swapping the app from fixtures to the server changes src/data/index.ts and nothing else.
  */
 import { randomUUID } from 'node:crypto';
+import { log } from '../http/request-id.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
@@ -132,7 +133,7 @@ routes.get('/wallet/balance', async (c) => {
     // wallet held a real position.
     totalValueUsd(w.address as Address).catch((e: unknown) => {
       // A zero that came from a failed read looks exactly like a zero balance. Say which.
-      console.error('[balance] chain read failed:', e instanceof Error ? e.message : e);
+      log.error('[balance] chain read failed:', e instanceof Error ? e.message : e);
       return { cash: 0, holdings: [], supplied: 0, total: 0 };
     }),
   ]);

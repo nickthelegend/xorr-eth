@@ -25,6 +25,7 @@
  * "no books are open". The lesson is inherited here rather than relearned.
  */
 import { decodeAbiParameters, encodeAbiParameters, parseAbiParameters, type Address, type Hex } from 'viem';
+import { log } from '../http/request-id.js';
 import { publicClient } from '../evm/client.js';
 import { AQUA_EVENTS, aquaAddress } from './aqua.js';
 
@@ -183,7 +184,7 @@ export async function buildSwapVmFill(params: {
   try {
     programs = await openPrograms();
   } catch (e) {
-    console.warn(
+    log.warn(
       `[swapvm] could not read programs from ${aquaAddress()}: ${e instanceof Error ? e.message : String(e)}`,
     );
     return undefined;

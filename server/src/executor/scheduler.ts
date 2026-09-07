@@ -9,6 +9,7 @@
  * mid-run, or a manual trigger racing the tick all converge on one run per period.
  */
 import { query } from '../db/index.js';
+import { log } from '../http/request-id.js';
 import { runStrategy, type StrategyRow } from './run.js';
 import { evaluateAlerts } from '../alerts/evaluate.js';
 
@@ -43,9 +44,9 @@ export async function tick(now: Date = new Date()): Promise<number> {
     const fired = outcomes.filter((o) => o.action === 'fired');
     const broken = outcomes.filter((o) => o.action === 'unevaluable');
     for (const o of fired) console.log(`[alerts] fired "${o.name}": ${o.detail}`);
-    for (const o of broken) console.warn(`[alerts] cannot evaluate "${o.name}": ${o.detail}`);
+    for (const o of broken) log.warn(`[alerts] cannot evaluate "${o.name}": ${o.detail}`);
   } catch (e) {
-    console.error('[alerts] sweep failed:', e instanceof Error ? e.message : e);
+    log.error('[alerts] sweep failed:', e instanceof Error ? e.message : e);
   }
 
   return ran;
@@ -54,6 +55,6 @@ export async function tick(now: Date = new Date()): Promise<number> {
 export function startScheduler(): NodeJS.Timeout {
   console.log(`  scheduler every ${TICK_MS}ms`);
   return setInterval(() => {
-    tick().catch((e: unknown) => console.error('[scheduler]', e));
+    tick().catch((e: unknown) => log.error('[scheduler]', e));
   }, TICK_MS);
 }

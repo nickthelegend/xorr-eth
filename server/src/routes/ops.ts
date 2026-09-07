@@ -129,10 +129,59 @@ ops.get('/metrics', async (c) => {
   const byStatus = Object.fromEntries(runs.map((r) => [r.status, Number(r.n)]));
   const filled = byStatus.filled ?? 0;
   const failed = byStatus.failed ?? 0;
+
+  /*
+   * WHY runs failed, not just how many.
+   *
+   * A failure rate says something is wrong and nothing about what. These are the causes an operator
+   * would actually act on differently: a price that moved is the market, a revoked permission is
+   * the user, a venue that could not fill is us. They were all one number.
+   *
+   * Grouped from the stored error text because that is where the cause lives — the same strings
+   * `humanFailure` and `isTransient` classify.
+   */
+  const causes = await query<{ error: string | null; n: string }>(
+    `SELECT error, count(*) AS n FROM strategy_runs
+      WHERE status = 'failed' AND finished_at > now() - interval '7 days'
+      GROUP BY error ORDER BY n DESC LIMIT 20`,
+  ).catch(() => []);
+  const bucket = (e: string | null): string => {
+    const t = (e ?? '').toLowerCase();
+    if (/returnamountisnotenough|slippage/.test(t)) return 'price_moved';
+    if (/policyrevoked|revoked/.test(t)) return 'permission_revoked';
+    if (/policyexpired|expired/.test(t)) return 'permission_expired';
+    if (/dailycapexceeded|cap/.test(t)) return 'daily_cap';
+    if (/venuenotallowed/.test(t)) return 'venue_not_allowed';
+    if (/notdelegate/.test(t)) return 'wrong_delegate';
+    if (/venuecallfailed|\btf\b|no route/.test(t)) return 'venue_could_not_fill';
+    if (/timeout|timed out|fetch failed|econn|socket hang up/.test(t)) return 'upstream_unreachable';
+    return 'other';
+  };
+  const failuresByCause: Record<string, number> = {};
+  for (const row of causes) {
+    const k = bucket(row.error);
+    failuresByCause[k] = (failuresByCause[k] ?? 0) + Number(row.n);
+  }
+
+  /** Which venue actually settled each fill, read from the audit trail's own wording. */
+  const venues = await query<{ venue: string; n: string }>(
+    `SELECT CASE
+              WHEN action ILIKE '%Aqua book%'        THEN 'aqua'
+              WHEN action ILIKE '%SwapVM program%'   THEN 'swapvm'
+              WHEN action ILIKE 'Bought%' OR action ILIKE 'Sold%' THEN '1inch'
+              ELSE 'other' END AS venue,
+            count(*) AS n
+       FROM audit_log WHERE kind = 'trade' GROUP BY 1`,
+  ).catch(() => []);
+
   return c.json({
     runs: byStatus,
     /** The number worth alerting on: fills that did not happen because something broke. */
     runFailureRate: filled + failed > 0 ? failed / (filled + failed) : 0,
+    /** The number worth acting on: what broke. Last 7 days. */
+    failuresByCause,
+    /** Where trades actually settled — the claim the 1inch track rests on, counted. */
+    fillsByVenue: Object.fromEntries(venues.map((r) => [r.venue, Number(r.n)])),
     strategies: Object.fromEntries(strategies.map((r) => [r.state, Number(r.n)])),
     alertsEnabled: Number(alerts[0]?.n ?? 0),
     alertsFiredTotal: Number(alerts[0]?.fired ?? 0),

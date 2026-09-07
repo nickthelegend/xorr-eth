@@ -35,6 +35,7 @@ import {
   type Hex,
 } from 'viem';
 import { publicClient } from '../evm/client.js';
+import { log } from '../http/request-id.js';
 
 /** The book's own terms. Hashed to produce the Aqua strategy id, so they are immutable. */
 export type AquaStrategy = {
@@ -310,7 +311,7 @@ export async function buildAquaFill(params: {
   try {
     books = await openBooks({ tokenA: params.tokenIn, tokenB: params.tokenOut });
   } catch (e) {
-    console.warn(
+    log.warn(
       `[aqua] could not read books from ${app}: ${e instanceof Error ? e.message : String(e)}`,
     );
     return undefined;
