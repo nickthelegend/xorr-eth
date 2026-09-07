@@ -28,10 +28,12 @@ What changed since round one, and what it does to the ranking:
 
 ## What happened
 
-**Eight built and verified working**, working down the list from the top: seven of Tier S, and one
-from Tier A. Three of my own Tier S proposals turned out to already exist — #7, #8 and a
-half of #6 — which is a research failure on my part and is marked in place rather than quietly
-dropped.
+**Fourteen built and verified working**: six of Tier S, five of Tier A, and three from Tier B that
+turned out to matter more than their rank suggested — the token approvals in particular, which are
+unlimited, survive a revoke, and had no way to be seen or withdrawn.
+
+Three of my own Tier S proposals turned out to already exist — #7, #8, and half of #6 — which is a
+research failure on my part and is marked in place rather than quietly dropped.
 
 Everything marked BUILT below was exercised against the live system: the Privy controls against
 Privy's own API on the deployed executor, the trailing stop by an on-chain fill, the sparklines by
@@ -57,10 +59,10 @@ a cold server warming, the offline banner by cutting `/health` in the running ap
 | # | Idea | I | F | Fit | Score | Outcome |
 |---|---|---|---|---|---|---|
 | 11 | **Offline banner.** The app assumes the executor is reachable and says nothing when it is not. | 3 | 5 | 4 | 60 | **✓ BUILT** — verified by cutting `/health` in the running app |
-| 12 | **Graceful 1inch outage.** A failed quote should state a reason, not render an empty route row. | 3 | 5 | 4 | 60 | not built |
+| 12 | **Graceful 1inch outage.** A failed quote should state a reason, not render an empty route row. | 3 | 5 | 4 | 60 | **✓ BUILT** — `apiReason` surfaces the executor's own sentence |
 | 13 | **Sparkline in every market row.** `Sparkline.tsx` exists and the rows do not use it. Skipped in round one for lack of a per-row series; `/market/ohlc` now serves one cheaply. | 3 | 4 | 4 | 48 | **✓ BUILT** — new batched `/market/sparklines`; 9 rendering |
-| 14 | **Pull-to-refresh on every polling list.** | 3 | 4 | 4 | 48 | not built |
-| 15 | **Receive screen with a QR of the address.** Funding is the first thing a judge does and the address is currently copy-only. | 3 | 4 | 3 | 36 | not built |
+| 14 | **Pull-to-refresh on every polling list.** | 3 | 4 | 4 | 48 | **✓ BUILT** — seven lists |
+| 15 | **Receive screen with a QR of the address.** Funding is the first thing a judge does and the address is currently copy-only. | 3 | 4 | 3 | 36 | **✓ BUILT** — `AddressQR`, EIP-681, drawn without the library's console error |
 | 16 | **Strategy sub-cap shown as a bar, not a number.** The sub-cap exists; the screen states it in prose. | 3 | 4 | 4 | 48 | not built |
 | 17 | **Day-and-time scheduling, not just cadence.** "Weekly" currently means "whenever the tick lands". | 3 | 4 | 3 | 36 | not built |
 | 18 | **Drift indicator on holdings.** The rebalance strategy computes drift; the holdings screen does not show it. | 3 | 4 | 4 | 48 | not built |
@@ -116,13 +118,13 @@ a cold server warming, the offline banner by cutting `/health` in the running ap
 | 63 | A diff view when a strategy's params change | |
 | 64 | Retry a failed run, explicitly, from the UI | |
 | 65 | Per-venue fill-quality history | Which venue actually gave the best price |
-| 66 | Alert on delegation expiry approaching | The grant expires; nothing warns you |
+| 66 | Alert on delegation expiry approaching | **✓ BUILT** — `expiryState`/`expiryNote`, a day of warning, verified at 5h and silent at 71.7h |
 | 67 | Alert when the daily cap is nearly spent | |
 | 68 | Export the whole app state as a signed bundle | |
 | 69 | A read-only share link for a portfolio | |
 | 70 | Time-travel: the portfolio as of a past block | |
-| 71 | Per-token approval revocation from the app | The approvals are unlimited; nothing takes them back |
-| 72 | Show which tokens have live approvals, and their size | The other half of 71 |
+| 71 | Per-token approval revocation from the app | **✓ BUILT** — user-signed `approve(spender, 0)`; USDC allowance verified ZERO on chain afterwards |
+| 72 | Show which tokens have live approvals, and their size | **✓ BUILT** — `GET /approvals` reads `allowance()` off the token contracts |
 | 73 | A "panic test" — flatten in dry-run so you trust it | |
 | 74 | Warn when a venue leaves the allowlist mid-strategy | |
 | 75 | Detect and surface a stuck/pending transaction | |
