@@ -72,8 +72,21 @@ export const STOCKS: Record<string, StockToken> = {
   },
 };
 
+/**
+ * Case-insensitively, because the suffix is the whole point and callers lose it.
+ *
+ * `symbol in STOCKS` missed `NVDAC` — and `/price/:symbol` uppercases its parameter, so every
+ * equity price request answered "No price feed for NVDAC" for an asset the app lists on its own
+ * markets screen. Same family as the `canonicalSymbol` fix: the lowercase `c` marks the tokenized
+ * form, and anything that normalises it away is asking about a company that has no token.
+ */
+export function stockKey(symbol: string): string | undefined {
+  const want = symbol.trim().toUpperCase();
+  return Object.keys(STOCKS).find((k) => k.toUpperCase() === want);
+}
+
 export function isStock(symbol: string): boolean {
-  return symbol in STOCKS;
+  return stockKey(symbol) !== undefined;
 }
 
 /**
@@ -103,13 +116,15 @@ export function clearStockPriceCache(): void {
 }
 
 export async function stockPriceUsd(symbol: string): Promise<number | null> {
-  if (!isStock(symbol)) return null;
-  const hit = cache.get(symbol);
+  // Resolve to the registry's own spelling first — the venue is asked with the symbol it knows.
+  const key = stockKey(symbol);
+  if (!key) return null;
+  const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.price;
 
-  const q = await quote({ inSymbol: 'USDC', outSymbol: symbol, amount: PROBE_USD }).catch(() => null);
+  const q = await quote({ inSymbol: 'USDC', outSymbol: key, amount: PROBE_USD }).catch(() => null);
   if (!q || !(q.outAmount > 0)) return null;
   const price = PROBE_USD / q.outAmount;
-  cache.set(symbol, { at: Date.now(), price });
+  cache.set(key, { at: Date.now(), price });
   return price;
 }

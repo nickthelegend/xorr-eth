@@ -62,6 +62,19 @@ describe('an equity is priced by the venue that would fill it', () => {
     expect(await stockPriceUsd('METAc')).toBeNull();
   });
 
+  it('resolves case-insensitively — the suffix is what callers lose', async () => {
+    /*
+     * `/price/:symbol` uppercased its parameter, so `isStock('NVDAC')` was false and every equity
+     * price answered "No price feed for NVDAC" for an asset on the app's own markets screen.
+     */
+    oneinchQuote.mockResolvedValue({ outAmount: 4, venues: [] });
+    expect(await stockPriceUsd('NVDAC')).toBeCloseTo(250, 6);
+    clearStockPriceCache();
+    expect(await stockPriceUsd('nvdac')).toBeCloseTo(250, 6);
+    // And the venue is asked with the spelling it knows, not the one the caller sent.
+    expect(oneinchQuote).toHaveBeenLastCalledWith(expect.objectContaining({ outSymbol: 'NVDAc' }));
+  });
+
   it('is not a stock, so it is not routed here', async () => {
     // Crypto must still go to the feed; this must not swallow every symbol.
     expect(await stockPriceUsd('WETH')).toBeNull();

@@ -33,7 +33,7 @@ import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
 import { TOKENS } from '../venues/oneinch.js';
 import { publicClient } from '../evm/client.js';
-import { STOCKS } from '../venues/stocks.js';
+import { STOCKS, isStock } from '../venues/stocks.js';
 import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
 import { PUSH_KINDS } from '../notifications/push.js';
 
@@ -1079,9 +1079,18 @@ routes.post('/limits/check', async (c) => {
 // ── Prices ───────────────────────────────────────────────────────────────────
 
 routes.get('/price/:symbol', async (c) => {
-  const symbol = c.req.param('symbol').toUpperCase();
+  /*
+   * Not `.toUpperCase()`, and not `source: 'coingecko'` either.
+   *
+   * Uppercasing turned `NVDAc` into `NVDAC`, which is not a token anyone lists, so every equity
+   * price answered "No price feed for NVDAC" for an asset on the app's own markets screen. And the
+   * source was hardcoded: equities are priced from a live 1inch route, so naming CoinGecko was
+   * simply false for eight of the symbols this route serves.
+   */
+  const symbol = canonicalSymbol(c.req.param('symbol'));
   try {
-    return c.json({ symbol, price: await priceOf(symbol), source: 'coingecko' });
+    const price = await priceOf(symbol);
+    return c.json({ symbol, price, source: isStock(symbol) ? '1inch' : 'coingecko' });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
