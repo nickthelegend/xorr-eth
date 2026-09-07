@@ -58,7 +58,24 @@ async function artifact(name: string): Promise<{ abi: unknown[]; bytecode: Hex }
 }
 
 async function main() {
-  const fundTarget = process.argv[2] as Address | undefined;
+  /*
+   * The wallet to fund, from either place.
+   *
+   * It was `argv[2]` only. Rebuilding the fork for real, the natural invocation — with every other
+   * setting already in the environment — silently skipped funding entirely, and the run finished
+   * looking successful: contracts deployed, delegate funded, "wrote .env.fork". The user wallet
+   * had zero USDC and zero ETH, which surfaces later as a trade that cannot pay for itself.
+   *
+   * `OWNER_ADDRESS` is what the rest of the fork tooling already reads, so it is the name someone
+   * will already have set.
+   */
+  const fundTarget = (process.argv[2] ?? process.env.OWNER_ADDRESS) as Address | undefined;
+  if (!fundTarget) {
+    console.log(
+      'No wallet to fund. Pass one as an argument or set OWNER_ADDRESS; the contracts will still\n' +
+        'deploy, but nothing will be able to trade on this fork.\n',
+    );
+  }
 
   const block = await pub.getBlockNumber();
   const id = await pub.getChainId();

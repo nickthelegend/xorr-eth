@@ -121,7 +121,7 @@ Cause: the `xorr-aqua` slug was never created in Studio; `graph deploy` returns 
 `indexesThisDeployment()` compares the running `DELEGATION_ADDRESS` to the indexed one:
 
 ```
-fork executor delegation : 0x9a927f780e52e57ed5b18e1e2e4843a91b322952   ← where every fill happens
+fork executor delegation : 0xabe6f2bbe7471c4976128f0dc13a7f83499e9a23   ← where every fill happens
 indexed by the subgraph  : 0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e   ← Base Sepolia
 ```
 

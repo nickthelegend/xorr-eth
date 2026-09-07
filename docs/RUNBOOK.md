@@ -130,3 +130,42 @@ npx tsx server/src/live-agents.ts     # 20 checks: grant, fill, close, scopes, c
 The database survives — agent keys, strategies and the audit trail are keyed by user, not by
 contract address. Only the on-chain state is new, so a wallet has to be re-granted and re-funded,
 which `setup:fork` and `live-agents.ts` do between them.
+
+## Rebuilding the fork
+
+The anvil service forks Base at whatever the head is when its container starts, and never moves
+after that. Live Base does. So the gap grows by roughly a block every two seconds, and it matters
+because **1inch quotes against live state while execution happens against the fork's** — a swap
+built from a live quote eventually cannot be satisfied by the frozen pools, and the aggregator
+reverts `ReturnAmountIsNotEnough`.
+
+Measured before the last rebuild: 13,110 blocks behind, about 7.3 hours, and every aggregator-routed
+DCA failing on slippage. Aqua fills were unaffected, because a book is quoted from its own on-chain
+state and there is nothing to drift against.
+
+Rebuild when a DCA starts failing on slippage, or before a demo:
+
+```bash
+# 1. Restart anvil so it re-forks at head. Any variable change redeploys the service.
+#    (Railway → base-fork → Variables, or the MCP `set_variables` call.)
+
+# 2. Redeploy the contracts and fund the wallet. OWNER_ADDRESS is read if no argument is given.
+cd server
+set -a && . ../.env && set +a
+export FORK_RPC=https://base-fork-production.up.railway.app XORR_CHAIN=base-fork
+npx tsx src/fork-bootstrap.ts 0xYourWallet      # writes server/.env.fork
+
+# 3. Point the executor at the new addresses — Railway vars on `executor-fork`:
+#    DELEGATION_ADDRESS, AQUA_BOOK_ADDRESS, SWAPVM_BOOK_ADDRESS. Setting them redeploys it.
+
+# 4. Grant. Privy cannot sign for a fork of Base — chain 8453 is indistinguishable from real Base
+#    to its RPC — so this impersonates the owner instead.
+npx tsx src/fork-grant.ts 0xYourWallet 2810
+
+# 5. Confirm.
+curl -s "$FORK_API/verify?owner=0xYourWallet" | jq '.passed, .failed'
+```
+
+The database is untouched by all of this: the audit trail, strategies and positions live in
+Postgres and survive. What is lost is on-chain state — the old contract addresses stop existing,
+so anything holding a balance on the previous fork is gone with it.
