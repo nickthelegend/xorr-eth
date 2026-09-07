@@ -65,7 +65,39 @@ const STALE_TOLERANCE_MS = 10 * 60_000;
  * fetched is the only case worth blocking on.
  */
 const FRESH_MS = 30_000;
-const refreshing = new Set<string>();
+
+/**
+ * One upstream fetch per cold URL, however many clients are waiting on it.
+ *
+ * The background-refresh path deduped through `refreshing`; the COLD path did not. So every
+ * request for a URL nobody had fetched yet started its own `getJson`, with its own retry ladder,
+ * against an upstream that rate-limits by IP. The app polls, which meant a cold symbol produced a
+ * steady stream of concurrent fetches, each one making the rate limit worse and none of them ever
+ * populating the cache.
+ *
+ * The result was not a slow chart, it was a permanently broken one. In the deployed logs:
+ * `GET /market/ohlc 503 8002ms` over and over for ETH and BTC — the two symbols the market list
+ * and the default chart both request, so the two with the most concurrent cold readers — while
+ * SOL and XAUT, warmed once before the stampede started, served in 1ms from cache. CoinGecko
+ * answered the identical URL in 200 from anywhere else. One request measured 31.5 seconds.
+ *
+ * Sharing the promise fixes the cause: the first caller starts the fetch, everyone else awaits
+ * the same one, and the cache gets its single write. The deadline below is per-CALLER, not per
+ * fetch — a client still gives up after `COLD_DEADLINE_MS`, and the shared fetch it was waiting
+ * on keeps running so the next request is served warm.
+ */
+const inflight = new Map<string, Promise<unknown>>();
+
+function sharedFetch<T>(url: string, timeoutMs: number): Promise<T> {
+  const existing = inflight.get(url) as Promise<T> | undefined;
+  if (existing) return existing;
+  const p = getJson<T>(url, 0, timeoutMs).finally(() => inflight.delete(url));
+  inflight.set(url, p);
+  // Nobody is guaranteed to await this copy — a caller can time out first — and an unhandled
+  // rejection would take the process down.
+  void p.catch(() => undefined);
+  return p;
+}
 
 async function getWithStale<T>(url: string, timeoutMs = 12_000): Promise<T> {
   const cached = staleValue<T>(url, STALE_TOLERANCE_MS);
@@ -73,12 +105,8 @@ async function getWithStale<T>(url: string, timeoutMs = 12_000): Promise<T> {
   if (fresh) return fresh;
 
   if (cached) {
-    if (!refreshing.has(url)) {
-      refreshing.add(url);
-      void getJson<T>(url, 0, timeoutMs)
-        .catch(() => undefined)
-        .finally(() => refreshing.delete(url));
-    }
+    // Same map, so a background refresh and a cold caller never race for the same upstream slot.
+    void sharedFetch<T>(url, timeoutMs);
     return cached;
   }
 
@@ -86,8 +114,7 @@ async function getWithStale<T>(url: string, timeoutMs = 12_000): Promise<T> {
   // retry ladder. Under a rate limit that ladder has measured over a minute, and no screen should
   // block for that. Give up at the deadline and let the fetch finish in the background, so the
   // next request — a retry, a refresh, another viewer — is instant.
-  const fetching = getJson<T>(url, 0, timeoutMs);
-  void fetching.catch(() => undefined);
+  const fetching = sharedFetch<T>(url, timeoutMs);
 
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => {
