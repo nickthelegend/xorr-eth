@@ -26,50 +26,61 @@ What changed since round one, and what it does to the ranking:
 
 ---
 
+## What happened
+
+**Eight built and verified working**, working down the list from the top: seven of Tier S, and one
+from Tier A. Three of my own Tier S proposals turned out to already exist — #7, #8 and a
+half of #6 — which is a research failure on my part and is marked in place rather than quietly
+dropped.
+
+Everything marked BUILT below was exercised against the live system: the Privy controls against
+Privy's own API on the deployed executor, the trailing stop by an on-chain fill, the sparklines by
+a cold server warming, the offline banner by cutting `/health` in the running app.
+
 ## Tier S — build first
 
-| # | Idea | I | F | Fit | Score |
-|---|---|---|---|---|---|
-| 1 | **Privy wallet policies, real and enforced.** Create a Privy policy per embedded wallet that constrains `eth_sendTransaction` to the delegation contract and the tokens it may approve, and attach it to the wallet. Closes the one explicit criterion the B2B track names and the project scores zero on. | 5 | 5 | 5 | 125 |
-| 2 | **Show both enforcement layers on `/safety`.** The screen names the two parties; it should name the two *policies* — Privy's, off the API, and the contract's, off the chain — each with what it forbids. Defence in depth you can read rather than be told about. | 5 | 5 | 5 | 125 |
-| 3 | **`/verify` checks the Privy policy too.** A claim about a control nobody can check is the thing this console exists to abolish. Re-read the policy from Privy's API and compare it to what the app says it is. | 5 | 5 | 5 | 125 |
-| 4 | **A deliberately-refused transaction, on camera.** A `/judge` action that asks the user's wallet to send somewhere the Privy policy forbids and shows the refusal. The kill switch proves you can stop the bot; this proves the wallet itself will not go where it must not. | 5 | 4 | 5 | 100 |
-| 5 | **Policy owner + quorum.** Privy policies carry an `owner_id`. Set one, so changing what the wallet may do is itself gated — the "key quorums" half of the same criterion. | 4 | 4 | 5 | 80 |
-| 6 | **Compose a second Graph read into `decide()` without a new endpoint.** The Aqua book state is already read from chain logs in `venues/aqua.ts`. Make `decide()` join *both* sources — the subgraph's policy/spend history and the venue's own book state — and say which one moved the decision. Composition of two data products, not two queries against one. | 4 | 3 | 5 | 60 |
-| 7 | **The delegate's gas, watched and surfaced.** `/verify` reports the balance; nothing tells a *user* their bot is about to stop. A strategy that cannot pay gas fails silently, which is the failure mode this product is least able to afford. | 4 | 5 | 4 | 80 |
-| 8 | **"While you were away."** On open: what the bot did since you last looked, and what it declined. The product's entire premise is not watching, and nothing currently rewards coming back. | 4 | 5 | 5 | 100 |
-| 9 | **Portfolio value over time, from the audit trail.** A real equity curve out of the append-only log — the trail is already the source of truth, so the chart is a read of evidence rather than a second record. | 4 | 4 | 5 | 80 |
-| 10 | **Trailing stop.** Exit rules take profit and stop out; the trailing stop is the one people actually ask for, and `planExitRules` already keeps a high-water mark on every tick. | 4 | 4 | 4 | 64 |
+| # | Idea | I | F | Fit | Score | Outcome |
+|---|---|---|---|---|---|---|
+| 1 | **Privy wallet policies, real and enforced.** Create a Privy policy per embedded wallet that constrains `eth_sendTransaction` to the delegation contract and the tokens it may approve, and attach it to the wallet. Closes the one explicit criterion the B2B track names and the project scores zero on. | 5 | 5 | 5 | 125 | **✓ BUILT** — policy `xorr wallet policy (base-sepolia)`, 4 rules, live on both deployments |
+| 2 | **Show both enforcement layers on `/safety`.** The screen names the two parties; it should name the two *policies* — Privy's, off the API, and the contract's, off the chain — each with what it forbids. Defence in depth you can read rather than be told about. | 5 | 5 | 5 | 125 | **✓ BUILT** — `/safety` names both locks and the quorum that owns the Privy one |
+| 3 | **`/verify` checks the Privy policy too.** A claim about a control nobody can check is the thing this console exists to abolish. Re-read the policy from Privy's API and compare it to what the app says it is. | 5 | 5 | 5 | 125 | **✓ BUILT** — `privy-policy` and `privy-refusal`, both PASS on the deployed executor |
+| 4 | **A deliberately-refused transaction, on camera.** A `/judge` action that asks the user's wallet to send somewhere the Privy policy forbids and shows the refusal. The kill switch proves you can stop the bot; this proves the wallet itself will not go where it must not. | 5 | 4 | 5 | 100 | **✓ BUILT** — `privy-refusal` performs the refused send; `POST /privy/policy/prove` does both halves |
+| 5 | **Policy owner + quorum.** Privy policies carry an `owner_id`. Set one, so changing what the wallet may do is itself gated — the "key quorums" half of the same criterion. | 4 | 4 | 5 | 80 | **✓ BUILT** — key quorum `zixx49ik3ngslu9oay54q4li`; unsigned PATCH → 401, signed → 200 |
+| 6 | **Compose a second Graph read into `decide()` without a new endpoint.** The Aqua book state is already read from chain logs in `venues/aqua.ts`. Make `decide()` join *both* sources — the subgraph's policy/spend history and the venue's own book state — and say which one moved the decision. Composition of two data products, not two queries against one. | 4 | 3 | 5 | 60 | not built — `decide()` already reads Aqua book state from chain logs; the missing half is the Studio slug |
+| 7 | **The delegate's gas, watched and surfaced.** `/verify` reports the balance; nothing tells a *user* their bot is about to stop. A strategy that cannot pay gas fails silently, which is the failure mode this product is least able to afford. | 4 | 5 | 4 | 80 | **already existed** — `gasStatus()` blocks the run with the true reason |
+| 8 | **"While you were away."** On open: what the bot did since you last looked, and what it declined. The product's entire premise is not watching, and nothing currently rewards coming back. | 4 | 5 | 5 | 100 | **already existed** — `/catchup` and `src/home/CatchUp.tsx` |
+| 9 | **Portfolio value over time, from the audit trail.** A real equity curve out of the append-only log — the trail is already the source of truth, so the chart is a read of evidence rather than a second record. | 4 | 4 | 5 | 80 | not built |
+| 10 | **Trailing stop.** Exit rules take profit and stop out; the trailing stop is the one people actually ask for, and `planExitRules` already keeps a high-water mark on every tick. | 4 | 4 | 4 | 64 | **✓ BUILT** — verified by a real fill, tx `0x47db5129…` |
 
 ## Tier A
 
-| # | Idea | I | F | Fit | Score |
-|---|---|---|---|---|---|
-| 11 | **Offline banner.** The app assumes the executor is reachable and says nothing when it is not. | 3 | 5 | 4 | 60 |
-| 12 | **Graceful 1inch outage.** A failed quote should state a reason, not render an empty route row. | 3 | 5 | 4 | 60 |
-| 13 | **Sparkline in every market row.** `Sparkline.tsx` exists and the rows do not use it. Skipped in round one for lack of a per-row series; `/market/ohlc` now serves one cheaply. | 3 | 4 | 4 | 48 |
-| 14 | **Pull-to-refresh on every polling list.** | 3 | 4 | 4 | 48 |
-| 15 | **Receive screen with a QR of the address.** Funding is the first thing a judge does and the address is currently copy-only. | 3 | 4 | 3 | 36 |
-| 16 | **Strategy sub-cap shown as a bar, not a number.** The sub-cap exists; the screen states it in prose. | 3 | 4 | 4 | 48 |
-| 17 | **Day-and-time scheduling, not just cadence.** "Weekly" currently means "whenever the tick lands". | 3 | 4 | 3 | 36 |
-| 18 | **Drift indicator on holdings.** The rebalance strategy computes drift; the holdings screen does not show it. | 3 | 4 | 4 | 48 |
-| 19 | **A visual before/after of a rebalance.** | 3 | 3 | 4 | 36 |
-| 20 | **Strategy templates — one tap to a working configuration.** | 3 | 4 | 3 | 36 |
-| 21 | **Copy a leaderboard agent's configuration.** | 3 | 3 | 3 | 27 |
-| 22 | **Buy-the-dip modifier on DCA.** Size up when the asset is below its own average. | 3 | 3 | 3 | 27 |
-| 23 | **Live subgraph query panel in-app.** Type a query, see the response, next to the screen that uses it. | 3 | 3 | 4 | 36 |
-| 24 | **Revoke-propagation latency, measured and shown.** The README claims "under a second"; measure it. | 3 | 3 | 5 | 45 |
-| 25 | **Backup / restore of the audit trail.** | 3 | 4 | 3 | 36 |
-| 26 | **Architecture diagram rendered in-app.** | 2 | 4 | 3 | 24 |
-| 27 | **Onboarding resume where you left off.** | 3 | 3 | 3 | 27 |
-| 28 | **Screen-reader labels audited across every control.** | 3 | 4 | 3 | 36 |
-| 29 | **Position-level notes.** | 2 | 4 | 3 | 24 |
-| 30 | **Weekly digest push.** | 3 | 3 | 3 | 27 |
-| 31 | **Pause/resume a strategy from the notification.** | 3 | 2 | 4 | 24 |
-| 32 | **Dockerfile and one-command up.** | 3 | 4 | 3 | 36 |
-| 33 | **A public status page.** | 2 | 4 | 3 | 24 |
-| 34 | **Connection-pool tuning under the scheduler's load.** | 2 | 4 | 3 | 24 |
-| 35 | **Secrets-never-logged audit, enforced by a test.** | 3 | 4 | 3 | 36 |
+| # | Idea | I | F | Fit | Score | Outcome |
+|---|---|---|---|---|---|---|
+| 11 | **Offline banner.** The app assumes the executor is reachable and says nothing when it is not. | 3 | 5 | 4 | 60 | **✓ BUILT** — verified by cutting `/health` in the running app |
+| 12 | **Graceful 1inch outage.** A failed quote should state a reason, not render an empty route row. | 3 | 5 | 4 | 60 | not built |
+| 13 | **Sparkline in every market row.** `Sparkline.tsx` exists and the rows do not use it. Skipped in round one for lack of a per-row series; `/market/ohlc` now serves one cheaply. | 3 | 4 | 4 | 48 | **✓ BUILT** — new batched `/market/sparklines`; 9 rendering |
+| 14 | **Pull-to-refresh on every polling list.** | 3 | 4 | 4 | 48 | not built |
+| 15 | **Receive screen with a QR of the address.** Funding is the first thing a judge does and the address is currently copy-only. | 3 | 4 | 3 | 36 | not built |
+| 16 | **Strategy sub-cap shown as a bar, not a number.** The sub-cap exists; the screen states it in prose. | 3 | 4 | 4 | 48 | not built |
+| 17 | **Day-and-time scheduling, not just cadence.** "Weekly" currently means "whenever the tick lands". | 3 | 4 | 3 | 36 | not built |
+| 18 | **Drift indicator on holdings.** The rebalance strategy computes drift; the holdings screen does not show it. | 3 | 4 | 4 | 48 | not built |
+| 19 | **A visual before/after of a rebalance.** | 3 | 3 | 4 | 36 | not built |
+| 20 | **Strategy templates — one tap to a working configuration.** | 3 | 4 | 3 | 36 | not built |
+| 21 | **Copy a leaderboard agent's configuration.** | 3 | 3 | 3 | 27 | not built |
+| 22 | **Buy-the-dip modifier on DCA.** Size up when the asset is below its own average. | 3 | 3 | 3 | 27 | not built |
+| 23 | **Live subgraph query panel in-app.** Type a query, see the response, next to the screen that uses it. | 3 | 3 | 4 | 36 | not built |
+| 24 | **Revoke-propagation latency, measured and shown.** The README claims "under a second"; measure it. | 3 | 3 | 5 | 45 | not built |
+| 25 | **Backup / restore of the audit trail.** | 3 | 4 | 3 | 36 | not built |
+| 26 | **Architecture diagram rendered in-app.** | 2 | 4 | 3 | 24 | not built |
+| 27 | **Onboarding resume where you left off.** | 3 | 3 | 3 | 27 | not built |
+| 28 | **Screen-reader labels audited across every control.** | 3 | 4 | 3 | 36 | not built |
+| 29 | **Position-level notes.** | 2 | 4 | 3 | 24 | not built |
+| 30 | **Weekly digest push.** | 3 | 3 | 3 | 27 | not built |
+| 31 | **Pause/resume a strategy from the notification.** | 3 | 2 | 4 | 24 | not built |
+| 32 | **Dockerfile and one-command up.** | 3 | 4 | 3 | 36 | not built |
+| 33 | **A public status page.** | 2 | 4 | 3 | 24 | not built |
+| 34 | **Connection-pool tuning under the scheduler's load.** | 2 | 4 | 3 | 24 | not built |
+| 35 | **Secrets-never-logged audit, enforced by a test.** | 3 | 4 | 3 | 36 | not built |
 
 ## Tier B — real, ranked lower on fit or feasibility
 

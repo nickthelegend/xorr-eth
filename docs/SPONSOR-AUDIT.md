@@ -36,10 +36,42 @@ Base is not a track on this event — "Base Build Camp" in the README is a separ
 A swap (`0x17cdec10…`), an Aave Earn deposit (tier 4, aToken to the user), and now a **user-signed
 USDC transfer** to an allowlisted address ([src/wallet/useWithdraw.ts](src/wallet/useWithdraw.ts)).
 
-### MISSING — and it is an explicit criterion
+### CLOSED 2026-09-07 — the control now exists, and it is enforced
 
-**No Privy *control* is used.** The B2B track names them: *policies, signers, key quorums, intents*.
-This project uses none. It built its **own** equivalents instead:
+**A Privy policy and a Privy key quorum are both in use**, which satisfies the B2B criterion
+("at least one Privy control, such as policies, signers, key quorums, or intents") twice over.
+
+| Control | Where | Evidence |
+|---|---|---|
+| **Policy** | [server/src/auth/privyPolicy.ts](../server/src/auth/privyPolicy.ts) | `xorr wallet policy (base-sepolia)`, 4 rules, derived from the chain registries the app trades from |
+| **Key quorum** | same, `PRIVY_KEY_QUORUM_ID` | `zixx49ik3ngslu9oay54q4li`, threshold 1, holding the executor's P-256 authorization key |
+| Policy owned by the quorum | `ensurePolicy` sets `owner_id` at creation | An unowned policy is one the app secret can rewrite — a comment, not a control |
+| Authorization signatures | RFC 8785 canonical JSON, ECDSA P-256 | Required for every write to the owned policy |
+
+Both halves are checked live by `/verify` and pass on the deployed executor:
+
+```
+PASS  privy-policy    4 rules over 4 destinations, owned by key quorum zixx49ik3ngslu9oay54q4li
+PASS  privy-refusal   refused: "RPC request denied due to policy violation"
+```
+
+The refusal is the interesting one. Holding the app id, the app secret and the wallet id, an
+`eth_sendTransaction` to an address the policy does not name comes back **"RPC request denied due
+to policy violation"**, while one to `XorrDelegation` passes the policy and reverts on chain for
+its own reasons. And with the quorum owning the policy, an unsigned PATCH adding an allow-rule for
+`0x…dead` is **401** — compromising this server does not widen what the wallet may do.
+
+`/safety` shows both locks side by side, and states plainly that where the policy is not attached
+to a user's embedded wallet it is because Privy makes the wallet's *owner* authorise that, and the
+owner is the user.
+
+### Still unused
+Session signers, server-wallet signing for the delegate key, fiat onramp, Privy Earn, wallet
+webhooks, smart wallets/AA, MFA, key export.
+
+### What it replaced
+The project also built its **own** equivalents, which remain and are not redundant — the contract
+is public and readable without us, where the Privy policy is enforced by the custodian of the key:
 
 - its own policy engine on-chain (`XorrDelegation`: cap, expiry, venue allowlist)
 - its own delegated signer (a raw private key in `DELEGATE_PRIVATE_KEY`)
@@ -54,8 +86,9 @@ Also unused: server wallets, key quorums, fiat onramp, Privy Earn, wallet webhoo
 wallets/AA, MFA, key export.
 
 ### Verdict
-**Deep and organic on auth + wallet. Zero on controls.** Adding session signers would both close the
-criterion and *remove a real weakness* — the one hot key this system has.
+**Deep and organic on auth, wallet and now controls.** The remaining weakness is unchanged and
+worth stating: the delegate key still sits in a Railway environment variable. Privy session signers
+would remove it, and that is the next thing to build rather than something this closes.
 
 ---
 
