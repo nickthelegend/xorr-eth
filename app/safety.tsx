@@ -31,8 +31,9 @@ import {
   size,
   space,
 } from '@/ui';
-import { delegateUnusable, killCta, killExplanation, killTitle } from '@/state/derived';
+import { delegateUnusable, expiryNote, expiryState, killCta, killExplanation, killTitle } from '@/state/derived';
 import { useStore } from '@/state/store';
+import { NoteStrip } from '@/ui';
 import { useAllowlist } from '@/wallet/allowlist';
 import { useApprovals } from '@/wallet/useApprovals';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
@@ -314,6 +315,23 @@ export default function Safety() {
               style={{ marginTop: space.s10 }}
             />
           </SheetCard>
+        ) : null}
+
+        {/*
+          The deadline the contract will enforce whether or not anyone is watching.
+
+          `expiresAt` has been written at grant time and returned by `/delegation` since the
+          beginning, and read by nothing. So the permission lapses, the bot stops, and every
+          screen goes on saying "Agents are live" — the same silent stop as a rotated delegate
+          key. Only shown when it is actually close, because a countdown three days out is noise.
+        */}
+        {expiryNote(delegation?.expiresAt) ? (
+          <NoteStrip
+            kind={expiryState(delegation?.expiresAt) === 'expired' ? 'blocked' : 'risk'}
+            style={{ marginTop: space.s10 }}
+          >
+            {expiryNote(delegation?.expiresAt)!}
+          </NoteStrip>
         ) : null}
 
         {/*

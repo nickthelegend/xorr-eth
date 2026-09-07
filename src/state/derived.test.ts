@@ -367,3 +367,40 @@ describe('trailing stop — the exit the engine could always run', () => {
     expect(floor(2800, 0)).toBe(2800);
   });
 });
+
+describe('permission expiry — the deadline nothing read', () => {
+  const H = 3_600_000;
+  const now = Date.UTC(2026, 8, 7, 12);
+
+  it('says nothing while there is plenty of time', () => {
+    expect(d.expiryState(now + 72 * H, now)).toBe('ok');
+    expect(d.expiryNote(now + 72 * H, now)).toBeUndefined();
+  });
+
+  it('warns inside the last day, in hours a person can act on', () => {
+    expect(d.expiryState(now + 5 * H, now)).toBe('soon');
+    expect(d.expiryNote(now + 5 * H, now)).toContain('5 hours');
+    // Singular, because "1 hours" is the kind of thing that makes a user trust nothing else.
+    expect(d.expiryNote(now + H, now)).toContain('an hour');
+  });
+
+  it('the boundary is inclusive — exactly a day out is already a warning', () => {
+    expect(d.expiryState(now + 24 * H, now)).toBe('soon');
+    expect(d.expiryState(now + 24 * H + 1, now)).toBe('ok');
+  });
+
+  it('an expired permission says what is and is not affected', () => {
+    expect(d.expiryState(now - 1, now)).toBe('expired');
+    const note = d.expiryNote(now - H, now)!;
+    expect(note).toContain('expired');
+    // The reassurance is the load-bearing half: a stopped bot is not a lost balance.
+    expect(note).toContain('untouched');
+  });
+
+  it('no permission is not an expired one', () => {
+    // Before a grant exists there is no deadline, and inventing one would be a false alarm.
+    expect(d.expiryState(undefined, now)).toBe('none');
+    expect(d.expiryState(0, now)).toBe('none');
+    expect(d.expiryNote(undefined, now)).toBeUndefined();
+  });
+});

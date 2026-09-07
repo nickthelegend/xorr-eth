@@ -403,3 +403,39 @@ export function rangeChange(
   const pct = range === '1D' && Number.isFinite(change24h) ? (change24h as number) : seriesPct;
   return { pct, label: RANGE_WINDOW_LABEL[range] ?? range };
 }
+
+// ── Permission expiry ────────────────────────────────────────────────────────
+
+/**
+ * How close the permission is to running out, and what to say about it.
+ *
+ * The grant is time-boxed on purpose — a permission that never expires is a permission nobody
+ * revisits, and the contract enforces the deadline whether or not anyone is watching. But nothing
+ * in the app ever read `expiresAt`. It is written at grant time, returned by `/delegation`, and
+ * displayed nowhere, so the bot simply stops one day and every screen goes on saying "Agents are
+ * live". Same silent-stop as a rotated delegate key: nothing is broken, nothing is wrong, and
+ * nothing happens.
+ *
+ * A day of warning because re-granting costs three signatures and a user should not discover that
+ * requirement at the moment the permission has already lapsed.
+ */
+export const EXPIRY_WARNING_MS = 24 * 60 * 60 * 1000;
+
+export type ExpiryState = 'none' | 'ok' | 'soon' | 'expired';
+
+export function expiryState(expiresAt: number | undefined, now = Date.now()): ExpiryState {
+  if (!expiresAt || !Number.isFinite(expiresAt)) return 'none';
+  if (expiresAt <= now) return 'expired';
+  return expiresAt - now <= EXPIRY_WARNING_MS ? 'soon' : 'ok';
+}
+
+/** Plain words, and never a bare timestamp — "1788908350000" is not a deadline anyone can act on. */
+export function expiryNote(expiresAt: number | undefined, now = Date.now()): string | undefined {
+  const state = expiryState(expiresAt, now);
+  if (state === 'none' || state === 'ok') return undefined;
+  if (state === 'expired') {
+    return 'Your permission has expired, so nothing can be placed. Your funds and positions are untouched — grant again to restart.';
+  }
+  const hours = Math.max(1, Math.round((expiresAt! - now) / 3_600_000));
+  return `Your permission runs out in ${hours === 1 ? 'an hour' : `${hours} hours`}. The bot stops on its own when it does; granting again takes a minute.`;
+}
