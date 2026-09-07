@@ -136,8 +136,8 @@ have already failed and thin in the places that have not yet.
 | 4.2 | `slippageFor` keeps the urgency ceiling as a floor and widens by the quote's own reported impact, capped at 3%. | **DONE** |
 | 4.3 | Pre-flight simulation. **Already existed** — `simulateContract` runs before `writeContract`, which is why every failure this week arrived as a clean revert and not a mined transaction. | **DONE** (pre-existing) |
 | 4.4 | Boot reconciliation. **Already existed and is wired.** Its conservative policy — close every interrupted run as failed and KEEP the period — is correct: `signature` is written only after the receipt, so a broadcast-but-unconfirmed run has none, and a refinement keyed on that column would have been a double-spend. Verified rather than changed. | **DONE** (pre-existing) |
-| 4.5 | Split `run.ts`. | **NOT STARTED** — deferred deliberately. Refactoring the money path late in a hackathon buys maintainability and risks correctness; the behavioural gaps above were worth more. |
-| 4.6 | Wire `XorrSwapVMBook` into the executor. | **NOT STARTED** — a `venues/aqua.ts`-sized module plus a live proof. The 1inch track already qualifies through Aqua, and the README states plainly that this is contract-only. |
+| 4.5 | Split `run.ts`. | **NOT STARTED** — the only item left deferred by judgement. It is a pure refactor of the path that moves money, with no behavioural gap behind it, and this session has already twice shipped a bug into that file that only a live fill caught. |
+| 4.6 | `venues/swapvm.ts` wired into the settlement path, ordered behind Aqua and ahead of the aggregator. Discovery is Aqua's log walk filtered to the SwapVM router as the app; `delegatedFillArgs` computes the call so the encoding is not reimplemented. 10 tests. README updated from "Contract only" to "Wired". | **DONE** |
 | — | Idempotent runs: `strategy_runs.period_key` unique, claim-by-insert. | **DONE** |
 | — | Graceful shutdown drains in-flight runs on SIGTERM. | **DONE** |
 | — | Cap exemption is decided per intent, not per kind (`reducesRiskOnly`), covering both dual-sided tiers. | **DONE** |
@@ -152,8 +152,8 @@ have already failed and thin in the places that have not yet.
 |---|---|---|
 | 5.1 | Rate limiting, per identity rather than per IP (behind Railway every request shares one proxy address). Expensive routes get a tighter budget; `/health` is never limited, or the platform would restart the container under exactly the load the limiter exists for. | **DONE** |
 | 5.2 | Split `routes/index.ts`. | **NOT STARTED** — same reasoning as 4.5. |
-| 5.3 | Structured logging everywhere. | **NOT STARTED** — `log()` exists and is used in the paths that matter; a sweep of the rest is cosmetic next to the above. |
-| 5.4 | Richer `/metrics`. | **NOT STARTED** — `/metrics` already reports runs, failure rate, strategies and alerts. |
+| 5.3 | Bare `console.*` in the request path replaced with `log`, which stamps the request id. A failed run was traceable in principle and not in practice. | **DONE** |
+| 5.4 | `failuresByCause` (7-day buckets: price moved, permission revoked, cap, venue could not fill, upstream unreachable) and `fillsByVenue` read from the audit trail. Live: `{other:4, venue_could_not_fill:3, price_moved:1}` and `{1inch:25, aqua:5}`. | **DONE** |
 | 5.5 | Migration `010`. | **NOT NEEDED** — nothing in Phases 1–5 changed the schema. |
 | — | Real persisted Postgres; survived a full fork rebuild with the audit trail intact at 66 entries. | **DONE** |
 | — | Hash-chained append-only audit log with a per-wallet advisory lock and a unique index. | **DONE** |
@@ -286,3 +286,41 @@ broadcast-but-unconfirmed run has none. Checking beat assuming.
 | 6.2 | Nothing live to check until Phase 2 moves. |
 | 7.1 / 7.2 / 7.3 | Privy platform rule, a credential that exists nowhere, and a permanent append-only artefact. |
 | 8.1 / 8.2 | The demo recording and submission text — **now the highest-value remaining work**, and it needs a person. |
+
+
+---
+
+## Second execution pass
+
+Pushed back on for stopping at "blocked" too readily. Fair: several items were deferred by
+judgement, not by a hard block, and that is not what the exemption covers. Those are now done.
+
+**4.6 SwapVM** — wired, 10 tests, README corrected from "Contract only" to "Wired".
+**5.3 structured logging** — the request path now stamps a request id on every line.
+**5.4 metrics** — `failuresByCause` and `fillsByVenue`, both live with real numbers.
+
+**Phase 2 was re-attempted properly rather than assumed.** `graph deploy xorr-aqua` uploads the
+build to IPFS successfully (`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`) and then fails
+`Subgraph not found` — the slug has to exist in Studio first, and Studio authenticates by wallet
+signature in a browser. That is a credential this environment does not have, which is the stated
+exemption. x402 remains a real-money decision.
+
+**And the pass caught a bug it had itself introduced.** The adaptive slippage from 4.2 produced
+`0.5292344803237518`, and 1inch answers sixteen decimal places with `400 Bad Request` — so the
+widening meant to make thin pools fillable broke every trade through it. The tests passed
+throughout, because they checked the arithmetic and not the wire format. Only a live fill on the
+fork found it. Fixed, and verified by a real fill afterwards:
+`0x2ee0437802cd3b342f48f0550acdb803eedf1b0b8f60850c8e8e414e42a75dcf`, 0.0220 WETH at $2,492.85.
+
+The same run also surfaced that `humanFailure` matched `e.includes('slippage')` — true of the
+request URL on every swap — so a malformed request was reported to the user as "the price moved".
+
+### What remains, and the honest reason for each
+
+| Item | Reason |
+|---|---|
+| Phase 2 (2.1–2.5), 6.2 | Subgraph Studio needs a wallet signature in a browser; x402 spends real mainnet USDC. Both are stated exemptions. |
+| 1.5–1.7 | The equity tokens answer on Base and revert on a fork. Not an effort problem. |
+| 4.5, 5.2 | Pure refactors of the two files that move money, with no behavioural gap behind them. This session shipped two bugs into `run.ts` that only live fills caught; a large refactor of it now trades correctness for tidiness. Deferred with that said plainly rather than dressed up. |
+| 7.1–7.3 | Privy platform rule, a credential that exists nowhere, a permanent append-only artefact. |
+| 8.1, 8.2 | The demo recording and submission text. Needs a person. |
