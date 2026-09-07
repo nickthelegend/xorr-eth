@@ -27,6 +27,9 @@ import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { humanFailure, isTransient } from './failure.js';
+import { rawBalanceOf, measuredDelta, estimateOutUnits } from './fill-measure.js';
+import { applyFill } from '../positions/index.js';
+import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { priceOf } from '../market/prices.js';
 import { send } from '../notifications/push.js';
 import { PLANNERS, observationFor, type TradeIntent } from './kinds/index.js';
@@ -38,55 +41,6 @@ import { canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
  * than pretending it considered a book.
  */
 const AQUA_BOOK_ADDRESS = process.env.AQUA_BOOK_ADDRESS;
-
-/** The owner's balance of a token, exactly as the chain holds it. Undefined if it cannot be read. */
-async function rawBalanceOf(owner: Address, symbol: string): Promise<bigint | undefined> {
-  const token = VENUE_TOKENS[symbol];
-  if (!token) return undefined;
-  return publicClient
-    .readContract({ address: token.address, abi: erc20Abi, functionName: 'balanceOf', args: [owner] })
-    .catch(() => undefined);
-}
-
-/**
- * How many units of `symbol` moved, in the token's own decimals.
- *
- * Undefined when either read failed — in which case the caller keeps its estimate rather than
- * recording a zero, since a zero here would erase the position.
- */
-async function measuredDelta(params: {
-  owner: Address;
-  symbol: string;
-  before: bigint | undefined;
-}): Promise<number | undefined> {
-  if (params.before === undefined) return undefined;
-  const token = VENUE_TOKENS[params.symbol];
-  const after = await rawBalanceOf(params.owner, params.symbol);
-  if (after === undefined || !token) return undefined;
-  return Number(formatUnits(after - params.before, token.decimals));
-}
-
-/**
- * Roughly how many base units of `symbol` a dollar amount buys, for the venue depth check.
- *
- * Approximate on purpose: it decides which venue to ASK, and the venue then quotes for real. A
- * price lookup that failed should not block the trade, so it falls back to no depth constraint.
- */
-async function estimateOutUnits(
-  usd: number,
-  symbol: string,
-  decimals: number,
-): Promise<bigint | undefined> {
-  try {
-    const px = await priceOf(symbol);
-    if (!(px > 0)) return undefined;
-    return BigInt(Math.floor((usd / px) * 10 ** decimals));
-  } catch {
-    return undefined;
-  }
-}
-import { applyFill } from '../positions/index.js';
-import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 
 /** The address that holds the tokens when the router is called: the delegation contract. */
 const DELEGATION_FROM = DELEGATION_ADDRESS;
