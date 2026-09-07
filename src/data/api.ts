@@ -8,8 +8,10 @@ import { accessToken } from '@/auth/token';
 import { isPublicPath } from './publicPaths';
 import { authKnowledge, whenAuthKnown } from '@/auth/authState';
 import { API_BASE } from './apiBase';
+import { ApiError } from './apiError';
 
 export { API_BASE };
+export { ApiError, apiReason } from './apiError';
 
 /**
  * Every request carries the Privy access token. The executor rejects anything without one, so a
@@ -78,23 +80,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-/**
- * An HTTP answer we did not want, with the body attached.
- *
- * A 409 from `/orders` is not a transport failure — it is the policy engine saying no, in a
- * sentence written for the user. Losing that to `new Error('409 Conflict')` meant the screen
- * had to show a status code where it could have shown "the daily cap is spent".
- */
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    readonly body?: unknown,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
 
 export const api = {
   get: <T,>(path: string) => request<T>(path),
@@ -110,3 +95,4 @@ export const api = {
     return res.text();
   },
 };
+

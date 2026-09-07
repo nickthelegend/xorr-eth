@@ -36,6 +36,7 @@ import { swapPct } from '@/state/derived';
 import { usePrice } from '@/data/usePrices';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { apiReason } from '@/data/api';
 import { useSwapQuote } from '@/data/useSwapQuote';
 import { useStore } from '@/state/store';
 
@@ -186,7 +187,15 @@ export default function Swap() {
                   ? `at least ${money(swap.data.minimumOut)} after slippage`
                   : swap.loading
                     ? 'Getting a route…'
-                    : 'No route available'}
+                    : /*
+                       * The venue's own reason, when it gave one.
+                       *
+                       * "No route available" was printed over the top of sentences like "No route
+                       * for USDC -> WETH" and whatever 1inch said when it was the one refusing.
+                       * A user who can see which pair failed knows to change something; one who
+                       * cannot just taps again.
+                       */
+                      (apiReason(swap.error) ?? 'No route available')}
               </Text>
             </View>
             <TokenPill symbol={RECEIVE} />
@@ -198,7 +207,8 @@ export default function Swap() {
             title="Route"
             value={
               <Text variant="rowPrimary" color={colors.ink55}>
-                {swap.data?.route ?? (swap.loading ? 'Finding…' : 'Unavailable')}
+                {swap.data?.route ??
+                  (swap.loading ? 'Finding…' : swap.error ? 'No venue would quote' : 'Unavailable')}
               </Text>
             }
             height={50}
