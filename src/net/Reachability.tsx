@@ -18,7 +18,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Text, colors, radius, space } from '@/ui';
-import { API_BASE } from '@/data/api';
+import { executorReachable } from '@/data/health';
 
 /** How often to re-check while down. Slow enough not to hammer a server that may be struggling. */
 const RETRY_MS = 5_000;
@@ -40,15 +40,8 @@ export function ReachabilityProvider({ children }: { children: React.ReactNode }
     let alive = true;
 
     const check = async () => {
-      /*
-       * `/health` and not a real route.
-       *
-       * It needs no token, so this reports on the network rather than on the session — a signed-out
-       * user is not offline, and telling them they are would be its own wrong answer.
-       */
-      const ok = await fetch(`${API_BASE}/health`, { method: 'GET' })
-        .then((r) => r.ok)
-        .catch(() => false);
+      // The request itself lives in the data layer, where network access belongs.
+      const ok = await executorReachable();
       if (!alive) return;
       setReachable(ok);
       timer.current = setTimeout(check, ok ? HEARTBEAT_MS : RETRY_MS);

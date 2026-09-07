@@ -319,7 +319,7 @@ export default function AutoClose() {
         />
         <ControlBlock
           label="Trailing Stop"
-          value={trail > 0 ? `${trail.toFixed(1)}% below the high` : 'Off'}
+          value={trail > 0 ? `${percent(trail).replace('+', '')} below the high` : 'Off'}
           tone="sl"
           chipColor={trail > 0 ? colors.candleDown : colors.ink35}
           onDec={() => setTrail((t) => Math.max(0, Math.round((t - TRAIL_STEP) * 10) / 10))}
@@ -331,7 +331,7 @@ export default function AutoClose() {
 
       {trail > 0 ? (
         <NoteStrip kind="acted" style={{ marginTop: space.s16 }}>
-          {`Follows ${symbol} up and never down. It sells if the price falls ${trail.toFixed(1)}% from the highest point reached after this is set — ${fmtPrice(mark * (1 - trail / 100))} if the high stays where it is now.`}
+          {`Follows ${symbol} up and never down. It sells if the price falls ${percent(trail).replace('+', '')} from the highest point reached after this is set — ${fmtPrice(mark * (1 - trail / 100))} if the high stays where it is now.`}
         </NoteStrip>
       ) : null}
 

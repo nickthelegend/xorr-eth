@@ -10,7 +10,7 @@
  * because the authority is revoked at the chain rather than at a server we fan out from.
  */
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -202,7 +202,19 @@ export default function Safety() {
         {killExplanation(killed, hiredCount, unusable)}
       </Text>
 
+      {/*
+        Scrolls, because this screen has outgrown a short phone.
+        
+        It gained the Privy policy, the token approvals and the expiry warning, and on an iPhone SE
+        (667pt against the design's 874) the last of those sits below the fold with no way to
+        reach it. The repo's own device-matrix check catches this, and it is right to: unreachable
+        content on the safety screen is worse than unreachable content anywhere else.
+
+        `Fill` keeps the flex behaviour; the ScrollView inside it takes the overflow, and the stop
+        button stays pinned below rather than scrolling away.
+      */}
       <Fill style={{ marginTop: space.s20 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space.s16 }}>
         <View style={{ gap: space.s10 }}>
           <ConsequenceCard tone="down" label="New orders" detail="Stopped immediately" />
           <ConsequenceCard
@@ -424,6 +436,7 @@ export default function Safety() {
             {error}
           </Text>
         ) : null}
+        </ScrollView>
       </Fill>
 
       <Button

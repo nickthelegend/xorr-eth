@@ -65,6 +65,19 @@ const surfaces = {
   bubble: '#111214',
 } as const;
 
+/**
+ * A QR code is not part of the palette, and must not follow it.
+ *
+ * The app is true black and it is tempting to draw the code in the ink ramp to match. Scanners
+ * expect dark modules on a light ground; an inverted code fails on most phones, and a QR nobody
+ * can scan is decoration in the shape of a feature. Named here so the rule is stated once rather
+ * than argued in every screen that shows one.
+ */
+const scan = {
+  scanInk: '#000000',
+  scanBg: '#FFFFFF',
+} as const;
+
 /** Light sheet. Auto Close and the order ticket only. */
 const sheet = {
   bg: '#FFFFFF',
@@ -187,6 +200,7 @@ export const colors = Object.freeze({
   ...ink,
   ...hairline,
   ...semantic,
+  ...scan,
   sheet,
   agent,
 });

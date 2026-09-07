@@ -24,6 +24,7 @@
 import React, { useMemo } from 'react';
 import Svg, { Rect } from 'react-native-svg';
 import QRC from 'qrcode';
+import { colors } from './tokens';
 
 export type AddressQRProps = {
   /** What the code encodes. An EIP-681 URI, so a wallet opens pre-filled on the right chain. */
@@ -65,21 +66,17 @@ export function AddressQR({ value, size = 168, quietZone = 4 }: AddressQRProps) 
           y={y + quietZone}
           width={1}
           height={1}
-          fill="#000000"
+          fill={colors.scanInk}
         />,
       );
     }
   }
 
   return (
-    /*
-     * Dark on white, always, whatever the app's theme.
-     *
-     * The design is true black and it is tempting to invert this to match. An inverted code does
-     * not scan on most phones, and a QR nobody can scan is decoration in the shape of a feature.
-     */
+    // `scanInk`/`scanBg` rather than the ink ramp — see tokens.ts for why a code must not follow
+    // the palette.
     <Svg width={size} height={size} viewBox={`0 0 ${total} ${total}`}>
-      <Rect x={0} y={0} width={total} height={total} fill="#FFFFFF" />
+      <Rect x={0} y={0} width={total} height={total} fill={colors.scanBg} />
       {cells}
     </Svg>
   );
