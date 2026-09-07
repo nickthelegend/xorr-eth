@@ -60,7 +60,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nAgents ›\n0 hired\nMomentum Scout\nPaused\nEarnings Desk\nPaused\nCoins ›\nWETH\nWrapped Ether · not held\n$2,511.61\n+1.15%\nIdle USDC can earn about 3.77% a year on Aave. Supplying USDC to Aave v3 on Base. The rate floats; it is not a promise.\nHome\nMarkets\nAgents\nTrade\nAssets"
+  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nIN THE LAST DAY\nGot it\n4 risk checks\nTrading permission granted\nUp to $1,600 a day, expiring Tue Sep 08 2026.\nAll agents stopped\nPermission revoked on-chain. Open positions are untouched.\nHired Drawdown Guard\nCuts risk when the book bleeds. It trades only inside the limits you already signed.\nand 1 more ›\nAgents ›\n1 hired\nDrawdo"
  },
  {
   "stem": "08-markets",
@@ -69,7 +69,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\n$4,420\n−0.15%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nP"
+  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\n$4,398\n−0.62%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nP"
  },
  {
   "stem": "09-markets-crypto",
@@ -78,7 +78,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$80,093\n+0.23%\nETH\nEthereum · Perp · 100x\n$2,511\n+1.12%\nSOL\nSolana · Spot · Perp\n$106.13\n+2.70%\nXRP\nXRP · Perp · 50x\n$1.42\n+0.52%\nDOGE\nDogecoin · Perp · 50x\n$0.0908\n+0.81%\nHYPE\nHyperliquid · Spot · Perp\n$87.70\n+2.67%\nAAVE\nAave · Spot · Perp\n$135.72\n+0.58%\nLINK\nChainlink · Perp · 50x\n$13.26\n+9.88%\nTON\nToncoin "
+  "text": "Crypto\n9 of 9 markets\n300+ coins · spot, margin, perps, options\nBTC\nBitcoin · Perp · 100x\n$80,028\n+0.05%\nETH\nEthereum · Perp · 100x\n$2,508\n+0.41%\nSOL\nSolana · Spot · Perp\n$105.65\n+1.87%\nXRP\nXRP · Perp · 50x\n$1.41\n−0.34%\nDOGE\nDogecoin · Perp · 50x\n$0.0906\n−0.00%\nHYPE\nHyperliquid · Spot · Perp\n$87.26\n+1.40%\nAAVE\nAave · Spot · Perp\n$134.81\n−2.74%\nLINK\nChainlink · Perp · 50x\n$13.15\n+7.59%\nTON\nToncoin "
  },
  {
   "stem": "10-markets-stocks",
@@ -87,7 +87,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$232.16\nAAPLc\nApple · Tokenized share\n$321.79\nTSLAc\nTesla · Tokenized share\n$357.15\nMETAc\nMeta · Tokenized share\n$615.53\nMSFTc\nMicrosoft · Tokenized share\n$525.49\nAMZNc\nAmazon · Tokenized share\n$282.73\nGOOGLc\nAlphabet · Tokenized share\n$339.76\nMSTRc\nMicroStrategy · Tokenized share\n$144.57"
+  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$231.91\nAAPLc\nApple · Tokenized share\n$321.76\nTSLAc\nTesla · Tokenized share\n$356.76\nMETAc\nMeta · Tokenized share\n$615.51\nMSFTc\nMicrosoft · Tokenized share\n$525.33\nAMZNc\nAmazon · Tokenized share\n$282.53\nGOOGLc\nAlphabet · Tokenized share\n$339.45\nMSTRc\nMicroStrategy · Tokenized share\n$144.50"
  },
  {
   "stem": "11-markets-commodities",
@@ -96,7 +96,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\n$4,420\n−0.15%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot feed\nSIMULATED\n$"
+  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\n$4,398\n−0.62%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot feed\nSIMULATED\n$"
  },
  {
   "stem": "12-markets-indices",
@@ -123,7 +123,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$357.15\nSOL\n$106.13\n+2.70%\nHYPE\n$87.70\n+2.67%"
+  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$356.76\nSOL\n$105.53\n+1.85%\nHYPE\n$87.09\n+0.85%"
  },
  {
   "stem": "15-search",
@@ -132,7 +132,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$80,126\n+0.28%\nETH\nEthereum · Perp · 100x\n$2,512\n+1.16%\nSOL\nSolana · Spot · Perp\n$106.14\n+2.68%\nXRP\nXRP · Perp · 50x\n$1.42\n+0.52%\nDOGE\nDogecoin · Perp · 50x\n$0.0908\n+0.81%\nHYPE\nHyperliquid · Spot · Perp\n$87.69\n+2.66%\nAAVE\nAave · Spot · Perp\n$135.80\n+0.42%\nLINK\nChainlink · Perp · 50x\n$13.29\n+10.08%\nTON\nToncoin · Spot · Perp\n$1.43\n+0.24%\nNVDAc\nNvidia · Tokenized shar"
+  "text": "Search\nBTC\nBitcoin · Perp · 100x\n$79,949\n−0.01%\nETH\nEthereum · Perp · 100x\n$2,507\n+0.41%\nSOL\nSolana · Spot · Perp\n$105.53\n+1.85%\nXRP\nXRP · Perp · 50x\n$1.41\n−0.42%\nDOGE\nDogecoin · Perp · 50x\n$0.0905\n+0.08%\nHYPE\nHyperliquid · Spot · Perp\n$87.09\n+0.85%\nAAVE\nAave · Spot · Perp\n$134.72\n−2.85%\nLINK\nChainlink · Perp · 50x\n$13.11\n+7.32%\nTON\nToncoin · Spot · Perp\n$1.43\n−0.33%\nNVDAc\nNvidia · Tokenized share"
  },
  {
   "stem": "16-asset",
@@ -141,7 +141,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Bitcoin\n$80,126\nup 0.5% today\n$80,341\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Bitcoin\n$79,949\ndown 0.0% today\n$80,097\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "17-asset-stock",
@@ -150,7 +150,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Nvidia\n$232.17\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Nvidia\n$232.02\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "18-chart",
@@ -159,7 +159,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USD\n$80,341\n+0.65%\n+$519.00 today\n80.6K\n80.3K\n80.0K\n79.6K\n79.3K\n$80,341\n15m\n1H\n4H\n1D\n1W\n8 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
+  "text": "BTC/USD\n$80,097\n+0.26%\n+$210.00 today\n80.6K\n80.3K\n80.0K\n79.6K\n79.3K\n$80,097\n15m\n1H\n4H\n1D\n1W\n7 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
  },
  {
   "stem": "19-order",
@@ -168,16 +168,20 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "WETH\nBuy\nSell\n$250\n0.0996 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of WETH\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
+  "text": "WETH\nBuy\nSell\n$250\n0.0997 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst, via Dodo V2, Uniswap V4\n0.0991 WETH\nBuy $250 of WETH\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
  },
  {
   "stem": "20-order-stock",
   "route": "/order/NVDAc",
-  "ok": true,
-  "errors": [],
-  "network": [],
+  "ok": false,
+  "errors": [
+   "Failed to load resource: the server responded with a status of 502 ()"
+  ],
+  "network": [
+   "502 https://executor-production-1659.up.railway.app/swap/quote?in=USDC&out=NVDAc&amount=250"
+  ],
   "content": [],
-  "text": "NVDAc\nBuy\nSell\n$250\n1.0768 NVDAc\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nFee (0.1%)\n$0.25\nBuy $250 of NVDAc\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
+  "text": "NVDAc\nBuy\nSell\n$250\n1.0775 NVDAc\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst\n—\nBuy $250 of NVDAc\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
  },
  {
   "stem": "21-swap",
@@ -186,7 +190,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$251.27\nWETH\nYOU RECEIVE\n$250.74\nat least $249.99 after slippage\nUSDC\nRoute\nBest of 6 venues\nFee (0.25%)\n$0.63\nPrice impact\nNaN%\nMax slippage\n0.30%\nReview swap"
+  "text": "Swap\nYOU PAY\nBalance 0.0000\n0\n$250.80\nWETH\nYOU RECEIVE\n$250.10\nat least $249.35 after slippage\nUSDC\nRoute\nBest of 4 venues\nYou receive at least\n249.3491 USDC\nPrice impact\n0.289%\nMax slippage\n0.30%\nReview swap"
  },
  {
   "stem": "22-perp",
@@ -195,7 +199,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USDT\n$80,168\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$65,417\nFunding\n—\nA 18% move against you wipes the margin.\nOPEN INTEREST\n—\n24H VOLUME\n—\nMARK VS INDEX\n+$0.00\nNEXT FUNDING\n07:35:22\nShort\nLong"
+  "text": "BTC/USDT\n$79,894\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$65,194\nFunding\n—\nA 18% move against you wipes the margin.\nOPEN INTEREST\n—\n24H VOLUME\n—\nMARK VS INDEX\n+$0.00\nNEXT FUNDING\n06:40:38\nShort\nLong"
  },
  {
   "stem": "23-position",
@@ -213,7 +217,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Auto Close\n$80,341\nTake Profit\n$81,144\nStop Loss\n$79,538\nTake Profit\n−\n+1.0%\n+\nStop Loss\n−\n−1.0%\n+\nCancel\nSet\nMake $0.00 at TP or lose $0.00 at SL"
+  "text": "Auto Close\nThis position is no longer open, so there is no stop to set on it."
  },
  {
   "stem": "25-bot",
@@ -222,7 +226,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Momentum Scout\nNo proposal right now\nToday\nNo trading permission has been granted\nHome\nMarkets\nAgents\nTrade\nAssets"
+  "text": "Momentum Scout\nNo proposal right now\nToday\nSOL is mid-range so there is nothing worth proposing\nHome\nMarkets\nAgents\nTrade\nAssets"
  },
  {
   "stem": "26-bot-roster",
@@ -231,7 +235,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Agents\n0 of 4 hired\nMomentum Scout\nRides breakouts on liquid majors\nNo trades yet\nHire\nEarnings Desk\nTrades tokenized equity earnings\nNo trades yet\nHire\nYield Keeper\nMoves idle cash into the best rate\nNo trades yet\nHire\nDrawdown Guard\nCuts risk when the book bleeds\nNo trades yet\nHire\nPast performance of a strategy says nothing about tomorrow."
+  "text": "Agents\n1 of 4 hired\nMomentum Scout\nRides breakouts on liquid majors\nNo trades yet\nHire\nEarnings Desk\nTrades tokenized equity earnings\nNo trades yet\nHire\nYield Keeper\nMoves idle cash into the best rate\nNo trades yet\nHire\nDrawdown Guard\nCuts risk when the book bleeds\nNo trades yet\nHired\nPast performance of a strategy says nothing about tomorrow."
  },
  {
   "stem": "27-bot-leaderboard",
@@ -267,7 +271,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nRETURN\n+36.6%\nMAX DD\n−12.6%\nSHARPE\n3.8\nTRADES\n13\nIf you'd started with\n−\n$5,000\n+\n$6,830.00\n+$1,830.00\ncoingecko market_chart, daily closes · Nothing here is a promise.\nRun this strategy live"
+  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nRETURN\n+35.7%\nMAX DD\n−12.6%\nSHARPE\n3.7\nTRADES\n13\nIf you'd started with\n−\n$5,000\n+\n$6,785.00\n+$1,785.00\ncoingecko market_chart, daily closes · Nothing here is a promise.\nRun this strategy live"
  },
  {
   "stem": "31-strategies",
@@ -303,7 +307,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,513.69\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
+  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,507.68\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
  },
  {
   "stem": "32d-yield-position",
@@ -326,11 +330,13 @@
  {
   "stem": "32f-judge",
   "route": "/judge",
-  "ok": true,
+  "ok": false,
   "errors": [],
   "network": [],
-  "content": [],
-  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n13/15\nclaims verified\n2 skipped — those need a wallet address, and none was given. Skipped is not passed.\nPASS\nThe app is talking to a real chain.\nchain 84532 (base-sepolia) at block 46486253\nPASS\nXorrDelegation is deployed and has code.\n"
+  "content": [
+   "must not contain /FAIL/"
+  ],
+  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n12/15\nverified · 1 failing\n2 skipped — those need a wallet address, and none was given. Skipped is not passed.\nPASS\nThe app is talking to a real chain.\nchain 84532 (base-sepolia) at block 46487915\nPASS\nXorrDelegation is deployed and has c"
  },
  {
   "stem": "33-holdings",
@@ -348,7 +354,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nNothing here yet. The trail fills itself the first time an agent acts — or declines to.\nSet up a recurring buy ›\nExport audit trail\nDisposals (CSV)"
+  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing.\nMomentum Scout · 01:20 AM\nTrading permission granted\nUp to $1,600 a day, expiring Tue Sep 08 2026.\nxorr · 12:55 AM\nView on BaseScan ›\nAll agents stopped\nPermission revoked on-chain. Open positions are untouched.\nxorr · 12:53 AM\nVie"
  },
  {
   "stem": "35-history",
@@ -366,7 +372,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Briefing\nLoaded 5:57 AM\nOnly what moved your book, and what each agent did about it.\nMACRO\n22m\n‘White hats’ take 4000 BTC from Liquid, ETFs see best week of 2026: Hodler’s Digest\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n6h\nPrediction markets inch closer to the Supreme Court: State of Crypto\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n8h\n"
+  "text": "Briefing\nLoaded 6:52 AM\nOnly what moved your book, and what each agent did about it.\nMACRO\n1h\n‘White hats’ take 4000 BTC from Liquid, ETFs see best inflows of 2026: Hodler’s Digest\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n7h\nPrediction markets inch closer to the Supreme Court: State of Crypto\nEverything is inside its limits. There is nothing for me to do.\nON-CHAIN\n9"
  },
  {
   "stem": "37-inbox",
@@ -375,7 +381,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nNothing to catch up on. The bot only writes here when something needs you.\nSee what it is allowed to do ›"
+  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nProposed nothing\nSOL is mid-range, so there is nothing worth proposing. · 01:20 AM\nTrading permission granted\nUp to $1,600 a day, expiring Tue Sep 08 2026. · 12:55 AM\nAll agents stopped\nPermission revoked on-chain. Open positions are untouched. · 12:53 AM\nHired Drawdown Guard\nCuts risk when the book blee"
  },
  {
   "stem": "38-safety",
@@ -384,7 +390,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Safety\nLIVE\nAgents are live\n0 agents can place orders inside your limits right now.\nNew orders\nStopped immediately\nStops and take-profits\nStay active — your risk is still covered\nOpen positions\nLeft exactly as they are\nYOUR WALLET\nNo Basename\n0x95A0b368588713011a15f4b1041423f31B08e615\nTHE BOT'S KEY\nNo Basename\n0xe992FE56589d1111d0b7Bb7c4Ca3946d4d53E403\nCan trade inside your limits. Cannot withdraw"
+  "text": "Safety\nLIVE\nAgents are live\n1 agents can place orders inside your limits right now.\nNew orders\nStopped immediately\nStops and take-profits\nStay active — your risk is still covered\nOpen positions\nLeft exactly as they are\nYOUR WALLET\nNo Basename\n0x95A0b368588713011a15f4b1041423f31B08e615\nTHE BOT'S KEY\nNo Basename\n0xC38f38f45463f77bD823FebE16b15714Eb98c8A5\nCan trade inside your limits. Cannot withdraw"
  },
  {
   "stem": "39-settings",
@@ -407,12 +413,10 @@
  {
   "stem": "41-alerts-new",
   "route": "/alerts/new",
-  "ok": false,
+  "ok": true,
   "errors": [],
   "network": [],
-  "content": [
-   "missing /Price|Agent|Risk/"
-  ],
+  "content": [],
   "text": "New alert\nAlerts interrupt you. Circuit breakers stop the bot. This creates the first kind.\nSYMBOL\nABOVE\nThe executor watches this, not your phone — so it still fires with the app closed. It notifies once, then turns itself off.\nAlert me when WETH is above $95"
  },
  {

@@ -43,6 +43,25 @@ export const TOKENS: Record<string, { address: Address; decimals: number }> = {
   ),
 };
 
+/**
+ * A symbol as the registry spells it, from however the caller spelled it.
+ *
+ * Tokenized equities carry a lowercase suffix — `NVDAc`, `TSLAc` — and the routes normalised
+ * their inputs with `.toUpperCase()`. `NVDAc` became `NVDAC`, which is not a key in `TOKENS`, so
+ * **every equity quote failed**: `/swap/quote?out=NVDAc` answered `502 No route for USDC ->
+ * NVDAC`, and the order ticket for the entire stocks track — one of the product's headline
+ * claims — could not price a single trade. The crypto symbols are already all-caps, so uppercase
+ * normalisation looked correct everywhere anyone tested it.
+ *
+ * Case-insensitive lookup against the registry's own spelling, so `nvdac`, `NVDAC` and `NVDAc`
+ * all resolve, and an unknown symbol comes back unchanged for the caller's own error to report.
+ */
+const CANONICAL = new Map(Object.keys(TOKENS).map((k) => [k.toUpperCase(), k]));
+
+export function canonicalSymbol(raw: string): string {
+  return CANONICAL.get(raw.trim().toUpperCase()) ?? raw.trim();
+}
+
 export type SwapQuote = {
   inSymbol: string;
   outSymbol: string;

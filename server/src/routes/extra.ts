@@ -12,7 +12,7 @@ import { TONE_INSTRUCTIONS, type ToneId } from '../bot/tone.js';
 import { briefing } from '../news/feed.js';
 import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
-import { quote } from '../venues/oneinch.js';
+import { quote, canonicalSymbol } from '../venues/oneinch.js';
 import { requireUser } from '../auth/middleware.js';
 import { decide } from '../graph/decide.js';
 import { health as graphHealth, dailySpendFor, spendsFor } from '../graph/client.js';
@@ -260,8 +260,10 @@ extra.get('/swap/quote', async (c) => {
   requireUser(c);
   try {
     const q = await quote({
-      inSymbol: (c.req.query('in') ?? 'ETH').toUpperCase(),
-      outSymbol: (c.req.query('out') ?? 'USDC').toUpperCase(),
+      // Not `.toUpperCase()`: tokenized equities are `NVDAc`, `TSLAc`, and uppercasing them
+      // produced a symbol the registry has never heard of — every equity quote 502'd.
+      inSymbol: canonicalSymbol(c.req.query('in') ?? 'ETH'),
+      outSymbol: canonicalSymbol(c.req.query('out') ?? 'USDC'),
       amount: Number(c.req.query('amount') ?? 1),
     });
     return c.json(q);

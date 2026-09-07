@@ -15,7 +15,7 @@ import {
   SELF_SIZING_KINDS,
   type StrategyRow,
 } from '../executor/run.js';
-import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
+import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { ADDRESSES, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
 import { basenameOf } from '../evm/basename.js';
@@ -393,7 +393,7 @@ const StrategyInput = z.object({
    */
   symbol: z
     .string()
-    .refine((v) => v.toUpperCase() in TOKENS || v in TOKENS, {
+    .refine((v) => canonicalSymbol(v) in TOKENS, {
       message: `not tradable on this chain — one of: ${Object.keys(TOKENS).join(', ')}`,
     }),
   params: z.record(z.string(), z.unknown()).default({}),
@@ -531,7 +531,8 @@ const OrderInput = z.object({
 routes.post('/orders', async (c) => {
   const w = await requireWallet(c);
   const body = OrderInput.parse(await c.req.json());
-  const symbol = body.symbol.toUpperCase();
+  // Equities are `NVDAc`/`TSLAc`; uppercasing loses the suffix and the venue lookup misses.
+  const symbol = canonicalSymbol(body.symbol);
 
   if (!VENUE_TOKENS[symbol]) {
     return c.json(

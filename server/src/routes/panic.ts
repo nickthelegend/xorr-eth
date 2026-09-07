@@ -26,7 +26,7 @@ import { one, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { holdings } from '../evm/balances.js';
 import { closeAsDelegate, readPolicy, waitForTx } from '../evm/delegation.js';
-import { buildSwap, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
+import { buildSwap, SLIPPAGE, TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { explorerTx } from '../evm/chains.js';
 import { applyFill } from '../positions/index.js';
@@ -276,7 +276,8 @@ export async function closeHolding(params: {
 }): Promise<{ status: number; body: Record<string, unknown> }> {
   const { wallet: w, fraction, actor } = params;
   const owner = w.address as Address;
-  const symbol = params.symbol.toUpperCase();
+  // `NVDAc` uppercased is not a token anyone can flatten.
+  const symbol = canonicalSymbol(params.symbol);
 
   const policy = await readPolicy(owner);
   if (!policy || policy.revoked || policy.expiresAt <= Date.now()) {
