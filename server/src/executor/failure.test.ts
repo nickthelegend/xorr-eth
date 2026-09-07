@@ -6,7 +6,7 @@
  * user nothing about whether their money is safe or their limits worked.
  */
 import { describe, expect, it } from 'vitest';
-import { humanFailure } from './failure.js';
+import { humanFailure, isTransient } from './failure.js';
 
 describe('revert reasons, in plain language', () => {
   it('names the daily cap when the cap is what stopped it', () => {
@@ -73,5 +73,57 @@ describe('the router error the deployed venue actually reverts with', () => {
     // Selectors are matched exactly; a prefix collision here would blame the wrong party.
     expect(humanFailure('reverted with the following signature: 0x430f7460')).toContain('revoked');
     expect(humanFailure('reverted with the following signature: 0x3e814127')).toContain('cap');
+  });
+});
+
+describe('a lost run and a refused one are not the same thing', () => {
+  /*
+   * `period_key` is UNIQUE, so a FAILED row consumes that period permanently. A user whose daily
+   * buy hit a five-second RPC timeout silently lost the day, and the only trace was a `failed` row
+   * nothing ever revisited.
+   *
+   * The classification is conservative in one direction only: a wrong "transient" costs a wasted
+   * retry, a wrong "permanent" costs a user a trade they asked for.
+   */
+  it('releases the period for a failure that obtained no answer', () => {
+    for (const e of [
+      'fetch failed',
+      'The request timed out after 5000ms',
+      'connect ETIMEDOUT 10.0.0.1:443',
+      'socket hang up',
+      'HTTP 503 from upstream',
+      'HTTP 429 rate limit exceeded',
+      'nonce too low',
+    ]) {
+      expect(isTransient(e), `${e} should be retryable`).toBe(true);
+    }
+  });
+
+  it('keeps the period for anything the contract or the venue refused', () => {
+    for (const e of [
+      'The contract function "spend" reverted with the following signature: 0x430f7460', // PolicyRevoked
+      'DailyCapExceeded(1000, 200)',
+      'VenueNotAllowed(0xdead)',
+      'PolicyExpired()',
+      'NotDelegate()',
+      'execution reverted: TF',
+      'No route for USDC -> NOTATOKEN',
+      'VenueCallFailed()',
+    ]) {
+      expect(isTransient(e), `${e} must NOT be retried`).toBe(false);
+    }
+  });
+
+  it('treats a price move as a real answer, not weather', () => {
+    // Retrying inside one tick is how a bot chases a moving price.
+    expect(isTransient('ReturnAmountIsNotEnough(19833510231696141, 19900000000000000)')).toBe(false);
+    expect(isTransient('The price moved more than your slippage limit')).toBe(false);
+  });
+
+  it('does not release on a bare unknown error', () => {
+    // Unknown means unknown. Releasing a claim on a cause nobody has classified is how a
+    // double-buy gets invented.
+    expect(isTransient('something went wrong')).toBe(false);
+    expect(isTransient('')).toBe(false);
   });
 });

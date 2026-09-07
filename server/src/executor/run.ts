@@ -20,12 +20,12 @@ import { erc20Abi, formatUnits } from 'viem';
 import { publicClient } from '../evm/client.js';
 import { gasStatus } from '../evm/gas.js';
 import { explorerTx, ADDRESSES } from '../evm/chains.js';
-import { buildSwap, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
+import { buildSwap, quote, slippageFor, SLIPPAGE, TOKENS } from '../venues/oneinch.js';
 import { buildAquaFill } from '../venues/aqua.js';
 import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
-import { humanFailure } from './failure.js';
+import { humanFailure, isTransient } from './failure.js';
 import { priceOf } from '../market/prices.js';
 import { send } from '../notifications/push.js';
 import { PLANNERS, observationFor, type TradeIntent } from './kinds/index.js';
@@ -376,6 +376,15 @@ async function runStrategyInner(
   }
 
   // ── 3. Execute on chain. ──
+  /**
+   * Has anything been broadcast yet?
+   *
+   * Declared outside the try so the catch can read it. It is the difference between a run that can
+   * be safely retried and one that must never be: everything before the write is a read, a quote or
+   * a simulation, and none of that leaves a trace on chain.
+   */
+  let sent = false;
+
   try {
     const owner = ownerAddress;
 
@@ -625,6 +634,21 @@ async function runStrategyInner(
             slippage: SLIPPAGE.scheduled / 100,
           }).catch(() => undefined);
 
+    /*
+     * Ask what this trade costs the pool before deciding what tolerance it needs.
+     *
+     * One extra quote on the settlement path, and it buys the only number that can tell a thin
+     * pair from a deep one. Failure is not fatal: with no quote the slippage falls back to the
+     * urgency constant, which is exactly the behaviour that existed before.
+     */
+    const quoted = aqua
+      ? null
+      : await quote({
+          inSymbol: intent.inSymbol,
+          outSymbol: intent.outSymbol,
+          amount: intent.amountIn,
+        }).catch(() => null);
+
     const swap = aqua
       ? { to: aqua.venue, data: aqua.data }
       : intent.direct
@@ -640,13 +664,36 @@ async function runStrategyInner(
           amountRaw: intent.amountInRaw,
           from: DELEGATION_FROM,
           receiver: owner,
-          // A risk-reducing close gets more room than a scheduled buy. See `SLIPPAGE`.
-          slippagePct: isCloseIntent(intent) ? SLIPPAGE.stop : SLIPPAGE.scheduled,
+          /*
+           * Urgency sets the floor; the pool sets the rest.
+           *
+           * A risk-reducing close gets more room than a scheduled buy — see `SLIPPAGE` — but those
+           * constants know nothing about the pair being traded. On a thin pool a $60 order can move
+           * the price further than the ceiling allows, and the router then refuses at a price its
+           * own quote had already predicted. `slippageFor` widens the ceiling by the impact the
+           * quote reports, with a cap: a quote predicting several percent is saying the size is
+           * wrong for the pool, and accepting that is paying for your own market impact.
+           */
+          slippagePct: slippageFor(
+            isCloseIntent(intent) ? SLIPPAGE.stop : SLIPPAGE.scheduled,
+            quoted?.priceImpactPct ?? null,
+          ),
         });
 
     // A direct leg is never a close: it puts capital to work rather than taking it off the table,
     // so it spends against the cap like any other outflow.
     const isClose = !intent.direct && intent.outSymbol === 'USDC';
+
+    /*
+     * From here on the period claim can never be released.
+     *
+     * `sent` flips before the write, not after, because the dangerous case is a transaction that
+     * WAS broadcast and whose receipt we then failed to read. Releasing the claim there would let
+     * the next tick place the same order again — the exact double-buy the unique `period_key`
+     * exists to prevent. Erring the other way costs a user one missed run; erring this way costs
+     * them a duplicate trade.
+     */
+    sent = true;
 
     // Read before the transaction so the delta afterwards is the fill and nothing else.
     const balanceBefore = intent.direct
@@ -822,6 +869,34 @@ async function runStrategyInner(
     return { status: 'filled', runId, signature, units: filledUnits, price };
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
+
+    /*
+     * A run that never reached the chain, and failed for a reason that will not recur, releases its
+     * period so the next tick can try again.
+     *
+     * `strategy_runs.period_key` is UNIQUE — that is what makes a retry, a restart and two
+     * schedulers racing all safe. It also means a FAILED row consumes the period permanently: a
+     * user whose daily buy hit a five-second RPC timeout silently lost that day, and the only trace
+     * was a `failed` row nothing ever revisits.
+     *
+     * Two conditions, both required. Nothing may have been sent — see `sent` above. And the cause
+     * must be transient: a policy refusal, a revoked permission or a spent cap will fail again in
+     * exactly the same way, and re-running them is noise plus gas. Deleting the row is the release,
+     * because the uniqueness IS the claim.
+     */
+    if (!sent && isTransient(error)) {
+      await query(`DELETE FROM strategy_runs WHERE id = $1`, [runId]).catch(() => undefined);
+      await append({
+        walletId,
+        agent: 'xorr',
+        action: `Retrying ${strategy.label}`,
+        detail: `${humanFailure(error)} Nothing was placed and nothing reached the chain, so this run will be tried again.`,
+        kind: 'block',
+        payload: { runId, strategyId: strategy.id, raw: error, released: true },
+      }).catch(() => undefined);
+      return { status: 'failed', runId, error: humanFailure(error), raw: error };
+    }
+
     await tx(async (client) => {
       await client.query(
         `UPDATE strategy_runs SET status='failed', error=$2, finished_at=now() WHERE id=$1`,

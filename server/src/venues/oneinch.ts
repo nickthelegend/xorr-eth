@@ -131,6 +131,30 @@ export const SLIPPAGE = {
   stop: 1,
   panic: 2,
 } as const;
+
+/**
+ * The ceiling above, widened by what the quote itself says this trade will cost.
+ *
+ * The three constants are right about URGENCY and know nothing about the POOL. A 0.3% ceiling is
+ * generous on WETH/USDC and impossible on a thin pair where a $60 order moves the price 0.8% on its
+ * own — and the failure is `ReturnAmountIsNotEnough`, a refusal to trade at a price the quote had
+ * already predicted. The router was told the answer and then told it was unacceptable.
+ *
+ * So the floor stays the urgency ceiling, and anything the quote already predicts is added to it
+ * with a margin. `priceImpactPct` is measured against an independent mid, so it is the pool's cost
+ * and not the market's drift.
+ *
+ * Capped, because a quote predicting several percent of impact is telling you the size is wrong for
+ * the pool, and widening the tolerance to accept it is how a bot pays for its own market impact.
+ * Beyond the cap the trade should fail and say why.
+ */
+const IMPACT_MARGIN = 1.5;
+const MAX_SLIPPAGE_PCT = 3;
+
+export function slippageFor(base: number, priceImpactPct: number | null): number {
+  if (priceImpactPct === null || !Number.isFinite(priceImpactPct) || priceImpactPct <= 0) return base;
+  return Math.min(Math.max(base, priceImpactPct * IMPACT_MARGIN), MAX_SLIPPAGE_PCT);
+}
 type QuoteResponse = {
   dstAmount: string;
   protocols?: { name: string }[][][];

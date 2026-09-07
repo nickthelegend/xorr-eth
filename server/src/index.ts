@@ -14,6 +14,7 @@ import { ops } from './routes/ops.js';
 import { catchup } from './routes/catchup.js';
 import { privyRoutes } from './routes/privy.js';
 import { idempotency } from './http/idempotency.js';
+import { rateLimit } from './http/rate-limit.js';
 import { requestId, currentRequestId, log } from './http/request-id.js';
 import { startScheduler } from './executor/scheduler.js';
 import { inFlightRuns } from './executor/run.js';
@@ -167,6 +168,15 @@ app.use('*', authMiddleware);
  * state-changing request can opt in with a header rather than each handler reimplementing it.
  */
 app.use('*', idempotency);
+
+/*
+ * After auth, because the limit is per identity and auth is what resolves one.
+ *
+ * The executor holds one 1inch key, one CoinGecko tier and one delegate key, and nothing bounded
+ * how fast a single caller could spend them. The scheduler competes for the same quota, so the
+ * first thing an unbounded loop would break is the trading — silently, while the app looked fine.
+ */
+app.use('*', rateLimit);
 
 app.route('/', routes);
 app.route('/', agentSurface);

@@ -102,3 +102,35 @@ export function humanFailure(error: string): string {
     return 'The network was congested and the fee was too low to land.';
   return 'The transaction did not go through, so nothing was placed.';
 }
+
+/**
+ * Will this error happen again for the same reason, or was it weather?
+ *
+ * `strategy_runs.period_key` is UNIQUE, which is what makes a retry, a restart and two schedulers
+ * racing all safe — and it also means a FAILED row consumes that period permanently. A user whose
+ * daily buy hit a five-second RPC timeout silently lost the day, with a `failed` row nobody ever
+ * revisited as the only trace.
+ *
+ * So a run that never reached the chain and failed for a passing reason releases its claim. The
+ * classification has to be conservative in one direction only: calling something transient that is
+ * really permanent costs a wasted retry; calling something permanent that was really transient
+ * costs a user a trade they asked for.
+ *
+ * Everything the CONTRACT refuses is permanent by definition — a revoked permission, a spent cap,
+ * a venue not on the allowlist and an expired policy will all refuse identically on the next tick.
+ * A price that moved past the slippage limit is deliberately permanent too: it is a real market
+ * answer, and hammering it inside one tick is how a bot chases a moving price.
+ */
+export function isTransient(error: string): boolean {
+  const e = error.toLowerCase();
+
+  // The contract's own refusals, and the venue's. Real answers, not failures to get one.
+  if (/notdelegate|policyrevoked|policyexpired|venuenotallowed|dailycapexceeded|zeroamount/.test(e)) return false;
+  if (/returnamountisnotenough|slippage|insufficient|exceeds the balance|transfer amount exceeds/.test(e)) return false;
+  if (/venuecallfailed|no route|not tradable|cannot fill on|reverted/.test(e)) return false;
+
+  // Nothing was obtained, rather than something being refused.
+  return /timeout|timed out|did not answer|econnreset|econnrefused|etimedout|enotfound|socket hang up|network|fetch failed|502|503|504|429|rate limit|nonce|replacement transaction|upstream/.test(
+    e,
+  );
+}
