@@ -398,11 +398,40 @@ export function warmMarketCache(): void {
         // Leave it pending; the next sweep tries again.
       }
     }
-    if (pending.size > 0) setTimeout(() => void sweep(), WARM_RETRY_MS).unref?.();
+    if (pending.size > 0) {
+      setTimeout(() => void sweep(), WARM_RETRY_MS).unref?.();
+      return;
+    }
+    /*
+     * And then do it again, forever.
+     *
+     * The sweep used to stop the moment everything had landed, which reads as finished and is
+     * not: `STALE_TOLERANCE_MS` is ten minutes, so every warmed URL falls out of tolerance shortly
+     * after and is cold again. Nothing re-warmed it, so the next person to open a market list got
+     * a cold fetch behind a rate limiter — for data the server had held twenty minutes earlier.
+     *
+     * Measured on the deployed executor: up for 2,546 seconds, and only four of nine symbols had
+     * a sparkline. Polling it by hand brought all nine back within a hundred seconds, which is the
+     * proof that nothing was wrong except that no one was asking.
+     *
+     * A pass every five minutes stays inside the ten-minute tolerance with room for the pass
+     * itself, and skips anything fetched in the last `FRESH_MS` — so a busy deployment does almost
+     * no extra work and an idle one never goes cold.
+     */
+    setTimeout(() => {
+      for (const url of urls) pending.add(url);
+      void sweep();
+    }, REWARM_MS).unref?.();
   };
   void sweep();
   keepPricesFresh();
 }
+
+/**
+ * How long between full re-warms. Must stay under `STALE_TOLERANCE_MS` by more than one pass takes,
+ * or the cache is cold again before the sweep that refills it has finished.
+ */
+const REWARM_MS = 5 * 60_000;
 
 /** How long to wait before another go at whatever has not warmed yet. */
 const WARM_RETRY_MS = 20_000;

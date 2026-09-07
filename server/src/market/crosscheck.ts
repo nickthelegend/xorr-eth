@@ -37,6 +37,20 @@ export type CrossCheck = {
   /** Derived from the pools a fill would actually touch. */
   oneinch: number | null;
   spreadPct: number | null;
+  /**
+   * Were there actually two numbers to compare?
+   *
+   * `agree` answers "is there a warning to raise", which is the question the screens ask, and it
+   * is deliberately true when a source is missing — reporting a disagreement because one API was
+   * down would make an outage look like a data-integrity problem and train people to ignore the
+   * warning that matters.
+   *
+   * But `agree: true` alongside `oneinch: null` is, read on its own, a claim that two sources
+   * concurred when only one was ever asked. The note said so and the boolean did not, and a
+   * caller reading the field rather than the prose was misled. So the two questions get two
+   * fields: `compared` is whether a second opinion exists, `agree` is whether to say anything.
+   */
+  compared: boolean;
   agree: boolean;
   note: string;
 };
@@ -72,6 +86,7 @@ export async function crossCheck(symbol: string): Promise<CrossCheck> {
       coingecko: await priceOf(symbol, 8_000).catch(() => null),
       oneinch: null,
       spreadPct: null,
+      compared: false,
       agree: true,
       note: `${symbol} is not routable on Base, so there is no on-chain price to compare against.`,
     };
@@ -94,6 +109,7 @@ export async function crossCheck(symbol: string): Promise<CrossCheck> {
       coingecko,
       oneinch,
       spreadPct: null,
+      compared: false,
       agree: true,
       note:
         coingecko === null && oneinch === null
@@ -109,6 +125,7 @@ export async function crossCheck(symbol: string): Promise<CrossCheck> {
     coingecko,
     oneinch,
     spreadPct,
+    compared: true,
     agree,
     note: agree
       ? `Two independent sources within ${spreadPct.toFixed(2)}%.`
