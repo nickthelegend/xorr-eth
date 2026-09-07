@@ -161,7 +161,22 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
         if (!owner) skip('No wallet on this request.');
         const p = await readPolicy(owner);
         if (!p) throw new Error('No policy on chain for this wallet.');
-        return `${money(p.dailyCapUsd)}/day cap, ${money(p.remainingTodayUsd)} left today, expires ${new Date(p.expiresAt).toISOString().slice(0, 10)}, revoked=${p.revoked}`;
+        /*
+         * The permission has to name THIS executor, not merely exist.
+         *
+         * A grant to a delegate we are not is worth exactly nothing: `spend` compares the caller
+         * against the address the user signed for, so every run reverts and the only symptom is
+         * trades that never happen. It is the failure a rotated or regenerated key produces, and
+         * this check reported "pass" straight through it — cap, expiry and revoked all read fine
+         * on a policy that authorises a key nobody holds.
+         */
+        if (p.delegate.toLowerCase() !== delegatePublicKey.toLowerCase()) {
+          throw new Error(
+            `granted to ${p.delegate}, but this executor signs as ${delegatePublicKey} — ` +
+              'the bot cannot act on this permission. The user must grant again.',
+          );
+        }
+        return `${money(p.dailyCapUsd)}/day cap, ${money(p.remainingTodayUsd)} left today, expires ${new Date(p.expiresAt).toISOString().slice(0, 10)}, revoked=${p.revoked}, delegate matches`;
       },
     },
     {

@@ -30,7 +30,7 @@ import {
   size,
   space,
 } from '@/ui';
-import { killCta, killExplanation, killTitle } from '@/state/derived';
+import { delegateUnusable, killCta, killExplanation, killTitle } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { useAllowlist } from '@/wallet/allowlist';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
@@ -58,6 +58,15 @@ export default function Safety() {
   const cap = useStore((s) => s.cap);
   const recoveryBackedUp = useStore((s) => s.recoveryBackedUp);
   const [localError, setLocalError] = useState<string>();
+
+  /*
+   * A granted permission the bot cannot actually use.
+   *
+   * Not revoked, not expired, cap intact — and inert, because it names a delegate key the
+   * executor is not. The screen reported LIVE through exactly this, so it gets its own state
+   * rather than being folded into either of the two that already existed.
+   */
+  const unusable = delegateUnusable(delegation, killed);
 
   // "2 addresses" was typed in. The allowlist is real and persisted; read it.
   const { addresses } = useAllowlist();
@@ -98,17 +107,28 @@ export default function Safety() {
         : false;
       if (enrolled) {
         const res = await LocalAuthentication.authenticateAsync({
-          promptMessage: killed ? 'Resume your agents' : 'Stop all agents',
+          promptMessage: unusable
+            ? 'Reconnect your agents'
+            : killed
+              ? 'Resume your agents'
+              : 'Stop all agents',
         });
         if (!res.success) {
           setLocalError('Not confirmed — nothing changed.');
           return;
         }
       }
-      if (killed) await signGrant(cap, 86_400_000);
+      /*
+       * A disconnected permission is re-granted, not revoked.
+       *
+       * `unusable` means the grant names a key the executor does not hold. Revoking it — which is
+       * what "not killed, so the button stops things" used to do — would take the user from a
+       * permission that does not work to no permission at all, and call that progress.
+       */
+      if (killed || unusable) await signGrant(cap, 86_400_000);
       else await signRevoke();
       setDelegation(await repos.wallet.delegation());
-      setKilled(!killed);
+      setKilled(unusable ? false : !killed);
     } catch (e) {
       setLocalError(e instanceof Error ? e.message : String(e));
     }
@@ -144,19 +164,19 @@ export default function Safety() {
             width: DOT,
             height: DOT,
             borderRadius: radius.full,
-            backgroundColor: killed ? colors.ink30 : colors.up,
+            backgroundColor: unusable ? colors.down : killed ? colors.ink30 : colors.up,
           }}
         />
-        <Text variant="tagSm" color={killed ? colors.ink55 : colors.up}>
-          {killed ? 'Stopped' : 'Live'}
+        <Text variant="tagSm" color={unusable ? colors.down : killed ? colors.ink55 : colors.up}>
+          {unusable ? 'Disconnected' : killed ? 'Stopped' : 'Live'}
         </Text>
       </View>
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s16 }}>
-        {killTitle(killed)}
+        {killTitle(killed, unusable)}
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s8 }}>
-        {killExplanation(killed, hiredCount)}
+        {killExplanation(killed, hiredCount, unusable)}
       </Text>
 
       <Fill style={{ marginTop: space.s20 }}>
@@ -256,8 +276,8 @@ export default function Safety() {
       </Fill>
 
       <Button
-        label={killCta(killed)}
-        variant={killed ? 'primary' : 'destructive'}
+        label={killCta(killed, unusable)}
+        variant={killed || unusable ? 'primary' : 'destructive'}
         height={size.buttonLg}
         loading={busy}
         onPress={toggle}

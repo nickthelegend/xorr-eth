@@ -238,6 +238,33 @@ describe('kill switch — screen 20', () => {
     );
     expect(d.killExplanation(true, 3)).toContain('Open positions are untouched');
   });
+
+  /*
+   * The third state. A grant that names a delegate the executor is not is unusable, and the
+   * screen reported it as "Agents are live — 1 agents can place orders inside your limits right
+   * now." while not one order could be placed.
+   */
+  it('a grant to a key the executor does not hold is not "live"', () => {
+    expect(d.delegateUnusable({ delegateIsCurrent: false }, false)).toBe(true);
+    expect(d.killTitle(false, true)).toBe('Agents cannot trade');
+    expect(d.killCta(false, true)).toBe('Reconnect agents');
+    expect(d.killExplanation(false, 1, true)).toContain('different bot key');
+    // And it must not read as a working permission.
+    expect(d.killExplanation(false, 1, true)).not.toContain('can place orders');
+  });
+
+  it('a stopped switch stays stopped — the two states do not collide', () => {
+    // Killed wins: the user stopped it, and that is not a connection fault.
+    expect(d.delegateUnusable({ delegateIsCurrent: false }, true)).toBe(false);
+  });
+
+  it('an executor too old to answer is not accused of being broken', () => {
+    // Undefined is "unknown", not "wrong" — claiming a fault we have not seen is its own bug.
+    expect(d.delegateUnusable({}, false)).toBe(false);
+    expect(d.delegateUnusable(null, false)).toBe(false);
+    expect(d.delegateUnusable(undefined, false)).toBe(false);
+    expect(d.delegateUnusable({ delegateIsCurrent: true }, false)).toBe(false);
+  });
 });
 
 describe('activity — screen 15', () => {

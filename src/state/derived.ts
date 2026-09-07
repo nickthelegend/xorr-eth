@@ -249,15 +249,43 @@ export function leaderboardBarPct(pnlValue: number, rows: readonly { pnl30d: num
 
 // ── Kill switch (screen 20) ──────────────────────────────────────────────────
 
-export function killTitle(killed: boolean): string {
+/**
+ * There is a third state, and leaving it out was a lie on the one screen that must not tell one.
+ *
+ * A permission can be perfectly valid — unrevoked, unexpired, cap intact — and still name a
+ * delegate the executor is not. `spend` compares the caller against the address the user signed
+ * for, so such a grant buys the bot nothing: every run reverts, and the only visible symptom is
+ * trades that quietly never happen.
+ *
+ * Observed here: a wallet held a live grant to `0xe992FE…` while the executor signed as
+ * `0xC38f38f4…`, and this screen said "Agents are live — 1 agents can place orders inside your
+ * limits right now." Both halves were false.
+ *
+ * `delegateIsCurrent` is undefined against a server that predates the field. Undefined is not
+ * false: an older executor cannot answer the question, and claiming a fault we have not observed
+ * is its own kind of wrong. Only an explicit `false` counts.
+ */
+export function delegateUnusable(
+  delegation: { delegateIsCurrent?: boolean } | null | undefined,
+  killed: boolean,
+): boolean {
+  return !killed && delegation?.delegateIsCurrent === false;
+}
+
+export function killTitle(killed: boolean, unusable = false): string {
+  if (unusable) return 'Agents cannot trade';
   return killed ? 'All agents stopped' : 'Agents are live';
 }
-export function killExplanation(killed: boolean, liveAgents: number): string {
+export function killExplanation(killed: boolean, liveAgents: number, unusable = false): string {
+  if (unusable) {
+    return 'Your permission names a different bot key than the one running, so nothing can be placed. Grant again to reconnect. Your funds are untouched.';
+  }
   return killed
     ? 'Nothing will be placed until you resume. Open positions are untouched.'
     : `${liveAgents} agents can place orders inside your limits right now.`;
 }
-export function killCta(killed: boolean): string {
+export function killCta(killed: boolean, unusable = false): string {
+  if (unusable) return 'Reconnect agents';
   return killed ? 'Resume agents' : 'Stop all agents';
 }
 

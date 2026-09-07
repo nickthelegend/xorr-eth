@@ -225,6 +225,15 @@ export type Delegation = {
    */
   ownerName?: string | null;
   delegateName?: string | null;
+  /**
+   * Is the granted delegate the key the executor actually signs with?
+   *
+   * A permission granted to a different key is unusable — `spend` checks the caller against the
+   * address the user signed for — but it reads as perfectly healthy: not revoked, cap intact,
+   * unexpired. The screen said LIVE while the bot could not place an order, which is the one
+   * mistake this screen must never make.
+   */
+  delegateIsCurrent?: boolean;
   /** screen 4 "Daily Spend Cap", $200–$5,000 step $200. Enforced outside the client. */
   dailyCapUsd: number;
   /** screen 4 "Run For" -> a real expiry, unix ms. */

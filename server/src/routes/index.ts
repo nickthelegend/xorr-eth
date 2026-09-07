@@ -183,6 +183,16 @@ routes.get('/delegation', async (c) => {
   return c.json({
     delegatePubkey: policy.delegate,
     delegateName,
+    /*
+     * Does this permission name the key we sign with?
+     *
+     * If it does not, the grant is inert: `spend` compares `msg.sender` to the delegate the user
+     * signed for, so every run reverts and nothing else about the policy looks wrong. The client
+     * cannot work this out on its own — it never sees the executor's key — so it is answered here
+     * rather than left to a screen that would otherwise report LIVE for a bot that cannot trade.
+     */
+    delegateIsCurrent:
+      policy.delegate.toLowerCase() === delegatePublicKey.toLowerCase(),
     ownerPubkey: w.address,
     ownerName,
     dailyCapUsd: policy.dailyCapUsd,
