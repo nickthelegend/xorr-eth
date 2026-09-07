@@ -33,6 +33,39 @@ curl -s "localhost:8788/verify?owner=0xYourAddress" | jq '.passed, .failed'
   <img src="docs/screens/32e-flatten.png" width="240" alt="Sell everything" />
 </p>
 
+## Two locks, and you can watch one of them say no
+
+`XorrDelegation` bounds what the **bot** may do. It says nothing about what your own wallet can be
+asked to sign — a compromised bundle or a bug in our code could put a transfer to an attacker in
+front of you, and the delegation would not care, because it governs the delegate.
+
+So there is a second lock at the layer above, enforced by the party that holds the key. Both are
+re-checked live by `/verify`:
+
+```
+PASS  privy-policy    4 rules over 4 destinations, owned by key quorum zixx49ik3ngslu9oay54q4li
+PASS  privy-refusal   refused: "RPC request denied due to policy violation"
+```
+
+The second line is a transaction actually being turned down. Holding the app id, the app secret
+and the wallet id, an `eth_sendTransaction` to an address the policy does not name comes back
+
+```
+RPC request denied due to policy violation
+```
+
+while the same call to `XorrDelegation` passes the policy and reverts on chain for its own
+reasons. And because a key quorum owns the policy, an unsigned attempt to add a rule allowing
+`0x…dead` is refused outright:
+
+```
+401 Missing `privy-authorization-signature` header
+```
+
+Compromising this server does not widen what your wallet may do. `/safety` names both locks side
+by side, and says plainly that where the policy is not attached to a user's embedded wallet it is
+because Privy makes the wallet's **owner** authorise that — and the owner is the user, not us.
+
 ## The idea in one paragraph
 
 Handing a bot your money is a trust problem, not a trading problem. So the permission is the
@@ -74,7 +107,8 @@ Nothing in this repo is claimed to work in an environment where it was not run.
 
 | Sponsor | What it does here | Status |
 |---|---|---|
-| **Privy** | Auth + embedded wallets. The identity and the wallet that signs are one object, so there is no second account system — and the wallet Privy creates is the `owner` in the on-chain policy. | **Done.** Real login → real embedded wallet → real signed grant, revoke and approval |
+| **Privy — auth + wallets** | The identity and the wallet that signs are one object, so there is no second account system — and the wallet Privy creates is the `owner` in the on-chain policy. | **Done.** Real login → real embedded wallet → real signed grant, revoke and approval |
+| **Privy — policies + key quorums** | The second lock, one layer above the contract. A Privy **policy** limits where the wallet may send at all — the delegation contract, the tokens it may pull, the lending pool, nothing else — and Privy enforces it before a signature exists. The policy is owned by a Privy **key quorum**, so widening it needs a signature this server can produce and its app secret cannot. | **Done, and checkable.** `/verify` runs both live — see below |
 | **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. **The executor settles through it**: books are discovered from Aqua's own logs, quoted, and filled via `delegatedFillArgs` through the same delegation as every other trade. | **Done.** 15 fork tests, plus `live-aqua.ts` — 12 checks against a real book, tx `0x3bb021d6…`, real ERC-20 out of the maker's own wallet |
 | **1inch — Aggregator** | Swap routing and execution. The Route row names the protocols actually routed through. | **Done.** Real fills on a Base mainnet fork |
 | **1inch — SwapVM** | `XorrSwapVMBook` compiles the terms of a trade into SwapVM program bytecode — a deadline, a slippage floor, a fee, a salt — so the *rules* of the fill are enforced inside the VM rather than trusted to whoever submits it. | **Done.** 10 fork tests, including behavioural guards that prove the deadline really expires and the fee really costs |
