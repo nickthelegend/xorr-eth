@@ -79,13 +79,13 @@ names 13.
 
 | # | Task | Status |
 |---|---|---|
-| 1.1 | Add `BASE_ELFOMOFI` to `FORK_AMMS` in `server/src/venues/oneinch.ts:270`. Re-run a `dca` into `NVDAc` on the fork and require a filled status with a tx hash. | **NOT STARTED** |
-| 1.2 | If 1.1 alone does not fill, widen `FORK_AMMS` to the full protocol list from `/liquidity-sources` **minus** the private-market-maker sources that a fork cannot reproduce (the reason the allowlist exists — see the docblock at `oneinch.ts:259`). Name the excluded ones and why. | **NOT STARTED** |
-| 1.3 | Make `quote()` and `buildSwap()` ask the **same** question. Today a fork quotes a price it structurally cannot fill, which is a lie by construction for any token whose best route is outside the allowlist. Either apply `AMM_ONLY` to `quote()` too, or drop it from `buildSwap()` — but they must agree. | **NOT STARTED** |
-| 1.4 | Add `TF` to the selector/reason table in `server/src/executor/failure.ts`. It is currently unhandled, so a user sees "the transaction did not go through" for a routing failure that has a specific cause. | **NOT STARTED** |
-| 1.5 | Add a live test `server/src/equity-fill.live.test.ts` that buys and sells one tokenized equity end to end on the fork, asserting a tx hash and a balance change — the same shape as `live-aqua.ts`. | **NOT STARTED** |
-| 1.6 | Verify the equity **sell** path separately. `closePosition` pulls the asset being sold, and the approvals report shows every equity at allowance `0` — confirm the grant's `approvableTokens()` actually includes equities on a fork build, and that a sell is not silently blocked. | **NOT STARTED** |
-| 1.7 | Once fills work, re-run tier 7's entry and flatten on `NVDAc` and record both tx hashes in `docs/COMPLETION.md`. | **BLOCKED** by 1.1 |
+| 1.1 | Add `BASE_ELFOMOFI` to `FORK_AMMS`. **Tried, and it is not the fix.** With it in the list the revert changes from `TF` to `VenueCallFailed`: it is a solver whose off-chain state a fork cannot reproduce, which is the class the allowlist exists to exclude. Reverted, with the reason recorded in the code. | **DONE** (negative result) |
+| 1.2 | Widen the allowlist further. **Not needed — the obstacle is one layer down.** An AMM-only route DOES exist (`BASE_AERODROME_SLIPSTREAM`, USDC→ETH→NVDAc) and still cannot fill, because the token itself is not functional on a fork. See the gap list. | **DONE** (superseded) |
+| 1.3 | Make `quote()` and `buildSwap()` ask the same question. `AMM_ONLY` now applies to both, so a fork can no longer display a price from a route it would not take. On a real network the constant is empty and this is the unrestricted quote it always was. | **DONE** |
+| 1.4 | `TF` humanised — a bare revert string, not a selector, matched word-bounded because `TF` appears inside longer words and a substring match would blame routing for something else. | **DONE** |
+| 1.5 | Live equity fill test. | **BLOCKED** — cannot pass on a fork. `totalSupply()` on the equity tokens works on real Base and REVERTS on an anvil fork of the same block, so there is nothing to trade against. A test asserting a fill would be asserting something impossible here. |
+| 1.6 | Verify the equity sell path. | **BLOCKED** by the same cause — with no functional token there is nothing to hold or sell. The allowance-0 observation is a consequence, not the cause. |
+| 1.7 | Tier 7 entry + flatten on `NVDAc` with tx hashes. | **BLOCKED** — same root cause. Tier 7's logic is proven by 21 unit tests and by its entry reaching the venue with a real route and price; only the settlement is impossible here. |
 
 ---
 
@@ -113,13 +113,13 @@ route boundaries and not at the venue boundary, so every caller has to remember.
 
 | # | Task | Status |
 |---|---|---|
-| 3.1 | Canonicalise **inside** `quote()` and `buildSwap()` — `oneinch.ts:183-184` and `333-334` do raw `TOKENS[params.inSymbol]` lookups. Then no caller can get it wrong. | **NOT STARTED** |
-| 3.2 | `server/src/executor/run.ts:388` — `TOKENS[strategy.symbol === 'ETH' ? 'WETH' : strategy.symbol]` is a raw lookup on a stored value. Route through `canonicalSymbol`. | **NOT STARTED** |
-| 3.3 | `server/src/market/crosscheck.ts:82` — `TOKENS[symbol] ?? TOKENS[symbol.toUpperCase()]`. The fallback uppercases, so it can never resolve an equity. Replace with `canonicalSymbol`. | **NOT STARTED** |
-| 3.4 | `server/src/market/perp.ts:42` uppercases then keys `COINGECKO_IDS`, so an equity silently returns null rather than saying it has no perp. Make the refusal explicit. | **NOT STARTED** |
-| 3.5 | `server/src/fork-e2e.ts:92` — `TOKENS[SYMBOL] ?? STOCKS[SYMBOL]`, both raw. | **NOT STARTED** |
-| 3.6 | Add a test that walks **every** registered symbol through every public entry point (`/price/:symbol`, `/swap/quote`, `POST /orders`, `POST /strategies`, `/market/crosscheck`, `/perp/:symbol`) in three casings and asserts none 404s or misroutes. The existing `symbols.test.ts` covers the registry; this covers the boundaries. | **NOT STARTED** |
-| 3.7 | Decide and document the rule in one place: **crypto symbols are uppercase, equities carry a lowercase `c`, and no boundary may uppercase a caller's symbol.** Put it next to `canonicalSymbol` so the next person does not re-derive it. | **NOT STARTED** |
+| 3.1 | Canonicalised inside `quote()` and `buildSwap()`, and the returned quote names the registry spelling so anything reading it back resolves. | **DONE** |
+| 3.2 | Executor's lookup on a stored symbol now canonicalised. | **DONE** |
+| 3.3 | `crosscheck` fixed — its fallback uppercased, so it reported eight tradable assets as "not routable on Base". | **DONE** |
+| 3.4 | `perp` refuses equities explicitly instead of returning a bare null indistinguishable from an unknown symbol. | **DONE** |
+| 3.5 | `fork-e2e` canonicalised on both sides. | **DONE** |
+| 3.6 | `symbol-boundaries.test.ts` — every registered symbol through three casings, plus a guard that fails the build if a boundary module reintroduces `.toUpperCase()`. | **DONE** |
+| 3.7 | The rule written once, next to `canonicalSymbol`, with the two legitimate exceptions named. | **DONE** |
 | — | `canonicalSymbol` exists and is applied at `/swap/quote`, `POST /orders`, `POST /strategies`, panic-flatten and `/price/:symbol`. | **DONE** |
 | — | `stockKey` resolves the stocks registry case-insensitively. | **DONE** |
 
@@ -132,12 +132,12 @@ have already failed and thin in the places that have not yet.
 
 | # | Task | Status |
 |---|---|---|
-| 4.1 | **No retry on a transient venue failure.** A run that fails on a reverted fill is terminal for that period, and because `period_key` is unique it can never be retried — a user silently loses that day's buy to a transient RPC or routing hiccup. Add a bounded retry inside the run, distinguishing "the venue said no" (do not retry) from "the call did not complete" (retry). | **NOT STARTED** |
-| 4.2 | **Slippage is two constants.** `SLIPPAGE.scheduled` / `SLIPPAGE.stop` are fixed. A thin equity pool needs more room than WETH, and the failure mode of getting it wrong is `ReturnAmountIsNotEnough`. Derive it from the quote's own `priceImpactPct`, with the constants as a floor. | **NOT STARTED** |
-| 4.3 | **Simulate before spending gas.** `eth_call` the `spend` before sending it, so a revert is reported without a failed transaction on chain and without consuming the period claim. This alone would have turned every `TF` failure this week into a clean, explained skip. | **NOT STARTED** |
-| 4.4 | **Pending runs are never reconciled.** A run interrupted between claim and completion stays `pending` forever (observed once this week). Add a startup sweep that reconciles rows older than N minutes against the chain. | **NOT STARTED** |
-| 4.5 | Split `run.ts`. The planning, the policy gate, the venue selection and the settlement are four concerns in one file; the venue selection alone (Aqua vs SwapVM vs aggregator) is about to grow. | **NOT STARTED** |
-| 4.6 | Wire `XorrSwapVMBook` into the executor, mirroring `venues/aqua.ts`. It is deployed and has 10 fork tests, and the running executor never calls it — the README now says "Contract only". Needs a discovery path for shipped programs (`ProgramShipped` logs → `orderFor` → `delegatedFillArgs`). | **NOT STARTED** |
+| 4.1 | A run that never reached the chain and failed transiently releases its period. `sent` flips before the write, so a broadcast-but-unconfirmed run can never be released; an unclassified error is treated as permanent. | **DONE** |
+| 4.2 | `slippageFor` keeps the urgency ceiling as a floor and widens by the quote's own reported impact, capped at 3%. | **DONE** |
+| 4.3 | Pre-flight simulation. **Already existed** — `simulateContract` runs before `writeContract`, which is why every failure this week arrived as a clean revert and not a mined transaction. | **DONE** (pre-existing) |
+| 4.4 | Boot reconciliation. **Already existed and is wired.** Its conservative policy — close every interrupted run as failed and KEEP the period — is correct: `signature` is written only after the receipt, so a broadcast-but-unconfirmed run has none, and a refinement keyed on that column would have been a double-spend. Verified rather than changed. | **DONE** (pre-existing) |
+| 4.5 | Split `run.ts`. | **NOT STARTED** — deferred deliberately. Refactoring the money path late in a hackathon buys maintainability and risks correctness; the behavioural gaps above were worth more. |
+| 4.6 | Wire `XorrSwapVMBook` into the executor. | **NOT STARTED** — a `venues/aqua.ts`-sized module plus a live proof. The 1inch track already qualifies through Aqua, and the README states plainly that this is contract-only. |
 | — | Idempotent runs: `strategy_runs.period_key` unique, claim-by-insert. | **DONE** |
 | — | Graceful shutdown drains in-flight runs on SIGTERM. | **DONE** |
 | — | Cap exemption is decided per intent, not per kind (`reducesRiskOnly`), covering both dual-sided tiers. | **DONE** |
@@ -150,11 +150,11 @@ have already failed and thin in the places that have not yet.
 
 | # | Task | Status |
 |---|---|---|
-| 5.1 | **No rate limiting.** `server/src/index.ts` has request-id, CORS, idempotency and auth, and nothing bounds request volume. One agent key or one loop can exhaust the 1inch and CoinGecko quotas for every user. | **NOT STARTED** |
-| 5.2 | Split `server/src/routes/index.ts` (1097 lines) along the seams it already has: wallet, delegation, strategies, positions, pnl. | **NOT STARTED** |
-| 5.3 | Structured logging. `log()` exists in `http/request-id.ts`; use it consistently instead of bare `console.error`, so a failed run can be traced by request id. | **NOT STARTED** |
-| 5.4 | Add `/metrics` counters for the things that now matter: fills by venue, failures by selector, cache warmth, projection staleness. | **NOT STARTED** |
-| 5.5 | Migration `010` for anything Phase 1–4 adds; keep the numbered-file convention. | **NOT STARTED** |
+| 5.1 | Rate limiting, per identity rather than per IP (behind Railway every request shares one proxy address). Expensive routes get a tighter budget; `/health` is never limited, or the platform would restart the container under exactly the load the limiter exists for. | **DONE** |
+| 5.2 | Split `routes/index.ts`. | **NOT STARTED** — same reasoning as 4.5. |
+| 5.3 | Structured logging everywhere. | **NOT STARTED** — `log()` exists and is used in the paths that matter; a sweep of the rest is cosmetic next to the above. |
+| 5.4 | Richer `/metrics`. | **NOT STARTED** — `/metrics` already reports runs, failure rate, strategies and alerts. |
+| 5.5 | Migration `010`. | **NOT NEEDED** — nothing in Phases 1–5 changed the schema. |
 | — | Real persisted Postgres; survived a full fork rebuild with the audit trail intact at 66 entries. | **DONE** |
 | — | Hash-chained append-only audit log with a per-wallet advisory lock and a unique index. | **DONE** |
 | — | Scoped agent keys (`read` / `trade:open` / `trade:close` / `admin`), sha256-only, revocable; `admin` does not imply trade scopes. | **DONE** |
@@ -167,9 +167,9 @@ have already failed and thin in the places that have not yet.
 
 | # | Task | Status |
 |---|---|---|
-| 6.1 | Add a `/verify` check that a tokenized equity can actually be **filled**, not merely priced. The current `equities` check asserts the contracts have code, which passed throughout the week fills were broken. | **NOT STARTED** |
+| 6.1 | The `equities` check now calls `totalSupply()` instead of measuring code length. It had reported "8 of 8 have code" for a week in which not one could be traded — these tokens carry a single byte and answer anyway on real Base. It now SKIPS on a fork with the real reason. | **DONE** |
 | 6.2 | Add a `/verify` check that the second Graph source is live, so the composability claim is checkable rather than asserted. | **BLOCKED** by 2.2/2.3 |
-| 6.3 | Add a `/verify` check for the earnings calendar: it should report the next projected date and its margin for one symbol, proving tier 7's data source is live. | **NOT STARTED** |
+| 6.3 | `earnings-calendar` check added — reports the filing count, last report, projected next date and the company's own cadence margin, live from SEC EDGAR. | **DONE** |
 | 6.4 | Re-run the 54-route screenshot sweep and the 47-route browser sweep after Phase 1, and record the result. | **NOT STARTED** |
 | — | `/verify` covers 18 claims; fork 18/0/0, Sepolia 15/1/2. | **DONE** |
 | — | `audit` and `audit-chain` are separate checks, so tampering and a fork are not reported as the same thing. | **DONE** |

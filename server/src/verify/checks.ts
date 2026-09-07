@@ -26,6 +26,7 @@ import { priceOf } from '../market/prices.js';
 import { quote } from '../venues/oneinch.js';
 import { health as graphHealth } from '../graph/client.js';
 import { STOCKS } from '../venues/stocks.js';
+import { earningsCalendar } from '../market/edgar.js';
 import {
   ensurePolicy as ensurePrivyPolicy,
   allowedDestinations as privyAllowedDestinations,
@@ -437,6 +438,29 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
         }
         return `${live.length} of ${entries.length} answer totalSupply(): ${live.map((s) => s.symbol).join(', ')}`;
       },
+    },
+    {
+      id: 'earnings-calendar',
+      claim: 'Tier 7 dates come from the regulator, and a projection says it is one.',
+      how: "SEC EDGAR 8-K Item 2.02 filings for NVDA, via data.sec.gov — no key, no vendor",
+      run: async () => {
+        const cal = await earningsCalendar('NVDAc');
+        if (!cal) throw new Error('NVDAc did not resolve to a CIK in the SEC ticker file.');
+        if (cal.reported.length === 0) throw new Error('No Item 2.02 filings found.');
+        const last = new Date(cal.reported[0]!).toISOString().slice(0, 10);
+        if (cal.nextAt === null) {
+          // A real answer: the cadence is not one this code claims to read, so it projects nothing.
+          return `${cal.reported.length} filings, last ${last}, cadence not quarterly — no projection made`;
+        }
+        const next = new Date(cal.nextAt).toISOString().slice(0, 10);
+        /*
+         * The margin is reported because it is the whole difference between a date and a guess.
+         * It is the company's OWN cadence spread, not a number anyone picked: NVIDIA runs ±7 days,
+         * Apple ±0.
+         */
+        return `${cal.reported.length} filings, last ${last}, next ~${next} ±${cal.errorDays}d (projected from a ${cal.medianGapDays}-day median)`;
+      },
+      timeoutMs: 20_000,
     },
     {
       id: 'gas',
