@@ -251,3 +251,25 @@ export async function fetchStockQuotes(): Promise<Record<string, StockQuote>> {
   const rows = await getJson<StockQuote[]>('/market/stocks', 30_000);
   return Object.fromEntries(rows.map((r) => [r.symbol, r]));
 }
+
+
+/**
+ * A day of closes per symbol, for the 90×30 glyph in a market row.
+ *
+ * One request for the whole screen. Nine rows asking `/market/ohlc` individually would be nine
+ * round trips for data the server already holds in one cache, and the cost of a sparkline is
+ * entirely in the requests.
+ *
+ * Symbols still warming are absent from the response, and absent is what the row renders — no
+ * glyph. `Sparkline` draws nothing below two points, which is the honest picture; a flat line
+ * would claim the price did not move.
+ */
+export async function fetchSparklines(symbols: string[]): Promise<Record<string, number[]>> {
+  const priced = await pricedSymbols();
+  const known = priced.size === 0 ? symbols : symbols.filter((s) => priced.has(s));
+  if (known.length === 0) return {};
+  return getJson<Record<string, number[]>>(
+    `/market/sparklines?symbols=${encodeURIComponent(known.join(','))}`,
+    60_000,
+  );
+}

@@ -15,6 +15,7 @@ export const PUBLIC_PATHS: readonly string[] = [
   '/verify',
   '/basename',
   '/market/quotes',
+  '/market/sparklines',
   '/market/ohlc',
   '/market/symbols',
   '/market/tradable',

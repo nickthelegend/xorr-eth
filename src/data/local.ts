@@ -14,10 +14,11 @@ import { agentFixtures } from './fixtures/agents';
 import { alertFixtures } from './fixtures/alerts';
 import { sleeveFixtures } from './fixtures/sleeves';
 import {
+  StillWarming,
   fetchCandles,
   fetchQuotes,
+  fetchSparklines,
   fetchStockQuotes,
-  StillWarming,
   type Quote,
   type StockQuote,
 } from './marketData';
@@ -157,6 +158,11 @@ export const LocalRepositories: Repositories = {
       return out;
     },
 
+    async sparklines(symbols: string[]): Promise<Record<string, number[]>> {
+      // Empty on failure, not an error: a row without its glyph is a row, and a market list that
+      // refuses to render because a decoration is unavailable is the wrong trade.
+      return (await fetchSparklines(symbols).catch(() => undefined)) ?? {};
+    },
     async candles(symbol: string, timeframe: Timeframe): Promise<Candles> {
       let warming = false;
       const live = await fetchCandles(symbol, timeframe).catch((e: unknown) => {

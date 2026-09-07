@@ -20,6 +20,7 @@ import { agentFor, can, operatorFor, type Principal, type Scope } from './agentK
 const PUBLIC_PATHS = new Set([
   '/health',
   '/market/quotes',
+  '/market/sparklines',
   '/market/ohlc',
   '/market/symbols',
   '/market/tradable',

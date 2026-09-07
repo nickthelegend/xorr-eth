@@ -29,6 +29,7 @@ import {
   size,
   space,
 } from '@/ui';
+import { Sparkline } from '@/ui/charts';
 import { Icon } from '@/design/Icon';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -43,6 +44,21 @@ export default function MarketsScreen() {
 
   const cls = data?.[mkt];
   const rows = useMemo(() => cls?.instruments ?? [], [cls]);
+
+  /*
+   * One request for every glyph on the screen.
+   *
+   * `Sparkline` has existed since the design handoff and no row has ever used it — the shape of a
+   * day is the one thing a price and a percentage cannot say, and it is why people scan a market
+   * list at all. Fetched for the visible symbols in a single call rather than per row, because
+   * nine round trips for a decoration is how a decoration becomes a regression.
+   */
+  const sparkSyms = useMemo(() => rows.map((r: Instrument) => r.sym), [rows]);
+  const sparks = useAsync(
+    () => repos.markets.sparklines(sparkSyms),
+    [sparkSyms.join(',')],
+  );
+
 
   return (
     <Screen tabBar gutter="none">
@@ -121,6 +137,14 @@ export default function MarketsScreen() {
                 value={
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s6 }}>
                     {item.feed === 'simulated' ? <Tag label="Simulated" small tone="warn" /> : null}
+                    {/*
+                      No glyph until there is a series. design.md puts the sparkline between the
+                      symbol and the price; a symbol whose history has not arrived simply has none,
+                      rather than a flat line claiming the price never moved.
+                    */}
+                    {(sparks.data?.[item.sym]?.length ?? 0) > 1 ? (
+                      <Sparkline data={sparks.data![item.sym]!} />
+                    ) : null}
                     <Price variant="rowPrimary">{item.px}</Price>
                   </View>
                 }

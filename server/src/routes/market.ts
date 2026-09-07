@@ -203,6 +203,50 @@ market.get('/market/ohlc', async (c) => {
   }
 });
 
+/**
+ * GET /market/sparklines?symbols=BTC,ETH — one day of closes for many symbols, in one request.
+ *
+ * The market rows want a 90×30 glyph each, and the per-symbol `/market/ohlc` would make that nine
+ * round trips for one screen. Every one of them is a cache hit the server already holds, so the
+ * cost is entirely in the requests rather than the data.
+ *
+ * A symbol whose history has not warmed yet is OMITTED, not sent as an empty array or a flat line.
+ * `Sparkline` draws nothing below two points, so a row simply has no glyph until the data exists —
+ * which is the honest rendering. A flat line would say the price did not move.
+ */
+market.get('/market/sparklines', async (c) => {
+  const symbols = (c.req.query('symbols') ?? '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => COINGECKO_IDS[s])
+    .slice(0, 24);
+  if (symbols.length === 0) return c.json({});
+
+  const out: Record<string, number[]> = {};
+  await Promise.all(
+    symbols.map(async (sym) => {
+      try {
+        const rows = await getWithStale<[number, number, number, number, number][]>(
+          `${COINGECKO}/coins/${COINGECKO_IDS[sym]}/ohlc?vs_currency=usd&days=1`,
+        );
+        // Closes only, thinned to what a 90px glyph can actually show.
+        const closes = rows.map((r) => r[4]).filter((n) => Number.isFinite(n));
+        if (closes.length > 1) out[sym] = thin(closes, 24);
+      } catch {
+        // Warming or unavailable: leave the symbol out. See above.
+      }
+    }),
+  );
+  return c.json(out);
+});
+
+/** Evenly sample a series down to at most `count` points, always keeping the last one. */
+function thin(series: number[], count: number): number[] {
+  if (series.length <= count) return series;
+  const step = (series.length - 1) / (count - 1);
+  return Array.from({ length: count }, (_, i) => series[Math.round(i * step)]!);
+}
+
 /** GET /market/symbols — which symbols have a real feed. */
 market.get('/market/symbols', (c) => c.json(Object.keys(COINGECKO_IDS)));
 

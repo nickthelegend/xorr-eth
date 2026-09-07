@@ -40,6 +40,8 @@ export interface MarketRepository {
     Record<string, { price: number; change24h?: number; warming?: boolean } | undefined>
   >;
   candles(symbol: string, timeframe: Timeframe): Promise<Candles>;
+  /** A day of closes per symbol, for the row glyphs. Symbols without history are omitted. */
+  sparklines(symbols: string[]): Promise<Record<string, number[]>>;
 }
 
 export interface BotRepository {

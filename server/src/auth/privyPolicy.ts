@@ -77,6 +77,19 @@ export type PrivyPolicy = {
 const AUTH_KEY = process.env.PRIVY_AUTHORIZATION_KEY;
 
 /**
+ * The key quorum that owns the policy.
+ *
+ * Set at CREATION, not afterwards. A policy is born unowned, and an unowned policy is one the app
+ * secret can rewrite at will — which makes it a comment rather than a control. The window between
+ * creating one and claiming it is small and entirely avoidable.
+ *
+ * This is not hypothetical: the first deployment of this code created its own policy against its
+ * own database, left it unowned, and `/verify` reported exactly that — "4 rules but no owner". The
+ * check was right and the code was wrong.
+ */
+const KEY_QUORUM_ID = process.env.PRIVY_KEY_QUORUM_ID;
+
+/**
  * RFC 8785 canonical JSON — keys sorted, at every depth.
  *
  * The server rebuilds this string from the request it received and verifies the signature against
@@ -233,10 +246,25 @@ export async function ensurePolicy(): Promise<PrivyPolicy> {
         name: POLICY_NAME,
         chain_type: 'ethereum',
         rules: wanted,
+        ...(KEY_QUORUM_ID ? { owner_id: KEY_QUORUM_ID } : {}),
       }),
     });
     await rememberPolicyId(created.id);
     return created;
+  }
+
+  /*
+   * An existing policy that nobody owns is still worth claiming.
+   *
+   * Deployments made before the quorum existed left one behind, and leaving it unowned means the
+   * app secret alone can widen what the wallet may do — the exact hole this is meant to close.
+   * Claiming it needs no signature precisely because it has no owner yet.
+   */
+  if (!existing.owner_id && KEY_QUORUM_ID) {
+    await privyFetch(`/policies/${existing.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ owner_id: KEY_QUORUM_ID }),
+    }).catch(() => undefined);
   }
 
   const same =
