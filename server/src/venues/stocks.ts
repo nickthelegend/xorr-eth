@@ -75,3 +75,41 @@ export const STOCKS: Record<string, StockToken> = {
 export function isStock(symbol: string): boolean {
   return symbol in STOCKS;
 }
+
+/**
+ * What a tokenized equity is worth, from the venue that would actually fill it.
+ *
+ * There is no CoinGecko feed for these and the NYSE print would be the wrong number anyway: what a
+ * user pays is what 1inch routes on Base right now. So the price is derived from a real quote —
+ * swap a fixed amount of USDC in, see how many tokens come out.
+ *
+ * This lived inside the `/market/stocks` route handler, which meant the SERVER could not price an
+ * equity for itself. `priceOf` keys into CoinGecko's id table and threw `No price feed for NVDAc`,
+ * so the executor could not size, cap-check or record any equity trade — found by running tier 7,
+ * whose entire remit is equities, and watching its first real entry fail. The UI had the number all
+ * along; the executor could not reach it.
+ */
+import { quote } from './oneinch.js';
+
+/** Big enough that the route is representative, small enough not to move the pool it is measuring. */
+const PROBE_USD = 1_000;
+
+const cache = new Map<string, { at: number; price: number }>();
+const TTL_MS = 30_000;
+
+/** Testing only — the 30s cache otherwise carries one case's price into the next. */
+export function clearStockPriceCache(): void {
+  cache.clear();
+}
+
+export async function stockPriceUsd(symbol: string): Promise<number | null> {
+  if (!isStock(symbol)) return null;
+  const hit = cache.get(symbol);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.price;
+
+  const q = await quote({ inSymbol: 'USDC', outSymbol: symbol, amount: PROBE_USD }).catch(() => null);
+  if (!q || !(q.outAmount > 0)) return null;
+  const price = PROBE_USD / q.outAmount;
+  cache.set(symbol, { at: Date.now(), price });
+  return price;
+}

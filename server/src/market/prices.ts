@@ -4,6 +4,7 @@
  */
 import { getJson, staleValue } from '../http/get.js';
 import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from './ids.js';
+import { isStock, stockPriceUsd } from '../venues/stocks.js';
 
 const IDS = COINGECKO_IDS;
 
@@ -30,6 +31,21 @@ const ALL_IDS_URL = COINGECKO_PRICE_URL;
  * the user looked at a spinner. Same function, different patience, stated at the call site.
  */
 export async function priceOf(symbol: string, deadlineMs?: number): Promise<number> {
+  /*
+   * Tokenized equities are priced by the venue that would fill them, not by a market-data feed.
+   *
+   * `IDS` is CoinGecko's table and has no equities in it, so this threw `No price feed for NVDAc`
+   * for every one of the eight — and with it went the executor's ability to size, cap-check or
+   * record an equity trade at all. The failure surfaced the first time tier 7 tried to open a real
+   * position, which is the one strategy whose entire remit is equities. The UI had the number all
+   * along, from `/market/stocks`; the executor could not reach it.
+   */
+  if (isStock(symbol)) {
+    const px = await stockPriceUsd(symbol);
+    if (px && px > 0) return px;
+    throw new Error(`No route for ${symbol} right now, so it has no price to trade against.`);
+  }
+
   const id = IDS[symbol];
   if (!id) throw new Error(`No price feed for ${symbol}`);
   const url = ALL_IDS_URL;
