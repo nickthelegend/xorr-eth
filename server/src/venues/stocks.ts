@@ -122,7 +122,19 @@ export async function stockPriceUsd(symbol: string): Promise<number | null> {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.price;
 
-  const q = await quote({ inSymbol: 'USDC', outSymbol: key, amount: PROBE_USD }).catch(() => null);
+  /*
+   * `skipPriceImpact` is load-bearing, not an optimisation.
+   *
+   * Price impact is measured against a mid from `priceOf`, and for an equity `priceOf` comes back
+   * here. That cycle took the deployed executor to a 2GB heap and a fatal OOM fifty seconds after
+   * boot. It is also meaningless here: this call is establishing what the price is.
+   */
+  const q = await quote({
+    inSymbol: 'USDC',
+    outSymbol: key,
+    amount: PROBE_USD,
+    skipPriceImpact: true,
+  }).catch(() => null);
   if (!q || !(q.outAmount > 0)) return null;
   const price = PROBE_USD / q.outAmount;
   cache.set(key, { at: Date.now(), price });

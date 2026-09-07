@@ -166,6 +166,19 @@ export async function quote(params: {
   outSymbol: string;
   amount: number;
   slippagePct?: number;
+  /**
+   * Skip the price-impact cross-check, which is what makes this quote safe to call FROM a price.
+   *
+   * `priceImpact` prices both legs with `priceOf` to get a mid to compare against. A tokenized
+   * equity has no feed, so `priceOf` derives its price from a quote — and that quote asked for its
+   * impact, which priced the legs, which quoted again. The deployed executor climbed to a 2GB heap
+   * and died with "Ineffective mark-compacts near heap limit" about fifty seconds after boot.
+   *
+   * The impact number is meaningless for that caller anyway: it is establishing what the price IS,
+   * so there is no independent mid to be impacted against. Asking for it was the bug, not just the
+   * recursion.
+   */
+  skipPriceImpact?: boolean;
 }): Promise<SwapQuote> {
   const from = TOKENS[params.inSymbol];
   const to = TOKENS[params.outSymbol];
@@ -181,7 +194,9 @@ export async function quote(params: {
   const venues = venuesFrom(res.protocols);
 
   return {
-    priceImpactPct: await priceImpact(params.inSymbol, params.outSymbol, params.amount, outAmount),
+    priceImpactPct: params.skipPriceImpact
+      ? null
+      : await priceImpact(params.inSymbol, params.outSymbol, params.amount, outAmount),
     inSymbol: params.inSymbol,
     outSymbol: params.outSymbol,
     inAmount: params.amount,

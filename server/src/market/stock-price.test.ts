@@ -75,6 +75,21 @@ describe('an equity is priced by the venue that would fill it', () => {
     expect(oneinchQuote).toHaveBeenLastCalledWith(expect.objectContaining({ outSymbol: 'NVDAc' }));
   });
 
+  it('asks the venue NOT to price-impact the probe — the cycle that OOMed the executor', async () => {
+    /*
+     * `priceImpact` prices both legs with `priceOf` to find a mid. For an equity `priceOf` derives
+     * its answer from a quote, so the quote asked for an impact, which priced the legs, which
+     * quoted again. The deployed executor reached a 2GB heap and died with "Ineffective
+     * mark-compacts near heap limit" about fifty seconds after boot.
+     *
+     * It is also meaningless for this caller: it is establishing what the price IS, so there is no
+     * independent mid for it to be impacted against.
+     */
+    oneinchQuote.mockResolvedValue({ outAmount: 4, venues: [] });
+    await stockPriceUsd('NVDAc');
+    expect(oneinchQuote).toHaveBeenCalledWith(expect.objectContaining({ skipPriceImpact: true }));
+  });
+
   it('is not a stock, so it is not routed here', async () => {
     // Crypto must still go to the feed; this must not swallow every symbol.
     expect(await stockPriceUsd('WETH')).toBeNull();
