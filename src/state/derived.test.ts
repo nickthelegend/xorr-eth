@@ -310,3 +310,30 @@ describe('bar helpers', () => {
     expect(d.lastClose(btcBars)).toBe(66560);
   });
 });
+
+describe('asset header — the percentage names its own window', () => {
+  it('1M is not "today"', () => {
+    /*
+     * The bug, exactly: the header computed the change over the selected candle range and then
+     * labelled it "today" regardless. On 1M a real asset read "up 38.4% today" having moved
+     * about 2% since midnight.
+     */
+    expect(d.rangeChange('1M', 38.4, 2.55).label).toBe('past month');
+    expect(d.rangeChange('1M', 38.4, 2.55).pct).toBe(38.4);
+    expect(d.rangeChange('1W', 4.2, 2.55).label).toBe('past week');
+    expect(d.rangeChange('1Y', 33.1, 2.55).label).toBe('past year');
+    expect(d.rangeChange('All', 33.1, 2.55).label).toBe('all time');
+  });
+
+  it('the day comes from the quote, so it matches every other screen', () => {
+    // 2.1 was this screen's own series maths; 2.55 is what the market list and search show.
+    expect(d.rangeChange('1D', 2.1, 2.55)).toEqual({ pct: 2.55, label: 'today' });
+  });
+
+  it('falls back to the series when there is no quote', () => {
+    expect(d.rangeChange('1D', 2.1, undefined).pct).toBe(2.1);
+    expect(d.rangeChange('1D', 2.1, Number.NaN).pct).toBe(2.1);
+    // A real zero is a real answer, not a missing one.
+    expect(d.rangeChange('1D', 2.1, 0).pct).toBe(0);
+  });
+});

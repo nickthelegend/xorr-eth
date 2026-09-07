@@ -47,6 +47,7 @@ import { repos } from '@/data';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
 import { usePrice } from '@/data/usePrices';
+import { rangeChange } from '@/state/derived';
 import { isTradable, settlementSymbol } from '@/data/tradable';
 
 const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
@@ -83,13 +84,28 @@ export default function AssetDetail() {
   // "Not yet" and "not ever" get different words, and the first one retries.
   const warming = candles.data?.feed === 'warming';
 
-  const changePct = hasSeries ? ((closes.at(-1)! - closes[0]!) / closes[0]!) * 100 : 0;
-  const up = changePct >= 0;
+  const seriesPct = hasSeries ? ((closes.at(-1)! - closes[0]!) / closes[0]!) * 100 : 0;
 
   // Tokenized equities have a real spot price and no history: they are priced off the 1inch
   // route that would fill them, not a candle feed. A real price with no chart is a true
   // state to show.
   const { quote, loading: priceLoading, reload: reloadQuote } = usePrice(symbol);
+
+  /*
+   * The percentage names the window it measured.
+   *
+   * It said "today" whatever the pills were set to, so 1M read "up 38.4% today" — false about a
+   * real asset, on the screen someone opens to decide whether to buy. The day itself now comes
+   * from the quote's 24h change, the same field the market list and the search rows read, because
+   * deriving it a second way from the candles is what made one asset show 2.1% here and 2.55%
+   * there at the same moment.
+   */
+  const { pct: changePct, label: changeLabel } = rangeChange(
+    RANGES[range] ?? '1D',
+    seriesPct,
+    quote?.change24h,
+  );
+  const up = changePct >= 0;
 
   /*
    * The same asset, priced a second way.
@@ -181,7 +197,7 @@ export default function AssetDetail() {
         </View>
         {hasSeries ? (
           <DeltaChip
-            label={`${up ? 'up' : 'down'} ${percent(Math.abs(changePct)).replace('+', '')} today`}
+            label={`${up ? 'up' : 'down'} ${percent(Math.abs(changePct)).replace('+', '')} ${changeLabel}`}
             tone={pnlTone(changePct)}
             style={{ alignSelf: 'center' }}
           />

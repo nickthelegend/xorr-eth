@@ -370,3 +370,36 @@ export function backtestSummary(capital: number, ret: number, dd: number) {
     dd: btDrawdown(dd),
   };
 }
+
+// ── Asset screen (screen 8) ──────────────────────────────────────────────────
+
+/**
+ * What the change on the asset header actually measures.
+ *
+ * The header computed its percentage from the candle series — first close to last, over whatever
+ * range the pills were set to — and then labelled it "today", always. Switching to 1M produced
+ * **"up 38.4% today"** over a real asset that had moved 2% since midnight. Not a rounding
+ * difference or a stale read: a flatly false sentence about somebody's money, on the screen they
+ * open to decide whether to buy.
+ *
+ * The 1D case takes the quote's own 24h change rather than the series. Every other screen prices
+ * the day from that field, and computing it a second way here is how the same asset showed 2.1%
+ * on this screen and 2.55% in the market list at the same moment, with nothing to tell the user
+ * which was true. One number, one source.
+ */
+export const RANGE_WINDOW_LABEL: Record<string, string> = {
+  '1D': 'today',
+  '1W': 'past week',
+  '1M': 'past month',
+  '1Y': 'past year',
+  All: 'all time',
+};
+
+export function rangeChange(
+  range: string,
+  seriesPct: number,
+  change24h: number | undefined,
+): { pct: number; label: string } {
+  const pct = range === '1D' && Number.isFinite(change24h) ? (change24h as number) : seriesPct;
+  return { pct, label: RANGE_WINDOW_LABEL[range] ?? range };
+}
