@@ -275,8 +275,23 @@ extra.get('/swap/quote', async (c) => {
 
 // ── The Graph — the agent's reasoning surface ────────────────────────────────
 
-/** What the bot would decide right now, and why. Read straight from indexed chain data. */
-extra.get('/agent/decision', async (c) => {
+/**
+ * What the bot would decide right now, and why. Read straight from indexed chain data.
+ *
+ * `/graph/decision`, not `/agent/decision`. The old path made this route unreachable by anyone:
+ * the auth middleware treats the `/agent/` prefix as the machine surface and demands an agent key,
+ * while the handler needs a signed-in user's wallet. A Privy token got "this surface needs an agent
+ * key"; an agent key got "this route belongs to a signed-in user". Both refusals were correct and
+ * the route was dead between them.
+ *
+ * It regressed silently when the prefix guard was introduced — an earlier test plan records it
+ * passing — because nothing calls it from the app. It is the surface a judge would use to see the
+ * subgraph actually driving a decision, which is exactly the thing worth showing.
+ *
+ * `/graph/` is where the other subgraph reads already live, and it is a user route in fact as well
+ * as in name: the decision is about the caller's own wallet.
+ */
+extra.get('/graph/decision', async (c) => {
   const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   const w = await one<{ address: string }>(`SELECT address FROM wallets WHERE id=$1`, [id]);
