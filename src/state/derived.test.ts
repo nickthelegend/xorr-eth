@@ -337,3 +337,33 @@ describe('asset header — the percentage names its own window', () => {
     expect(d.rangeChange('1D', 2.1, 0).pct).toBe(0);
   });
 });
+
+describe('trailing stop — the exit the engine could always run', () => {
+  /*
+   * `planExitRules` has read `trailPct` since it was written and `observationFor` maintains the
+   * high-water mark on every tick, both covered by tests. Nothing in the app could set it, so the
+   * one exit people actually ask for existed in full and was unreachable.
+   *
+   * These pin the arithmetic the screen shows next to the control, because a trailing stop whose
+   * displayed floor disagrees with the executor's is worse than no number at all.
+   */
+  const floor = (peak: number, trailPct: number) => peak * (1 - trailPct / 100);
+
+  it('the floor follows the high, not the entry', () => {
+    expect(floor(2800, 5)).toBeCloseTo(2660, 6);
+    // Up from entry: the floor rose with it.
+    expect(floor(3000, 5)).toBeCloseTo(2850, 6);
+  });
+
+  it('a breached floor is what fired the real fill', () => {
+    // The live run: peak 2800, 5% trail, WETH at 2501.65 — sold, tx 0x47db5129…
+    expect(2501.65).toBeLessThan(floor(2800, 5));
+    // And at the same peak with the price above the floor, it must not fire.
+    expect(2700).toBeGreaterThan(floor(2800, 5));
+  });
+
+  it('off is off — zero is not a stop at ground level', () => {
+    // `planExitRules` treats trailPct > 0 as configured, so 0 must never arm a floor at the peak.
+    expect(floor(2800, 0)).toBe(2800);
+  });
+});

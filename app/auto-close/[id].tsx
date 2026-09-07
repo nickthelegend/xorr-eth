@@ -61,6 +61,16 @@ const CHART_MIN = 230;
 /** Half a marker chip, so the row centres on its price rather than hanging under it. */
 const MARKER_OFFSET = 11;
 
+/**
+ * Trailing-stop bounds.
+ *
+ * The ceiling is 25% because beyond that the stop stops being a stop — it sits below almost any
+ * drawdown and the position is effectively unprotected while looking protected. Half-percent steps
+ * match the fixed controls above so the three read as one set of dials.
+ */
+const TRAIL_STEP = 0.5;
+const TRAIL_MAX = 25;
+
 export default function AutoClose() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const goBack = useGoBack();
@@ -82,6 +92,19 @@ export default function AutoClose() {
   const setTp = useStore((s) => s.setTp);
   const setSl = useStore((s) => s.setSl);
 
+  /*
+   * The trailing stop, which the executor has always been able to run.
+   *
+   * `planExitRules` reads `trailPct`, `observationFor` maintains the high-water mark on every tick
+   * — including the runs where nothing fires, which is most of them and exactly when trailing has
+   * to happen — and both are covered by tests. Nothing in the app could ever set it, so the one
+   * exit people actually ask for existed in full and was unreachable.
+   *
+   * Off by default and off is a real value: a trailing stop is not strictly better than a fixed
+   * one, and turning it on for everybody would change what existing positions do.
+   */
+  const [trail, setTrail] = useState(0);
+
   const [chartH, setChartH] = useState(CHART_MIN);
   const [rulerW, setRulerW] = useState(300);
   const [saving, setSaving] = useState(false);
@@ -96,14 +119,17 @@ export default function AutoClose() {
   const armedParams = (armed?.params ?? {}) as {
     takeProfitPct?: number;
     stopLossPct?: number;
+    trailPct?: number;
   };
+  const armedTrail = armedParams.trailPct;
   const armedTp = armedParams.takeProfitPct;
   const armedSl = armedParams.stopLossPct == null ? undefined : -Math.abs(armedParams.stopLossPct);
 
   useEffect(() => {
     if (armedTp !== undefined && Number.isFinite(armedTp)) setTp(armedTp);
     if (armedSl !== undefined && Number.isFinite(armedSl)) setSl(armedSl);
-  }, [armedTp, armedSl, setTp, setSl]);
+    if (armedTrail !== undefined && Number.isFinite(armedTrail)) setTrail(armedTrail);
+  }, [armedTp, armedSl, armedTrail, setTp, setSl]);
 
   /**
    * The steppers edit inside state.md's manual range (TP 0.5–3.0, SL −3.0 to −0.5). A rule
@@ -144,6 +170,14 @@ export default function AutoClose() {
           entryPrice: position.data?.entry ?? mark,
           takeProfitPct: tp,
           stopLossPct: Math.abs(sl),
+          /*
+           * Omitted entirely when off, rather than sent as 0.
+           *
+           * `planExitRules` treats `trailPct > 0` as "configured", so a zero is already inert —
+           * but a param that is present and meaningless is the kind of thing a later reader
+           * trusts. Absent says what it means.
+           */
+          ...(trail > 0 ? { trailPct: trail, peakPrice: mark } : {}),
         },
         cadence: 'daily',
         dailyAllocationUsd: 0,
@@ -283,7 +317,23 @@ export default function AutoClose() {
           tickPct={slTickPct(sl)}
           rulerW={rulerW}
         />
+        <ControlBlock
+          label="Trailing Stop"
+          value={trail > 0 ? `${trail.toFixed(1)}% below the high` : 'Off'}
+          tone="sl"
+          chipColor={trail > 0 ? colors.candleDown : colors.ink35}
+          onDec={() => setTrail((t) => Math.max(0, Math.round((t - TRAIL_STEP) * 10) / 10))}
+          onInc={() => setTrail((t) => Math.min(TRAIL_MAX, Math.round((t + TRAIL_STEP) * 10) / 10))}
+          tickPct={(trail / TRAIL_MAX) * 100}
+          rulerW={rulerW}
+        />
       </View>
+
+      {trail > 0 ? (
+        <NoteStrip kind="acted" style={{ marginTop: space.s16 }}>
+          {`Follows ${symbol} up and never down. It sells if the price falls ${trail.toFixed(1)}% from the highest point reached after this is set — ${fmtPrice(mark * (1 - trail / 100))} if the high stays where it is now.`}
+        </NoteStrip>
+      ) : null}
 
       {clamped ? (
         <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
