@@ -92,7 +92,19 @@ export function humanFailure(error: string): string {
     return 'The agent ran out of gas money on this network, so nothing was placed. Your funds are untouched.';
   if (e.includes('insufficient funds') || e.includes('exceeds balance'))
     return 'Not enough settled balance to cover this buy.';
-  if (e.includes('slippage') || e.includes('returnamount') || e.includes('min return'))
+  /*
+   * Matched on the CAUSE, not on any occurrence of the word.
+   *
+   * `e.includes('slippage')` also matches the request URL, which carries `&slippage=` on every
+   * swap — so a `400 Bad Request` from the venue was reported to the user as "the price moved",
+   * which is a market explanation for a malformed request. The rest of this function reads
+   * reverts; this one has to read an HTTP failure, and the distinguishing thing is that the venue
+   * REFUSED the price rather than refusing the call.
+   */
+  if (/\b(4\d\d|5\d\d) (bad request|unprocessable|internal|service unavailable)/i.test(error)) {
+    return 'The venue rejected the request, so nothing was placed.';
+  }
+  if (e.includes('returnamount') || e.includes('min return') || /slippage (limit|exceeded|too)/.test(e))
     return 'The price moved more than your slippage limit while this was in flight.';
   if (e.includes('nonce') || e.includes('replacement transaction'))
     return 'The network moved on before this confirmed. Nothing was placed; I will retry.';

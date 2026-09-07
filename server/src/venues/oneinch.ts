@@ -153,7 +153,21 @@ const MAX_SLIPPAGE_PCT = 3;
 
 export function slippageFor(base: number, priceImpactPct: number | null): number {
   if (priceImpactPct === null || !Number.isFinite(priceImpactPct) || priceImpactPct <= 0) return base;
-  return Math.min(Math.max(base, priceImpactPct * IMPACT_MARGIN), MAX_SLIPPAGE_PCT);
+  const widened = Math.min(Math.max(base, priceImpactPct * IMPACT_MARGIN), MAX_SLIPPAGE_PCT);
+  /*
+   * Two decimal places, because the API this feeds rejects more.
+   *
+   * `0.35 * 1.5` is `0.5292344803237518` in binary floating point, and 1inch answers a slippage
+   * with sixteen decimals with `400 Bad Request` — so the adaptive tolerance broke every fill it
+   * touched, and the failure text mentioned neither slippage nor precision. Rounded UP: rounding a
+   * tolerance down would refuse trades the widening was calculated to allow.
+   */
+  /*
+   * The `toFixed(6)` is not decoration. `0.8 * 1.5` is `1.2000000000000002`, and ceiling that
+   * directly gives 1.21 — rounding a clean 1.2 UP because of binary noise. Settle the noise first,
+   * then round up deliberately.
+   */
+  return Math.ceil(Number((widened * 100).toFixed(6))) / 100;
 }
 type QuoteResponse = {
   dstAmount: string;

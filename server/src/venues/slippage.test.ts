@@ -24,7 +24,22 @@ describe('the ceiling is the floor, not the answer', () => {
     // 0.8% impact against a 0.3% ceiling is the exact shape that reverted.
     const s = slippageFor(SLIPPAGE.scheduled, 0.8);
     expect(s).toBeGreaterThan(0.8);
-    expect(s).toBeCloseTo(1.2, 10); // 0.8 × 1.5 margin
+    expect(s).toBe(1.2); // 0.8 × 1.5, rounded up to 2dp
+  });
+
+  it('rounds to two decimals, because the venue rejects more', () => {
+    /*
+     * `0.35 * 1.5` is `0.5292344803237518` in binary floating point, and 1inch answers a slippage
+     * with sixteen decimals with `400 Bad Request` — so the adaptive tolerance broke every fill it
+     * touched. Rounded UP, since rounding a tolerance down refuses trades the widening was
+     * calculated to allow.
+     */
+    expect(slippageFor(0.3, 0.35)).toBe(0.53);
+    expect(String(slippageFor(0.3, 0.35))).not.toContain('0.529');
+    for (const impact of [0.11, 0.37, 0.79, 1.234, 1.999]) {
+      const s = slippageFor(0.3, impact);
+      expect(String(s).split('.')[1]?.length ?? 0, `${s} has too many decimals`).toBeLessThanOrEqual(2);
+    }
   });
 
   it('refuses to widen without limit', () => {
