@@ -31,6 +31,7 @@ import {
   colors,
   size,
   space,
+  Tag,
 } from '@/ui';
 import { assetGradient } from '@/design/gradients';
 import { useAsync } from '@/data/useAsync';
@@ -83,6 +84,17 @@ export default function Movers() {
             left={<AssetMark gradient={assetGradient(i.sym)} {...logoProps(logos, i.sym)} size={size.mark} />}
             title={i.sym}
             secondary={`${i.name} · ${i.tag}`}
+            /*
+              The same stamp the class lists carry.
+              
+              Movers ranks every class together by how far it moved, so the top of the list was
+              routinely a pre-IPO perp — XAI +5.62%, OPENAI +3.40% — printed exactly like WETH
+              beneath it. /markets/preipo tags all nine of those "Simulated" and heads the list
+              with "prices are indicative"; this screen showed the same instruments, from the same
+              response, with the flag dropped. Sorting by move size is precisely what puts the
+              indicative ones on top, which makes this the screen that needed the label most.
+            */
+            middle={i.feed === 'simulated' ? <Tag label="Simulated" small tone="warn" /> : undefined}
             value={<Price variant="rowPrimary">{i.px}</Price>}
             delta={i.chg}
             deltaTone={i.up ? 'up' : 'down'}

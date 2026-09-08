@@ -49,7 +49,19 @@ export default function Funding() {
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Funding</Text>} />
         <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
-          Mark against oracle, across the perps this build prices.
+          {/*
+            "Mark against oracle" implies two independent numbers. There is one.
+            
+            The docblock above is right that nulls must never render as zero — open interest and
+            funding are dashes here for exactly that reason. Mark-versus-index escaped it: the
+            executor sets `markPx` and `oraclePx` from the SAME spot price, because xorr does not
+            run a perp venue and has no separate mark to compare, so the column read "+0.000%" down
+            the whole page. A screen-wide row of perfect zeros reads as two sources agreeing, which
+            is a stronger claim than one number printed twice. Say which it is.
+          */}
+          Mark against oracle, across the perps this build prices. xorr does not run a perp venue,
+          so the mark IS the spot price — the difference below is zero by construction, not two
+          sources agreeing.
         </Text>
       </View>
 
