@@ -84,6 +84,17 @@ export default function Swap() {
    */
   const heldUnits = positions.data === undefined ? undefined : (payHeld?.units ?? 0);
   const overBalance = heldUnits !== undefined && swapAmt > heldUnits;
+  /*
+   * The third state, which the two lines above do not cover.
+   *
+   * `data === undefined` is "not loaded yet" OR "the load failed", and the comment above only
+   * reasoned about the first. Found by interrupting this screen mid-load three times: the fetch
+   * was abandoned, `data` stayed undefined, and the balance sat at an em dash indefinitely — never
+   * wrong, which is the point of the dash, but never right either, and with no way to tell it apart
+   * from a slow read. Worse quietly: `overBalance` needs `heldUnits`, so a failed read disables the
+   * guard as a side effect and the screen goes silent about a check it is no longer making.
+   */
+  const balanceUnread = positions.data === undefined && positions.error !== undefined;
 
   const target = swapPct(swapAmt);
   const pct = useSharedValue(target);
@@ -118,6 +129,12 @@ export default function Swap() {
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Eyebrow small>You pay</Eyebrow>
+            {/* Tappable only when there is something to retry — otherwise it is a label. */}
+            <Press
+              onPress={balanceUnread ? () => positions.reload() : undefined}
+              accessibilityRole={balanceUnread ? 'button' : undefined}
+              accessibilityLabel={balanceUnread ? `Retry reading your ${PAY} balance` : undefined}
+            >
             <Text variant="footnote" color={colors.ink40}>
               {/*
                 A dash while positions load, never a zero.
@@ -131,8 +148,11 @@ export default function Swap() {
                 `heldUnits` already distinguishes the three states for the guard below; the label
                 uses the same one so the two can never disagree.
               */}
-              Balance {heldUnits === undefined ? MINUS : quantity(heldUnits)}
+              {balanceUnread
+                ? `Balance ${MINUS} · tap to retry`
+                : `Balance ${heldUnits === undefined ? MINUS : quantity(heldUnits)}`}
             </Text>
+            </Press>
           </View>
           <View
             style={{
@@ -312,6 +332,16 @@ export default function Swap() {
           {heldUnits === 0
             ? `You hold no ${PAY}. There is nothing to swap.`
             : `You hold ${quantity(heldUnits ?? 0)} ${PAY}.`}
+        </Text>
+      ) : balanceUnread ? (
+        /* Says the check is not running, rather than letting its absence pass for a pass. */
+        <Text
+          variant="footnote"
+          color={colors.ink40}
+          align="center"
+          style={{ marginTop: space.s10 }}
+        >
+          {`Your ${PAY} balance could not be read, so this is not being checked against it. The chain still refuses a swap larger than you hold.`}
         </Text>
       ) : null}
     </Screen>

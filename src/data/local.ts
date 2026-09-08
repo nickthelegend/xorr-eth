@@ -21,7 +21,7 @@ import {
   type Quote,
   type StockQuote,
 } from './marketData';
-import { ApiError, api, apiReason } from './api';
+import { ApiError, NotSignedIn, api, apiReason } from './api';
 import type {
   ActivityEvent,
   Agent,
@@ -261,8 +261,14 @@ export const LocalRepositories: Repositories = {
         {},
       );
     },
+    /** Same distinction as `portfolio.positions` — "none running" is not "could not ask". */
     async list(): Promise<Strategy[]> {
-      return (await api.get<Strategy[]>('/strategies').catch(() => undefined)) ?? [];
+      try {
+        return await api.get<Strategy[]>('/strategies');
+      } catch (e) {
+        if (e instanceof NotSignedIn) return [];
+        throw e;
+      }
     },
     async create(s) {
       /*
@@ -319,8 +325,27 @@ export const LocalRepositories: Repositories = {
   },
 
   portfolio: {
+    /*
+     * An empty list means the wallet holds nothing. It must not also mean "the read failed".
+     *
+     * This was `.catch(() => undefined) ?? []`, which turned every failure — a 500, a timeout, a
+     * dropped connection — into a confident empty portfolio. On /swap that renders as "Balance
+     * 0.0000" and "You hold no WETH. There is nothing to swap." to someone holding 0.4890 WETH,
+     * and `useAsync` never sees an error, so no screen can tell the two apart or offer a retry.
+     * The whole app draws the absent-versus-not-known line carefully and this one line erased it
+     * underneath every screen that reads positions.
+     *
+     * `NotSignedIn` is the exception the catch was actually written for: no session means no
+     * positions, which genuinely is an empty list and not a failure. That one stays swallowed;
+     * everything else now reaches the screen.
+     */
     async positions(): Promise<Position[]> {
-      return (await api.get<Position[]>('/positions').catch(() => undefined)) ?? [];
+      try {
+        return await api.get<Position[]>('/positions');
+      } catch (e) {
+        if (e instanceof NotSignedIn) return [];
+        throw e;
+      }
     },
     async position(id) {
       return (await api.get<Position | null>(`/positions/${id}`).catch(() => undefined)) ?? null;
