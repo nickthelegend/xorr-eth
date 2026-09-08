@@ -10,6 +10,7 @@
  */
 import { useCallback, useState } from 'react';
 import { useWallets } from '@privy-io/react-auth';
+import { pickEmbedded } from './embeddedWallet';
 import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
 import { api } from '@/data/api';
 import { activeChain } from '@/chain';
@@ -64,8 +65,21 @@ export function useGrantDelegation() {
 
   const send = useCallback(
     async (to: Address, data: Hex) => {
-      const wallet = wallets?.[0];
-      if (!wallet) throw new Error('No wallet yet. Finish sign-in first.');
+      /*
+       * The embedded wallet signs this, or nothing does.
+       *
+       * `wallets[0]` was an injected extension on any browser that had one — verified on the hosted
+       * build, where pressing this raised a browser wallet's own dialog for the USDC approval. A
+       * permission signed by the wrong key grants nothing the executor can use.
+       */
+      const wallet = pickEmbedded(wallets);
+      if (!wallet) {
+        throw new Error(
+          wallets?.length
+            ? 'This needs your xorr wallet, not a browser extension. Sign out and back in to use it.'
+            : 'No wallet yet. Finish sign-in first.',
+        );
+      }
       const provider = await wallet.getEthereumProvider();
       /*
        * Put the wallet on the chain this deployment settles on, before it signs anything.

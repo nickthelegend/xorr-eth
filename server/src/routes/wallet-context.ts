@@ -17,9 +17,26 @@ export type WalletRow = {
   user_id: string;
 };
 
+/**
+ * The user's wallet — and `LIMIT 1` is not enough on its own to say which.
+ *
+ * A user can end up with more than one row here, and it is not hypothetical: web Privy lists any
+ * injected browser extension alongside the embedded wallet, and until `pickEmbedded` landed the app
+ * registered whichever the SDK happened to put first. So an account that once connected through an
+ * extension has that address on file AND the embedded one, and this query — with no ORDER BY — was
+ * free to return either, differently between calls.
+ *
+ * Which it returns decides whose policy is read, whose balance is shown and whose trail is written,
+ * so "whatever Postgres feels like" is not an acceptable answer. Newest wins: the most recent
+ * connect is the wallet the app is actually using, and the ordering is a total one because `id` is
+ * the primary key and breaks any tie in `created_at`.
+ */
 export async function currentWallet(c: Context): Promise<WalletRow | undefined> {
   const { userId } = requireUser(c);
-  return one<WalletRow>(`SELECT * FROM wallets WHERE user_id = $1 LIMIT 1`, [userId]);
+  return one<WalletRow>(
+    `SELECT * FROM wallets WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [userId],
+  );
 }
 
 export async function requireWallet(c: Context): Promise<WalletRow> {

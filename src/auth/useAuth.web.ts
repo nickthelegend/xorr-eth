@@ -4,6 +4,7 @@
  */
 import { useCallback, useMemo } from 'react';
 import { usePrivy, useLoginWithEmail, useWallets, useCreateWallet } from '@privy-io/react-auth';
+import { pickEmbedded } from './embeddedWallet';
 import { alreadyHasWallet } from './alreadyHasWallet';
 
 export type AuthState = {
@@ -22,7 +23,14 @@ export function useAuth(): AuthState & {
   const { wallets } = useWallets();
   const { createWallet: create } = useCreateWallet();
 
-  const address = wallets?.[0]?.address;
+  /*
+   * The EMBEDDED wallet, not merely the first one Privy lists.
+   *
+   * This value is what gets registered with the executor and is named, in this file's own type,
+   * as "the `owner` in the on-chain delegation policy". `useWallets()` includes injected browser
+   * extensions, so on a browser with one installed this was somebody else's address.
+   */
+  const address = pickEmbedded(wallets)?.address;
 
   const createWallet = useCallback(async () => {
     if (address) return address;

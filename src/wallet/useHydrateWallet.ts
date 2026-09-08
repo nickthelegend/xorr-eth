@@ -24,7 +24,7 @@ import { useStore } from '@/state/store';
 import { setAuthKnowledge } from '@/auth/authState';
 
 export function useHydrateWallet(): void {
-  const { ready, authenticated } = useAuth();
+  const { ready, authenticated, address } = useAuth();
   /*
    * READ through a ref, never a dependency.
    *
@@ -87,8 +87,39 @@ export function useHydrateWallet(): void {
     let alive = true;
     void repos.wallet
       .current()
-      .then((w) => {
+      .then(async (w) => {
         if (!alive) return;
+
+        /*
+         * Reconcile: the executor's idea of "your wallet" must be the wallet you actually sign with.
+         *
+         * This only ever READ the row, so once the executor had an address it kept it for ever. That
+         * is fine while the address cannot change, and it can. On web, Privy lists injected browser
+         * extensions alongside the embedded wallet, and until `pickEmbedded` landed the app
+         * registered whichever came first — so an account could have an extension's address on file
+         * while every signature now comes from the embedded one.
+         *
+         * The symptom is silent and total: the user grants the permission, it lands on chain, and
+         * the executor reads `policyOf()` for the OTHER address and finds nothing. Safety says "not
+         * granted", Limits says the cap is zero, the bot never runs. Measured on the hosted build —
+         * a grant verified on chain ($1,600/day, delegate matches) while every screen said the
+         * permission did not exist. The only thing that repaired it was walking back through
+         * onboarding, which is the one screen that had ever called `connect`.
+         *
+         * `connect` is an idempotent upsert, and this runs only when the two disagree, so it
+         * settles after one call rather than looping.
+         */
+        const known = w?.address?.toLowerCase();
+        if (address && known !== address.toLowerCase()) {
+          const reconciled = await repos.wallet.connect(address).catch(() => undefined);
+          if (!alive) return;
+          if (reconciled) {
+            setWallet(reconciled);
+            setWalletChecked(true);
+            return;
+          }
+        }
+
         if (w) setWallet(w);
         setWalletChecked(true);
       })
@@ -108,5 +139,5 @@ export function useHydrateWallet(): void {
     return () => {
       alive = false;
     };
-  }, [ready, authenticated, setWallet, setWalletChecked]);
+  }, [ready, authenticated, address, setWallet, setWalletChecked]);
 }
