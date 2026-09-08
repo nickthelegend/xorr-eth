@@ -70,10 +70,19 @@ export default function Swap() {
   // The balance was hardcoded at 1,750.30. It is the real held quantity now.
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const payHeld = (positions.data ?? []).find((p) => p.symbol === PAY);
-  // You cannot swap what you do not hold. Without this the screen quoted 32 SOL against a
-  // 0.2344 SOL balance with "Review swap" enabled — a route the venue would refuse, priced
-  // and presented as if it were ready.
-  const heldUnits = payHeld?.units;
+  /*
+   * You cannot swap what you do not hold — including when you hold none of it.
+   *
+   * This read `payHeld?.units`, so a wallet with no position in the pay token produced `undefined`
+   * and the guard fell through: "Review swap" was enabled, on a real quote, for a wallet holding
+   * zero. The check was written to mean "block when we know the balance and it is too small", and
+   * treated a missing position as not knowing. A missing position IS knowing: it is zero.
+   *
+   * The distinction that actually matters is between "positions have not loaded yet" and "they
+   * loaded and there is nothing" — the same absent-versus-not-yet line this app draws everywhere.
+   * `positions.data` is undefined only in the first case, so that is what decides it.
+   */
+  const heldUnits = positions.data === undefined ? undefined : (payHeld?.units ?? 0);
   const overBalance = heldUnits !== undefined && swapAmt > heldUnits;
 
   const target = swapPct(swapAmt);
@@ -288,7 +297,9 @@ export default function Swap() {
           align="center"
           style={{ marginTop: space.s10 }}
         >
-          {`You hold ${quantity(heldUnits ?? 0)} ${PAY}.`}
+          {heldUnits === 0
+            ? `You hold no ${PAY}. There is nothing to swap.`
+            : `You hold ${quantity(heldUnits ?? 0)} ${PAY}.`}
         </Text>
       ) : null}
     </Screen>
