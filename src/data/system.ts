@@ -97,8 +97,22 @@ export type DelegationParams = {
 
 /* ──────────────────────────────────────────────────────────────── the graph */
 
-/** `_meta` from the subgraph: the block it has indexed to, and whether it errored doing it. */
-export type GraphHealth = { block: number; healthy: boolean };
+/**
+ * `_meta` from the subgraph, plus whether the index is about THIS deployment.
+ *
+ * A perfectly synced index of a different contract is worse than no index: it answers confidently
+ * about somebody else's policy. `indexesThisDeployment` is what lets a screen tell those apart, and
+ * it is the same flag the agent uses to decide whether to trust the index at all.
+ */
+export type GraphHealth = {
+  block: number;
+  healthy: boolean;
+  /* Optional: an executor older than these fields simply does not send them. */
+  endpoint?: string;
+  indexedDelegation?: string;
+  activeDelegation?: string;
+  indexesThisDeployment?: boolean;
+};
 
 /** One `Spend` event as the subgraph indexed it. Amounts are raw units, as strings. */
 export type GraphSpend = {

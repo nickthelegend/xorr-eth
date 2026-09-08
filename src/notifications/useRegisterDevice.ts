@@ -38,10 +38,21 @@ export function useRegisterDevice(): RegistrationResult | undefined {
        * happens.
        */
       /*
-       * The token is a credential-shaped value and was being printed in full on every successful
-       * registration. Say that it worked, not what it is.
+       * Development only, and it is not the real answer.
+       *
+       * A push registration that failed — permission denied, no FCM on this device, the executor
+       * unreachable — is genuinely hard to notice after the fact, which is why this was logged at
+       * all. But the console is the one place a user will never look, so shipping the only signal
+       * there means the failure is still silent to everyone it affects. `/notifications` renders
+       * `result` now, and this line stays behind `__DEV__` for whoever is actually watching a
+       * terminal.
+       *
+       * The token itself is never printed: it is a credential-shaped value, and "it worked" is the
+       * whole of what a log needs to say.
        */
-      console.log(r.ok ? '[push] registered' : `[push] not registered (${r.reason}): ${r.detail}`);
+      if (__DEV__) {
+        console.log(r.ok ? '[push] registered' : `[push] not registered (${r.reason}): ${r.detail}`);
+      }
     });
   }, [wallet?.address]);
 

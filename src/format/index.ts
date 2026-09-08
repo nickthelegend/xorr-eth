@@ -111,7 +111,18 @@ export function mmss(seconds: number): string {
  * Anything not long enough to shorten is returned as-is rather than mangled — a short string here
  * is a bug upstream, and hiding it behind an ellipsis would make it look deliberate.
  */
-export function shortAddress(address: string, lead = 6, tail = 4): string {
+export function shortAddress(address: string | null | undefined, lead = 6, tail = 4): string {
+  /*
+   * Absent renders as a dash rather than throwing.
+   *
+   * This took `string` and called `.trim()` on it, so a field an older executor did not send
+   * crashed the whole screen — `/sponsors` went to the error boundary because a rolling deploy left
+   * one field undefined. A formatter is the wrong place to enforce a contract: it is called from
+   * render, its callers are screens, and the blast radius of a throw is everything they were about
+   * to draw. Formatting nothing is a dash; deciding whether nothing is acceptable belongs to the
+   * screen, which can say so in words.
+   */
+  if (!address) return MINUS;
   const a = address.trim();
   if (a.length <= lead + tail + 1) return a;
   return `${a.slice(0, lead)}…${a.slice(-tail)}`;

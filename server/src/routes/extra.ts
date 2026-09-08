@@ -15,7 +15,7 @@ import { send } from '../notifications/push.js';
 import { quote, canonicalSymbol } from '../venues/oneinch.js';
 import { requireUser } from '../auth/middleware.js';
 import { decide } from '../graph/decide.js';
-import { health as graphHealth, dailySpendFor, spendsFor } from '../graph/client.js';
+import { health as graphHealth, dailySpendFor, indexDescription, spendsFor } from '../graph/client.js';
 
 export const extra = new Hono();
 
@@ -358,7 +358,16 @@ extra.get('/graph/decision', async (c) => {
 extra.get('/graph/health', async (c) => {
   requireUser(c);
   try {
-    return c.json(await graphHealth());
+    /*
+     * The index's own state, and whether it is about THIS deployment.
+     *
+     * `_meta` alone says a subgraph is healthy and current, which is true and can still be
+     * useless: a perfectly synced index of a different contract is worse than no index, because
+     * it answers confidently about somebody else's policy. The screen has to be able to say which
+     * of those it is looking at, so the description travels with the health.
+     */
+    const [meta, index] = [await graphHealth(), indexDescription()];
+    return c.json({ ...meta, ...index });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }

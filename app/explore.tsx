@@ -36,6 +36,7 @@ const GROUPS: Group[] = [
       { route: '/policy', title: 'Wallet policy', detail: 'What Privy refuses, independently of us' },
       { route: '/delegation', title: 'Permission', detail: 'The grant itself: key, venues, cap, expiry' },
       { route: '/venues', title: 'Venues', detail: 'Where a fill may go, enforced on-chain' },
+      { route: '/sponsors', title: 'Integrations', detail: 'What 1inch, The Graph and Privy each do here, with the evidence' },
       { route: '/sources', title: 'Sources', detail: 'Where every number in this app comes from' },
     ],
   },

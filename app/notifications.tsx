@@ -18,18 +18,31 @@ import {
   HeaderBar,
   LoadingRows,
   Screen,
+  SheetCard,
   SwitchRow,
   Text,
   colors,
+  radius,
   size,
   space,
 } from '@/ui';
 import { useAsync } from '@/data/useAsync';
 import { system } from '@/data/system';
+import { useRegisterDevice } from '@/notifications/useRegisterDevice';
 
 export default function Notifications() {
   const goBack = useGoBack();
   const { data, loading, error, reload } = useAsync(() => system.notificationPrefs(), []);
+  /*
+   * Whether this device can actually be reached.
+   *
+   * Four switches that decide which pushes to send are worth nothing if none can arrive, and that
+   * failure used to exist only as a line in a console — the one place a user will never look. It
+   * is the same "nothing versus not yet" problem as everywhere else in this app: a screen of
+   * enabled toggles and a screen of enabled toggles on a device that never registered look
+   * identical and mean opposite things.
+   */
+  const device = useRegisterDevice();
 
   /*
    * Local overrides on top of the fetched list, so a toggle responds immediately rather than after
@@ -55,6 +68,32 @@ export default function Notifications() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: space.s30 }}
           >
+            {/*
+              Stated before the switches, because it governs all of them. Web has no push token at
+              all, which is a fact about the platform rather than a failure, and says so.
+            */}
+            {device && !device.ok ? (
+              <SheetCard
+                bordered
+                borderRadius={radius.panel}
+                padding={space.s14}
+                style={{ marginBottom: space.s14 }}
+              >
+                <Text variant="rowPrimary" color={colors.warn}>
+                  {device.reason === 'denied'
+                    ? 'Notifications are turned off for this app'
+                    : device.reason === 'unsupported'
+                      ? 'This device cannot receive push'
+                      : device.reason === 'unconfigured'
+                        ? 'Push is not configured in this build'
+                        : 'This device could not be registered'}
+                </Text>
+                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                  {device.detail} Nothing below will arrive until that is fixed.
+                </Text>
+              </SheetCard>
+            ) : null}
+
             {data.map((p) => (
               <SwitchRow
                 key={p.kind}

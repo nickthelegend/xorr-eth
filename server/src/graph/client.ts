@@ -33,6 +33,21 @@ const ENDPOINT =
 const INDEXED_DELEGATION = (process.env.SUBGRAPH_DELEGATION_ADDRESS ??
   '0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e').toLowerCase();
 
+/** What the index is, for a screen that has to say whether it applies here. */
+export function indexDescription(): {
+  endpoint: string;
+  indexedDelegation: string;
+  activeDelegation: string;
+  indexesThisDeployment: boolean;
+} {
+  return {
+    endpoint: ENDPOINT,
+    indexedDelegation: INDEXED_DELEGATION,
+    activeDelegation: (process.env.DELEGATION_ADDRESS ?? '').toLowerCase(),
+    indexesThisDeployment: indexesThisDeployment(),
+  };
+}
+
 export function indexesThisDeployment(): boolean {
   const active = (process.env.DELEGATION_ADDRESS ?? '').toLowerCase();
   return active.length > 0 && active === INDEXED_DELEGATION;
