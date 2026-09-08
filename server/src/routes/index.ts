@@ -20,6 +20,7 @@ import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { ADDRESSES, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
 import { basenameOf } from '../evm/basename.js';
+import { dripGasIfNeeded } from '../evm/gasDrip.js';
 import {
   allowedVenues,
   delegatePublicKey,
@@ -99,17 +100,102 @@ routes.post('/wallet/create', async (c) => {
     detail: `Your keys, held by you. ${CHAIN_KEY}.`,
     kind: 'risk',
   });
+
+  /*
+   * A wallet that cannot pay gas cannot sign the permission, and the permission is the product.
+   *
+   * Privy creates the embedded wallet empty, so on the hosted deployment a first-time visitor
+   * reached the delegate screen and the signature failed on `insufficient funds` — every screen
+   * past that point unreachable. The drip refuses on mainnet and on a fork of it, refuses a wallet
+   * that already holds anything, and refuses to spend the delegate below its own gas reserve.
+   *
+   * Awaited but never allowed to throw: the wallet exists and is usable either way, and someone
+   * funding it themselves must not be blocked by a faucet that had nothing to give. The outcome is
+   * written to the trail because a transfer out of the delegate's key is exactly the sort of thing
+   * that should never happen unrecorded.
+   */
+  const drip = await dripGasIfNeeded(address as Address).catch((e) => ({
+    sent: false as const,
+    reason: e instanceof Error ? e.message : String(e),
+  }));
+  await append({
+    walletId: row!.id,
+    agent: 'xorr',
+    action: drip.sent ? `Sent ${drip.amountEth} test ETH for gas` : 'No gas sent',
+    detail: drip.sent
+      ? `${CHAIN_KEY} test ETH, so you can sign the permission. It has no value and buys nothing.`
+      : `Not sent — ${drip.reason}.`,
+    kind: 'risk',
+    payload: drip.sent ? { hash: drip.hash } : { reason: drip.reason },
+  }).catch(() => undefined);
+
   return c.json(row);
 });
 
+/**
+ * The endpoint onboarding actually calls.
+ *
+ * `/wallet/create` exists and is the one that reads like the entry point, but screen 2 posts here —
+ * Privy has already made the wallet, so the app is telling the executor about an address rather
+ * than asking for one. That distinction cost the gas drip a whole deploy: it was added to
+ * `/wallet/create`, which the app never calls, and a wallet signed in through the hosted build
+ * still arrived with nothing to pay gas with.
+ */
 routes.post('/wallet/connect', async (c) => {
   const { userId } = requireUser(c);
   const body = z.object({ address: z.string().regex(/^0x[a-fA-F0-9]{40}$/) }).parse(await c.req.json());
+
+  /*
+   * Was this wallet already known? Asked BEFORE the upsert, because afterwards there is no way to
+   * tell an insert from an update — and the drip must fire once, on first sight, not on every app
+   * load for as long as the wallet stays empty.
+   */
+  const known = await one<{ id: string }>(`SELECT id FROM wallets WHERE address = $1`, [body.address]);
+
   const row = await one<WalletRow>(
     `INSERT INTO wallets (id, user_id, address, kind, cluster) VALUES ($1,$2,$3,'connected',$4)
      ON CONFLICT (address) DO UPDATE SET kind='connected', user_id = EXCLUDED.user_id RETURNING *`,
     [randomUUID(), userId, body.address, CHAIN_KEY],
   );
+
+  if (!known) {
+    await append({
+      walletId: row!.id,
+      agent: 'xorr',
+      action: 'Wallet connected',
+      detail: `Your keys, held by you. ${CHAIN_KEY}.`,
+      kind: 'risk',
+    }).catch(() => undefined);
+
+    /*
+     * A wallet that cannot pay gas cannot sign the permission, and the permission is the product.
+     *
+     * Privy creates the embedded wallet empty, so on the hosted deployment a first-time visitor
+     * reached the delegate screen and the signature failed on `insufficient funds` — every screen
+     * past that point unreachable. `dripGasIfNeeded` refuses on mainnet and on a fork of it,
+     * refuses a wallet that already holds anything, and refuses to spend the delegate below its
+     * own reserve.
+     *
+     * Never fatal: the wallet is created and usable either way, and someone funding it themselves
+     * must not be blocked by a faucet that had nothing to give. Recorded in the trail because a
+     * transfer out of the delegate's key should never happen unlogged.
+     */
+    const drip = await dripGasIfNeeded(body.address as Address).catch((e: unknown) => ({
+      sent: false as const,
+      reason: e instanceof Error ? e.message : String(e),
+    }));
+    await append({
+      walletId: row!.id,
+      agent: 'xorr',
+      action: drip.sent ? `Sent ${drip.amountEth} test ETH for gas` : 'No gas sent',
+      detail: drip.sent
+        ? `${CHAIN_KEY} test ETH, so you can sign the permission. It has no value and buys nothing.`
+        : `Not sent — ${drip.reason}.`,
+      kind: 'risk',
+      payload: drip.sent ? { hash: drip.hash } : { reason: drip.reason },
+    }).catch(() => undefined);
+  }
+
   return c.json(row);
 });
 

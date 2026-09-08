@@ -95,12 +95,21 @@ history we hold.
 
 | | |
 |---|---|
+| **The app** | **[`web-production-3e214.up.railway.app`](https://web-production-3e214.up.railway.app)** — open it, sign in, it is the real thing against the Sepolia executor below |
 | `XorrDelegation` | [`0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e`](https://sepolia.basescan.org/address/0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e) on Base Sepolia |
 | Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.2`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2) — synced, no indexing errors |
 | Aqua venue subgraph | built + pinned `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ` |
 | Bot delegate key | `0xC38f38f45463f77bD823FebE16b15714Eb98c8A5` — the key the deployed executor signs with, funded for its own gas |
 | Executor (Base Sepolia) | [`executor-production-1659.up.railway.app`](https://executor-production-1659.up.railway.app/verify) — the public, explorer-checkable deployment |
 | Executor (Base mainnet fork) | [`executor-fork-production.up.railway.app`](https://executor-fork-production.up.railway.app/verify) — where fills actually execute |
+
+The hosted app runs on Base Sepolia, and that is a correctness choice rather than a convenience
+one: Privy previews and broadcasts through its own RPC for a chain it knows, and a fork of Base is
+chain 8453 — indistinguishable from real Base — so a hosted fork build would simulate every
+user-signed transaction against mainnet, where the wallet holds nothing. Sepolia is where the
+signing half is real: a real login, a real embedded wallet, a real on-chain permission, real prices,
+and history read from The Graph. Fills are the half that is not, because 1inch has no liquidity
+there — the network screen says so rather than pretending, and the fork below is where they settle.
 
 A real grant signed by a real Privy embedded wallet is queryable right now:
 [`0x596f4c08…`](https://sepolia.basescan.org/tx/0x596f4c08eca02e0d4dd0928e7499c4cccad31461c35e5b98e2f5bf211595ee6d)
@@ -186,8 +195,9 @@ every day is noise that trains people to stop reading.
 
 ## The strategy ladder
 
-Ordered by how much the bot has to be right about the future, not by how impressive it sounds. Five
-of seven rungs run.
+Ordered by how much the bot has to be right about the future, not by how impressive it sounds. All
+seven rungs are built and registered in `PLANNERS`; the fork's run log carries fills from tiers 1
+through 7.
 
 | | What it does | Why it sits here |
 |---|---|---|
@@ -196,8 +206,8 @@ of seven rungs run.
 | **3 · Take profit, stop loss, trailing stop** | Closes a position at levels you set. It never opens one. | Risk-reducing only. The trailing stop follows the high-water mark, updated on every run — including the ones where it does nothing, which is when trailing has to happen. |
 | **4 · Idle cash to yield** | Supplies spare USDC to Aave v3. | Every move is a published rate you can check. The bot can supply and deliberately **cannot withdraw** — burning your own aTokens needs nobody's permission, so that power was never granted. |
 | **5 · Range accumulation** | Buys a rung lower and sells a rung higher inside a band you draw. | The first tier that assumes something — that the range holds. So the setup screen backtests exactly that against real history before you commit. |
-| 6 · Momentum | — | Not built. The first tier that needs the bot to be right about the future. |
-| 7 · Events and earnings | — | Not built. Most judgement, most ways to be wrong, last. |
+| **6 · Momentum** | A Donchian breakout with a trend filter and a stop attached to every entry. | The first tier that needs the bot to be right about the future, so it proposes rather than executes unless you turn that off. Its backtest replays this exact rule — see `momentumReplay`. |
+| **7 · Events and earnings** | Trades tokenized equities around EDGAR filing dates. | Most judgement, most ways to be wrong, last. The dates come from the regulator and a projection says it is one. |
 
 Every tier runs through the same `spend()` or `closePosition()` — one set of gates, checked once.
 A tier with a screen and no executor is worse than no tier, so `available` is flipped only after
@@ -316,11 +326,11 @@ XORR_CHAIN=base-fork FORK_RPC=http://127.0.0.1:8545 npx tsx server/src/fork-e2e.
 ## Tests
 
 ```bash
-npm test                                       # 245 — app AND executor units
-(cd server && npm test)                        # 86 executor on its own
+npm test                                       # 432 — app AND executor units
+(cd server && npm test)                        # 214 executor on its own
 npm run test:live                              # 83 against real APIs and a real chain
 (cd server && npm run test:live)               # 59 more, needing the fork environment
-(cd contracts && forge test)                   # 22 contract unit
+(cd contracts && forge test)                   # 54 contract: 22 unit + 32 fork
 (cd contracts && forge test --match-contract Fork \
    --fork-url $BASE_RPC)                       # 32 fork: 15 Aqua, 10 SwapVM, 7 equities
 node tools/shoot.mjs                           # 54 screens, console + network + content
