@@ -39,3 +39,7 @@ contracts/lib/swap-vm/node_modules/
 
 # The demo's intermediate. The .mp4 and .gif are committed; the source webm is 2MB of duplicate.
 docs/demo/*.webm
+
+# Web build output. `npm run build:base` regenerates it and verifies the artifact.
+dist-base/
+dist/

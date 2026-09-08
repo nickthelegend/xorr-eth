@@ -13,7 +13,8 @@
     "test": "vitest run --exclude \"**/*.live.test.ts\"",
     "test:watch": "vitest",
     "test:live": "LIVE=1 vitest run live.test",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "build:base": "node scripts/build-base.mjs"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",

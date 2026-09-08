@@ -74,6 +74,30 @@ ceremony — every other environment in this repo is safe to point anything at, 
 real money. Leave it out of any `.env` that gets copied around, and set it only on the deployment
 that is meant to be live.
 
+## Building the app for Base
+
+```bash
+EXPO_PUBLIC_API_URL=https://your-base-executor npm run build:base
+```
+
+Not `expo export`. That command produces a perfectly valid build for the *wrong* chain: the client
+reads `EXPO_PUBLIC_XORR_CHAIN`, falls back to `base-sepolia`, and that variable is not in `.env` —
+so the obvious command yields a Sepolia bundle pointing at `http://localhost:8788`, which looks
+exactly like a successful production build and is not one. It works perfectly on the machine that
+built it, which is what makes it ship.
+
+So `build:base` refuses rather than documents. Before building it checks that an executor URL is
+set, that it is not localhost, and — by asking `/health` — that the executor actually settles on
+`base`. A Base app wired to a Sepolia executor is the mistake worth catching: both halves work,
+they simply disagree about which chain the money is on.
+
+Afterwards it checks the artifact rather than the intent. `chainLabel` folds to a literal at minify
+time, so a Base bundle contains "settles on Base" and a Sepolia one does not — an environment
+variable that was set and then ignored produces the same console output as one that worked, and
+only the output tells you which happened.
+
+A verified Base bundle was produced this way; the `dist-base/` it writes is gitignored.
+
 ## What does not change
 
 Nothing else. No code path is testnet-only, no address is hardcoded to a fork, and
