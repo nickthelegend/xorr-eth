@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
+  IconButton,
   Button,
   Fill,
   LoadingRows,
@@ -25,6 +26,7 @@ import { useAsync } from '@/data/useAsync';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 import type { Alert } from '@/data/types';
+import { useGoBack } from '@/nav/useGoBack';
 
 const ROW_H = 70;
 
@@ -57,6 +59,7 @@ function when(iso: string): string {
 type Pref = { kind: string; label: string; detail: string; enabled: boolean };
 
 export default function Alerts() {
+  const goBack = useGoBack();
   const router = useRouter();
   const alerts = useStore((s) => s.alerts);
   const toggleAlert = useStore((s) => s.toggleAlert);
@@ -79,8 +82,17 @@ export default function Alerts() {
 
   return (
     <Screen>
+      {/*
+        A pushed screen needs a way back that is visible.
+
+        This had none: the only exit was iOS's edge-swipe, which is undiscoverable and does not
+        exist on web at all. Same header as History, which had it right.
+      */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="screenTitle">Alerts</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+          <IconButton name="back" accessibilityLabel="Back" background="none" onPress={() => goBack()} />
+          <Text variant="screenTitle">Alerts</Text>
+        </View>
         <Text variant="footnote" color={colors.ink28}>
           {onCount} of {data?.length ?? 0} on
         </Text>

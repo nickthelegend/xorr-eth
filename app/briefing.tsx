@@ -15,6 +15,7 @@ import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
+  IconButton,
   Button,
   ErrorState,
   Fill,
@@ -30,9 +31,11 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useGoBack } from '@/nav/useGoBack';
 
 const DOT = 8;
 export default function Briefing() {
+  const goBack = useGoBack();
   const router = useRouter();
   const { data, loading, error, reload, settledAt } = useAsync(() => repos.news.briefing(), []);
 
@@ -45,8 +48,17 @@ export default function Briefing() {
 
   return (
     <Screen>
+      {/*
+        A pushed screen needs a way back that is visible.
+
+        This had none: the only exit was iOS's edge-swipe, which is undiscoverable and does not
+        exist on web at all. Same header as History, which had it right.
+      */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="screenTitle">Briefing</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+          <IconButton name="back" accessibilityLabel="Back" background="none" onPress={() => goBack()} />
+          <Text variant="screenTitle">Briefing</Text>
+        </View>
         <Text variant="footnote" color={colors.ink28}>
           {loadedAt === undefined ? '' : `Loaded ${loadedAt}`}
         </Text>

@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 import { Linking, ScrollView, Share, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
+  IconButton,
   Button,
   EmptyState,
   ErrorState,
@@ -42,6 +43,7 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
+import { useGoBack } from '@/nav/useGoBack';
 
 const DOT = 8;
 
@@ -78,6 +80,7 @@ function ExplorerLink({ explorer }: { explorer: string }) {
 }
 
 export default function Activity() {
+  const goBack = useGoBack();
   const router = useRouter();
   const actFilter = useStore((s) => s.actFilter);
   const setActFilter = useStore((s) => s.setActFilter);
@@ -127,7 +130,16 @@ export default function Activity() {
 
   return (
     <Screen>
-      <Text variant="screenTitle">Activity</Text>
+      {/*
+        A pushed screen needs a way back that is visible.
+
+        This had none: the only exit was iOS's edge-swipe, which is undiscoverable and does not
+        exist on web at all. Same header as History, which had it right.
+      */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+        <IconButton name="back" accessibilityLabel="Back" background="none" onPress={() => goBack()} />
+        <Text variant="screenTitle">Activity</Text>
+      </View>
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
         Every action an agent took, and every one it chose not to take.
       </Text>
