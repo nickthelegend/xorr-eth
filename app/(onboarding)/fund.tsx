@@ -16,7 +16,7 @@
 import React from 'react';
 import { ScrollView, View  } from 'react-native';
 import { useRouter } from 'expo-router';
-import { activeChain } from '@/chain';
+import { activeChain, chainLabel } from '@/chain';
 import { AddressQR } from '@/ui/AddressQR';
 import { useGoBack } from '@/nav/useGoBack';
 import {
@@ -51,9 +51,11 @@ const METHODS = [
   },
   {
     name: 'On-chain deposit',
-    // USDC on Base, because that is what the executor settles in. "USDT or SOL" was left
-    // over from before the pivot and named two things this app cannot do anything with.
-    detail: 'USDC on Base',
+    // USDC on whichever chain this build settles on, because that is what the executor settles
+    // in. "USDT or SOL" was left over from before the pivot and named two things this app cannot
+    // do anything with. The chain is read rather than written: this screen tells someone where to
+    // send money, and a testnet build that says "Base" is telling them to send it to mainnet.
+    detail: `USDC on ${chainLabel}`,
     tag: 'On-chain',
     feePct: 0,
     lands: () => 'After 1 confirmation',
@@ -190,8 +192,7 @@ export default function Fund() {
             {wallet?.address ?? 'Finish signing in to see your address.'}
           </Text>
           <Text variant="footnote" color={colors.ink32}>
-            On Base. Nothing else on this screen moves money — xorr has no custody and no
-            rail to move it for you.
+            {`On ${chainLabel}. Nothing else on this screen moves money — xorr has no custody and no rail to move it for you.`}
           </Text>
         </View>
         </ScrollView>
