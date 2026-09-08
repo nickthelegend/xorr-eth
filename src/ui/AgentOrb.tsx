@@ -21,6 +21,7 @@
  * prototype, so all six sizes are the same drawing rather than six hand-placed ones.
  */
 import React from 'react';
+import { Image } from 'expo-image';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, {
   Circle,
@@ -235,19 +236,31 @@ export function AgentOrb({
 export function AssetMark({
   gradient,
   size = metrics.mark,
+  uri,
   style,
   testID,
 }: {
   gradient: Gradient;
   size?: number;
+  /**
+   * The asset's real logo, from `/market/logos`. Null or absent keeps the gradient.
+   *
+   * The gradient is not a placeholder to be ashamed of — it is the honest mark for an instrument
+   * with no issuer and no token, which is every commodity, index and pre-IPO name in the list. It
+   * also renders underneath while the image loads, so a row never flashes empty.
+   */
+  uri?: string | null;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const gradientId = `mark-g-${uid}`;
+  // A logo that 404s or is malformed falls back to the gradient rather than leaving a hole.
+  const [failed, setFailed] = React.useState(false);
+  const showLogo = !!uri && !failed;
 
   return (
-    <View testID={testID} style={style}>
+    <View testID={testID} style={[{ width: size, height: size }, style]}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
           <RadialGradient id={gradientId} cx={GRADIENT_CX} cy={GRADIENT_CY} r={GRADIENT_R}>
@@ -257,6 +270,22 @@ export function AssetMark({
         </Defs>
         <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={`url(#${gradientId})`} />
       </Svg>
+      {showLogo ? (
+        <Image
+          source={{ uri }}
+          onError={() => setFailed(true)}
+          // `contain` rather than `cover`: these are logos with their own padding and a mark
+          // cropped to a circle loses the part that identifies it.
+          contentFit="contain"
+          transition={0}
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          }}
+        />
+      ) : null}
     </View>
   );
 }

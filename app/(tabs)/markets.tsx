@@ -34,6 +34,7 @@ import { Sparkline } from '@/ui/charts';
 import { Icon } from '@/design/Icon';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useLogos } from '@/data/useLogos';
 import { useStore } from '@/state/store';
 import type { Instrument } from '@/data/types';
 
@@ -55,6 +56,8 @@ export default function MarketsScreen() {
    * nine round trips for a decoration is how a decoration becomes a regression.
    */
   const sparkSyms = useMemo(() => rows.map((r: Instrument) => r.sym), [rows]);
+  // Real logos for the visible rows. Same symbol list the sparklines already use.
+  const logos = useLogos(sparkSyms);
   const sparks = useAsync(
     () => repos.markets.sparklines(sparkSyms),
     [sparkSyms.join(',')],
@@ -141,7 +144,13 @@ export default function MarketsScreen() {
               <Row
                 height={size.rowLg}
                 onPress={() => router.push(`/asset/${item.sym}`)}
-                left={<AssetMark gradient={{ c1: item.c1, c2: item.c2 }} size={size.mark} />}
+                left={
+                  <AssetMark
+                    gradient={{ c1: item.c1, c2: item.c2 }}
+                    uri={logos[item.sym]}
+                    size={size.mark}
+                  />
+                }
                 title={item.sym}
                 secondary={`${item.name} · ${item.tag}`}
                 value={

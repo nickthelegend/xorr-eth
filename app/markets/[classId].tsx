@@ -25,6 +25,7 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useLogos } from '@/data/useLogos';
 import type { Instrument } from '@/data/types';
 
 const PAGE = 25;
@@ -38,6 +39,7 @@ export default function ClassList() {
 
   const cls = data?.find((c) => c.id === classId);
   const rows = useMemo(() => (cls?.instruments ?? []).slice(0, page * PAGE), [cls, page]);
+  const logos = useLogos(useMemo(() => rows.map((r) => r.sym), [rows]));
   const hasMore = (cls?.instruments.length ?? 0) > rows.length;
 
   return (
@@ -81,7 +83,13 @@ export default function ClassList() {
             showsVerticalScrollIndicator={false}
             renderItem={({ item }: { item: Instrument }) => (
               <Row
-                left={<AssetMark gradient={{ c1: item.c1, c2: item.c2 }} size={size.mark} />}
+                left={
+                  <AssetMark
+                    gradient={{ c1: item.c1, c2: item.c2 }}
+                    uri={logos[item.sym]}
+                    size={size.mark}
+                  />
+                }
                 title={item.sym}
                 secondary={`${item.name} · ${item.tag}`}
                 middle={

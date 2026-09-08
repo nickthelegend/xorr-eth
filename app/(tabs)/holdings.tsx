@@ -5,7 +5,7 @@
  * the stacked proportion bar from screen 10, holdings rows, the realised card, and the
  * wallet. No new visual language — and no design values of its own; everything is `src/ui`.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { assetGradient } from '@/design/gradients';
@@ -31,6 +31,7 @@ import {
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useLogos } from '@/data/useLogos';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 import { weightBarPct } from '@/state/derived';
@@ -57,7 +58,8 @@ export default function Assets() {
   const weights = (sleeves.data ?? []).map((sleeve, i) => approvedWeights[i] ?? sleeve.weight);
   // Real holdings from the position book. This previously listed watchlist FIXTURES, so it
   // showed assets the user did not own at prices that never moved.
-  const holdings = positions.data ?? [];
+  const holdings = useMemo(() => positions.data ?? [], [positions.data]);
+  const logos = useLogos(useMemo(() => holdings.map((h) => h.symbol), [holdings]));
 
   return (
     <Screen tabBar>
@@ -148,7 +150,7 @@ export default function Assets() {
           holdings.map((h) => (
             <Row
               key={h.id}
-              left={<AssetMark gradient={assetGradient(h.symbol)} size={32} />}
+              left={<AssetMark gradient={assetGradient(h.symbol)} uri={logos[h.symbol]} size={32} />}
               title={h.symbol}
               secondary={`${quantity(h.units)} · avg ${money(h.entry)}`}
               value={<Price>{money(h.notional)}</Price>}

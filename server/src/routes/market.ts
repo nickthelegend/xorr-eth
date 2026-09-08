@@ -19,6 +19,7 @@ import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../mar
 import { TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
 import { STOCKS, equitiesFunctional, isStock, observedHistory } from '../venues/stocks.js';
 import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
+import { logosFor } from '../market/logos.js';
 import { withdrawCalldata } from '../venues/aave.js';
 import { suppliedUsd } from '../evm/balances.js';
 import { publicClient } from '../evm/client.js';
@@ -297,6 +298,21 @@ market.get('/market/stocks/history', async (c) => {
 
 /** GET /market/symbols — which symbols have a real feed. */
 market.get('/market/symbols', (c) => c.json(Object.keys(COINGECKO_IDS)));
+
+/**
+ * GET /market/logos?symbols=BTC,NVDAc — real logos, from the registries that actually know.
+ *
+ * Public, because it is the same information the market list already shows and it identifies
+ * nothing about the caller. A symbol neither upstream knows answers `{ url: null }` and the client
+ * keeps its gradient mark, which is why this cannot put a wrong face on an instrument.
+ */
+market.get('/market/logos', async (c) => {
+  const raw = (c.req.query('symbols') ?? '').trim();
+  if (!raw) return c.json({});
+  // Bounded so one caller cannot fan out into hundreds of upstream lookups on a rate-limited key.
+  const symbols = raw.split(',').map((s) => canonicalSymbol(s.trim())).filter(Boolean).slice(0, 60);
+  return c.json(await logosFor(symbols));
+});
 
 /**
  * GET /market/tradable — the symbols the executor can actually settle on this chain.

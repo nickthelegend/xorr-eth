@@ -51,6 +51,7 @@ import { CLOSE_STEPS, closeCta } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useLogo } from '@/data/useLogos';
 
 /** The close bar. 6pt — a readout, not a control; the pills below it do the setting. */
 const BAR_H = 6;
@@ -72,6 +73,7 @@ export default function PositionScreen() {
   // entry $63,880 / mark $66,560 / liquidation $58,110 were design values with nothing
   // behind them.
   const { data: p, loading, error, reload } = useAsync(() => repos.portfolio.position(id!), [id]);
+  const logo = useLogo(p?.symbol);
 
   const realise = p ? (p.unrealised * closePct) / 100 : 0;
   const free = p ? (p.margin * closePct) / 100 : 0;
@@ -122,7 +124,7 @@ export default function PositionScreen() {
           background="none"
           onPress={() => goBack()}
         />
-        {p ? <AssetMark gradient={assetGradient(p.symbol)} size={26} /> : null}
+        {p ? <AssetMark gradient={assetGradient(p.symbol)} uri={logo} size={26} /> : null}
         <Text variant="cardTitle" numberOfLines={1}>
           {p ? `${p.symbol} ${p.side}` : 'Position'}
         </Text>

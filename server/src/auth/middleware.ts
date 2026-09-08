@@ -23,6 +23,7 @@ const PUBLIC_PATHS = new Set([
   '/market/sparklines',
   '/market/ohlc',
   '/market/symbols',
+  '/market/logos',
   '/market/tradable',
   '/market/stocks',
   // Same reasoning as the rest of `/market/*`: an observed price series is not user data, and

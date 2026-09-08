@@ -10,7 +10,7 @@
  * `areaSeries.SOL`, drawing Solana's shape under whatever symbol you had opened.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import { chainLabel } from '@/chain';
@@ -27,6 +27,7 @@ import {
   NoteStrip,
   Pill,
   PillRow,
+  Segmented,
   Press,
   Price,
   Row,
@@ -47,12 +48,24 @@ import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
+import { useLogo } from '@/data/useLogos';
 import { usePrice } from '@/data/usePrices';
 import { rangeChange } from '@/state/derived';
 import { settlementSymbol } from '@/data/tradable';
 import { useSettleable } from '@/data/useSettleable';
 
 const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
+/**
+ * Candles or line, as a visible control.
+ *
+ * Labelled with glyphs rather than words: at this width "Candles"/"Line" would push the range
+ * pills off the row, and the two shapes read faster than either word does.
+ */
+const CHART_VIEWS: { value: number; label: string }[] = [
+  { value: 0, label: '▮' },
+  { value: 1, label: '∿' },
+];
+
 /** The timeframe each range pill maps to when asking for real candles. */
 const RANGE_TF = { '1D': '1H', '1W': '4H', '1M': '1D', '1Y': '1W', All: '1W' } as const;
 
@@ -70,6 +83,7 @@ export default function AssetDetail() {
   // default wherever there are real ones to draw.
   const [candleView, setCandleView] = useState(true);
 
+  const logo = useLogo(symbol);
   const inst = useAsync(() => repos.markets.getInstrument(symbol!), [symbol]);
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const held = (positions.data ?? []).find((p) => p.symbol === symbol);
@@ -184,7 +198,7 @@ export default function AssetDetail() {
             background="none"
             onPress={() => goBack()}
           />
-          {i ? <AssetMark gradient={{ c1: i.c1, c2: i.c2 }} size={26} /> : null}
+          {i ? <AssetMark gradient={{ c1: i.c1, c2: i.c2 }} uri={logo} size={26} /> : null}
           <Text variant="cardTitleLg" numberOfLines={1}>
             {i?.name ?? symbol}
           </Text>
@@ -198,6 +212,19 @@ export default function AssetDetail() {
         />
       </View>
 
+      {/*
+        Everything between the header and the footer scrolls.
+        The design canvas is 874 tall and an iPhone SE is 667. Price, chart, range pills, the
+        chart-type control, the position rows and the note come to more than that, so on a short
+        device the bottom of it was simply unreachable — `Fill` anchors height, it does not give
+        you a way to reach what overflows. The Sell/Buy pair stays pinned outside, because the
+        action must not scroll away.
+      */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: space.s14 }}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={{ alignItems: 'center', marginTop: space.s22, gap: space.s6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}>
           <Price variant="priceLg">{spot !== undefined ? fmtPrice(spot) : '—'}</Price>
@@ -277,13 +304,32 @@ export default function AssetDetail() {
         </View>
       )}
 
-      <PillRow style={{ marginTop: space.s16, flexGrow: 0 }} contentPadding={space.gutter}>
-        {RANGES.map((r, idx) => (
-          <Pill key={r} label={r} selected={idx === range} onPress={() => setRange(idx)} />
-        ))}
-      </PillRow>
+      {/*
+        The range pills, and — visibly — the chart type.
 
-      <Fill style={{ marginTop: space.s14, paddingHorizontal: space.gutter }}>
+        Both charts have been here since the beginning and the only way to swap them was to tap
+        the chart itself, an affordance with nothing on screen to suggest it existed. So the line
+        view may as well not have shipped. The control sits at the end of the same row, because it
+        answers the same question the range pills do: what am I looking at.
+      */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+        <PillRow style={{ marginTop: space.s16, flexGrow: 1 }} contentPadding={space.gutter}>
+          {RANGES.map((r, idx) => (
+            <Pill key={r} label={r} selected={idx === range} onPress={() => setRange(idx)} />
+          ))}
+        </PillRow>
+        {hasSeries ? (
+          <View style={{ marginTop: space.s16, paddingRight: space.gutter }}>
+            <Segmented
+              options={CHART_VIEWS}
+              value={candleView ? 0 : 1}
+              onChange={(v) => setCandleView(v === 0)}
+            />
+          </View>
+        ) : null}
+      </View>
+
+      <View style={{ marginTop: space.s14, paddingHorizontal: space.gutter }}>
         {held ? (
           <>
             <Row
@@ -315,7 +361,8 @@ export default function AssetDetail() {
             ? 'Momentum Scout holds this from your recurring buys. It will not add without asking.'
             : 'No agent holds this yet. Set up a recurring buy and it will start.'}
         </NoteStrip>
-      </Fill>
+      </View>
+      </ScrollView>
 
       {/*
         A Buy button on a market this chain cannot settle is a promise the app cannot keep.
