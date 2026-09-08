@@ -2,10 +2,11 @@
  * Settings — PLAN.md 10.3 [G14]. The Home gear had no destination.
  * Wallet, delegation status + revoke, security, notifications, the TONE DIAL, legal.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
+import { useAuth } from '@/auth/useAuth';
 import {
   Eyebrow,
   Fill,
@@ -52,6 +53,42 @@ export default function Settings() {
   const { tone, setTone } = useTone();
 
   const stopped = killed || delegation?.revoked;
+
+  /*
+   * Sign out. There was no way to.
+   *
+   * `useAuth` has exposed `logout` since it was written and not one screen called it, so a
+   * signed-in session could only be ended by deleting the app — which does not even work, because
+   * Privy keeps the session in the iOS keychain and it survives a reinstall. On a shared or lost
+   * phone that is the whole account, and for anyone testing it means one account, forever.
+   *
+   * Two taps rather than a dialog: the app has no modal confirm of its own, and the row saying
+   * what the second tap does is clearer than inventing one. Biometrics gate what the BOT may do —
+   * signing out changes none of that, and the on-chain permission is untouched by it, which the
+   * row says out loud so nobody reads this as a kill switch.
+   */
+  const { logout } = useAuth();
+  const setWallet = useStore((s) => s.setWallet);
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string>();
+
+  async function signOut() {
+    if (!confirmingSignOut) {
+      setConfirmingSignOut(true);
+      return;
+    }
+    setSignOutError(undefined);
+    try {
+      await logout();
+      // The persisted store outlives the session, and the entry gate reads `wallet` to choose
+      // between onboarding and the tab shell. Leaving it set signs you out into a signed-in shell.
+      setWallet(null);
+      router.replace('/welcome');
+    } catch (e) {
+      setConfirmingSignOut(false);
+      setSignOutError(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   return (
     <Screen>
@@ -190,6 +227,34 @@ export default function Settings() {
             divider={false}
             onPress={() => router.push('/legal/risk')}
           />
+
+          <Eyebrow small style={{ marginTop: space.s26 }}>
+            Session
+          </Eyebrow>
+          <Row
+            title={
+              confirmingSignOut ? (
+                <Text variant="rowPrimary" color={colors.down}>
+                  Tap again to sign out
+                </Text>
+              ) : (
+                'Sign out'
+              )
+            }
+            secondary={
+              confirmingSignOut
+                ? 'You will need your email code to get back in.'
+                : 'Ends this session on this device. The bot keeps whatever permission you granted it on-chain — stop that on Safety.'
+            }
+            height={SETTING_ROW}
+            divider={false}
+            onPress={() => void signOut()}
+          />
+          {signOutError ? (
+            <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s10 }}>
+              {signOutError}
+            </Text>
+          ) : null}
           <View style={{ height: space.s30 }} />
         </ScrollView>
       </Fill>
