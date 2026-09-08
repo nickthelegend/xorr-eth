@@ -6,6 +6,7 @@
  * phone." So the toggles here govern INTERRUPTION ONLY. The breakers that stop trading live in the
  * server's rule engine and are deliberately unreachable from this file.
  */
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { api } from '../data/api';
@@ -24,7 +25,7 @@ Notifications.setNotificationHandler({
 
 export type RegistrationResult =
   | { ok: true; token: string }
-  | { ok: false; reason: 'denied' | 'unsupported' | 'error'; detail: string };
+  | { ok: false; reason: 'denied' | 'unsupported' | 'unconfigured' | 'error'; detail: string };
 
 /**
  * Ask for permission and register the device with the executor.
@@ -52,7 +53,27 @@ export async function register(): Promise<RegistrationResult> {
       return { ok: false, reason: 'denied', detail: 'Notification permission was not granted.' };
     }
 
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    /*
+     * Expo cannot mint a token without knowing which project it is for.
+     *
+     * `getExpoPushTokenAsync()` infers the id from the manifest in a managed build and cannot in a
+     * prebuilt one, so every launch logged `[push] not registered (error): No "projectId" found` —
+     * an SDK sentence, filed as an error, for a build that simply has no EAS project. It is
+     * configuration, not a fault, and it now says so under its own reason. Pass the id explicitly
+     * where one exists, so a build that HAS an EAS project works without further change.
+     */
+    const projectId =
+      (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas
+        ?.projectId ?? Constants.easConfig?.projectId;
+    if (!projectId) {
+      return {
+        ok: false,
+        reason: 'unconfigured',
+        detail:
+          'No EAS project id in this build, so Expo cannot issue a push token. Alerts still fire on the executor; this device just cannot be notified.',
+      };
+    }
+    const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     await api.post('/devices/register', { token, platform: Platform.OS });
     return { ok: true, token };
   } catch (e) {

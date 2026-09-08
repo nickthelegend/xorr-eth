@@ -37,11 +37,11 @@ export function useRegisterDevice(): RegistrationResult | undefined {
        * this product to notice after the fact, so it gets a line in the log at the moment it
        * happens.
        */
-      console.log(
-        r.ok
-          ? `[push] registered ${r.token}`
-          : `[push] not registered (${r.reason}): ${r.detail}`,
-      );
+      /*
+       * The token is a credential-shaped value and was being printed in full on every successful
+       * registration. Say that it worked, not what it is.
+       */
+      console.log(r.ok ? '[push] registered' : `[push] not registered (${r.reason}): ${r.detail}`);
     });
   }, [wallet?.address]);
 
