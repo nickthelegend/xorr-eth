@@ -157,14 +157,22 @@ export type Catchup = {
 
 /* ─────────────────────────────────────────────────────────────────── market */
 
+/**
+ * The same asset priced two ways. Field names are the server's, checked against a live response.
+ *
+ * `compared: false` means only one source answered, which is NOT a disagreement — an outage tells
+ * you nothing about the other source's number, and rendering it as a discrepancy sends someone
+ * looking for a problem in the wrong place.
+ */
 export type CrossCheck = {
   symbol: string;
-  /** Null when only one source could be reached — not the same as agreeing. */
+  /** Null when that source could not be reached. Never zero — zero is a price. */
   oneinch: number | null;
-  feed: number | null;
+  coingecko: number | null;
   agree: boolean;
   compared: boolean;
-  diffPct?: number | null;
+  /** How far apart, as a percentage. Absent when only one side answered. */
+  spreadPct?: number | null;
   note: string;
 };
 

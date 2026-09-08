@@ -77,8 +77,8 @@ export default function Tokens() {
             }}
           >
             {rows.map((t) => (
+              <View key={t.address} style={{ gap: space.s6 }}>
               <Press
-                key={t.address}
                 onPress={() => router.push(`/asset/${t.symbol}`)}
                 accessibilityRole="button"
                 accessibilityLabel={`${t.symbol}, ${t.decimals} decimals`}
@@ -106,6 +106,38 @@ export default function Tokens() {
                   </Text>
                 </SheetCard>
               </Press>
+
+              {/*
+                The two per-symbol inspectors live here.
+                
+                They are tools for a token and their natural home would be the asset screen, which
+                predates this work and is not mine to redesign. Hanging them off the token registry
+                is the honest alternative — and arguably the better one, since this is the screen
+                that already answers "what exactly is this contract".
+              */}
+              <View style={{ flexDirection: 'row', gap: space.s16, paddingHorizontal: space.s14 }}>
+                <Press
+                  onPress={() => router.push(`/route/${t.symbol}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Inspect the route into ${t.symbol}`}
+                  hitHeight={size.hit}
+                >
+                  <Text variant="control" color={colors.ink55}>
+                    Route ›
+                  </Text>
+                </Press>
+                <Press
+                  onPress={() => router.push(`/crosscheck/${t.symbol}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Cross-check the price of ${t.symbol}`}
+                  hitHeight={size.hit}
+                >
+                  <Text variant="control" color={colors.ink55}>
+                    Cross-check ›
+                  </Text>
+                </Press>
+              </View>
+              </View>
             ))}
           </ScrollView>
         )}

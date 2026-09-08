@@ -83,7 +83,14 @@ export default function Stocks() {
               <Row
                 key={s.address}
                 height={size.rowLg}
-                onPress={() => router.push(`/asset/${s.symbol}`)}
+                /*
+                 * To the readings, not the asset screen.
+                 *
+                 * These have no market-data feed — the only history that exists is what this
+                 * executor recorded by probing, and `/oracle` is the only screen that shows it.
+                 * The asset screen is one tap further and predates this work.
+                 */
+                onPress={() => router.push(`/oracle/${s.symbol}`)}
                 left={
                   <AssetMark
                     gradient={assetGradient(s.symbol)}

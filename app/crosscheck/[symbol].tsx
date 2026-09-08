@@ -71,7 +71,7 @@ export default function Crosscheck() {
 
             <View style={{ flexDirection: 'row', gap: space.s10 }}>
               <Source label="1inch" note="the pools a fill would touch" value={data.oneinch} />
-              <Source label="Feed" note="the reference price" value={data.feed} />
+              <Source label="CoinGecko" note="the reference price" value={data.coingecko} />
             </View>
 
             {/*
@@ -79,13 +79,13 @@ export default function Crosscheck() {
               percentage computed against a missing number is not a small discrepancy, it is a
               fabricated one.
             */}
-            {data.compared && data.diffPct !== null && data.diffPct !== undefined ? (
+            {data.compared && data.spreadPct !== null && data.spreadPct !== undefined ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
                 <Text variant="footnote" color={colors.ink40}>
                   DIFFERENCE
                 </Text>
                 <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
-                  {percent(Math.abs(data.diffPct), { digits: 2, explicitSign: false })}
+                  {percent(Math.abs(data.spreadPct), { digits: 2, explicitSign: false })}
                 </Text>
                 <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
                   The executor fills at the 1inch side. Where they diverge, that is the number that

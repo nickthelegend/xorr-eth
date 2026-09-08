@@ -14,39 +14,54 @@
  */
 import React from 'react';
 import { useGoBack } from '@/nav/useGoBack';
+import { ScrollView } from 'react-native';
 import {
   Button,
   ErrorState,
   Fill,
   HeaderBar,
   Placeholder,
+  Row,
   Screen,
   SheetCard,
   Text,
   colors,
   radius,
+  size,
   space,
 } from '@/ui';
 import { useRouter } from 'expo-router';
 import { useAsync } from '@/data/useAsync';
 import { system } from '@/data/system';
+import { repos } from '@/data';
 
 export default function AuditChain() {
   const goBack = useGoBack();
   const router = useRouter();
   const { data, loading, error, reload } = useAsync(() => system.auditChain(), []);
+  /*
+   * The rows the count above is about.
+   *
+   * `/audit/[seq]` had no way in — it was written and then reachable only by typing a URL, which is
+   * the orphan this whole set was supposed to avoid. Listing the entries here is also the better
+   * shape: a screen that says "168 entries verify" should be able to show you one.
+   */
+  const entries = useAsync(() => repos.activity.list(), []);
 
   return (
     <Screen>
       <HeaderBar onBack={goBack} title={<Text variant="screenTitle">The trail</Text>} />
 
-      <Fill style={{ marginTop: space.s20, gap: space.s12 }}>
+      <Fill style={{ marginTop: space.s20 }}>
         {error ? (
           <ErrorState error={error} onRetry={reload} />
         ) : loading && !data ? (
           <Placeholder height={160} />
         ) : !data ? null : (
-          <>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: space.s30, gap: space.s12 }}
+          >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
               <Text variant="footnote" color={colors.ink40}>
                 HASH CHAIN
@@ -94,11 +109,30 @@ export default function AuditChain() {
             </SheetCard>
 
             <Button
-              label="Read the entries"
+              label="The full trail"
               variant="ghost"
               onPress={() => router.push('/activity')}
             />
-          </>
+
+            {(entries.data ?? []).slice(0, 25).map((e) => (
+              <Row
+                key={e.id}
+                height={size.rowLg}
+                onPress={() => router.push(`/audit/${e.id}`)}
+                title={e.action}
+                secondary={`${e.agent} · ${e.t}`}
+                value={
+                  e.amount ? (
+                    <Text variant="rowPrimary">{e.amount}</Text>
+                  ) : (
+                    <Text variant="footnote" color={colors.ink28}>
+                      {e.kind}
+                    </Text>
+                  )
+                }
+              />
+            ))}
+          </ScrollView>
         )}
       </Fill>
     </Screen>

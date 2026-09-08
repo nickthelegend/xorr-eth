@@ -9,11 +9,13 @@
  * what the bot DID, including the refusals; disposals are cost basis on what was sold. One file
  * trying to be both would be the wrong shape for each.
  *
- * Handed to the system share sheet rather than written to disk. A file the app saves somewhere only
- * it can see is not an export.
+ * Delivery is `deliverFile`, which downloads in a browser and shares on a phone. It used to call
+ * `Share.share` on both, and Chrome rejects that outright — the screen said "Permission denied" and
+ * produced nothing, which on a screen whose whole purpose is producing a file is a total failure
+ * wearing a handled error's clothes.
  */
 import React, { useState } from 'react';
-import { Share, View } from 'react-native';
+import { View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
@@ -27,6 +29,7 @@ import {
   space,
 } from '@/ui';
 import { repos } from '@/data';
+import { deliverFile } from '@/export/deliver';
 
 type Job = 'trail-csv' | 'trail-json' | 'disposals' | null;
 
@@ -34,19 +37,28 @@ export default function Export() {
   const goBack = useGoBack();
   const [busy, setBusy] = useState<Job>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  /* What actually left, so a silent download is not indistinguishable from a dead button. */
+  const [done, setDone] = useState<string | null>(null);
 
-  const run = async (job: Exclude<Job, null>, get: () => Promise<string>) => {
+  const run = async (job: Exclude<Job, null>, filename: string, get: () => Promise<string>) => {
     setBusy(job);
     setProblem(null);
+    setDone(null);
     try {
       const body = await get();
       /*
-       * The count, from the file itself. A share sheet gives no feedback about what it received,
-       * and "exported" with nothing behind it is the kind of confirmation that hides an empty file.
+       * The count, from the file itself. Neither a download nor a share sheet reports what it
+       * received, and "exported" with nothing behind it is the confirmation that hides an empty
+       * file.
        */
       const rows = Math.max(0, body.trim().split('\n').length - 1);
-      await Share.share({ message: body, title: job });
-      setProblem(rows === 0 ? 'That file came back empty — there is nothing to export yet.' : null);
+      if (rows === 0) {
+        setProblem('That file came back empty — there is nothing to export yet.');
+        return;
+      }
+      const out = await deliverFile(filename, body, filename.endsWith('.json') ? 'application/json' : 'text/csv');
+      if (out.ok) setDone(`${rows} rows · ${filename}`);
+      else setProblem(out.reason);
     } catch (e) {
       setProblem(e instanceof Error ? e.message : String(e));
     } finally {
@@ -71,14 +83,14 @@ export default function Export() {
               variant="ghost"
               disabled={busy !== null}
               style={{ flex: 1 }}
-              onPress={() => run('trail-csv', () => repos.activity.exportTrail('csv'))}
+              onPress={() => run('trail-csv', 'xorr-audit.csv', () => repos.activity.exportTrail('csv'))}
             />
             <Button
               label={busy === 'trail-json' ? 'Preparing…' : 'JSON'}
               variant="ghost"
               disabled={busy !== null}
               style={{ flex: 1 }}
-              onPress={() => run('trail-json', () => repos.activity.exportTrail('json'))}
+              onPress={() => run('trail-json', 'xorr-audit.json', () => repos.activity.exportTrail('json'))}
             />
           </View>
         </SheetCard>
@@ -94,13 +106,17 @@ export default function Export() {
             variant="ghost"
             disabled={busy !== null}
             style={{ marginTop: space.s14 }}
-            onPress={() => run('disposals', () => repos.activity.exportDisposals())}
+            onPress={() => run('disposals', 'xorr-disposals.csv', () => repos.activity.exportDisposals())}
           />
         </SheetCard>
 
         {problem ? (
           <Text variant="secondarySm" color={colors.warn}>
             {problem}
+          </Text>
+        ) : done ? (
+          <Text variant="secondarySm" color={colors.up}>
+            {done}
           </Text>
         ) : null}
 
