@@ -56,6 +56,9 @@ import { voice } from '@/bot/message';
 import { useTone } from '@/bot/tone';
 import { DEFAULT_BUY } from '@/data/tradable';
 import type { Proposal } from '@/data/types';
+import { AgentRail } from './AgentRail';
+import { Thinking } from './Thinking';
+import { DEFAULT_AGENT, agentByName, type ChatAgent } from './agents';
 
 /** Thread gutter, composer and send button. */
 const THREAD_PAD_H = space.s16;
@@ -168,11 +171,30 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
   }, [hydrated, data, messages, append, setProposal]);
 
   const items = useMemo(() => withDividers(messages), [messages]);
-  const agentName = proposal?.agent ?? agentNameFallback;
+
+  /*
+   * Who you are talking to, chosen rather than inherited.
+   *
+   * This used to be `proposal?.agent ?? 'Momentum Scout'` — whichever agent happened to own the
+   * open proposal, and Momentum Scout the rest of the time. Four personas existed on the server,
+   * each with its own mandate and its own refusals, and three of them were unreachable.
+   *
+   * Seeded from the proposal when there is one, because if an agent has just asked you for
+   * something, that is who you are about to reply to.
+   */
+  const [agent, setAgent] = useState<ChatAgent>(
+    () => (proposal ? agentByName(proposal.agent) : DEFAULT_AGENT),
+  );
+  const accent = agentGradient(agent.name).c1;
+  const agentName = agent.name;
   const empty = draft.trim().length === 0;
 
-  const send = useCallback(() => {
-    const text = draft.trim();
+  /*
+   * `override` is what lets an opener send itself. Routing a starter through `setDraft` and a
+   * second tap would make the chips a way to fill in the box rather than a way to ask.
+   */
+  const send = useCallback((override?: string) => {
+    const text = (override ?? draft).trim();
     if (!text || thinking) return;
     append(userMessage(text));
     setDraft('');
@@ -180,7 +202,7 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
     // PLAN.md 11.7: a real question to the real agent. The reply is PROSE ONLY — anything
     // numeric is rejected server-side before it can reach this thread.
     void repos.bot
-      .ask({ agentId: agentIdFor(agentName), question: text, tone })
+      .ask({ agentId: agent.id, question: text, tone })
       /*
        * A fallback line is not an answer, and must not be dressed as one.
        *
@@ -209,58 +231,51 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
         ),
       )
       .finally(() => setThinking(false));
-  }, [draft, thinking, append, agentName, tone]);
+  }, [draft, thinking, append, agent, agentName, tone]);
 
   return (
     <>
-      <View
-        style={[
-          {
+      <View style={[{ paddingTop: headerTop, paddingBottom: space.s16 }, divider]}>
+        {/*
+          The close control sits above the rail rather than beside a name, because the rail is four
+          things wide and a control at the end of it lands under a thumb reaching for an agent.
+        */}
+        <View
+          style={{
             flexDirection: 'row',
             alignItems: 'center',
-            gap: space.s12,
-            paddingTop: headerTop,
+            justifyContent: 'flex-end',
             paddingHorizontal: space.gutter,
-            paddingBottom: space.s16,
-          },
-          divider,
-        ]}
-      >
-        <AssetMark gradient={agentGradient(agentName)} size={size.mark} />
-        <View style={{ flex: 1 }}>
-          <Text variant="rowPrimaryLg">{agentName}</Text>
-          <Text
-            variant="footnote"
-            color={thinking ? colors.ink40 : proposal ? colors.up : colors.ink40}
-          >
-            {/*
-              The agent's real status, or nothing.
-
-              This said "Watching 14 markets" whenever there was no proposal — a specific number
-              from the design mock, in profit-green, describing work no part of this app had
-              done. Fourteen was never counted; the crypto class has nine. A confident invented
-              figure under an agent's name is exactly the claim this product exists to argue
-              against, so when there is no proposal the line says so plainly instead.
-            */}
-            {thinking ? 'Thinking…' : (proposal?.status ?? 'No proposal right now')}
-          </Text>
+            minHeight: size.mark,
+            marginBottom: space.s6,
+          }}
+        >
+          {proposal ? (
+            <Text variant="footnote" color={colors.up} style={{ flex: 1 }}>
+              {proposal.status}
+            </Text>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+          {onClose ? (
+            <IconButton
+              name="close"
+              accessibilityLabel="Close chat"
+              onPress={onClose}
+              background="none"
+              color={colors.ink40}
+            />
+          ) : (
+            <IconButton
+              name="more"
+              accessibilityLabel="Conversation options"
+              background="none"
+              color={colors.ink40}
+            />
+          )}
         </View>
-        {onClose ? (
-          <IconButton
-            name="close"
-            accessibilityLabel="Close chat"
-            onPress={onClose}
-            background="none"
-            color={colors.ink40}
-          />
-        ) : (
-          <IconButton
-            name="more"
-            accessibilityLabel="Conversation options"
-            background="none"
-            color={colors.ink40}
-          />
-        )}
+
+        <AgentRail selected={agent} onSelect={setAgent} />
       </View>
 
       <KeyboardAvoidingView
@@ -315,9 +330,46 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
                 }}
               />
             ) : (
-              <Turn key={item.id} message={item} />
+              <Turn key={item.id} message={item} speakerBefore={speakerAt(items, i)} />
             ),
           )}
+
+          {/*
+            Openers, only on an empty thread and only for the agent selected right now.
+            
+            They are QUESTIONS. A starter that asserted a position or a number would put words in
+            the agent's mouth before it had said anything, which on this product is the one thing a
+            convenience must not do.
+          */}
+          {items.length === 0 && !thinking ? (
+            <View style={{ gap: space.s10, marginTop: space.s6 }}>
+              <Text variant="secondary" color={colors.ink40}>
+                {agent.role}. Ask it something.
+              </Text>
+              {agent.openers.map((q) => (
+                <Press
+                  key={q}
+                  onPress={() => send(q)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ask: ${q}`}
+                  style={{
+                    alignSelf: 'flex-start',
+                    borderRadius: radius.card,
+                    paddingHorizontal: space.s14,
+                    paddingVertical: space.s10,
+                    backgroundColor: colors.surfaceAlt,
+                  }}
+                >
+                  <Text variant="bodySm" color={colors.ink65}>
+                    {q}
+                  </Text>
+                </Press>
+              ))}
+            </View>
+          ) : null}
+
+          {/* Where the answer is about to land, not in the header twelve lines above it. */}
+          {thinking ? <Thinking color={accent} /> : null}
         </ScrollView>
 
         <View
@@ -343,12 +395,12 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder="Ask about this trade…"
+              placeholder={`Ask ${agent.name}…`}
               placeholderTextColor={colors.ink35}
               accessibilityLabel="Message the bot"
               editable={!thinking}
               multiline
-              onSubmitEditing={send}
+              onSubmitEditing={() => send()}
               /*
                * Enter sends on web, where there is a hardware keyboard and a newline costs a
                * modifier. On a phone the return key on a multiline field inserts a newline, which
@@ -374,7 +426,7 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
             accessibilityLabel="Send message"
             accessibilityState={{ disabled: thinking || empty }}
             disabled={thinking || empty}
-            onPress={send}
+            onPress={() => send()}
             hitHeight={SEND}
             hitWidth={SEND}
             style={{
@@ -398,17 +450,34 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
 const agentNameFallback = 'Momentum Scout';
 
 /**
+ * Who spoke immediately before position `i`, skipping day dividers.
+ *
+ * Used to decide whether a bot message needs a name over it. Once the rail exists, a thread can
+ * contain four voices, and an unattributed wall of prose is worse than the single-agent version it
+ * replaced — you would be reading Drawdown Guard's answer under Momentum Scout's orb.
+ *
+ * Dividers are skipped rather than treated as a speaker change, or every morning would re-label a
+ * continuing conversation.
+ */
+function speakerAt(
+  items: (ThreadMessage | { divider: string })[],
+  i: number,
+): string | undefined {
+  for (let j = i - 1; j >= 0; j--) {
+    const prev = items[j];
+    if (!prev || 'divider' in prev) continue;
+    return prev.type === 'user' ? 'user' : ('agent' in prev ? prev.agent : undefined);
+  }
+  return undefined;
+}
+
+/**
  * The server's decline reasons name a symbol but sometimes a figure too. A voice segment may
  * not carry a number (src/bot/message.ts), so any digits are dropped rather than the message.
  */
 function stripNumbers(text: string): string {
   const cleaned = text.replace(/[$]?[\d,.]+%?/g, '').replace(/\s{2,}/g, ' ').trim();
   return cleaned.length > 4 ? cleaned : 'There is nothing worth proposing right now.';
-}
-
-/** The roster ids the server's persona registry uses. */
-function agentIdFor(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '-');
 }
 
 /**
@@ -418,7 +487,13 @@ function agentIdFor(name: string): string {
  * chat rather than a transcript — a bubble on both sides makes two speakers of equal weight, and
  * here one of them is answering the other.
  */
-function Turn({ message }: { message: ThreadMessage }) {
+function Turn({
+  message,
+  speakerBefore,
+}: {
+  message: ThreadMessage;
+  speakerBefore?: string;
+}) {
   const reduced = useReducedMotion();
   const scale = useSharedValue(message.type === 'fill' ? 0.96 : 1);
 
@@ -458,8 +533,30 @@ function Turn({ message }: { message: ThreadMessage }) {
   const color =
     message.type === 'fill' ? colors.up : message.type === 'declined' ? colors.down : colors.ink;
 
+  const who = 'agent' in message ? message.agent : undefined;
+  /*
+   * A name only when the voice changes. Stamping every message with its author turns a
+   * conversation into a log; stamping none of them makes four agents look like one.
+   */
+  const newVoice = !!who && who !== speakerBefore;
+
   return (
     <Animated.View style={[{ alignSelf: 'stretch' }, anim]}>
+      {newVoice ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: space.s8,
+            marginBottom: space.s8,
+          }}
+        >
+          <AssetMark gradient={agentGradient(who!)} size={size.noteOrb} />
+          <Text variant="footnote" color={colors.ink40}>
+            {who}
+          </Text>
+        </View>
+      ) : null}
       <Text variant="bodyLg" color={color}>
         {renderSegments(segments)}
       </Text>
