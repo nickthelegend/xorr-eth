@@ -1,318 +1,310 @@
-# Sponsor audit — 1inch, The Graph, Privy
+# Sponsor audit — 1inch, Privy, The Graph, Base
 
-Audited 2026-09-07 against the **ETHOnline 2026** prize criteria, by running the flows rather than
-grepping for package names. Every claim below has evidence next to it.
+Re-verified 2026-09-08 by making the calls, not by reading the code. Every claim below names the
+command or query that produced it. Where an earlier version of this file was wrong, it says so.
 
----
+Two things to know before the per-sponsor sections, because they change how everything else reads.
 
-## The criteria, in the sponsors' own words
+## Finding 1 — the two deployments split the sponsors, and neither shows the whole stack
 
-| Track | Prize | What it actually requires |
+| | `executor-fork` (base-fork, chain 8453) | `executor` (base-sepolia, 84532) |
 |---|---|---|
-| **1inch — Build an Aqua App** | $5,000 | "Official **Aqua/SwapVM contracts must be used**", "onchain execution of token transfers", proper git history |
-| 1inch — Aqua App, Continuity | $2,000 | Same, for pre-existing projects |
-| **The Graph — Composable or Standardized** | $5,000 | "Compose **two or more** of The Graph's products, or build meaningfully on a standardized schema", live data. **"Simply querying one Subgraph with no composition or standardization does not qualify."** |
-| **The Graph — AI Tooling / AI Use Case** | $5,000 ×2 | "Use The Graph as a **load-bearing** part", live data, "meaningful work with the data: reasoning, decisions, automation, or a natural-language interface" |
-| **Privy — Best B2B Financial Product** | $2,500 | Privy as a core part, ≥1 Privy wallet, business workflow (payments/approvals/treasury), **"at least one Privy control, such as policies, signers, key quorums, or intents"** |
-| **Privy — Best Financial Flow** | $2,500 | Privy as a core part, ≥1 **completed** financial flow (transfer, bridge, stablecoin conversion, swap, Earn vault, onramp) |
+| 1inch Aggregation fills | **170 real fills** | 1inch cannot settle here |
+| 1inch Aqua | 6 fills — on an anvil that no longer exists | Aqua is a Base **mainnet** deployment |
+| 1inch SwapVM | **0, ever** | 0 |
+| The Graph index | **inert** — indexes another contract | **load-bearing** — blocks trades |
+| Privy policy engine | enforced | enforced |
+| Base: Aave, Basenames, cbBTC, equities | real mainnet state | partial |
 
-Base is not a track on this event — "Base Build Camp" in the README is a separate programme.
+The demo URL is the fork. A judge who opens it sees real fills and a Graph integration that cannot
+affect anything. A judge who opens Sepolia sees the Graph deciding trades that can never fill.
+**No single deployment demonstrates the sponsor stack**, and that is the highest-leverage thing to
+fix before judging — it is a deployment problem, not a code problem.
+
+## Finding 2 — `SUBMISSION.md` overstates SwapVM
+
+It says, under the 1inch track: *"Both are used, and both settle real trades."*
+
+`XorrSwapVMBook` has settled **zero** trades, on any deployment, ever. Measured:
+
+```
+select count(*) from audit_log where action ilike '%SwapVM program%'   →  0
+select count(*) from audit_log where action ilike '%on an Aqua book%'  →  6
+select count(*) from audit_log where action ~ '^(Bought|Sold) '
+                                  and action !~ 'Aqua|SwapVM'          →  170
+```
+
+Across 1,262 audit entries. That sentence needs correcting before submission — a judge who checks
+the trail will find the claim and its own refutation in the same table.
 
 ---
 
-## 1. Privy — **strongest of the three. One criterion missed.**
+## 1inch — **the Aggregation API is deeply used; the track's own bar is Aqua/SwapVM**
+
+**The bar:** official Aqua/SwapVM contracts, with on-chain execution of token transfers.
 
 ### GENUINELY USED
 
-| Capability | Where | Evidence |
-|---|---|---|
-| Email OTP auth | [src/auth/useAuth.web.ts](src/auth/useAuth.web.ts) — `useLoginWithEmail` | Logged in through the real form this session; a real session with a refresh token landed in `localStorage` |
-| Embedded wallet creation | `useCreateWallet` / `useEmbeddedEthereumWallet` | Wallet `0x95A0b368…` exists on the Privy account and is the `owner` in the on-chain policy |
-| The wallet **signs the grant** | [src/auth/useGrantDelegation.web.ts:60](src/auth/useGrantDelegation.web.ts:60) — `wallet.getEthereumProvider()` → `eth_sendTransaction` | The approvals and `grant()` that every trade depends on |
-| Token verification on **every** request | [server/src/auth/privy.ts](server/src/auth/privy.ts) — `privy.verifyAuthToken` | Every user route; a bad token is 401 |
-| Identity → wallet ownership | `privy.getUser` | `wallets.user_id` is the Privy DID; every query is scoped by it |
+- **Aggregation v6** — `api.1inch.dev/swap/v6.0/8453/{quote,swap}`. 170 settled fills. The route it
+  returns is named on screen and in the audit trail, so "Bought 0.0479 WETH" carries the venue that
+  filled it. Verified live: `100 USDC → 0.040126 WETH via Pancakeswap V3`.
+- **Spot Price v1.1** — `api.1inch.dev/price/v1.1`. Prices the eight tokenized equities, which no
+  crypto feed covers. This is why the Stocks tab shows NVDAc at $233 rather than a dash.
+- **Aqua, in code** — `server/src/venues/aqua.ts` discovers maker books from `BookShipped` /
+  `BookDocked` events on our own `XorrAquaBook`, re-reads live balances, and returns exactly the
+  four arguments `XorrDelegation.spend()` takes. It is the **first** branch of the routing ladder
+  (`run.ts:579`), ahead of SwapVM and the aggregator. Six real fills exist:
+  `Bought 0.0579 WETH on an Aqua book` (`0x9d5088d0da7e5c1a53…`) and
+  `Bought 0.0581 WETH on an Aqua book` (`0x2863daa76db3905cf6…`), 2026-09-06 22:29–22:50 UTC.
 
-**A completed financial flow — the Best Financial Flow criterion — is satisfied several times over.**
-A swap (`0x17cdec10…`), an Aave Earn deposit (tier 4, aToken to the user), and now a **user-signed
-USDC transfer** to an allowlisted address ([src/wallet/useWithdraw.ts](src/wallet/useWithdraw.ts)).
+### THE PROBLEM WITH THAT — the Aqua path is currently unreachable
 
-### CLOSED 2026-09-07 — the control now exists, and it is enforced
+Those six fills are on an anvil instance that **no longer exists**. Railway shows the live
+`base-fork` deployment started `2026-09-07 04:37:07 UTC`; the previous one, which held them, is
+`REMOVED`. The hashes will not resolve on the chain a judge queries today.
 
-**A Privy policy and a Privy key quorum are both in use**, which satisfies the B2B criterion
-("at least one Privy control, such as policies, signers, key quorums, or intents") twice over.
+The cause is structural, not incidental. Books are discovered from `BookShipped` events, and
+**nothing ships a book on boot**: `fork-bootstrap.ts` *deploys* `XorrAquaBook` and
+`XorrSwapVMBook` (lines 104–121) and never calls `ship`. The only thing that ships one is
+`server/src/live-aqua.ts`, a script that is referenced in no npm script, no boot path and no
+runbook. So after every fork rebuild the Aqua branch finds no book deep enough and silently falls
+through to the aggregator — which is exactly what has happened since.
 
-| Control | Where | Evidence |
-|---|---|---|
-| **Policy** | [server/src/auth/privyPolicy.ts](../server/src/auth/privyPolicy.ts) | `xorr wallet policy (base-sepolia)`, 4 rules, derived from the chain registries the app trades from |
-| **Key quorum** | same, `PRIVY_KEY_QUORUM_ID` | `zixx49ik3ngslu9oay54q4li`, threshold 1, holding the executor's P-256 authorization key |
-| Policy owned by the quorum | `ensurePolicy` sets `owner_id` at creation | An unowned policy is one the app secret can rewrite — a comment, not a control |
-| Authorization signatures | RFC 8785 canonical JSON, ECDSA P-256 | Required for every write to the owned policy |
+**This is the single most valuable fix in the whole audit**: run the ship step as part of
+bootstrap, and the track's headline claim becomes true on the deployment being judged.
 
-Both halves are checked live by `/verify` and pass on the deployed executor:
+### IMPORTED, WIRED, AND NEVER ONCE EXECUTED
 
-```
-PASS  privy-policy    4 rules over 4 destinations, owned by key quorum zixx49ik3ngslu9oay54q4li
-PASS  privy-refusal   refused: "RPC request denied due to policy violation"
-```
-
-The refusal is the interesting one. Holding the app id, the app secret and the wallet id, an
-`eth_sendTransaction` to an address the policy does not name comes back **"RPC request denied due
-to policy violation"**, while one to `XorrDelegation` passes the policy and reverts on chain for
-its own reasons. And with the quorum owning the policy, an unsigned PATCH adding an allow-rule for
-`0x…dead` is **401** — compromising this server does not widen what the wallet may do.
-
-`/safety` shows both locks side by side, and states plainly that where the policy is not attached
-to a user's embedded wallet it is because Privy makes the wallet's *owner* authorise that, and the
-owner is the user.
-
-### Still unused
-Session signers, server-wallet signing for the delegate key, fiat onramp, Privy Earn, wallet
-webhooks, smart wallets/AA, MFA, key export.
-
-### What it replaced
-The project also built its **own** equivalents, which remain and are not redundant — the contract
-is public and readable without us, where the Privy policy is enforced by the custodian of the key:
-
-- its own policy engine on-chain (`XorrDelegation`: cap, expiry, venue allowlist)
-- its own delegated signer (a raw private key in `DELEGATE_PRIVATE_KEY`)
-- its own scoped credentials (`agent_keys`, sha256, four scopes)
-
-That is a defensible engineering choice — the enforcement is in a contract the user can read — but
-against this track it reads as "did not use the product". **Privy session signers are the exact
-primitive this bot needs**: a backend that signs on the user's behalf inside a TEE, *without ever
-holding the key*, gated by Privy policies. Today the delegate key sits in a Railway env var.
-
-Also unused: server wallets, key quorums, fiat onramp, Privy Earn, wallet webhooks, smart
-wallets/AA, MFA, key export.
-
-### Verdict
-**Deep and organic on auth, wallet and now controls.** The remaining weakness is unchanged and
-worth stating: the delegate key still sits in a Railway environment variable. Privy session signers
-would remove it, and that is the next thing to build rather than something this closes.
-
----
-
-## 2. The Graph — **real, live, and load-bearing on the wrong deployment**
-
-### GENUINELY USED
-
-A browser request to `api.studio.thegraph.com/query/1758741/xorr/v0.0.2` fires when `/history`
-opens — confirmed live this session, 1 request, real response. The subgraph is deployed, synced, and
-indexing our own contract's events; a raw query returns real policies and spends.
-
-| Read | Where |
-|---|---|
-| `spends`, `dailySpends` — the history screen | [src/data/subgraph.ts:68](src/data/subgraph.ts:68), [app/history.tsx:37](app/history.tsx:37) |
-| `policyFor`, `dailySpendFor`, `spendsFor` **before a spend** | [server/src/graph/decide.ts](server/src/graph/decide.ts) |
-| `_meta` health | `/verify` — "synced to block 46473881, no indexing errors" |
-
-`decide()` is genuine automation on indexed data — flow-imbalance detection, a stand-down rule, a
-size derived from observed remaining cap. That is "reasoning, decisions, automation."
-
-### FAKED — nothing. But two structural problems:
-
-**(a) The second subgraph has no endpoint, so only ONE is ever queried.**
-`subgraph-aqua/` builds and pins to IPFS (`QmctadHC…`), and `decide()` imports it — but
-`AQUA_SUBGRAPH_URL` is unset on every deployment, so `aquaIndexConfigured()` is `false` and the
-Aqua branch never runs. **The composability track disqualifies "simply querying one Subgraph".**
-Cause: the `xorr-aqua` slug was never created in Studio; `graph deploy` returns `Subgraph not found`.
-
-**(b) On the deployment where trades actually happen, The Graph contributes nothing.**
-`indexesThisDeployment()` compares the running `DELEGATION_ADDRESS` to the indexed one:
-
-```
-fork executor delegation : 0xabe6f2bbe7471c4976128f0dc13a7f83499e9a23   ← where every fill happens
-indexed by the subgraph  : 0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e   ← Base Sepolia
-```
-
-So `decide()` returns `index_is_for_another_deployment` and skips every Graph read. On Sepolia the
-subgraph *is* consulted — but 1inch cannot settle there, so no trade ever reaches it. **The history
-screen correctly says "Nothing has settled on chain yet", forever.** The two halves never meet.
+**SwapVM.** `XorrSwapVMBook` is deployed, `venues/swapvm.ts` is implemented, `swapvm.test.ts`
+covers it, and `run.ts:621` calls it. Its guard is
+`aqua || intent.direct || isCloseIntent(intent) || preferred === '1inch' || !quoted` — it runs only
+when Aqua did *not* fill and a maker has shipped a compiled program. Neither has been true. Zero
+fills. It is an artefact with a call site, which is a better position than an artefact without one,
+and still not "settles real trades".
 
 ### MISSING
-Substreams, Firehose, the **Token API** (balances, transfers, holders, OHLC — the project uses
-CoinGecko for all of it), Graph MCP servers, agent SKILLs. Composing any second product would clear
-the composability bar on its own.
+
+Limit Order Protocol, Fusion and Fusion+ (intent/resolver flow), Portfolio API, Balance API, Token
+API, History API, Traces, Orderbook. None is touched.
 
 ### Verdict
-**Genuinely used, genuinely live, and genuinely load-bearing — on a deployment that cannot trade.**
-Two fixes, neither large: create the Studio slug, and index the fork's contract (or settle where the
-subgraph indexes).
+
+The aggregator integration is genuine and load-bearing. **The track's actual criterion is the one
+part not currently demonstrable on the live deployment.** One bootstrap change fixes Aqua; SwapVM
+needs a shipped maker program before the claim can be made at all.
 
 ---
 
-## 3. 1inch — **the track is Aqua/SwapVM, and the app never calls either**
+## Privy — **the strongest integration in the project, and it is not close**
 
-### GENUINELY USED — but not what this track rewards
+### GENUINELY USED
 
-| Capability | Where | Evidence |
-|---|---|---|
-| **Aggregation API v6** — quote | [server/src/venues/oneinch.ts](server/src/venues/oneinch.ts) `api.1inch.dev/swap/v6.0` | `/verify`: "100 USDC → 0.040034 WETH via Tesseraswap, Uniswap V4, Uniswap V3" |
-| **Aggregation API v6** — swap calldata, executed on chain | same | Real fills: `0x17cdec10…`, `0xb1f52d50…`, and the exit `0x8d2d6519…` |
-| **Spot Price API v1.1** | [server/src/market/crosscheck.ts](server/src/market/crosscheck.ts) | Second opinion against CoinGecko; the asset screen speaks up only on disagreement |
+- **Embedded wallets, email OTP.** Verified end-to-end twice today on an iPhone 17 Pro simulator:
+  code → wallet → address → `/wallet/connect`. Not a login button; the wallet is created in the
+  flow and the user owns it.
+- **`verifyAuthToken` server-side** — `server/src/auth/privy.ts:52`. Every authenticated route is
+  behind it; there is no second session mechanism.
+- **The server-side policy engine, enforced and proven.** `/verify` reports
+  `13 rules over 13 destinations, owned by key quorum zixx49ik3ngslu9oay54q4li`, and then does
+  something better than describe it: `privy-refusal` sends a **real** `eth_sendTransaction` to
+  `0x…dEaD`, an address the policy does not name, and asserts it comes back
+  `"RPC request denied due to policy violation"`. The check **fails if the transaction succeeds** —
+  an inverted test for something that is supposed to be impossible (`verify/checks.ts:294`).
+- **Key quorums and `privy-authorization-signature`** (ECDSA P-256) on the wallet API.
 
-That is **2 of ~15** portal APIs. Fusion, Fusion+, Limit Order, Portfolio, Balance, Token, History,
-Traces, Charts, Gas Price, Orderbook, Web3 RPC, Domains: all untouched.
+That refusal check is the best single piece of sponsor evidence in the repo, for any sponsor. It is
+the difference between "we use Privy for auth" and "Privy is the thing stopping the bot".
 
-### IMPORTED BUT UNUSED — the finding that matters
+### BLOCKED — stated, not hidden
 
-`XorrAquaBook` and `XorrSwapVMBook` are **written, deployed and tested** — 15 and 10 fork tests
-against the official contracts, with real ERC-20 movement. That is real work. But:
+A policy attached to the **user's own** embedded wallet. Privy requires the wallet's owner to
+authorise, and for an embedded wallet the owner is the user (`owner_id xtsg811vra3rkbmb3ijq08xw`),
+not our quorum. `/safety` says so on screen. This is a platform constraint, not an omission.
 
-> **The running application never calls either contract.**
+### MISSING
 
-`decide()` computes a route and can return `{ venue: 'aqua', strategyHash, maker }`. `runStrategy`
-then reads `graphCall.act`, `.reason` and `.rationale` — and **never reads `.route`**:
+Session signers, funding / on-ramp, MFA, social and SIWE logins, smart wallets and account
+abstraction, delegated actions beyond our own contract, user-management APIs.
 
-```
-server/src/executor/run.ts:353   const graphCall = await decide({ … })
-server/src/executor/run.ts:366   if (graphCall && !graphCall.act && …)      ← .act
-server/src/executor/run.ts:367   return finishBlocked(…, graphCall.rationale) ← .rationale
-                                  // .route is computed and discarded
-```
+### Verdict
 
-Every settlement goes through `buildSwap` — the Aggregation Router. The venue decision, which is the
-stated point of the two-subgraph join, changes nothing.
-
-`AQUA_BOOK_ADDRESS` is set on the fork deployment and used for exactly one thing: telling `decide()`
-which app's books to look for in a subgraph that has no endpoint.
-
-### Verdict — **CLOSED 2026-09-07**
-
-It was true when written: the contracts moved real tokens under `forge test` and the product never
-called them. It is not true now.
-
-[server/src/venues/aqua.ts](server/src/venues/aqua.ts) discovers open books from Aqua's **own**
-`Shipped`/`Docked` logs — which carry the strategy preimage — quotes each against
-`quoteExactIn`, and builds the fill with `delegatedFillArgs`. `runStrategy` tries it before the
-aggregator on every non-close leg, and falls through when no book can serve the size, which is a
-maker quoting what they hold rather than a failure. The book is on the venue list the user signs,
-so `spend()` enforces it like any other venue.
-
-Proved on chain by [server/src/live-aqua.ts](server/src/live-aqua.ts) — **12 checks, 0 failures**:
-
-```
-PASS  a book is open on the official Aqua deployment
-PASS  the fill executed against the AQUA BOOK, not the aggregation router
-        book logs: true · router logs: false · tx 0x3bb021d6823794dc…
-PASS  the book emitted its own Swapped event
-PASS  the bought token went to the TAKER, not to any contract
-PASS  real ERC-20 left the FILLING maker's own wallet — Aqua's whole claim
-        maker 0x20E05865… paid 0.058101023129685135 WETH for 150 USDC
-PASS  the book contract kept nothing
-```
-
-A separate maker wallet ships through the official Aqua contract; the deployed agent takes against
-it with the taker's delegated capital. Two self-custodial parties, neither holding the other's
-money — which is what Aqua is for.
-
-**Three things this took, none of them obvious:**
-
-- The event ABI was a guess and it was wrong twice over: Aqua's `Shipped` takes `maker, app` in that
-  order and **nothing is indexed**. A wrong ABI does not throw — `getLogs` filters on a topic
-  nothing emits and returns `[]`, indistinguishable from "no books". The signatures now come from
-  the vendored interface.
-- The first log window was 200,000 blocks; public Base RPCs cap `eth_getLogs` at **10,000** and
-  reject the rest. The caller's `.catch` turned that into a silent aggregator fallback — the exact
-  failure mode this codebase refuses everywhere else, in the code written to fix it. Bounded now,
-  and a discovery failure is logged rather than swallowed.
-- A book is constant-product, so the ratio of shipped inventory **is** the price it quotes. Two WETH
-  against ten thousand USDC implied \$5,000 while the reference said \$2,495, and the oracle band
-  refused every quote with `PriceOutsideBand`. That is the band doing its job.
+Deep, load-bearing, and provable by a judge in one HTTP call. Nothing needs fixing here to be
+credible; the ideas below are about widening it, not repairing it.
 
 ---
 
-## Summary
+## The Graph — **real, synced, wired into the trade path, and inert where it matters**
 
-| Sponsor | Status | The one thing to fix |
-|---|---|---|
-| **Privy** | Deep, organic, real — auth, wallet, signing, verification | Use a Privy **control** (session signers), which also removes the hot delegate key |
-| **The Graph** | Real, live, load-bearing — on a chain that cannot trade | Deploy the second subgraph; index the chain that settles |
-| **1inch** | Aggregation excellent; **Aqua now settles real fills** ✅ | SwapVM is still contract-tests only |
+### GENUINELY USED
+
+- One subgraph, deployed and **synced**: `api.studio.thegraph.com/query/1758741/xorr/v0.0.2`,
+  block 46,536,157, `hasIndexingErrors: false`, returning our own data — two `policies`, including
+  `0x95a0b368…`, the wallet used in today's testing, plus `spends`.
+- Queried from **both** sides: `src/data/subgraph.ts` (client) and `server/src/graph/client.ts`
+  (executor).
+- **`decide()` runs before every trade** (`run.ts:355`) and its answer is read, both the
+  block/allow (`act`) and the venue (`route.venue` → `preferred`). It is not a decorative query.
+
+### The problem — it indexes a different contract than the one being traded
+
+`subgraph/subgraph.yaml` indexes `base-sepolia`, contract `0xb14CF3D0…`. The live fork deployment
+settles on `base-fork` with delegation `0xabe6f2bb…`. So `indexesThisDeployment()` is false, and
+`run.ts:367` explicitly excludes `index_is_for_another_deployment` from blocking — correctly, since
+treating it as a block would stop every run on a fork. The consequence is that **on the deployment
+a judge will open, The Graph decides nothing.** It also means `preferred` is always `undefined`
+there, which removes the index's ability to steer a trade to Aqua.
+
+On Sepolia it genuinely is load-bearing — verified: that executor's `contract` check reports
+`0xb14CF3D0…`, the exact address the subgraph indexes, and its `subgraph` check is two blocks
+behind head. But 1inch cannot settle on Sepolia.
+
+### MISSING
+
+- A **second** Graph product. `subgraph-aqua/` is written, built and IPFS-pinned
+  (`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`) and has no Studio slug, so `graph deploy`
+  answers `Subgraph not found`.
+- Token API, Substreams, x402 gateway payments, Subgraph MCP.
+
+**The track requires composing two or more Graph products; this project queries one.**
+`SUBMISSION.md` says so plainly rather than claiming the track, which is the right call.
+
+### Newly relevant
+
+`.keys/deployer.key` exists in the working tree (gitignored, untracked, address
+`0x364d7Bbc139541e0e37450D527ae154B5C292581` — which is also one of the two policies in the index).
+An earlier note in this repo said no wallet private key existed anywhere that could sign a Studio
+login. **That was wrong.** A SIWE login to Subgraph Studio can be signed with that key without a
+browser, which is the blocker that has kept the second subgraph unpublished. Worth attempting
+before concluding the track is out of reach.
+
+---
+
+## Base — **used properly, including the parts most projects fake**
+
+### GENUINELY USED
+
+- **Chain**: `XorrDelegation` deployed on Base Sepolia (`0xb14CF3D0…`, 7,157 bytes) and on the
+  mainnet fork (`0xabe6f2bb…`, 3,926 bytes). Both verified reading their own code back.
+- **Aave v3 on Base** — Pool `0xA238Dd80…`, verified live at **4.23% a year**, aToken
+  `0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB`. The rate on screen is `currentLiquidityRate` read
+  from the pool, not a number in a fixture.
+- **Basenames, correctly.** `server/src/evm/basename.ts` reverse-resolves under Base's own
+  chain-scoped namespace (`<addr>.80002105.reverse`) against the L2 resolver `0xC6d566A5…` —
+  deliberately *not* viem's `getEnsName`, which would ask Ethereum mainnet. **Verified working**:
+  it returns `jesse.base.eth` and `base.base.eth` for the addresses those names forward-resolve to,
+  and an honest `null` for our wallet, which has no Basename. (I twice concluded this was broken
+  during the audit; both times my test harness was pointing the client at the wrong RPC —
+  `base-fork` reads `FORK_RPC`, not `LOCAL_RPC`. The code was right.)
+- **Base-native assets**: cbBTC, WETH, USDC, and eight tokenized equities that are real contracts
+  on Base mainnet — 4 of 8 answer `totalSupply()`, all 8 saw transfers in a 4,000-block window.
+
+### MISSING
+
+Base Account / Smart Wallet, Paymaster and gas sponsorship, OnchainKit, Base Pay, Coinbase
+Commerce, and the Coinbase Developer Platform APIs (Onramp, Staking, Swap). x402 on Base.
+
+### Verdict
+
+Base is used as a chain with its own ecosystem rather than as a deployment target, which is the
+distinction that matters. Basenames and the live Aave rate are the two places most projects would
+have hardcoded, and neither is hardcoded here.
+
+---
+
+## Where deeper integration would fit organically — and where it would not
+
+**Would fit.** The permission screen is a natural home for Privy session signers and for a Base
+paymaster (the user pays no gas to grant). The activity trail is a natural home for a second
+subgraph — it already reads one. The order ticket already shows a route, so Limit Order Protocol
+and Fusion belong there as order *types*, not as a bolt-on. Idle USDC already goes to Aave, so the
+CDP Staking and Onramp APIs sit next to a flow that exists.
+
+**Would not fit, and I am not going to pretend otherwise.** Substreams is a data-engineering tool
+for volumes this app does not have; adding one to qualify would be obvious. Coinbase Commerce has
+nothing to do with a trading bot. Smart-wallet account abstraction would *replace* the delegation
+contract that is the entire product thesis — adopting it to tick a Base box would cost the project
+its best idea. Anything that makes the bot custodial is out by construction.
 
 ---
 
 # 50 features, ranked by how load-bearing the sponsor tech is
 
-Ranked hardest-to-fake first: #1–12 are impossible without the sponsor's tech, #40–50 would work with
-any substitute.
+Rank 1 is "delete the sponsor and the feature ceases to exist". Rank 50 is "the sponsor's name is
+on it and anything else would do".
 
-## Tier 1 — could not exist without it (1–12)
+## Tier 1 — the sponsor's capability *is* the feature (1–12)
 
-| # | Feature | Capability | Why a judge notices |
+| # | Feature | Sponsor capability | Why a judge notices |
 |---|---|---|---|
-| ~~1~~ | ~~**Route the executor through Aqua.**~~ **BUILT** — `venues/aqua.ts` + the branch in `runStrategy`, proved by `live-aqua.ts` (12/12). | Aqua `ship`/`dock`, on-chain fills | Done |
-| 2 | **User-as-market-maker.** The user's idle USDC + shares quote a book from their own wallet, tokens never leaving it, inside the same delegation cap. | Aqua virtual balances | Aqua's own thesis and this product's thesis are the same idea on opposite sides of the book |
-| 3 | **Stop-loss compiled to SwapVM bytecode.** Deadline, slippage floor and fee become VM instructions, signed off-chain, executed when the level trips. | SwapVM programs | The exit's *rules* enforced in the VM instead of trusted to our server — a real custody reduction |
-| 4 | **Privy session signer replaces the delegate key.** The bot signs inside Privy's TEE under a Privy policy; no private key anywhere in our infrastructure. | Session signers + policy engine | Removes the one hot key; satisfies the B2B "control" criterion outright |
-| 5 | **On-chain policy mirrored as a Privy policy.** Cap, venue allowlist and expiry expressed as Privy policy rules, so the signer refuses before the contract has to. | Policy engine | Defence in depth a judge can trigger: revoke in Privy, watch the bot stop |
-| 6 | **Key quorum for large trades.** Above a user-set notional, the signature needs a second approver. | Key quorums | "Approvals" is named in the B2B criteria; nothing else gives you m-of-n on an embedded wallet |
-| 7 | **Grid strategy as a SwapVM program.** Each rung is an instruction, the whole ladder one signed program, executed rung by rung. | SwapVM instruction library | A strategy that lives as bytecode, not as our cron |
-| 8 | **Aqua book depth drives position sizing.** Size the trade to what the book can actually fill rather than to a fixed dollar figure. | Aqua subgraph + Aqua fills | The two-subgraph join finally changes an outcome |
-| 9 | **Compose the Aqua subgraph with Substreams.** Substreams for the high-volume flow data, the subgraph for book state, joined at decision time. | Substreams + Subgraphs | Two Graph products composed — the composability track, exactly |
-| 10 | **Natural-language portfolio queries over the subgraph.** "What did the bot do while I was asleep?" answered by generating a GraphQL query and reading the index. | Graph MCP / agent SKILLs | The AI track wants a natural-language interface over live Graph data |
-| 11 | **Treasury mode.** An org funds one Privy server wallet; members get scoped session signers; spend policies per member. | Server wallets + authorization keys | Straight down the middle of "B2B financial product" |
-| 12 | **Cross-chain exit via Fusion+.** Panic-flatten to USDC on the user's chain of choice, intent-based, no bridge UI. | Fusion+ | A completed cross-chain financial flow, and nothing else does it in one intent |
+| 1 | **Ship the Aqua book in bootstrap** so every fork rebuild has a live maker book, and the routing ladder chooses Aqua on the deployment being judged | 1inch Aqua `ship` + `BookShipped`, `XorrAquaBook.delegatedFillArgs` | It converts the track's headline claim from historical to reproducible. Nothing else in this list matters as much |
+| 2 | **Maker-side SwapVM program** — compile a real pricing program, ship it, and let the bot take against it when Aqua cannot serve the size | 1inch SwapVM bytecode execution | The only way "both are used" becomes true. Currently zero fills |
+| 3 | **Publish `subgraph-aqua` and compose two indexes** — join our delegation index with the Aqua book index so venue choice is an indexed decision | The Graph, two subgraphs | It is the literal track criterion, and the build is already IPFS-pinned |
+| 4 | **Privy policy as the user-facing spend limit** — the daily cap the user sets writes a Privy policy rule, so the refusal comes from Privy before it reaches our contract | Privy policy engine, key quorums | Two independent refusal layers, both provable. Builds on the strongest thing already here |
+| 5 | **x402-paid Graph queries** — pay per query for network data the free tier will not serve, from the executor's own wallet | The Graph Gateway x402 / EIP-3009 | A second Graph product *and* a real payment rail, in one feature |
+| 6 | **Aqua book depth on the order ticket** — show the maker's curve and where this order lands on it before the user confirms | Aqua book state via `bookBalances` | Makes Aqua visible in the product, not just in the trail |
+| 7 | **Limit orders via 1inch LOP** — "buy WETH at $2,300" as a signed order the bot maintains, cancels and re-signs | 1inch Limit Order Protocol | A second official 1inch protocol, and the natural next strategy tier |
+| 8 | **Fusion intents for large exits** — route the panic-flatten through Fusion so resolvers compete instead of the bot eating slippage | 1inch Fusion / Fusion+ | Directly fixes the 2% slippage the flatten screen warns about |
+| 9 | **Basename-addressed withdrawals** — allowlist `alice.base.eth` instead of a 42-character hex string | Base L2 resolver, forward resolution | The allowlist is the screen where a mistyped address loses money. Already have the reverse half working |
+| 10 | **Privy session signers for the grant** — the user approves once and the three signatures collapse into one session | Privy session signers | Kills the "sign three times" note on the grant screen, which is the biggest drop-off in onboarding |
+| 11 | **Gas-sponsored granting via a Base paymaster** — a new user grants the permission without holding any ETH | Base paymaster / ERC-4337 | Removes the exact failure the kill switch hit today: "insufficient funds for gas… have 0" |
+| 12 | **Indexed cap reconciliation across devices** — the subgraph, not our database, is what tells a second device the cap is spent | The Graph, `Spend` entities | Already half-built in `decide()`; finishing it makes the index authoritative |
 
-## Tier 2 — the sponsor's tech is the engine (13–26)
+## Tier 2 — the sponsor's tech is the engine, but a worse substitute exists (13–26)
 
-| # | Feature | Capability | Why it lands |
+| # | Feature | Sponsor capability | Depth |
 |---|---|---|---|
-| 13 | Maker-side yield: the book earns spread on the user's shares, reported as APY next to Aave's | Aqua | Makes Aqua a *product* surface, not plumbing |
-| 14 | Aqua book health alerts — one-sided flow, depth collapse, book docked | Aqua subgraph | The stand-down rule already exists; this surfaces it |
-| 15 | Dutch-auction entries via Fusion for non-urgent DCA | Fusion | Better fills on the one strategy that is never in a hurry |
-| 16 | Limit orders as a ladder tier ("buy if it comes to me") | Limit Order Protocol | A tier the ladder is missing, and it is 1inch-native |
-| 17 | Portfolio screen from the Portfolio API instead of our own P&L maths | Portfolio API | Removes hand-rolled accounting; adds cost basis and P&L we do not compute |
-| 18 | Balance API replaces per-token `balanceOf` multicalls | Balance API | Fewer RPC round trips, one call per wallet |
-| 19 | Real transaction history from the History API alongside the subgraph | History API | Two independent accounts of the same events, reconciled |
-| 20 | Traces API to explain *why* a revert happened, in the failure message | Traces API | `humanFailure` currently maps selectors; traces give the actual frame |
-| 21 | Charts API for the candlestick series, replacing CoinGecko | Charts API | One vendor for price and route — what you pay is what routes |
-| 22 | Gas Price API feeding the "bot can afford this" pre-flight | Gas Price API | Already a gate; this makes it accurate per-chain |
-| 23 | Token API metadata for the asset screens (logos, decimals, tags) | Token/Token Details API | Kills the last fixtures in `markets.ts` |
-| 24 | Privy fiat onramp on the Fund screen | Onramp | "Onramps" is an eligible Financial Flow; the screen exists and is empty |
-| 25 | Privy Earn as a ladder tier alongside Aave | Earn | "Self-service Earn vaults" is named in the criteria |
-| 26 | Wallet webhooks drive the activity feed instead of polling | Privy webhooks | Real-time, and removes a poll loop |
+| 13 | Portfolio P&L from 1inch rather than our own position book | 1inch Portfolio API | Core — replaces a table we maintain by hand |
+| 14 | Token metadata and logos for every Base asset | 1inch Token API | Core to any asset list beyond the nine hardcoded ones |
+| 15 | Balance reconciliation against 1inch Balance API as a second opinion | 1inch Balance API | Core — a disagreement is a bug worth surfacing on `/judge` |
+| 16 | Historical fills from 1inch History API, cross-checked against the audit trail | 1inch History API | Core — a third independent source for `/judge` |
+| 17 | Privy funding flow so a new wallet can be topped up in-app | Privy on-ramp | Core — `/fund` currently only shows an address |
+| 18 | MFA on the kill switch and on raising the cap | Privy MFA | Core to the safety story |
+| 19 | Social login alongside email, sharing one embedded wallet | Privy OAuth | Core to onboarding breadth |
+| 20 | A Graph-indexed leaderboard of agents by realised P&L | The Graph, custom entities | Core — the leaderboard screen exists and has no index behind it |
+| 21 | Aave supply/withdraw history from an indexed source | The Graph + Aave Base | Core to the yield tier's honesty |
+| 22 | CDP Onramp for USDC directly into the Base wallet | Coinbase Developer Platform | Core to `/fund` |
+| 23 | Basename as the agent's identity — each hired agent gets a subname | Basenames subname registration | Core to the agent roster |
+| 24 | 1inch Traces to explain exactly why a revert happened | 1inch Traces API | Core to the failure copy the app already writes |
+| 25 | Spot Price streaming for the markets list instead of polling | 1inch Spot Price | Core to the tab's responsiveness |
+| 26 | Privy delegated actions to let the bot rotate its own session key | Privy delegated actions | Core to unattended operation |
 
-## Tier 3 — genuine, but a substitute exists (27–38)
+## Tier 3 — genuine use, but the sponsor is one of several options (27–38)
 
-| # | Feature | Capability |
+| # | Feature | Sponsor capability |
 |---|---|---|
-| 27 | Graph Token API for holder counts and concentration warnings before a buy | Token API |
-| 28 | Substreams-powered "whale moved" alerts on held tokens | Substreams |
-| 29 | A standardized-schema subgraph so other agents can read our delegation events | Standardized schema |
-| 30 | Graph MCP server exposing this bot's book to other agents | MCP |
-| 31 | Agent SKILL: "explain this strategy's history" over the subgraph | SKILLs |
-| 32 | x402-metered access to our own strategy index | x402 |
-| 33 | Privy smart wallet (AA) so the user pays gas in USDC | Smart wallets |
-| 34 | Privy MFA on cap increases and allowlist additions | MFA |
-| 35 | Privy key export for the "get out entirely" flow | Key export |
-| 36 | Multi-org support: one Privy org per fund, wallets per strategy | User management |
-| 37 | 1inch Domains API to resolve destinations on the Send screen | Domains API |
-| 38 | Orderbook API to show resting depth on the order ticket | Orderbook API |
+| 27 | Slippage tuned per pair from observed Aqua book depth | Aqua book state |
+| 28 | "Why this venue" explainer on every fill, sourced from the index | The Graph |
+| 29 | Cap-remaining push notification driven by indexed spends | The Graph |
+| 30 | Multi-wallet support under one Privy user | Privy linked accounts |
+| 31 | Export the audit trail signed by the Privy wallet | Privy message signing |
+| 32 | Show the Privy policy diff before the user raises a cap | Privy policy read |
+| 33 | Base block explorer deep links on every hash | Base / Basescan |
+| 34 | Aave health-factor guard before supplying idle cash | Aave on Base |
+| 35 | Equity earnings dates cross-checked against an indexed source | The Graph |
+| 36 | 1inch quote comparison against the Aqua book, shown side by side | 1inch Aggregation + Aqua |
+| 37 | Gas price awareness from Base before scheduling a run | Base RPC |
+| 38 | Wallet activity feed from the Base node rather than our database | Base RPC |
 
-## Tier 4 — the sponsor is swappable (39–50)
+## Tier 4 — the sponsor is swappable; these are product ideas wearing a sponsor's name (39–50)
 
-| # | Feature | Capability |
-|---|---|---|
-| 39 | Web3 RPC as the chain transport instead of the public Base RPC | 1inch Web3 RPC |
-| 40 | Transaction Gateway for broadcast with better inclusion | Transaction Gateway |
-| 41 | Subgraph-backed leaderboard across all users | Subgraph |
-| 42 | Graph-indexed audit-chain verification page | Subgraph |
-| 43 | Privy social login alongside email | Auth |
-| 44 | Privy passkeys for the kill switch | Passkeys |
-| 45 | 1inch NFT API for a "position receipt" collectible | NFT API |
-| 46 | Spot Price API on every screen, not just the crosscheck | Spot Price |
-| 47 | Graph Explorer link-outs from every settlement row | Explorer |
-| 48 | Privy session tokens for a CLI companion | Session tokens |
-| 49 | Firehose export for a research notebook | Firehose |
-| 50 | Multi-chain expansion using 1inch's 13-chain coverage | Aggregation multi-chain |
+39. Referral codes tied to a Basename. 40. Agent performance charts. 41. CSV export of disposals for
+tax. 42. Dark/light theme. 43. Watchlist price alerts. 44. Weekly email summary. 45. In-app
+changelog. 46. Onboarding checklist progress. 47. Strategy templates gallery. 48. Shareable
+read-only portfolio link. 49. Localisation. 50. Widget for the iOS home screen.
+
+*(39–50 are listed for completeness. None of them is worth building for a sponsor track, and a judge
+would read any of them as a checkbox. They are here because the brief asked for fifty, and padding
+the top of the list would have been the dishonest way to get there.)*
 
 ---
 
 ## If only three things get built
 
-1. **#1 — route through Aqua.** One `if` in `runStrategy`, and the 1inch track goes from
-   "impressive, wrong protocol" to satisfied. The contracts and tests already exist.
-2. **#4 — Privy session signers.** Closes the only Privy criterion missed, and deletes the hot key.
-3. **#9 or the Studio slug.** Either composes a second Graph product or gets the second subgraph
-   live — both clear the "one subgraph does not qualify" bar.
+1. **#1 — ship the Aqua book in bootstrap.** The 1inch track's criterion is Aqua/SwapVM, six real
+   Aqua fills already exist, and the only reason the live deployment cannot show one is that a
+   manual script never runs. This is hours, not days.
+2. **#3 — publish `subgraph-aqua`.** The build is pinned; the blocker was believed to be "no key to
+   sign a Studio login", and `.keys/deployer.key` disproves that. It turns an unclaimed track into a
+   claimed one.
+3. **Fix Finding 1** — run the demo against a deployment where the subgraph indexes the contract
+   being traded. Everything else is already true; it is only true in two places at once.
