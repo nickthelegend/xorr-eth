@@ -238,6 +238,8 @@ than the client knows, never more.
 | Server tests | 184 |
 | Typecheck | clean, both projects |
 | Mock/stub/TODO sweep | 1 hit — `src/test/react-native-stub.ts`, a Node shim used only by unit tests |
+| Screenshot sweep | **54/54**, no content, console or network failures |
+| `/markets/stocks` after the change | **8 of 8 markets** with live prices — the list still shows them, which is 1.5's requirement. Only the ORDER path refuses |
 
 ### What is left, and exactly why
 
