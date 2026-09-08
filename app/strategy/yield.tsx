@@ -234,13 +234,23 @@ export default function YieldSetup() {
             ))}
           </Card>
 
-          {error ? (
-            <Text variant="secondarySm" color={colors.candleDown} style={{ marginTop: space.s12 }}>
-              {error}
-            </Text>
-          ) : null}
         </ScrollView>
       </Fill>
+
+      {/*
+        The refusal has to be where the button is.
+
+        It used to render inside the ScrollView, below a panel tall enough to push it off the
+        screen, while the button that triggers it is pinned outside the scroll area. So tapping
+        "Buy $9,000 of WETH, weekly" over the daily cap looked like nothing happened at all: the
+        executor answered `400` in 304ms with a perfectly good sentence, and the user never saw it.
+        Above the button, it is on screen whenever it exists.
+      */}
+      {error ? (
+        <Text variant="secondarySm" color={colors.candleDown} style={{ marginBottom: space.s12 }}>
+          {error}
+        </Text>
+      ) : null}
 
       <Button
         label={`Sweep up to ${money(usd, { decimals: 0 })} ${phrase(cadence)}`}

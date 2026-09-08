@@ -22,7 +22,7 @@ import {
   type Quote,
   type StockQuote,
 } from './marketData';
-import { ApiError, api } from './api';
+import { ApiError, api, apiReason } from './api';
 import type {
   ActivityEvent,
   Agent,
@@ -266,9 +266,31 @@ export const LocalRepositories: Repositories = {
       return (await api.get<Strategy[]>('/strategies').catch(() => undefined)) ?? [];
     },
     async create(s) {
-      const remote = await api.post<Strategy>('/strategies', s).catch(() => undefined);
-      if (remote) return remote;
-      throw new Error('The strategy service is unreachable — nothing was created.');
+      /*
+       * Say what the executor said.
+       *
+       * This was `.catch(() => undefined)` followed by "The strategy service is unreachable —
+       * nothing was created", which is the one sentence that is almost never true. A refusal
+       * arrives as a 400 with a written reason — the daily cap, an equity that cannot settle on
+       * this chain, a buy of the token the buy is paid in — and all of it was thrown away and
+       * reported as the backend being down. Watched on a simulator: `POST /strategies 400` in
+       * 304ms, and the screen blamed the network.
+       *
+       * `apiReason` is the same unwrapping `/orders` already does, and for the same reason: the
+       * difference between a user who changes the amount and a user who retries forever.
+       */
+      try {
+        return await api.post<Strategy>('/strategies', s);
+      } catch (e) {
+        const reason = apiReason(e);
+        if (reason) throw new Error(reason);
+        // Genuinely no sentence to report — a transport failure, or a body without one.
+        throw new Error(
+          e instanceof ApiError
+            ? `The strategy service refused this (${e.status}) and gave no reason.`
+            : 'The strategy service is unreachable — nothing was created.',
+        );
+      }
     },
     async pause(id) {
       return api.post<Strategy>(`/strategies/${id}/pause`, {});
