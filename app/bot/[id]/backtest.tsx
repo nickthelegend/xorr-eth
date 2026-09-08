@@ -16,23 +16,24 @@ import { useGoBack } from '@/nav/useGoBack';
 import {
   AreaChart,
   Button,
+  colors,
+  ErrorState,
   Fill,
   IconButton,
   LoadingRows,
+  money,
   Pill,
   PillRow,
+  pnlTone,
   Price,
+  radius,
   Screen,
   SheetCard,
+  size,
+  space,
   StatGrid,
   Stepper,
   Text,
-  colors,
-  pnlTone,
-  money,
-  radius,
-  size,
-  space,
 } from '@/ui';
 import { BT_CAPITAL_MAX, BT_CAPITAL_MIN, backtestSummary } from '@/state/derived';
 import { repos } from '@/data';
@@ -52,10 +53,22 @@ export default function Backtest() {
   const btCapital = useStore((s) => s.btCapital);
   const bumpBtCapital = useStore((s) => s.bumpBtCapital);
 
-  const { data, loading } = useAsync(
+  const { data, loading, error, reload } = useAsync(
     () => repos.bot.backtest(id, LOOKBACKS[btLook]!),
     [id, btLook],
   );
+
+  /*
+   * Whose backtest this is, read rather than assumed.
+   *
+   * The line below the title was the literal string "Momentum Scout". The RESULTS underneath it
+   * have always been real and have always been for `id` — /bot/earnings-desk/backtest returned
+   * Earnings Desk's +33.5% over 13 trades — so every agent but one had its own numbers published
+   * under another agent's name. Attribution is the whole content of a backtest: a return with the
+   * wrong strategy on it is worse than no return at all.
+   */
+  const roster = useAsync(() => repos.bot.listAgents(), []);
+  const agent = (roster.data ?? []).find((a) => a.id === id);
 
   const summary = data ? backtestSummary(btCapital, data.ret, data.maxDd) : null;
   const tone = pnlTone(data?.ret ?? 0);
@@ -73,8 +86,19 @@ export default function Backtest() {
       </View>
 
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        Momentum Scout, run against real history at your current limits. Nothing here is a
-        promise.
+        {/*
+          Only claims a run when there was one. The executor refuses three of the four agents, and
+          "run against real history" sitting above "there is no history to replay" is the screen
+          arguing with itself — so when it refuses, the name alone stands and ErrorState below says
+          why. A missing agent gets no subtitle at all; the error names it.
+        */}
+        {error
+          ? agent
+            ? agent.name
+            : ''
+          : agent
+            ? `${agent.name}, run against real history at your current limits. Nothing here is a promise.`
+            : 'Run against real history at your current limits. Nothing here is a promise.'}
       </Text>
 
       <PillRow style={{ marginTop: space.s18, flexGrow: 0 }}>
@@ -86,6 +110,15 @@ export default function Backtest() {
       <Fill style={{ marginTop: space.s18 }}>
         {loading && !data ? (
           <LoadingRows count={3} height={size.row} />
+        ) : error ? (
+          /*
+            The executor now refuses to backtest three of the four agents, and says why in one
+            sentence each — a tokenized-equity strategy has no price history to replay, a yield
+            strategy has no price path, and a strategy that only closes positions has no return
+            independent of the book it is guarding. Those are 4xx, so `ErrorState` shows the
+            sentence and offers no retry: pressing again cannot change any of them.
+          */
+          <ErrorState error={error} onRetry={reload} />
         ) : data && summary ? (
           <>
             {data.equity.length > 1 ? (

@@ -355,3 +355,142 @@ export async function backtestGrid(params: {
     disclaimer: 'Nothing here is a promise. A range that held is not a range that will hold.',
   };
 }
+
+/**
+ * The replay itself, with no network in it.
+ *
+ * Split out so the rule can be tested against a series constructed to trigger it, rather than
+ * against whatever the last 90 days of a live market happened to do. A backtest whose only proof
+ * is "it returned a number" is not proof that it implements the strategy on the tin — and the bug
+ * this replaces was exactly that: four agents, four plausible numbers, one wrong strategy.
+ *
+ * `days` is how many bars to REPORT on; anything before that is warm-up the windows need in order
+ * for the first reported bar to be testable at all.
+ */
+export function momentumReplay(
+  closes: readonly number[],
+  opts: { days: number; window: number; stopPct: number; size: number },
+): { equity: number[]; trades: number } {
+  const { days, window, stopPct, size } = opts;
+
+  let cash = size;
+  let units = 0;
+  let stop = 0;
+  let trades = 0;
+  const equity: number[] = [];
+
+  const mean = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const start = Math.max(window + 1, closes.length - days);
+
+  for (let i = start; i < closes.length; i++) {
+    const px = closes[i]!;
+
+    if (units > 0) {
+      // The stop is checked before any new signal: a position that should already be closed
+      // cannot also be the reason not to open another.
+      if (px <= stop) {
+        cash += units * px * (1 - SLIPPAGE_PCT) * (1 - FEE_PCT);
+        units = 0;
+        stop = 0;
+        trades += 1;
+      }
+    } else {
+      // The window EXCLUDES the bar being tested — a close compared to a high it set itself
+      // always breaks out. Same slice the live planner takes.
+      const prior = closes.slice(i - window, i);
+      const high = Math.max(...prior);
+      const fast = mean(closes.slice(i - Math.max(3, Math.floor(window / 4)), i));
+      const slow = mean(prior);
+      if (px > high && fast > slow && cash > 0) {
+        const effective = px * (1 + SLIPPAGE_PCT);
+        units = (cash * (1 - FEE_PCT)) / effective;
+        stop = px * (1 - stopPct / 100);
+        cash = 0;
+        trades += 1;
+      }
+    }
+
+    equity.push(cash + units * px);
+  }
+
+  return { equity, trades };
+}
+
+/**
+ * Momentum, replayed rather than approximated.
+ *
+ * `GET /agents/:id/backtest` ran `backtestDca` for every agent — and, because `const id = await
+ * walletId(c)` shadowed the route param, without ever reading which agent was asked for. So the
+ * Momentum Scout's published track record was a weekly $50 buy of SOL, and so was everyone else's:
+ * four agents, one number, none of them the strategy named above it.
+ *
+ * This runs tier 6's ACTUAL rule from `executor/kinds/index.ts` over the same `daily(history())`
+ * series the live planner reads, bar by bar:
+ *
+ *   - flat, and the close is above the highest close of the preceding `lookbackDays` window
+ *     (excluding the bar being tested — a bar compared to a high it set itself always breaks out),
+ *     and the fast average is above the slow one: enter.
+ *   - open, and the close is at or below the stop set `stopPct` under the entry: exit there.
+ *
+ * The one deviation from live is deliberate and stated: the planner reads an intraday `priceOf()`
+ * for its entry, and history only has closes, so a backtest cannot know where inside the day the
+ * break happened. Both fills take the close, with the same fee and slippage the other engines use.
+ * That is a real limitation of daily data, not a modelling choice — and it is why a stop can only
+ * be checked once a day here, which flatters the result on a gap down. Said plainly rather than
+ * smoothed over.
+ */
+export async function backtestMomentum(params: {
+  symbol: string;
+  lookback: Lookback;
+  usdPerEntry: number;
+  dailyCapUsd: number;
+  lookbackDays?: number;
+  stopPct?: number;
+}): Promise<BacktestResult> {
+  const window = Math.floor(params.lookbackDays ?? 20);
+  const stopPct = params.stopPct ?? 8;
+  const size = Math.min(params.usdPerEntry, params.dailyCapUsd);
+
+  /*
+   * Enough history to test the FIRST bar of the requested window, not just to fill it.
+   *
+   * Asking for 30 days and starting the replay on day 21 would report a "30-day backtest" that
+   * looked at nine days. The warm-up is fetched on top of the window and then skipped.
+   */
+  const days = DAYS[params.lookback];
+  const prices = daily(await history(params.symbol, days + window + 1));
+  const closes = prices.map(([, p]) => p);
+  const { equity, trades } = momentumReplay(closes, { days, window, stopPct, size });
+
+  const first = equity[0] ?? size;
+  const last = equity[equity.length - 1] ?? size;
+  const ret = first > 0 ? ((last - first) / first) * 100 : 0;
+
+  /*
+   * Measured on the STRATEGY's equity, not the asset's.
+   *
+   * `backtestDca` deliberately measures drawdown and Sharpe per-unit, because a schedule that
+   * keeps adding capital would otherwise look like a rising strategy when it is a rising float.
+   * Momentum contributes once and then sits in cash between entries, so its own equity curve is
+   * the honest series here — and the flat stretches are part of what the strategy IS. Using the
+   * asset's series instead would report the drawdown of holding, which this does not do.
+   */
+  const dailyReturns: number[] = [];
+  for (let i = 1; i < equity.length; i++) {
+    const prev = equity[i - 1]!;
+    if (prev > 0) dailyReturns.push((equity[i]! - prev) / prev);
+  }
+
+  return {
+    lookback: params.lookback,
+    ret: Number(ret.toFixed(1)),
+    maxDd: Number(maxDrawdown(equity).toFixed(1)),
+    sharpe: Number(sharpeRatio(dailyReturns).toFixed(1)),
+    trades,
+    equity: curvePoints(equity),
+    feed: 'live',
+    source: `coingecko market_chart, daily closes · ${window}-day breakout, ${stopPct}% stop`,
+    disclaimer:
+      'Entries and stops fill at the daily close, so a stop is only checked once a day. Nothing here is a promise.',
+  };
+}

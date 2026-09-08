@@ -14,6 +14,7 @@ import { agentGradient } from '@/design/gradients';
 import {
   AgentOrb,
   Button,
+  EmptyState,
   Fill,
   IconButton,
   Screen,
@@ -53,6 +54,40 @@ export default function AgentIntro() {
   const goBack = useGoBack();
   const { data, loading } = useAsync(() => repos.bot.listAgents(), []);
   const agent = (data ?? []).find((a) => a.id === id);
+
+  /*
+   * A roster miss ends the screen; it does not decorate it.
+   *
+   * The title and the role line were already fixed to stop naming a different agent, and the
+   * comment below records why. Everything underneath them was left alone, so /bot/999/intro read
+   * "No such agent — this agent is not on the roster", then showed Earnings Desk's orb gradient
+   * (the same borrowed-identity bug, in colour), three paragraphs about what it would do for you,
+   * and a "Get Started" button pointing at /bot/999/settings.
+   *
+   * There is nothing to get started with. Say so once and offer the roster.
+   */
+  if (!loading && !agent) {
+    return (
+      <Screen style={{ backgroundColor: colors.surface, borderRadius: radius.sheetLg }}>
+        <View style={{ alignItems: 'flex-end' }}>
+          <IconButton
+            name="close"
+            accessibilityLabel="Close"
+            onPress={() => goBack()}
+            background="none"
+            glyph={20}
+          />
+        </View>
+        <Fill>
+          <EmptyState
+            text={`There is no agent "${id ?? ''}" on the roster. It may have been renamed, or the link may be out of date.`}
+            actionLabel="See the roster"
+            onAction={() => router.replace('/bot/roster')}
+          />
+        </Fill>
+      </Screen>
+    );
+  }
 
   return (
     // A sheet, not a screen: it sits on `surface` with the card radius, and the modal

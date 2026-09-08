@@ -4,7 +4,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
-import { backtestDca, backtestGrid, type Lookback } from '../backtest/engine.js';
+import { backtestDca, backtestGrid, backtestMomentum, type Lookback } from '../backtest/engine.js';
 import { leaderboard } from '../agents/leaderboard.js';
 import { PERSONAS } from '../bot/personas.js';
 import { speak, fallbackLine } from '../bot/llm.js';
@@ -32,28 +32,82 @@ extra.get('/agents/leaderboard', async (c) => {
   return c.json(await leaderboard(id));
 });
 
+/**
+ * Why three of the four agents answer 422 here.
+ *
+ * A backtest is only honest when the strategy can actually be replayed over data we hold. Exactly
+ * one of these can be:
+ *
+ *   - momentum-scout  — a Donchian breakout with a stop, defined entirely by daily closes. Replayed
+ *                       bar by bar against the same series the live planner reads.
+ *   - earnings-desk   — trades tokenized equities around EDGAR prints. Those tokens have no price
+ *                       history at all: /oracle/:symbol exists precisely because the only series
+ *                       that will ever exist for them is the one this deployment records by
+ *                       looking. There is nothing to replay against.
+ *   - yield-keeper    — supplies USDC to Aave v3. Its return is the pool's floating rate, not a
+ *                       price path, and we do not hold the historical rate series.
+ *   - drawdown-guard  — only ever CLOSES positions. Its result is a function of the book it is
+ *                       guarding, so there is no strategy return independent of a portfolio.
+ *
+ * Before this, all four ran `backtestDca` over SOL and returned the same four numbers — and the
+ * route never read `:id` at all, because `const id = await walletId(c)` shadowed it. Publishing one
+ * strategy's numbers under another strategy's name is the single most misleading thing a screen
+ * like this can do, so the three that cannot be measured now say why instead.
+ */
+const NOT_BACKTESTABLE: Record<string, string> = {
+  'earnings-desk':
+    'Earnings Desk trades tokenized equities around scheduled prints, and those tokens have no price history to replay — the only series that exists for them is the one this executor has recorded since it started looking.',
+  'yield-keeper':
+    'Yield Keeper does not take a price position. It supplies idle USDC to Aave v3, so its return is the pool\'s floating rate rather than a price path, and this deployment does not hold the historical rate series.',
+  'drawdown-guard':
+    'Drawdown Guard only closes positions. What it would have returned depends entirely on the book it was guarding, so there is no strategy return to measure independently of a portfolio.',
+};
+
 extra.get('/agents/:id/backtest', async (c) => {
   const lookback = (c.req.query('lookback') ?? '90d') as Lookback;
-  const id = await walletId(c);
-  const cap = id
+  // The AGENT, from the path. This was shadowed by the wallet lookup below and never read.
+  const agentId = c.req.param('id');
+
+  const reason = NOT_BACKTESTABLE[agentId];
+  if (reason) return c.json({ error: 'not_backtestable', agent: agentId, message: reason }, 422);
+  if (agentId !== 'momentum-scout') {
+    return c.json(
+      {
+        error: 'unknown_agent',
+        agent: agentId,
+        message: `No agent "${agentId}" is on the roster.`,
+      },
+      404,
+    );
+  }
+
+  const wallet = await walletId(c);
+  const cap = wallet
     ? Number(
         (
           await one<{ daily_cap_usd: string }>(
             `SELECT daily_cap_usd FROM delegations WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
-            [id],
+            [wallet],
           )
         )?.daily_cap_usd ?? 1600,
       )
     : 1600;
-  const symbol = c.req.query('symbol') ?? 'SOL';
+
+  /*
+   * WETH, not SOL.
+   *
+   * The old default backtested a symbol this executor cannot settle — "liquid majors" means the
+   * ones with a real route on Base. Backtesting an asset the strategy could never have bought is
+   * the same class of error as backtesting the wrong strategy.
+   */
+  const symbol = c.req.query('symbol') ?? 'WETH';
   try {
     return c.json(
-      await backtestDca({
+      await backtestMomentum({
         symbol,
         lookback,
-        perRunUsd: Number(c.req.query('perRun') ?? 50),
+        usdPerEntry: Number(c.req.query('perRun') ?? 500),
         dailyCapUsd: cap,
-        everyNDays: 7,
       }),
     );
   } catch (e) {
