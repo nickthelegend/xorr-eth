@@ -13,6 +13,7 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
+import { chainLabel } from '@/chain';
 import {
   Button,
   Fill,
@@ -276,7 +277,17 @@ export default function OrderTicket() {
       ) : (
         <View style={{ paddingVertical: space.s14, alignItems: 'center' }}>
           <Text variant="secondary" color={colors.sheet.muted} align="center">
-            {`${symbol} cannot be settled on Base, so there is no order to place.`}
+            {/*
+              Name the CHAIN, not "Base".
+
+              This screen refuses two different things with one sentence. A symbol like SOL has no
+              instrument on Base at all — "cannot be settled on Base" is exactly right for it. A
+              tokenized equity is the opposite case: NVDAc is live and busy on Base mainnet and does
+              not function on a fork of it, so telling someone it cannot be settled on Base is the
+              one claim that is actually false. `chainLabel` says which chain this build is on, and
+              the two cases then read as what they are.
+            */}
+            {`${symbol} cannot be settled on ${chainLabel}, so there is no order to place.`}
           </Text>
         </View>
       )}
