@@ -312,8 +312,18 @@ strategyRoutes.post('/strategies', async (c) => {
    * off — 1inch rejects a swap whose source and destination match outright, `src and dst should be
    * different`, HTTP 400. Same reasoning as the equity check directly above: refuse the impossible
    * request at creation, in the executor, so no client can schedule it.
+   *
+   * Only for the kinds that ACQUIRE the symbol by swapping into it. The first version of this
+   * guard refused every USDC strategy, which would have broken `yield-rotation` — the tier whose
+   * entire job is sweeping idle USDC into Aave, and which is correctly `symbol: 'USDC'`. It never
+   * shipped: found by listing this wallet's USDC strategies while testing the guard and seeing a
+   * legitimate one sitting next to the illegitimate one.
    */
-  if (canonicalSymbol(body.symbol) === SETTLEMENT_SYMBOL) {
+  const BUYS_ITS_SYMBOL: readonly string[] = ['dca', 'grid', 'momentum', 'event-driven'];
+  if (
+    BUYS_ITS_SYMBOL.includes(body.kind) &&
+    canonicalSymbol(body.symbol) === SETTLEMENT_SYMBOL
+  ) {
     return c.json(
       {
         error: 'not_settleable_here',

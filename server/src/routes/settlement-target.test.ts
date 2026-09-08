@@ -25,9 +25,16 @@ process.env.ONEINCH_API_KEY ??= 'test-key';
 process.env.XORR_CHAIN ??= 'base-sepolia';
 const { SETTLEMENT_SYMBOL, TOKENS, canonicalSymbol } = await import('../venues/oneinch.js');
 
-/** The rule under test, kept in step with `POST /strategies`. */
-function refusesAsTarget(symbol: string): boolean {
-  return canonicalSymbol(symbol) === SETTLEMENT_SYMBOL;
+/**
+ * The rule under test, kept in step with `POST /strategies`.
+ *
+ * The `kind` half matters as much as the symbol. A first version refused every USDC strategy and
+ * would have broken `yield-rotation`, the tier that sweeps idle USDC into Aave and is correctly
+ * `symbol: 'USDC'` — it supplies to a pool, it does not swap USDC for USDC.
+ */
+const BUYS_ITS_SYMBOL: readonly string[] = ['dca', 'grid', 'momentum', 'event-driven'];
+function refusesAsTarget(symbol: string, kind = 'dca'): boolean {
+  return BUYS_ITS_SYMBOL.includes(kind) && canonicalSymbol(symbol) === SETTLEMENT_SYMBOL;
 }
 
 describe('the settlement token is not a buy target', () => {
@@ -43,6 +50,15 @@ describe('the settlement token is not a buy target', () => {
   it('still allows everything a buy can actually route into', () => {
     for (const symbol of ['WETH', 'CBBTC', 'NVDAc', 'AAPLc']) {
       expect(refusesAsTarget(symbol)).toBe(false);
+    }
+  });
+
+  it('leaves the tier that legitimately works in USDC alone', () => {
+    // Sweeping idle cash into Aave is a supply, not a swap. Refusing it would delete a whole tier.
+    expect(refusesAsTarget('USDC', 'yield-rotation')).toBe(false);
+    // And the kinds that do buy their symbol are still refused.
+    for (const kind of ['dca', 'grid', 'momentum', 'event-driven']) {
+      expect(refusesAsTarget('USDC', kind)).toBe(true);
     }
   });
 
