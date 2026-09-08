@@ -1,5 +1,11 @@
 # Submission — ETHOnline 2026
 
+**Demo:** [`docs/demo/demo.mp4`](demo/demo.mp4) — 95 seconds against the running app on the Base
+mainnet fork. Sign in with Privy, the on-chain permission, live markets, a recurring buy, the
+activity trail with transaction hashes, `/judge` re-running every claim live, and the kill switch.
+Script in [`DEMO-SCRIPT.md`](DEMO-SCRIPT.md); regenerate with `node tools/demo.mjs`.
+
+
 One page per track, each pointing at evidence a judge can check without taking anything on trust.
 Every hash and address below is real and live at the time of writing.
 

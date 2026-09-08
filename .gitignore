@@ -36,3 +36,6 @@ contracts/lib/swap-vm/node_modules/
 # thousand-file diff, and the checked-in copy silently stops matching the config that produced it.
 /android
 /ios
+
+# The demo's intermediate. The .mp4 and .gif are committed; the source webm is 2MB of duplicate.
+docs/demo/*.webm

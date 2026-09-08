@@ -15,6 +15,22 @@ Chain: **Base**. ETH Online 2026 · Base Build Camp 2026.
 
 ---
 
+## Watch it work
+
+<p align="center">
+  <img src="docs/demo/demo.gif" width="300" alt="Sign in, the permission, live markets, a recurring buy, the activity trail, /judge, the kill switch" />
+</p>
+
+95 seconds, recorded against the running app on the Base mainnet fork — the deployment where fills
+actually settle. Full quality: [`docs/demo/demo.mp4`](docs/demo/demo.mp4). The path it walks, and
+the words to say over it, are in [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md); it was produced by
+[`tools/demo.mjs`](tools/demo.mjs), which drives a real signed-in Privy session rather than a
+mockup, so re-recording it after a change is one command.
+
+Note the `/judge` beat leaves a failing check on screen. That is deliberate — a console that goes
+green when something is broken is worth nothing, and the break it shows is a real one this project
+cannot repair without rewriting an append-only log.
+
 ## Check it yourself
 
 Everything below is a claim. `/judge` in the app — and `GET /verify` behind it, which needs no
