@@ -13,6 +13,7 @@ import { useWallets } from '@privy-io/react-auth';
 import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
 import { api } from '@/data/api';
 import { activeChain } from '@/chain';
+import { humanWalletError } from '@/wallet/walletError';
 
 const DELEGATION_ABI = [
   {
@@ -174,7 +175,9 @@ export function useGrantDelegation() {
         });
         return txHash;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        // viem's message is a five-line dump with the RPC URL and the whole signed
+        // transaction in it. See humanWalletError.
+        const msg = humanWalletError(e);
         setError(msg);
         throw e;
       } finally {
@@ -196,7 +199,9 @@ export function useGrantDelegation() {
       await api.post('/delegation/revoke', { txHash });
       return txHash;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      // viem's message is a five-line dump with the RPC URL and the whole signed
+        // transaction in it. See humanWalletError.
+        const msg = humanWalletError(e);
       setError(msg);
       throw e;
     } finally {
