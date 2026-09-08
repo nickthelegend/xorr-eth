@@ -240,6 +240,58 @@ export type StrategyBacktest = {
   disclaimer: string;
 };
 
+/** What the executor has done, counted. Public — it names no wallet. */
+export type Metrics = {
+  runs: Record<string, number>;
+  alerts: { enabled: number; fired: number };
+  strategies: Record<string, number>;
+  spentTodayUsd: number;
+  uptimeSec?: number;
+};
+
+/**
+ * When a company last reported and when it is projected to next.
+ *
+ * `nextAt` is a PROJECTION and `errorDays` is how wrong it could reasonably be — both derived from
+ * the company's own filing cadence. Rendering the projection beside the observed dates without that
+ * distinction would be handing someone a date to trade on.
+ */
+export type EarningsCalendar = {
+  symbol: string;
+  cik: number;
+  /** Observed report dates, newest first, UTC ms. */
+  reported: number[];
+  nextAt: number | null;
+  gapDays: number[];
+  medianGapDays: number | null;
+  errorDays: number;
+};
+
+/** A price this deployment actually recorded, as opposed to one a feed would give now. */
+export type ObservedHistory = {
+  symbol: string;
+  points: { at: number; usd: number }[];
+  observedSince: number | null;
+  note: string;
+};
+
+/** What flattening would sell, before it sells it. */
+export type FlattenPreview = {
+  legs: { symbol: string; units: number; usd: number }[];
+  totalUsd: number;
+  dustBelowUsd: number;
+};
+
+/** One tokenized equity, priced by a live 1inch probe rather than a feed. */
+export type StockRow = {
+  symbol: string;
+  name: string;
+  address: string;
+  price: number | null;
+  venues: string[];
+  feed: 'live' | 'unavailable';
+};
+
 export type NotificationPref = {
   kind: string;
   label: string;
@@ -290,6 +342,16 @@ export const system = {
   /* strategies */
   runs: (limit = 100) => api.get<StrategyRunRow[]>(`/runs?limit=${limit}`),
   disposals: () => api.get<Disposal[]>('/disposals'),
+  metrics: () => api.get<Metrics>('/metrics'),
+  earnings: (symbol: string) =>
+    api.get<EarningsCalendar>(`/market/earnings?symbol=${encodeURIComponent(symbol)}`),
+  observed: (symbol: string, hours = 720) =>
+    api.get<ObservedHistory>(
+      `/market/stocks/history?symbol=${encodeURIComponent(symbol)}&hours=${hours}`,
+    ),
+  flattenPreview: () => api.get<FlattenPreview>('/panic/preview'),
+  stocks: () => api.get<StockRow[]>('/market/stocks'),
+  symbols: () => api.get<string[]>('/market/symbols'),
   backtestStrategy: (body: {
     kind: 'dca' | 'grid';
     symbol: string;

@@ -18,6 +18,7 @@ import { getJson, staleValue } from '../http/get.js';
 import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../market/ids.js';
 import { TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
 import { STOCKS, equitiesFunctional, isStock, observedHistory } from '../venues/stocks.js';
+import { earningsCalendar } from '../market/edgar.js';
 import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
 import { logosFor } from '../market/logos.js';
 import { withdrawCalldata } from '../venues/aave.js';
@@ -279,6 +280,26 @@ function thin(series: number[], count: number): number[] {
  * timestamped readings from the route that prices them. It starts when we started watching and the
  * response says so, rather than back-filling a shape nobody measured.
  */
+/**
+ * When a tokenized equity last reported, and when it is projected to report next.
+ *
+ * Straight from EDGAR — the dates are the regulator's own filing record, not a vendor's calendar.
+ * `earningsCalendar` has driven the event-driven planner and one verification check since it was
+ * written and was reachable from nowhere in the app, which is odd for a product that ships an agent
+ * whose entire mandate is trading around these dates.
+ *
+ * `nextAt` is a PROJECTION from the observed cadence and the response says so, with the gaps it was
+ * projected from. A predicted date rendered next to real ones without that distinction is the kind
+ * of number someone trades on.
+ */
+market.get('/market/earnings', async (c) => {
+  const symbol = canonicalSymbol(c.req.query('symbol') ?? '');
+  if (!isStock(symbol)) return c.json({ error: `${symbol} is not a tokenized equity` }, 404);
+  const cal = await earningsCalendar(symbol).catch(() => null);
+  if (!cal) return c.json({ error: 'no_filings', message: `No EDGAR filings found for ${symbol}.` }, 502);
+  return c.json(cal);
+});
+
 market.get('/market/stocks/history', async (c) => {
   const symbol = canonicalSymbol(c.req.query('symbol') ?? '');
   if (!isStock(symbol)) return c.json({ error: `${symbol} is not a tokenized equity` }, 404);

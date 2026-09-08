@@ -37,6 +37,7 @@ const GROUPS: Group[] = [
       { route: '/delegation', title: 'Permission', detail: 'The grant itself: key, venues, cap, expiry' },
       { route: '/keys', title: 'API keys', detail: 'What can act on this account without you' },
       { route: '/venues', title: 'Venues', detail: 'Where a fill may go, enforced on-chain' },
+      { route: '/sources', title: 'Sources', detail: 'Where every number in this app comes from' },
     ],
   },
   {
@@ -47,6 +48,11 @@ const GROUPS: Group[] = [
       { route: '/limits', title: "Today's limit", detail: 'The cap, what it has spent, what remains' },
       { route: '/allocation', title: 'Allocation', detail: 'Where the money sits, by class' },
       { route: '/disposals', title: 'Disposals', detail: 'Cost basis per sale, for an accountant' },
+      { route: '/balance', title: 'Balance', detail: 'Cash, held and supplied — they behave differently' },
+      { route: '/spend', title: 'Spend', detail: 'Day by day, from what the contract emitted' },
+      { route: '/rates', title: 'Rate', detail: 'What idle cash earns, and who sets it' },
+      { route: '/export', title: 'Export', detail: 'The two files an accountant asks for' },
+      { route: '/sell-everything', title: 'What would sell', detail: 'A preview of flattening, before you ask' },
     ],
   },
   {
@@ -57,6 +63,10 @@ const GROUPS: Group[] = [
       { route: '/proposals', title: 'Proposals', detail: 'What it asked for, and what you said' },
       { route: '/catchup', title: 'Since you looked', detail: 'What happened while you were away' },
       { route: '/backtest', title: 'Backtest', detail: 'What a weekly buy would have done, on real prices' },
+      { route: '/schedule', title: 'What runs next', detail: 'Every live strategy, ordered by time' },
+      { route: '/roster-compare', title: 'Compare agents', detail: 'The four side by side, on the numbers' },
+      { route: '/risk', title: 'Risk limits', detail: 'What each agent holds itself to' },
+      { route: '/voice', title: 'Voice', detail: 'How the bot talks, with the instruction shown' },
     ],
   },
   {
@@ -66,6 +76,10 @@ const GROUPS: Group[] = [
       { route: '/movers', title: 'Movers', detail: "Today's largest moves, both directions" },
       { route: '/tokens', title: 'Tokens', detail: 'What settles on this chain, with addresses' },
       { route: '/compare', title: 'Compare', detail: 'Two instruments over the same range' },
+      { route: '/stocks', title: 'Equities', detail: 'Priced by a real buy, not a feed' },
+      { route: '/earnings', title: 'Earnings', detail: "Filing dates from the regulator's own record" },
+      { route: '/coverage', title: 'Coverage', detail: 'What is priced, what settles, and the gap' },
+      { route: '/funding', title: 'Funding', detail: 'Mark against oracle, across the perps' },
     ],
   },
   {
@@ -77,6 +91,7 @@ const GROUPS: Group[] = [
       { route: '/graph', title: 'Subgraph', detail: 'How far behind the index is' },
       { route: '/graph/spends', title: 'Spend events', detail: 'The same money, recorded by someone else' },
       { route: '/graph/decision', title: 'Routing decision', detail: 'Which venue the router picks, and why' },
+      { route: '/metrics', title: 'Metrics', detail: 'What this executor has done, counted' },
     ],
   },
   {

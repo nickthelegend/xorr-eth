@@ -1,6 +1,6 @@
 # New screens
 
-Thirty-two screens, none of which redesign an existing one.
+Fifty screens, taking the app from 44 to 94. None of them redesign an existing one.
 
 The rule that shaped the whole list: **a screen with no real data behind it is a mock**, so every
 row below names the endpoint, table or contract call it renders. Nothing here invents a number, and
@@ -80,6 +80,29 @@ at any of them from the phone.
 | `/catchup` | What happened since you last looked | `GET /catchup` |
 | `/notifications` | Which events are worth waking you for | `GET/PATCH /notifications/prefs` |
 | `/explore` | The index for all of the above | — |
+
+## G2 · The rest
+
+| Screen | Renders | Source |
+|---|---|---|
+| `/sources` | Every upstream a number can come from, three of them probed live | `/health` + `/graph/health` |
+| `/metrics` | What this executor has done, counted | `GET /metrics` |
+| `/coverage` | What is priced, what settles, and the gap between them | `/market/symbols` + `/market/tradable` |
+| `/stocks` | The tokenized equities, priced by probing a real buy | `GET /market/stocks` |
+| `/earnings` | Filing dates from EDGAR, and what the cadence implies | `GET /market/earnings` (new) |
+| `/oracle/[symbol]` | Every price this deployment recorded for an equity | `GET /market/stocks/history` |
+| `/funding` | Mark against oracle across the perps | `GET /perp/:symbol` |
+| `/rates` | What idle cash earns at Aave, and who sets it | `repos.yield.staking` |
+| `/balance` | Cash, held and supplied — three things a total hides | `GET /wallet/balance` |
+| `/spend` | Day by day, from what the contract emitted | `GET /graph/activity` |
+| `/schedule` | Every live strategy, ordered by when it next runs | `GET /strategies` |
+| `/strategy/[id]` | One strategy: what it is set to, what it has done | `GET /strategies` + `/runs` |
+| `/alert/[id]` | Armed or already fired, and how often | `GET /alerts` |
+| `/risk` | What each agent holds itself to | `GET /agents` |
+| `/roster-compare` | The four agents side by side, on the numbers | `GET /agents` |
+| `/voice` | The three tones, with the model instruction shown | `src/bot/tone` |
+| `/sell-everything` | What flattening would sell, before you ask | `GET /panic/preview` |
+| `/export` | The audit trail and the disposals file, out of the app | `/activity/export` + `/pnl/disposals.csv` |
 
 ## Not built, and why
 

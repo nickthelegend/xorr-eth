@@ -1,0 +1,153 @@
+/**
+ * What this executor has done, counted.
+ *
+ * `/status` says whether the machine is up; this says what it has been doing. Runs by outcome,
+ * strategies by state, alerts and what they have fired, and today's spend — the four numbers an
+ * operator would actually check, and the ones that make "the scheduler trades unattended" a claim
+ * with arithmetic behind it.
+ *
+ * Deployment-wide rather than wallet-scoped, and the screen says so. A run count that silently
+ * mixed every wallet's activity into one figure and called it yours would be worse than no figure.
+ */
+import React from 'react';
+import { ScrollView, View } from 'react-native';
+import { useGoBack } from '@/nav/useGoBack';
+import {
+  ErrorState,
+  Fill,
+  HeaderBar,
+  Placeholder,
+  Screen,
+  SheetCard,
+  Text,
+  colors,
+  radius,
+  space,
+} from '@/ui';
+import { money } from '@/format';
+import { useAsync } from '@/data/useAsync';
+import { system } from '@/data/system';
+
+/** Green for what landed, amber for what was refused, red for what broke. */
+function toneFor(status: string): string {
+  if (status === 'filled') return colors.up;
+  if (status === 'failed') return colors.down;
+  if (status === 'pending') return colors.ink40;
+  return colors.warn;
+}
+
+export default function Metrics() {
+  const goBack = useGoBack();
+  const { data, loading, error, reload } = useAsync(() => system.metrics(), []);
+
+  const runs = Object.entries(data?.runs ?? {}).sort((a, b) => b[1] - a[1]);
+  const strategies = Object.entries(data?.strategies ?? {}).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <Screen gutter="none">
+      <View style={{ paddingHorizontal: space.gutter }}>
+        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Metrics</Text>} />
+        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+          Everything this executor has done, across every wallet on it — not only yours.
+        </Text>
+      </View>
+
+      <Fill style={{ marginTop: space.s16 }}>
+        {error ? (
+          <View style={{ paddingHorizontal: space.gutter }}>
+            <ErrorState error={error} onRetry={reload} />
+          </View>
+        ) : loading && !data ? (
+          <View style={{ paddingHorizontal: space.gutter, gap: space.s12 }}>
+            <Placeholder height={110} />
+            <Placeholder height={110} />
+          </View>
+        ) : !data ? null : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingHorizontal: space.gutter,
+              paddingBottom: space.s30,
+              gap: space.s10,
+            }}
+          >
+            <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+              <Text variant="footnote" color={colors.ink40}>
+                RUNS BY OUTCOME
+              </Text>
+              {runs.length === 0 ? (
+                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                  Nothing has run yet.
+                </Text>
+              ) : (
+                runs.map(([status, n]) => (
+                  <View
+                    key={status}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      marginTop: space.s10,
+                    }}
+                  >
+                    <Text variant="secondarySm" color={toneFor(status)}>
+                      {status}
+                    </Text>
+                    <Text variant="secondarySm">{n}</Text>
+                  </View>
+                ))
+              )}
+            </SheetCard>
+
+            <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+              <Text variant="footnote" color={colors.ink40}>
+                STRATEGIES BY STATE
+              </Text>
+              {strategies.length === 0 ? (
+                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                  None exist.
+                </Text>
+              ) : (
+                strategies.map(([state, n]) => (
+                  <View
+                    key={state}
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      marginTop: space.s10,
+                    }}
+                  >
+                    <Text variant="secondarySm" color={colors.ink65}>
+                      {state}
+                    </Text>
+                    <Text variant="secondarySm">{n}</Text>
+                  </View>
+                ))
+              )}
+            </SheetCard>
+
+            <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+              <Text variant="footnote" color={colors.ink40}>
+                ALERTS
+              </Text>
+              <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
+                {data.alerts.enabled} enabled · {data.alerts.fired} fired
+              </Text>
+            </SheetCard>
+
+            <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+              <Text variant="footnote" color={colors.ink40}>
+                SPENT TODAY
+              </Text>
+              <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
+                {money(data.spentTodayUsd)}
+              </Text>
+              <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
+                UTC day, every wallet on this executor.
+              </Text>
+            </SheetCard>
+          </ScrollView>
+        )}
+      </Fill>
+    </Screen>
+  );
+}
