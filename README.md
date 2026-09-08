@@ -92,6 +92,24 @@ A real grant signed by a real Privy embedded wallet is queryable right now:
 
 ## Two environments, and why there are two
 
+### Why the tokenized equities do not fill on the fork
+
+They are real and they are busy — on **Base mainnet**. Measured there, read-only, by
+`server/src/equity-mainnet-proof.ts`: four of the eight answer `totalSupply()` and **all eight saw
+transfers inside 4,000 blocks**, while 1inch quotes `100 USDC → 0.4297 NVDAc` on chain 8453 right
+now.
+
+On an anvil fork of the same block, that same `totalSupply()` call **reverts**. Every one of these
+tokens carries a single byte of code, so whatever serves them lives below the bytecode and a fork
+copies the byte and nothing else. No routing choice can fill a token that is not functional, which
+is why widening the venue allowlist did not help and why `/verify` calls the contract instead of
+measuring `eth_getCode` — one byte passes a length check.
+
+So the app does not offer them here. `/market/tradable` filters them out, `POST /strategies` refuses
+one at creation rather than scheduling a run that can only fail, and the order ticket says so. The
+markets screen still lists them with their real prices, because the price is genuine and a market
+list is not an order form.
+
 Aqua, 1inch and the tokenized equities exist only on Base **mainnet**. `XorrDelegation` is deployed
 to Base **Sepolia**, where anyone can grant and revoke for real without spending money.
 

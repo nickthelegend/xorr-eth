@@ -55,7 +55,18 @@ describe('a token that will not answer cannot be traded', () => {
     expect(await equitiesFunctional()).toBe(false);
   });
 
-  it('asks the chain once, not once per request', async () => {
+  it('accepts any one token answering, because not all of them do', async () => {
+    /*
+     * Measured on real Base: only four of the eight answer `totalSupply()` — TSLAc, AMZNc, GOOGLc
+     * and MSTRc revert — while all eight show transfer activity. They are transferable without
+     * exposing the full ERC-20 read surface. Probing whichever happened to be first in the registry
+     * would have called mainnet broken on a different ordering.
+     */
+    readContract.mockRejectedValueOnce(new Error('reverted')).mockResolvedValue(1_000n);
+    expect(await equitiesFunctional()).toBe(true);
+  });
+
+  it('asks the chain once per process, not once per request', async () => {
     /*
      * `/market/tradable` is called on mount by the market list. An RPC round trip per request would
      * put the chain in front of a screen that renders before the user has done anything.
@@ -63,7 +74,8 @@ describe('a token that will not answer cannot be traded', () => {
     readContract.mockResolvedValue(1n);
     await Promise.all([equitiesFunctional(), equitiesFunctional(), equitiesFunctional()]);
     await equitiesFunctional();
-    expect(readContract).toHaveBeenCalledTimes(1);
+    // One probe batch — four tokens, asked once — and nothing on the three later calls.
+    expect(readContract).toHaveBeenCalledTimes(4);
   });
 });
 

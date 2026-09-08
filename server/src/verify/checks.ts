@@ -431,9 +431,11 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
          */
         if (live.length === 0) {
           skip(
-            `No working equity tokens on ${CHAIN_KEY}. They answer on Base mainnet and NOT on a ` +
-              `fork of it — they carry one byte of code and whatever serves them is not something ` +
-              `a fork reproduces, so they cannot be traded here. See README.`,
+            `No working equity tokens on ${CHAIN_KEY}. They are live on Base mainnet — measured ` +
+              `there: 4 of 8 answer totalSupply() and all 8 saw transfers within 4,000 blocks — ` +
+              `and not reproducible on a fork of it: they carry one byte of code, a fork copies ` +
+              `the byte, and nothing serves it. The tokens are real; this chain is the limit. ` +
+              `Re-check with: cd server && npx tsx src/equity-mainnet-proof.ts`,
           );
         }
         return `${live.length} of ${entries.length} answer totalSupply(): ${live.map((s) => s.symbol).join(', ')}`;

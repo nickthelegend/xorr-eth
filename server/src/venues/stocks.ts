@@ -102,7 +102,6 @@ export function isStock(symbol: string): boolean {
  * whose entire remit is equities, and watching its first real entry fail. The UI had the number all
  * along; the executor could not reach it.
  */
-import { quote } from './oneinch.js';
 import { query } from '../db/index.js';
 
 /** Big enough that the route is representative, small enough not to move the pool it is measuring. */
@@ -130,6 +129,17 @@ export async function stockPriceUsd(symbol: string): Promise<number | null> {
    * here. That cycle took the deployed executor to a 2GB heap and a fatal OOM fifty seconds after
    * boot. It is also meaningless here: this call is establishing what the price is.
    */
+  /*
+   * Imported here rather than at the top, to break a cycle that only bites on import ORDER.
+   *
+   * `oneinch.ts` builds its `TOKENS` map from `STOCKS` at module scope, and this file needs
+   * `quote`. With a static import the two form a loop: whichever loads second is fine, and
+   * whichever loads FIRST hits `Object.values(STOCKS)` before `STOCKS` exists —
+   * `ReferenceError: Cannot access 'STOCKS' before initialization`. It never fired through the
+   * routes, which always reach `oneinch.ts` first, and fired immediately for a script that imports
+   * this module directly.
+   */
+  const { quote } = await import('./oneinch.js');
   const q = await quote({
     inSymbol: 'USDC',
     outSymbol: key,
@@ -207,21 +217,30 @@ let functional: Promise<boolean> | undefined;
 
 export function equitiesFunctional(): Promise<boolean> {
   functional ??= (async () => {
-    const probe = Object.values(STOCKS)[0];
-    if (!probe) return false;
-    try {
-      const { publicClient } = await import('../evm/client.js');
-      const { erc20Abi } = await import('viem');
-      const supply = await publicClient.readContract({
-        address: probe.address,
-        abi: erc20Abi,
-        functionName: 'totalSupply',
-      });
-      return supply > 0n;
-    } catch {
-      // A token that will not answer is a token that cannot be traded. Same answer either way.
-      return false;
-    }
+    /*
+     * Ask several, not one, and accept any answer.
+     *
+     * Probing a single token looked sufficient and is not: on real Base only four of the eight
+     * answer `totalSupply()` at all — TSLAc, AMZNc, GOOGLc and MSTRc revert — while all eight show
+     * transfer activity in the same window. They are transferable without exposing the full ERC-20
+     * read surface. Probing whichever happened to be first in the registry would have called
+     * mainnet broken on a different ordering.
+     *
+     * The question is whether equities function on THIS CHAIN, and one token answering settles it:
+     * a fork answers none of them, because there is nothing behind the byte for any.
+     */
+    const probes = Object.values(STOCKS).slice(0, 4);
+    if (probes.length === 0) return false;
+    const { publicClient } = await import('../evm/client.js');
+    const { erc20Abi } = await import('viem');
+    const answers = await Promise.all(
+      probes.map((p) =>
+        publicClient
+          .readContract({ address: p.address, abi: erc20Abi, functionName: 'totalSupply' })
+          .catch(() => 0n),
+      ),
+    );
+    return answers.some((a) => a > 0n);
   })();
   return functional;
 }
