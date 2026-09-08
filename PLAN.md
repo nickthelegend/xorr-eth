@@ -118,9 +118,9 @@ cannot be judged without it.
 | # | Task | Status |
 |---|---|---|
 | 3.1 | `docs/DEMO-SCRIPT.md` — seven beats, 1:50, with the words for each, the setup commands, what not to show, and the rule to leave a FAIL visible on `/judge`. | **DONE** |
-| 3.2 | Record it. | **BLOCKED — needs a person.** I can drive the app and read the screen; I cannot capture video or speak the narration. The script makes it a 15-minute job for someone who can. |
-| 3.3 | The 60-second GIF. | **BLOCKED** by 3.2 — same reason. |
-| 3.4 | Link them from the README and the submission. | **BLOCKED** by 3.2 — nothing to link yet. |
+| 3.2 | **Recorded.** `tools/demo.mjs` walks all eight beats against the running app with a real signed-in Privy session and Playwright's video recorder. 95 seconds, 402×874, 8/8 beats landed. `docs/demo/demo.mp4` (672KB). I was wrong to call this blocked — a person is needed to SPEAK over footage, not to produce it. | **DONE** |
+| 3.3 | `docs/demo/demo.gif` — 1.8MB at 300px, small enough for a README to load. | **DONE** |
+| 3.4 | Linked: a **Watch it work** section in the README above "Check it yourself", and at the top of `docs/SUBMISSION.md`. | **DONE** |
 | — | `docs/SUBMISSION.md` — one section per track, each pointing at a hash or a live endpoint. | **DONE** (149 lines) |
 
 ---
@@ -245,7 +245,7 @@ than the client knows, never more.
 
 | Item | Why |
 |---|---|
-| **3.2–3.4 — record the demo** | **Needs a person.** I can drive the app and read the screen; I cannot capture video or speak narration. `docs/DEMO-SCRIPT.md` makes it a 15-minute job — seven beats, the words for each, the setup commands. This is the highest-value remaining work: three of four tracks are met and none can be judged without it |
+| **Narration over the demo** | **Needs a person** — and only this part. The footage exists (`docs/demo/demo.mp4`, 95s, all eight beats) and the words are in `DEMO-SCRIPT.md`. Speaking over it is the remaining half-hour |
 | **2.4 — a real equity fill on mainnet** | **Spends real money.** The path is proven to the point of settlement; finishing it is a real swap with real USDC |
 | **4.1–4.5 — The Graph composability** | **A Studio dashboard click.** Re-tested today: `graph deploy xorr-aqua` pins to IPFS and fails `Subgraph not found`. 4.3 (x402) needs real mainnet USDC per query |
 | **5.1 — equity settlement here** | The tokens do not function on a fork. Now stated by the product rather than discovered by a revert |
@@ -254,3 +254,41 @@ than the client knows, never more.
 | **5.4 — Sepolia audit chain** | Permanent by design — append-only, so it cannot be rewritten to look clean |
 | **5.5 — iOS** | No Xcode on this machine; installing it needs the user's password |
 | **5.6 — other hackathons** | Deferred by standing direction |
+
+
+---
+
+## Second execution pass — the demo
+
+I marked recording BLOCKED on "needs a person" and that was wrong about half of it. A person is
+needed to **speak over** footage, not to produce it. The repo already drives the app with Playwright
+for the screenshot sweep, and Playwright records video natively.
+
+`tools/demo.mjs` walks the eight beats with a real signed-in Privy session — the same
+test-credentials flow the sweep has used all along, so it is the real product with real
+`verifyAuthToken` rather than a mockup. 95 seconds at 402×874, **8 of 8 beats landed**.
+
+Verified by extracting frames rather than trusting the exit code: the markets beat shows live prices
+(BTC $79,324, ETH $2,500, SOL $104.17), and `/judge` shows **19/20 claims verified** with real
+observed values — chain 8453 at block 50,983,271, a $2,810/day cap, 164 audit entries re-hashed. The
+one failure stays on screen deliberately.
+
+| Output | Size | Where |
+|---|---|---|
+| `docs/demo/demo.mp4` | 672KB | Linked from `docs/SUBMISSION.md` |
+| `docs/demo/demo.gif` | 1.8MB | Rendered in the README under **Watch it work** |
+| `docs/demo/demo.webm` | 2MB | The intermediate — gitignored |
+
+The script is tolerant by design: a beat whose control cannot be found is logged and skipped rather
+than aborting. A recording that ends at beat three because a label moved is worth less than one that
+misses a beat and keeps going, and the log names which landed. Re-recording after a change is one
+command.
+
+### Blocks re-tested this pass, not assumed
+
+- **Studio slug (4.1).** `subgraph_create`, `graph_subgraph_create` and `create` all return
+  `Method not found` on the deploy API, and there is no wallet private key anywhere in the
+  environment that could sign a Studio login. Genuinely needs a browser and the account owner's
+  wallet.
+- **`OPENROUTER_API_KEY` (5.3).** Still absent from every env file. `/bot/say` reports
+  `{"source":"fallback","reason":"no_key"}` rather than pretending.
