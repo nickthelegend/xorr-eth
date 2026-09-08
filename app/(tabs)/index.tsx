@@ -274,9 +274,17 @@ export default function Home() {
               style={{ marginTop: space.s6, marginBottom: space.s20 }}
             >
               <NoteStrip kind="acted">
+                {/*
+                  "Idle USDC can earn about 4.08% a year on Aave" is an offer, and it is only true
+                  where the pool exists. On a build without it the strip read as the offer followed
+                  immediately by the executor's note explaining that nothing can be supplied here —
+                  the sentence arguing with itself. The note alone is the honest half.
+                */}
                 {staking.data
-                  ? // `estimatedApy` is a fraction (0.0388); `percent` takes points.
-                    `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, 2).replace('+', '')} a year on Aave. ${staking.data.note}`
+                  ? staking.data.availableHere === false
+                    ? staking.data.note
+                    : // `estimatedApy` is a fraction (0.0388); `percent` takes points.
+                      `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, 2).replace('+', '')} a year on Aave. ${staking.data.note}`
                   : 'Supply rates are unavailable right now, so there is no figure to quote.'}
               </NoteStrip>
             </Press>
