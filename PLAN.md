@@ -190,3 +190,65 @@ logic, no TODOs in shipped code.
    Base and not reproducible on a fork", which is both true and much better.
 4. **4.1**, the moment someone can open a browser with the deployer wallet. Everything downstream of
    it is already written.
+
+
+---
+
+## Execution record — 2026-09-08
+
+Phases 1, 2 and 3.1 are done and verified running. Phases 3.2–3.4, 4 and 5 are blocked on things
+outside the code, each named below.
+
+### The gap this plan was written around is closed
+
+`/market/tradable` served all eight equities on both deployments; both now serve exactly
+`['ETH','WETH','USDC','CBBTC']`. `/order/NVDAc` offers no Buy button and says *"NVDAc cannot be
+settled on Base (local fork)"*. `POST /strategies` returns `400 not_settleable_here` for an equity
+while WETH still creates. A new `/verify` check pins the invariant: **PASS — "equities do not
+function on base-fork, and none of the 8 are offered as tradable"**.
+
+### Three of my own bugs, found by running the work rather than shipping it
+
+1. **The single-token probe.** `equitiesFunctional()` asked whichever equity was first in the
+   registry. Measured on real Base, **only 4 of 8 answer `totalSupply()`** — TSLAc, AMZNc, GOOGLc
+   and MSTRc revert, while all eight show transfer activity: transferable without exposing the full
+   ERC-20 read surface. A different registry ordering and the probe would have declared mainnet
+   broken. It asks four and accepts any answer.
+2. **A circular import that only fires on load ORDER.** `stocks.ts` needed `quote`; `oneinch.ts`
+   builds `TOKENS` from `STOCKS` at module scope. Through the routes `oneinch.ts` always loads
+   first, so it never fired — a script importing `stocks.ts` directly died instantly with
+   `ReferenceError: Cannot access 'STOCKS' before initialization`.
+3. **The refusal blamed the wrong thing.** "NVDAc cannot be settled on Base" is right for SOL, which
+   has no instrument there, and false for NVDAc, which is live on Base and merely absent from a fork
+   of it. One sentence covering two opposite cases; it names `chainLabel` now.
+
+And one in the test suite: the live mirror test asserted `TRADABLE` and `/market/tradable` were
+**equal**, which is how the gap survived a live check for a week — equality forced them to agree by
+making the server lie. The honest invariant is one-directional: the executor may serve fewer symbols
+than the client knows, never more.
+
+### Final state
+
+| Check | Result |
+|---|---|
+| Fork `/verify` | **19 pass / 0 fail / 1 skip** (was 18/0/1 — the new check) |
+| Sepolia `/verify` | 17 pass / 1 fail / 2 skip |
+| `/market/tradable`, both deployments | `ETH, WETH, USDC, CBBTC` — no equity offered anywhere |
+| Client tests | 367 |
+| Server tests | 184 |
+| Typecheck | clean, both projects |
+| Mock/stub/TODO sweep | 1 hit — `src/test/react-native-stub.ts`, a Node shim used only by unit tests |
+
+### What is left, and exactly why
+
+| Item | Why |
+|---|---|
+| **3.2–3.4 — record the demo** | **Needs a person.** I can drive the app and read the screen; I cannot capture video or speak narration. `docs/DEMO-SCRIPT.md` makes it a 15-minute job — seven beats, the words for each, the setup commands. This is the highest-value remaining work: three of four tracks are met and none can be judged without it |
+| **2.4 — a real equity fill on mainnet** | **Spends real money.** The path is proven to the point of settlement; finishing it is a real swap with real USDC |
+| **4.1–4.5 — The Graph composability** | **A Studio dashboard click.** Re-tested today: `graph deploy xorr-aqua` pins to IPFS and fails `Subgraph not found`. 4.3 (x402) needs real mainnet USDC per query |
+| **5.1 — equity settlement here** | The tokens do not function on a fork. Now stated by the product rather than discovered by a revert |
+| **5.2 — Privy policy on the user's wallet** | Privy requires the wallet's owner to authorise, and that is the user |
+| **5.3 — LLM voice** | `OPENROUTER_API_KEY` exists nowhere |
+| **5.4 — Sepolia audit chain** | Permanent by design — append-only, so it cannot be rewritten to look clean |
+| **5.5 — iOS** | No Xcode on this machine; installing it needs the user's password |
+| **5.6 — other hackathons** | Deferred by standing direction |
