@@ -19,6 +19,13 @@
 import React, { useEffect } from 'react';
 import { View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+/*
+ * The one import this layer takes from outside itself. `apiError.ts` is pure by construction —
+ * its own docblock exists because it was split out of `api.ts` to stay free of any runtime — so
+ * this is a couple of string functions, not the data layer's fetching machinery. The alternative
+ * was resolving the text at all 51 call sites.
+ */
+import { errorText, isRetryable } from '@/data/apiError';
 import { Button } from './Button';
 import { Press } from './Press';
 import { Text } from './Text';
@@ -145,9 +152,16 @@ export function ErrorState({
     <View testID={testID} style={{ paddingVertical: space.s30, gap: space.s14, alignItems: 'center' }}>
       <Text variant="rowPrimary">That did not load.</Text>
       <Text variant="secondary" align="center">
-        {error.message}
+        {errorText(error)}
       </Text>
-      {onRetry ? <Button label="Try again" variant="ghost" onPress={onRetry} /> : null}
+      {/*
+        A retry is offered only where repeating the request could answer differently. Under a
+        permanent refusal the button is worse than nothing — it invites someone to press it until
+        they give up on the app rather than on the request.
+      */}
+      {onRetry && isRetryable(error) ? (
+        <Button label="Try again" variant="ghost" onPress={onRetry} />
+      ) : null}
     </View>
   );
 }

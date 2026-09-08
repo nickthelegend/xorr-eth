@@ -48,6 +48,44 @@ export function apiReason(e: unknown): string | undefined {
 }
 
 /**
+ * The sentence to put in front of a user, out of whatever the failure carried.
+ *
+ * `ApiError.message` keeps the raw wire form on purpose — `404 Not Found: {"error":"WETH is not a
+ * tokenized equity"}` — because throwing information away at the boundary is how a screen ends up
+ * with a status code and nothing else. But `ErrorState` was rendering exactly that string, so the
+ * raw body, the braces and the quotes went on screen: /oracle/WETH showed the JSON verbatim.
+ *
+ * The server already wrote the sentence. Prefer it; fall back to the status when the body carried
+ * no prose, and leave non-HTTP errors alone — `TimedOut` and `NotSignedIn` write their own.
+ */
+export function errorText(e: unknown): string {
+  const reason = apiReason(e);
+  if (reason) return reason;
+  if (e instanceof ApiError) {
+    // No prose in the body. A bare status is not a sentence either, so say what happened in one.
+    return `The executor answered ${e.status}.`;
+  }
+  return e instanceof Error && e.message ? e.message : 'Something went wrong.';
+}
+
+/**
+ * Is trying the identical request again worth offering?
+ *
+ * A "Try again" button under a permanent refusal is a worse failure than no button: it invites a
+ * user to keep pressing something that will answer the same way forever. /oracle/WETH offered a
+ * retry on "WETH is not a tokenized equity", which is not going to change.
+ *
+ * 4xx means the request was wrong, so repeating it unchanged gets the same answer — except 408 and
+ * 429, which are explicitly "not now, try later". Everything else (5xx, timeouts, transport) is
+ * worth another go.
+ */
+export function isRetryable(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return true;
+  if (e.status === 408 || e.status === 429) return true;
+  return e.status < 400 || e.status >= 500;
+}
+
+/**
  * Thrown instead of sending a request that is certain to be rejected.
  *
  * Screens already treat a failed read as "no data", which is the right rendering for a signed-out
