@@ -10,6 +10,7 @@ import { useGoBack } from '@/nav/useGoBack';
 import {
   AssetMark,
   Button,
+  EmptyState,
   ErrorState,
   Fill,
   IconButton,
@@ -29,6 +30,13 @@ import { logoProps, useLogos } from '@/data/useLogos';
 import type { Instrument } from '@/data/types';
 
 const PAGE = 25;
+
+/** "Crypto, Tokenized equities and Commodities" — an Oxford-comma-free list for one sentence. */
+function listOf(labels: string[]): string {
+  if (labels.length === 0) return 'no classes at all';
+  if (labels.length === 1) return labels[0]!;
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+}
 
 export default function ClassList() {
   const { classId } = useLocalSearchParams<{ classId: string }>();
@@ -63,7 +71,13 @@ export default function ClassList() {
             renders LoadingRows for exactly that window; this line was still asserting a count.
             Same fix as the Markets tab.
           */}
-          {loading && !data ? 'Loading markets' : `${rows.length} of ${cls?.instruments.length ?? 0} markets`}
+          {loading && !data
+            ? 'Loading markets'
+            : // Nor is it a true one for a class that does not exist. Same reason: it counts
+              // something, and there is nothing here to count.
+              !cls
+              ? ''
+              : `${rows.length} of ${cls.instruments.length} markets`}
         </Text>
       </View>
 
@@ -76,6 +90,20 @@ export default function ClassList() {
           <LoadingRows count={8} />
         ) : error ? (
           <ErrorState error={error} onRetry={reload} />
+        ) : !cls ? (
+          /*
+            The classes loaded and none of them is the one in the URL.
+            
+            Rendering the list anyway gave a black screen under the word "Markets" with "0 of 0
+            markets" in the corner — indistinguishable from a class that exists and happens to be
+            empty, and from a failed load. A stale link or a typo lands here, so it should say
+            which it is and name the classes that do exist.
+          */
+          <EmptyState
+            text={`There is no "${classId}" class. This build lists ${listOf(data?.map((c) => c.label) ?? [])}.`}
+            actionLabel="Browse all markets"
+            onAction={() => router.replace('/(tabs)/markets')}
+          />
         ) : (
           <FlashList
             data={rows}
