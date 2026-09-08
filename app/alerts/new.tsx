@@ -24,6 +24,7 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { DEFAULT_BUY } from '@/data/tradable';
+import { usePrice } from '@/data/usePrices';
 
 
 const FIELD_H = 48;
@@ -31,12 +32,31 @@ const FIELD_H = 48;
 export default function NewAlert() {
   const goBack = useGoBack();
   const [symbol, setSymbol] = useState<string>(DEFAULT_BUY);
-  const [level, setLevel] = useState('95');
+  const sym = symbol.trim().toUpperCase();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
+  /*
+   * Start the level near the price, not at 95.
+   *
+   * `useState('95')` was a fixture from when the default symbol was a cheap one. Against WETH at
+   * $2,490 the screen opened offering "Alert me when WETH is above $95" — an alert that fires the
+   * instant it is created, which is the opposite of what an alert is for. Five percent above the
+   * live price is a level worth waiting for, and it is a starting point the user edits anyway.
+   *
+   * With no price to work from there is no sensible number to invent, so the field stays empty and
+   * the CTA says "Enter a symbol and a price" — which it already knew how to do.
+   */
+  const { quote } = usePrice(sym || undefined);
+  const [level, setLevel] = useState('');
+  const [seededFor, setSeededFor] = useState<string>();
+  const suggestion = quote?.price === undefined ? undefined : Math.round(quote.price * 1.05);
+  if (suggestion !== undefined && seededFor !== sym) {
+    setSeededFor(sym);
+    if (level.trim() === '') setLevel(String(suggestion));
+  }
+
   const value = parseFloat(level);
-  const sym = symbol.trim().toUpperCase();
   const valid = sym.length > 0 && Number.isFinite(value) && value > 0;
 
   async function create() {
