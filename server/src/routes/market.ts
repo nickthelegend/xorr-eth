@@ -24,6 +24,7 @@ import { logosFor } from '../market/logos.js';
 import { withdrawCalldata } from '../venues/aave.js';
 import { suppliedUsd } from '../evm/balances.js';
 import { publicClient } from '../evm/client.js';
+import { ADDRESSES } from '../evm/chains.js';
 import { one } from '../db/index.js';
 import { requireUser } from '../auth/middleware.js';
 import { isAddress, type Address } from 'viem';
@@ -358,9 +359,35 @@ market.get('/market/tradable', async (c) => {
   return c.json(
     Object.entries(TOKENS)
       .filter(([symbol]) => equitiesOk || !isStock(symbol))
-      .map(([symbol, t]) => ({ symbol, address: t.address, decimals: t.decimals })),
+      .map(([symbol, t]) => ({
+        symbol,
+        address: SETTLEMENT_ADDRESS[symbol] ?? t.address,
+        decimals: t.decimals,
+      })),
   );
 });
+
+/**
+ * The address a fill actually moves on THIS chain, for the symbols where that differs.
+ *
+ * `TOKENS` is deliberately all-mainnet — its own comment says so, because 1inch is only ever asked
+ * about chain 8453 and a Sepolia address makes the quote 400. That is right for quoting and wrong
+ * for this route, which promises "the symbols the executor can actually settle on this chain" and
+ * hands each one an address. On the Sepolia build it published mainnet USDC,
+ * 0x833589fC…02913, while /venues and /approvals — which read ADDRESSES — showed Circle's Sepolia
+ * deployment, 0x036CbD53…3dCF7e, for the same token on the same screen-load. One of those is the
+ * contract a user would inspect on a block explorer, and it was not the one on /tokens.
+ *
+ * Only the four the chain sets differ on. The equities are absent on purpose: they are mainnet
+ * ERC-20s, `equitiesFunctional()` filters them out entirely on a chain where they do not work, so
+ * anywhere they survive this filter the registry address IS the settlement address.
+ */
+const SETTLEMENT_ADDRESS: Record<string, string> = {
+  ETH: ADDRESSES.nativeEth,
+  WETH: ADDRESSES.wethBase,
+  USDC: ADDRESSES.usdcBase,
+  CBBTC: ADDRESSES.cbbtcBase,
+};
 
 /**
  * GET /yield/supply — the real USDC supply rate on Aave v3, Base.
