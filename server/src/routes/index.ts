@@ -537,6 +537,48 @@ routes.get('/pnl/realised', async (c) => {
   return c.json(await realisedPnl(w.id));
 });
 
+/**
+ * Every disposal, one row per sale.
+ *
+ * `/pnl/realised` aggregates by symbol, which is the right shape for "what have I made" and the
+ * wrong one for "which sale was that". `/pnl/disposals.csv` has the rows but only as a file, so the
+ * app could hand them to an accountant and never show them to the person who made them.
+ *
+ * `basis_known` is carried through per row rather than folded into the total. A sale whose cost was
+ * never recorded understates the gain, and which sale it was is the thing an accountant asks first.
+ */
+routes.get('/disposals', async (c) => {
+  const w = await requireWallet(c);
+  const rows = await query<{
+    id: string;
+    symbol: string;
+    at: Date;
+    units: string;
+    proceeds_usd: string;
+    cost_usd: string;
+    realised_usd: string;
+    basis_known: boolean;
+  }>(
+    `SELECT id, symbol, at, units, proceeds_usd, cost_usd, realised_usd, basis_known
+       FROM disposals WHERE wallet_id = $1 ORDER BY at DESC LIMIT 200`,
+    [w.id],
+  );
+  return c.json(
+    rows.map((r) => ({
+      id: r.id,
+      symbol: r.symbol,
+      at: r.at.toISOString(),
+      // NUMERIC arrives as a string because it is arbitrary precision; these are display
+      // quantities of known small magnitude, so parsing them here is safe and honest.
+      units: Number(r.units),
+      proceeds: Number(r.proceeds_usd),
+      cost: Number(r.cost_usd),
+      realised: Number(r.realised_usd),
+      basisKnown: r.basis_known,
+    })),
+  );
+});
+
 routes.get('/positions/:id', async (c) => {
   const w = await requireWallet(c);
   return c.json((await getPosition(w.id, c.req.param('id'))) ?? null);

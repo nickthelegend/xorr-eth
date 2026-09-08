@@ -1,6 +1,6 @@
 # New screens
 
-Thirty-three screens, none of which touch an existing one.
+Thirty-two screens, none of which redesign an existing one.
 
 The rule that shaped the whole list: **a screen with no real data behind it is a mock**, so every
 row below names the endpoint, table or contract call it renders. Nothing here invents a number, and
@@ -40,9 +40,9 @@ at any of them from the phone.
 | `/movers` | Today's largest moves, both directions | `GET /market/quotes` |
 | `/compare` | Two instruments side by side over one range | `GET /market/ohlc` |
 | `/crosscheck/[symbol]` | The same asset priced two ways, and the gap | `GET /market/crosscheck` |
-| `/token/[symbol]` | Address, decimals, where the logo came from, whether it settles | `/market/tradable` + `/market/logos` |
+| `/tokens` | Every token that settles here, with full addresses | `GET /market/tradable` |
 | `/route/[symbol]` | The protocols a fill would actually route through | `GET /swap/quote` |
-| `/oracle/[symbol]` | Every price this executor has recorded | `price_observations` |
+| `/venues` | Where a fill may go, and every token it may pull | `GET /delegation/params` |
 
 ## D · Agents and strategies
 
@@ -52,10 +52,9 @@ at any of them from the phone.
 | `/runs` | Every strategy run, and what it did or refused | `strategy_runs` |
 | `/runs/[id]` | One run: inputs, decision, fill or reason | `strategy_runs` |
 | `/proposals` | Every proposal, approved, skipped or expired | `GET /proposals` |
-| `/strategy/[id]` | One live strategy: parameters, runs, spend | `GET /strategies/:id` |
-| `/strategy/momentum` | Create a momentum strategy — a kind with no creator | `POST /strategies` |
-| `/strategy/event` | Create an event-driven strategy — likewise | `POST /strategies` |
-| `/backtest` | What a strategy would have done, before committing | `POST /strategies/backtest` |
+| `/backtest` | What a weekly buy would have done, on real past prices | `POST /strategies/backtest` |
+| `/audit/[seq]` | One trail entry in full, with its transaction | `GET /activity` |
+| `/route/[symbol]` | The pools a fill would take, at a size you pick | `GET /swap/quote` |
 
 ## E · Infrastructure
 
@@ -92,3 +91,19 @@ These were on the list and came off it, because there is no real source:
   inventing the number the screen exists to display.
 - **Portfolio performance over time.** `price_observations` records what the executor priced, not a
   daily mark of the whole portfolio. Drawing a curve from it would imply a history nobody kept.
+- **Momentum and event-driven strategy creators.** Both kinds run server-side and neither has a
+  creator, so these were on the list. They came off it because a creator is a form that spends
+  money, and shipping two of those without running them end to end against a funded wallet would be
+  the opposite of what this set is for. Worth doing next, deliberately.
+
+## What the screens found
+
+Building them surfaced two facts that were true before and invisible:
+
+- **`/verify` fails one of its twenty checks** on the local Sepolia deployment. `privy-refusal`
+  tries to prove Privy blocks a transaction the policy omits; the request is refused for a
+  *different* reason — a 401 for a missing `privy-authorization-signature` — so the claim is not
+  proven. The check is right to call that a failure rather than a pass, and it needs a key-quorum
+  signature to go green.
+- **WETH is approved without a limit.** `/approvals` reads it straight off the chain: USDC is capped
+  at 48,000 and WETH is MAX_UINT256. Nothing was wrong with the app; nothing had ever shown it.

@@ -36,6 +36,7 @@ const GROUPS: Group[] = [
       { route: '/policy', title: 'Wallet policy', detail: 'What Privy refuses, independently of us' },
       { route: '/delegation', title: 'Permission', detail: 'The grant itself: key, venues, cap, expiry' },
       { route: '/keys', title: 'API keys', detail: 'What can act on this account without you' },
+      { route: '/venues', title: 'Venues', detail: 'Where a fill may go, enforced on-chain' },
     ],
   },
   {
@@ -55,6 +56,7 @@ const GROUPS: Group[] = [
       { route: '/runs', title: 'Runs', detail: 'Every scheduled run, fills and refusals alike' },
       { route: '/proposals', title: 'Proposals', detail: 'What it asked for, and what you said' },
       { route: '/catchup', title: 'Since you looked', detail: 'What happened while you were away' },
+      { route: '/backtest', title: 'Backtest', detail: 'What a weekly buy would have done, on real prices' },
     ],
   },
   {
@@ -74,6 +76,7 @@ const GROUPS: Group[] = [
       { route: '/network', title: 'Network', detail: 'Which chain this build is really pointed at' },
       { route: '/graph', title: 'Subgraph', detail: 'How far behind the index is' },
       { route: '/graph/spends', title: 'Spend events', detail: 'The same money, recorded by someone else' },
+      { route: '/graph/decision', title: 'Routing decision', detail: 'Which venue the router picks, and why' },
     ],
   },
   {

@@ -128,6 +128,22 @@ export default function Settings() {
             onPress={() => router.push('/recovery')}
           />
 
+          {/*
+            One door to everything the app can show about itself — the verification report, the
+            approvals, the runs, the subgraph. Thirty-odd surfaces cannot each earn a row here, and
+            a screen nobody can reach is worse than no screen.
+          */}
+          <Row
+            title="Explore"
+            value={
+              <Text variant="rowPrimary" color={colors.ink55}>
+                Everything else
+              </Text>
+            }
+            height={SETTING_ROW}
+            onPress={() => router.push('/explore')}
+          />
+
           <Eyebrow small style={{ marginTop: space.s26 }}>
             What the bot may do
           </Eyebrow>

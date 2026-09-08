@@ -192,6 +192,54 @@ export type StrategyRunRow = {
 };
 
 /** One push kind, its explanation, and whether it is on. Labels come from the server. */
+/** One sale, with its cost basis. `basisKnown: false` means the gain is understated. */
+export type Disposal = {
+  id: string;
+  symbol: string;
+  at: string;
+  units: number;
+  proceeds: number;
+  cost: number;
+  realised: number;
+  basisKnown: boolean;
+};
+
+/**
+ * A proposal as it was shown, plus what became of it.
+ *
+ * `payload` is stored at the time and rendered as stored. Re-pricing it against today's market
+ * would rewrite what was actually put in front of someone, which is the one thing a record of
+ * decisions must not do.
+ */
+export type ProposalRow = {
+  id: string;
+  agent: string;
+  payload: Record<string, unknown>;
+  /** Null only while it is still open and unexpired. */
+  decision: 'approve' | 'skip' | 'expired' | null;
+  decidedAt: string | null;
+  expiresAt: string;
+  at: string;
+};
+
+/**
+ * What a strategy would have done over a past window.
+ *
+ * `feed`, `source` and `disclaimer` come from the server and are rendered, not dropped. A backtest
+ * without the window it ran over and where the prices came from is a sales pitch.
+ */
+export type StrategyBacktest = {
+  lookback: string;
+  ret: number;
+  maxDd: number;
+  sharpe: number;
+  trades: number;
+  equity: number[];
+  feed: 'live';
+  source: string;
+  disclaimer: string;
+};
+
 export type NotificationPref = {
   kind: string;
   label: string;
@@ -241,7 +289,14 @@ export const system = {
 
   /* strategies */
   runs: (limit = 100) => api.get<StrategyRunRow[]>(`/runs?limit=${limit}`),
-  proposals: () => api.get<unknown[]>('/proposals'),
+  disposals: () => api.get<Disposal[]>('/disposals'),
+  backtestStrategy: (body: {
+    kind: 'dca' | 'grid';
+    symbol: string;
+    lookback: '30d' | '90d' | '6m' | '1y';
+    params: Record<string, number>;
+  }) => api.post<StrategyBacktest>('/strategies/backtest', body),
+  proposals: () => api.get<ProposalRow[]>('/proposals'),
   notificationPrefs: () => api.get<NotificationPref[]>('/notifications/prefs'),
   setNotificationPref: (kind: string, enabled: boolean) =>
     api.patch<{ ok: boolean }>('/notifications/prefs', { kind, enabled }),

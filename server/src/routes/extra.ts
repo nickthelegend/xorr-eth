@@ -119,6 +119,52 @@ extra.post('/proposals/generate', async (c) => {
   });
 });
 
+/**
+ * Every proposal this wallet has been shown, and what happened to it.
+ *
+ * The thread renders the CURRENT proposal and forgets the rest, so "what has it asked me for, and
+ * what did I say" had no answer anywhere. That is the record of the approve-before-execute loop
+ * working — and specifically of the ones that expired, which are the interesting rows: an expiry is
+ * the bot asking and being ignored, which neither an approval nor a skip tells you.
+ *
+ * `payload` is the proposal as it was shown, stored at the time. Rendering today's prices against
+ * yesterday's proposal would rewrite what was actually put in front of someone.
+ */
+extra.get('/proposals', async (c) => {
+  const id = await walletId(c);
+  if (!id) return c.json([]);
+  const rows = await query<{
+    id: string;
+    agent: string;
+    payload: Record<string, unknown>;
+    expires_at: Date;
+    decision: string | null;
+    decided_at: Date | null;
+    created_at: Date;
+  }>(
+    `SELECT id, agent, payload, expires_at, decision, decided_at, created_at
+       FROM proposals WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT 100`,
+    [id],
+  );
+  const now = Date.now();
+  return c.json(
+    rows.map((r) => ({
+      id: r.id,
+      agent: r.agent,
+      payload: r.payload,
+      /*
+       * An undecided proposal past its expiry is expired, whether or not anything wrote that down.
+       * The decision column is only set when someone acts or the thread notices; leaving those rows
+       * as "awaiting" would show a queue of decisions nobody can make any more.
+       */
+      decision: r.decision ?? (r.expires_at.getTime() <= now ? 'expired' : null),
+      decidedAt: r.decided_at ? r.decided_at.toISOString() : null,
+      expiresAt: r.expires_at.toISOString(),
+      at: r.created_at.toISOString(),
+    })),
+  );
+});
+
 extra.post('/proposals', async (c) => {
   const body = z
     .object({
