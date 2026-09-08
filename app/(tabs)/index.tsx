@@ -118,8 +118,14 @@ export default function Home() {
       <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
         <View style={{ alignItems: 'center', marginTop: space.s22 }}>
           <Eyebrow>Total value</Eyebrow>
+          {/*
+            A dash on this line means "we could not read your balance" — see the comment on `total`.
+            While the read is still in flight it means nothing of the kind, and against this
+            executor that window is twenty seconds on the first screen of the app. Fifth site with
+            this conflation; the others are Markets, Send, Watchlist and markets/[classId].
+          */}
           <Price variant="heroBalance" style={{ marginTop: space.s6 }}>
-            {total === null ? '—' : money(total)}
+            {total !== null ? money(total) : balance.loading ? '· · ·' : '—'}
           </Price>
           {unrealisedPct !== undefined ? (
             <DeltaChip
@@ -164,7 +170,9 @@ export default function Home() {
             left={<AssetMark gradient={{ c1: '#B58CFF', c2: '#6E3ED8' }} size={size.markSm} />}
             title="Cash"
             secondary="Available to trade"
-            value={<Price>{cash === null ? '—' : money(cash)}</Price>}
+            value={
+              <Price>{cash !== null ? money(cash) : balance.loading ? '· · ·' : '—'}</Price>
+            }
             height={size.hit}
           />
 

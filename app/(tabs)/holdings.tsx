@@ -67,9 +67,17 @@ export default function Assets() {
         <Eyebrow small>Portfolio value</Eyebrow>
         {/* `money(balance.data ?? 0)` reported "$0.00" whenever the executor was
             unreachable — a confident number for a question we never got to ask. An em dash
-            says the same thing the code actually knows. */}
+            says the same thing the code actually knows.
+
+            And only that. `undefined` is "not back yet", which is a different state from `null`'s
+            "could not be read", and collapsing them showed the could-not-read dash for the twenty
+            seconds this executor takes to answer. Sixth site with this conflation. */}
         <Price variant="heroBalance" style={{ marginTop: space.s8 }}>
-          {balance.data === null || balance.data === undefined ? '—' : money(balance.data)}
+          {balance.data !== null && balance.data !== undefined
+            ? money(balance.data)
+            : balance.loading
+              ? '· · ·'
+              : '—'}
         </Price>
         {balance.error ? (
           <Text variant="secondary" style={{ marginTop: space.s6 }}>
