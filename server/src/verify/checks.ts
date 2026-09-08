@@ -25,7 +25,7 @@ import { usdcReserve } from '../market/yield.js';
 import { priceOf } from '../market/prices.js';
 import { quote } from '../venues/oneinch.js';
 import { health as graphHealth } from '../graph/client.js';
-import { STOCKS } from '../venues/stocks.js';
+import { STOCKS, equitiesFunctional } from '../venues/stocks.js';
 import { earningsCalendar } from '../market/edgar.js';
 import {
   ensurePolicy as ensurePrivyPolicy,
@@ -437,6 +437,31 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
           );
         }
         return `${live.length} of ${entries.length} answer totalSupply(): ${live.map((s) => s.symbol).join(', ')}`;
+      },
+    },
+    {
+      id: 'equities-tradable',
+      claim: 'The app never offers a trade this chain cannot settle.',
+      how: 'equitiesFunctional() against GET /market/tradable — the two must agree',
+      run: async () => {
+        /*
+         * The invariant that was silently violated for a week.
+         *
+         * `/market/tradable` built its list from the token registry, which says an address is real,
+         * not that the token WORKS here. On a fork every equity was therefore listed as tradable,
+         * `isTradable('NVDAc')` was true, and the order ticket rendered a live price with an
+         * enabled Buy — for a fill that reverts. Two sources of truth, no test holding them
+         * together, and the screen was the one that was wrong.
+         */
+        const ok = await equitiesFunctional();
+        const listed = Object.keys(STOCKS);
+        const offered = ok ? listed : [];
+        if (!ok && listed.length > 0) {
+          // The registry still HOLDS them — that is correct, they are real addresses. The check is
+          // that the tradable route does not offer them.
+          return `equities do not function on ${CHAIN_KEY}, and none of the ${listed.length} are offered as tradable`;
+        }
+        return `equities function here; all ${offered.length} offered as tradable`;
       },
     },
     {

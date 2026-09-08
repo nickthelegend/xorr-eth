@@ -25,6 +25,7 @@ import {
 import { TOKENS as VENUE_TOKENS, TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { CHAIN_KEY } from '../evm/chains.js';
+import { equitiesFunctional, isStock } from '../venues/stocks.js';
 import { readPolicy } from '../evm/delegation.js';
 import type { Address } from 'viem';
 import { currentWallet, requireWallet } from './wallet-context.js';
@@ -273,6 +274,30 @@ strategyRoutes.post('/strategies/:id/run', async (c) => {
 
 strategyRoutes.post('/strategies', async (c) => {
   const body = StrategyInput.parse(await c.req.json());
+
+  /*
+   * Refuse at creation what cannot settle here, rather than at run time.
+   *
+   * The schema check above proves the symbol is a token this executor knows. It does not prove the
+   * token WORKS on the chain this deployment points at — the tokenized equities have real Base
+   * addresses and do not function on a fork of Base, where `totalSupply()` reverts. So a user could
+   * create a recurring buy of NVDAc that scheduled forever and failed every single run with `TF`,
+   * and the failure read as our bug rather than an impossible request. That is the same reasoning
+   * the schema check is there for, one layer deeper.
+   */
+  if (isStock(body.symbol) && !(await equitiesFunctional())) {
+    return c.json(
+      {
+        error: 'not_settleable_here',
+        message:
+          `${canonicalSymbol(body.symbol)} cannot be settled on ${CHAIN_KEY}. The tokenized ` +
+          'equities are live on Base mainnet and do not function on a fork of it, so a strategy ' +
+          'for one would schedule forever and fill never.',
+      },
+      400,
+    );
+  }
+
   const w = await requireWallet(c);
 
   /*

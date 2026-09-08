@@ -183,3 +183,50 @@ export async function observedHistory(
   ).catch(() => []);
   return rows.map((r) => ({ at: new Date(r.at).getTime(), usd: Number(r.usd) }));
 }
+
+/**
+ * Do the tokenized equities actually WORK on the chain this executor is pointed at?
+ *
+ * They are listed in `STOCKS` because the addresses are real on Base. That is not the same question
+ * as whether they can be traded here, and conflating the two produced the worst kind of bug this
+ * codebase can have: `/market/tradable` returned all eight on a fork, so `isTradable('NVDAc')` was
+ * true, so `/order/NVDAc` rendered a complete ticket — live price, unit conversion, an enabled
+ * "Buy $250 of NVDAc" — and the fill reverted `TF`. The app made a confident offer it could not
+ * honour.
+ *
+ * The test is the same one `/verify` uses, and it is a call rather than a code-length check for the
+ * reason recorded there: these tokens carry a single byte of code and answer anyway on real Base,
+ * while on an anvil fork of the same block the same call reverts. `eth_getCode` cannot tell those
+ * apart; `totalSupply()` can.
+ *
+ * Cached for the process lifetime rather than by a timer. A chain does not stop serving a token
+ * halfway through a deployment's life, and re-asking on every request would put an RPC round trip
+ * in front of a route the market list calls on mount.
+ */
+let functional: Promise<boolean> | undefined;
+
+export function equitiesFunctional(): Promise<boolean> {
+  functional ??= (async () => {
+    const probe = Object.values(STOCKS)[0];
+    if (!probe) return false;
+    try {
+      const { publicClient } = await import('../evm/client.js');
+      const { erc20Abi } = await import('viem');
+      const supply = await publicClient.readContract({
+        address: probe.address,
+        abi: erc20Abi,
+        functionName: 'totalSupply',
+      });
+      return supply > 0n;
+    } catch {
+      // A token that will not answer is a token that cannot be traded. Same answer either way.
+      return false;
+    }
+  })();
+  return functional;
+}
+
+/** Testing only — the process-lifetime cache would otherwise carry one case into the next. */
+export function resetEquitiesFunctional(): void {
+  functional = undefined;
+}

@@ -54,3 +54,53 @@ export function isTradable(symbol: string): boolean {
 
 /** What the default buy is when a screen has to pick one. */
 export const DEFAULT_BUY: string = 'WETH';
+
+/**
+ * What the SERVER says can be settled, which is not always what this list says.
+ *
+ * `TRADABLE` above is a compile-time mirror of the token registry — it answers "is this a symbol we
+ * know how to route". That is a different question from "can this deployment settle it", and the
+ * two came apart on the tokenized equities: their addresses are real on Base, they do not function
+ * on a fork of Base, and the app offered a Buy button for all eight regardless. Live price, unit
+ * conversion, an enabled "Buy $250 of NVDAc", and a fill that reverts.
+ *
+ * So the order path asks the executor rather than a constant. `/market/tradable` now filters by
+ * whether the token actually answers on the running chain.
+ *
+ * The pre-answer default is the static list — the same behaviour as before — because the alternative
+ * is refusing trades that are perfectly fine for the second before the fetch lands. On a deployment
+ * where equities do not work that leaves a brief window; the order ticket closes it by awaiting the
+ * real answer rather than rendering from the default.
+ */
+let settleable: Set<string> | undefined;
+let settleableInFlight: Promise<Set<string>> | undefined;
+
+export async function settleableSymbols(): Promise<Set<string>> {
+  if (settleable) return settleable;
+  settleableInFlight ??= (async () => {
+    try {
+      const { api } = await import('./api');
+      const rows = await api.get<{ symbol: string }[]>('/market/tradable');
+      settleable = new Set(rows.map((r) => r.symbol.toUpperCase()));
+      return settleable;
+    } catch {
+      settleableInFlight = undefined;
+      // Unknown, not empty. An empty set here would refuse every trade on one failed request.
+      return new Set((TRADABLE as readonly string[]).map((t) => t.toUpperCase()));
+    }
+  })();
+  return settleableInFlight;
+}
+
+/** Testing only. */
+export function resetSettleable(): void {
+  settleable = undefined;
+  settleableInFlight = undefined;
+}
+
+/** Can this deployment actually settle it — asked of the executor, not of a constant. */
+export async function isSettleable(symbol: string): Promise<boolean> {
+  const upper = symbol.toUpperCase();
+  const settled = (SETTLES_AS[upper] ?? upper).toUpperCase();
+  return (await settleableSymbols()).has(settled);
+}

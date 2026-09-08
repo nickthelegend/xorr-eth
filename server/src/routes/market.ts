@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import { getJson, staleValue } from '../http/get.js';
 import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../market/ids.js';
 import { TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
-import { STOCKS, isStock, observedHistory } from '../venues/stocks.js';
+import { STOCKS, equitiesFunctional, isStock, observedHistory } from '../venues/stocks.js';
 import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
 import { withdrawCalldata } from '../venues/aave.js';
 import { suppliedUsd } from '../evm/balances.js';
@@ -305,15 +305,25 @@ market.get('/market/symbols', (c) => c.json(Object.keys(COINGECKO_IDS)));
  * would have created a strategy no signed transaction could ever fill. Anything not in this list
  * is a chart you can look at, not an order you can place.
  */
-market.get('/market/tradable', (c) =>
-  c.json(
-    Object.entries(TOKENS).map(([symbol, t]) => ({
-      symbol,
-      address: t.address,
-      decimals: t.decimals,
-    })),
-  ),
-);
+market.get('/market/tradable', async (c) => {
+  /*
+   * "Real address" and "tradable here" are different questions, and answering the first while being
+   * asked the second is how the app came to offer a Buy button it could not honour.
+   *
+   * The equities are in `TOKENS` because their addresses are real on Base. On a fork of Base they
+   * do not function — they carry one byte of code and `totalSupply()` reverts — so every one of
+   * them was listed as tradable, `isTradable('NVDAc')` returned true, and `/order/NVDAc` rendered a
+   * complete ticket with a live price and an enabled "Buy $250 of NVDAc". The fill then reverted
+   * `TF`. The screen was confidently wrong, which is the one thing this route exists to prevent:
+   * anything not in this list is a chart you can look at, not an order you can place.
+   */
+  const equitiesOk = await equitiesFunctional();
+  return c.json(
+    Object.entries(TOKENS)
+      .filter(([symbol]) => equitiesOk || !isStock(symbol))
+      .map(([symbol, t]) => ({ symbol, address: t.address, decimals: t.decimals })),
+  );
+});
 
 /**
  * GET /yield/supply — the real USDC supply rate on Aave v3, Base.

@@ -48,7 +48,7 @@ import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
 import { usePrice } from '@/data/usePrices';
 import { rangeChange } from '@/state/derived';
-import { isTradable, settlementSymbol } from '@/data/tradable';
+import { isSettleable, isTradable, settlementSymbol } from '@/data/tradable';
 
 const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
 /** The timeframe each range pill maps to when asking for real candles. */
@@ -157,7 +157,12 @@ export default function AssetDetail() {
     );
   }
 
-  const tradable = isTradable(symbol ?? '');
+  /*
+   * Asked of the executor, like the order ticket. A Buy button that leads to a ticket the chain
+   * cannot settle is the same lie one screen earlier.
+   */
+  const settleable = useAsync(() => isSettleable(symbol ?? ''), [symbol]);
+  const tradable = settleable.data ?? isTradable(symbol ?? '');
 
   return (
     <Screen gutter="none">

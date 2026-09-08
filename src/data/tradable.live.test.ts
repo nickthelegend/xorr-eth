@@ -9,11 +9,32 @@ import { TRADABLE } from './tradable';
 import { API_BASE } from './apiBase';
 
 describe('tradable set', () => {
-  it('matches the executor exactly', async () => {
+  it('is a subset of the executor, never a superset', async () => {
+    /*
+     * Equality was the wrong assertion, and it hid the bug it was written to catch.
+     *
+     * `TRADABLE` mirrors the token REGISTRY — the symbols this build knows how to route.
+     * `/market/tradable` answers a narrower question: what this DEPLOYMENT can settle. They
+     * legitimately differ on the tokenized equities, whose addresses are real on Base and which do
+     * not function on a fork of it. Demanding equality forced the two to agree by making the server
+     * lie, and the app offered a Buy button for eight assets whose fills revert.
+     *
+     * The invariant that actually matters is one-directional: the executor may serve FEWER symbols
+     * than the client knows, never more. A symbol the client would offer and the server cannot
+     * settle is the bug; a symbol the server settles and the client never offers is merely unused.
+     */
     const res = await fetch(`${API_BASE}/market/tradable`);
     expect(res.status, 'executor must serve /market/tradable without auth').toBe(200);
     const rows = (await res.json()) as { symbol: string }[];
-    expect([...rows.map((r) => r.symbol)].sort()).toEqual([...TRADABLE].sort());
+    const served = rows.map((r) => r.symbol);
+
+    const unknown = served.filter((s) => !(TRADABLE as readonly string[]).includes(s));
+    expect(unknown, 'executor serves symbols the client has never heard of').toEqual([]);
+
+    // And the crypto four must always be there, on every chain this project runs.
+    for (const core of ['ETH', 'WETH', 'USDC', 'CBBTC']) {
+      expect(served, `${core} must be settleable everywhere`).toContain(core);
+    }
   }, 30_000);
 
   it('every tradable symbol is priced by one feed or the other', async () => {

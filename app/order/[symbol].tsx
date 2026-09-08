@@ -36,7 +36,7 @@ import { unitsFor, usePrice } from '@/data/usePrices';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useStore } from '@/state/store';
-import { DEFAULT_BUY, isTradable } from '@/data/tradable';
+import { DEFAULT_BUY, isSettleable, isTradable } from '@/data/tradable';
 
 type Side = 'buy' | 'sell';
 
@@ -53,10 +53,20 @@ export default function OrderTicket() {
     side?: string;
   }>();
   const goBack = useGoBack();
-  // An order ticket for something this chain cannot settle is a ticket that can never be
-  // filled. The asset screen already refuses to offer a Buy for one; the ticket itself was
-  // still reachable directly and happily said "Buy $250 of NOPE".
-  const tradable = isTradable(symbol);
+  /*
+   * An order ticket for something this chain cannot settle is a ticket that can never be filled.
+   * The asset screen already refuses to offer a Buy for one; the ticket itself was still reachable
+   * directly and happily said "Buy $250 of NOPE".
+   *
+   * Asked of the EXECUTOR, not of the static list. The two disagree on the tokenized equities:
+   * their addresses are real on Base and they do not function on a fork of it, so the constant said
+   * tradable while the chain said otherwise, and this screen rendered a live price and an enabled
+   * Buy for a fill that reverts. `isTradable` is still the pre-answer default — refusing a perfectly
+   * good trade for the second before the fetch lands would be its own bug — and the server's answer
+   * narrows it the moment it arrives.
+   */
+  const settleable = useAsync(() => isSettleable(symbol), [symbol]);
+  const tradable = settleable.data ?? isTradable(symbol);
 
   const orderAmt = useStore((s) => s.orderAmt);
   const pressKey = useStore((s) => s.pressKey);
