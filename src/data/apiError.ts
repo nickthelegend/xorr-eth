@@ -46,3 +46,43 @@ export function apiReason(e: unknown): string | undefined {
   // make that invisible.
   return reason.trim();
 }
+
+/**
+ * Thrown instead of sending a request that is certain to be rejected.
+ *
+ * Screens already treat a failed read as "no data", which is the right rendering for a signed-out
+ * user — the difference is that they now get there without three 401s in the console and three
+ * pointless round trips.
+ */
+export class NotSignedIn extends Error {
+  constructor(path: string) {
+    super(`Not signed in, so ${path} was not requested.`);
+    this.name = 'NotSignedIn';
+  }
+}
+
+/**
+ * The executor did not answer in time.
+ *
+ * Nothing in this client was bounded, and `fetch` on its own never gives up. A single request the
+ * server never finished — a `POST /orders` whose swap wedged upstream — left the order ticket
+ * spinning on its green button with no error, no timeout and no way back: the only exit was to
+ * kill the app. Found by placing a real order on a simulator and watching it never return.
+ *
+ * A bound is not a fix for a slow server. It is the difference between a state the user can act on
+ * and one they cannot leave.
+ */
+export class TimedOut extends Error {
+  constructor(
+    readonly path: string,
+    readonly ms: number,
+  ) {
+    // Never "it failed". A request that timed out may still be running on the server, and for a
+    // trade the difference between those two sentences is a double spend.
+    super(
+      `The executor did not answer within ${Math.round(ms / 1000)}s. ` +
+        'It may still be working — check Activity before trying again.',
+    );
+    this.name = 'TimedOut';
+  }
+}

@@ -32,6 +32,8 @@ import {
 import { repos } from '@/data';
 import { useStore } from '@/state/store';
 import { useAuth, useEmailLogin } from '@/auth/useAuth';
+import { codeFailure, connectFailure, verifyFailure } from '@/auth/onboardingErrors';
+import { NotSignedIn } from '@/data/api';
 
 const STEPS = [
   { label: 'Signed in', detail: 'An email code, no password to lose' },
@@ -63,15 +65,30 @@ export default function WalletSetup() {
   const step = !authenticated ? 0 : !address ? 1 : 4;
   const done = step >= STEPS.length;
 
-  // Once Privy has an address, register it with the executor so the bot knows whose wallet
-  // it is.
+  /*
+   * Once Privy has an address AND a session, register it with the executor.
+   *
+   * `authenticated` is in the guard and the deps because Privy restores the two separately: on a
+   * returning visit the address comes back from storage a beat before the access token does, so
+   * this fired without one, `api` refused to send an unauthenticated request, and onboarding
+   * greeted the user with "Not signed in, so /wallet/connect was not requested." — a developer's
+   * sentence, naming an endpoint, on the screen where they had not yet done anything.
+   *
+   * It was also wrong on its own terms: that is "not yet", not "failed", and the effect re-runs
+   * the moment the token lands. The same distinction this app draws everywhere else between a
+   * value that is absent and one that could not be read.
+   */
   useEffect(() => {
-    if (!address) return;
+    if (!address || !authenticated) return;
     repos.wallet
       .connect(address)
       .then((w) => setWallet(w))
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-  }, [address, setWallet]);
+      .catch((e: unknown) => {
+        // A session that has not settled yet is not an error to show anyone.
+        if (e instanceof NotSignedIn) return;
+        setError(connectFailure(e));
+      });
+  }, [address, authenticated, setWallet]);
 
   async function send() {
     setBusy(true);
@@ -80,7 +97,7 @@ export default function WalletSetup() {
       await sendCode({ email: email.trim() });
       setCodeSent(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(codeFailure(e));
     } finally {
       setBusy(false);
     }
@@ -93,7 +110,7 @@ export default function WalletSetup() {
       await loginWithCode({ code: code.trim(), email: email.trim() });
       await createWallet();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(verifyFailure(e));
     } finally {
       setBusy(false);
     }
