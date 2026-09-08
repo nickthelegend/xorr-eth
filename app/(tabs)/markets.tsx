@@ -20,6 +20,7 @@ import {
   Row,
   Screen,
   Fill,
+  LoadingRows,
   Pill,
   PillRow,
   Tag,
@@ -105,7 +106,12 @@ export default function MarketsScreen() {
           {cls?.note ?? ''}
         </Text>
         <Text variant="footnote" color={colors.ink28} numberOfLines={1}>
-          {rows.length} shown · 24/7
+          {/*
+            "0 shown" is a claim, and until the classes land it is a false one. This screen waits
+            on four upstream calls and `/market/stocks` alone can take eight seconds, so the
+            window where it was asserting zero was long enough to read as an empty product.
+          */}
+          {loading && !data ? 'Loading · 24/7' : `${rows.length} shown · 24/7`}
         </Text>
       </View>
 
@@ -122,7 +128,11 @@ export default function MarketsScreen() {
               </Text>
             </Press>
           </View>
-        ) : loading && !data ? null : (
+        ) : loading && !data ? (
+          // Was `null`. Every other list in the app shows LoadingRows; this one rendered an empty
+          // black screen under a "0 shown" line for as long as the slowest call took.
+          <LoadingRows count={8} height={size.rowLg} />
+        ) : (
           <FlashList
             data={rows}
             keyExtractor={(i: Instrument) => i.sym}

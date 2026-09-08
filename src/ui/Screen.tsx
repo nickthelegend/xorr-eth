@@ -16,9 +16,15 @@
  * spacer. An empty flex:1 view above a footer collects all the leftover height and opens
  * a visible hole. `Screen` gives `flex: 1` to nothing on its own — compose a `<Fill />`
  * onto the chart, the list or the scroll area.
+ *
+ * A tap on the background puts the keyboard away. That is not a nicety on iOS: a **number pad
+ * has no return key**, so on any screen whose primary button sits in the footer — sign-in's
+ * six-digit code, the send amount, a grid's bounds — the keypad covers the only control that
+ * would accept what was just typed, and without this there is no way to move it. Caught by
+ * driving the real app on a simulator; it is invisible on web, where the keyboard is hardware.
  */
 import React from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { Keyboard, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, space } from './tokens';
 
@@ -56,6 +62,15 @@ export function Screen({
   return (
     <View
       testID={testID}
+      /*
+       * Responder negotiation runs deepest-first, so this is only asked about a touch that no
+       * control underneath claimed — a tap on the background. Returning false declines the
+       * responder, so nothing else about touch handling changes.
+       */
+      onStartShouldSetResponder={() => {
+        Keyboard.dismiss();
+        return false;
+      }}
       style={[
         {
           flex: 1,

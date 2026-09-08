@@ -11,7 +11,7 @@
  * the row and truncated their labels. Pills never shrink — the row scrolls.
  */
 import React from 'react';
-import { ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Press } from './Press';
 import { Text } from './Text';
 import { border, colors, radius, size, space } from './tokens';
@@ -154,8 +154,14 @@ export function ChoiceChip({
       onPress={onPress}
       disabled={disabled || !onPress}
       hitHeight={CHOICE_H}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected, disabled }}
+      // iOS has no checkbox trait — RN maps `checkbox` to `UIAccessibilityTraitNone`, so the
+      // chip drops out of the accessibility tree entirely and VoiceOver cannot say which goals
+      // are picked. `button` + `selected` is the idiomatic iOS pair and announces the state.
+      // Android and web do have a real checkbox, and `checked` is the right word there.
+      accessibilityRole={Platform.OS === 'ios' ? 'button' : 'checkbox'}
+      accessibilityState={
+        Platform.OS === 'ios' ? { selected, disabled } : { checked: selected, disabled }
+      }
       accessibilityLabel={label}
       style={[
         {

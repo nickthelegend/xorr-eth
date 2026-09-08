@@ -4,6 +4,7 @@
  */
 import { useCallback, useMemo } from 'react';
 import { usePrivy, useLoginWithEmail, useWallets, useCreateWallet } from '@privy-io/react-auth';
+import { alreadyHasWallet } from './alreadyHasWallet';
 
 export type AuthState = {
   ready: boolean;
@@ -25,8 +26,15 @@ export function useAuth(): AuthState & {
 
   const createWallet = useCallback(async () => {
     if (address) return address;
-    const w = await create();
-    return w?.address;
+    try {
+      const w = await create();
+      return w?.address;
+    } catch (e) {
+      // See alreadyHasWallet: right after login the SDK's wallet list is briefly empty, so a
+      // returning user trips Privy's "one embedded wallet only" refusal on the happy path.
+      if (!alreadyHasWallet(e)) throw e;
+      return undefined;
+    }
   }, [address, create]);
 
   return useMemo(

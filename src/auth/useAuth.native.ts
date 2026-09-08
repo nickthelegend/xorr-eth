@@ -6,6 +6,7 @@
  */
 import { useCallback, useMemo } from 'react';
 import { usePrivy, useEmbeddedEthereumWallet, useLoginWithEmail } from '@privy-io/expo';
+import { alreadyHasWallet } from './alreadyHasWallet';
 
 export type AuthState = {
   ready: boolean;
@@ -30,9 +31,15 @@ export function useAuth(): AuthState & {
 
   const createWallet = useCallback(async () => {
     if (address) return address;
-    // create() resolves to a provider, not a wallet record — the address lands in `wallets` on
-    // the next render, so the caller reads it from there.
-    await create();
+    try {
+      // create() resolves to a provider, not a wallet record — the address lands in `wallets` on
+      // the next render, so the caller reads it from there.
+      await create();
+    } catch (e) {
+      // A returning user already has one and `wallets` has not caught up yet. See
+      // alreadyHasWallet — that is the postcondition, not a failure. Everything else rethrows.
+      if (!alreadyHasWallet(e)) throw e;
+    }
     return undefined;
   }, [address, create]);
 
