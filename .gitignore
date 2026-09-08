@@ -43,3 +43,4 @@ docs/demo/*.webm
 # Web build output. `npm run build:base` regenerates it and verifies the artifact.
 dist-base/
 dist/
+dist-web/
