@@ -117,7 +117,15 @@ export default function Swap() {
             }}
           >
             <View>
-              <Price variant="amountLg">{quantity(swapAmt, 0)}</Price>
+              {/*
+                Four decimals, not zero.
+
+                The pay amount steps from 0.01 to 10 WETH in increments of 0.05, and this rendered
+                it with `decimals = 0` — so the screen's hero number read "0" for the default
+                0.1 WETH, directly above "$248.40" and a quote for 247.86 USDC. A leftover from
+                when this screen paid in SOL and the amounts were whole.
+              */}
+              <Price variant="amountLg">{quantity(swapAmt)}</Price>
               <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
                 {payQuote?.price !== undefined ? money(swapAmt * payQuote.price) : 'No live price'}
               </Text>

@@ -150,8 +150,16 @@ export default function Send() {
             <Text variant="footnote" color={colors.ink40}>
               Spendable cash
             </Text>
-            {/* A dash, never a confident $0.00, when the balance could not be read. */}
-            <Price variant="footnote">{cash === null ? '—' : money(cash)}</Price>
+            {/*
+              A dash, never a confident $0.00, when the balance could not be read — and never a
+              dash for one that simply has not arrived yet. `?? null` collapsed those two into the
+              same glyph, and against this executor "not yet" lasts long enough to read as "we
+              could not": measured at twenty-five seconds on the simulator before $24,207.43
+              appeared where a dash had been.
+            */}
+            <Price variant="footnote">
+              {cash !== null ? money(cash) : balance.loading ? '· · ·' : '—'}
+            </Price>
           </View>
         </View>
 
