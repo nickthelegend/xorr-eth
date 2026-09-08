@@ -629,18 +629,46 @@ routes.get('/activity/verify', async (c) => {
 
 // ── Limits ───────────────────────────────────────────────────────────────────
 
+/**
+ * The cap, read from the chain — like every other surface that reports it.
+ *
+ * This route asked Postgres: `SELECT daily_cap_usd ... FROM delegations`. Everything else in the
+ * product asks the contract, and /verify publishes the claim in as many words — "The permission is
+ * read from the chain, never from our database." This was the one place that was not true, and
+ * `readPolicy`'s own docblock says why it matters: *never trust our own database for an enforcement
+ * decision.*
+ *
+ * It showed. On the fork wallet, where the local row is stale, /limits rendered "Nothing —
+ * permission is off · $0.00 cap · $480.00 spent" while /delegation and /safety, one tap away, both
+ * read the chain and said Live with a $2,810 cap. Three screens, one wallet, two answers to the
+ * question this whole product exists to answer — and the wrong one came from the database copy.
+ *
+ * Both numbers are still reported, because the footer on that screen promises exactly that: the cap
+ * is enforced on the chain AND again by the executor, "and the stricter of the two is the one that
+ * binds". So the chain gives the cap and the revocation, the executor's own tally gives what it
+ * believes it has spent, and `remainingUsd` is the smaller of the two remainders — which is the
+ * number that actually governs the next trade.
+ */
 routes.get('/limits', async (c) => {
   const w = await requireWallet(c);
-  const del = await one<{ daily_cap_usd: string; expires_at: Date; revoked: boolean }>(
-    `SELECT daily_cap_usd, expires_at, revoked FROM delegations WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
-    [w.id],
-  );
-  const spent = await spentToday(w.id);
+  const policy = await readPolicy(w.address as Address).catch(() => null);
+  const ourSpend = await spentToday(w.id);
+
+  if (!policy || policy.revoked) {
+    return c.json({
+      dailyCapUsd: 0,
+      spentTodayUsd: ourSpend,
+      remainingUsd: 0,
+      revoked: true,
+    });
+  }
+
   return c.json({
-    dailyCapUsd: del ? Number(del.daily_cap_usd) : 0,
-    spentTodayUsd: spent,
-    remainingUsd: del ? Number(del.daily_cap_usd) - spent : 0,
-    revoked: del?.revoked ?? true,
+    dailyCapUsd: policy.dailyCapUsd,
+    // The chain's own tally, so "spent" and "cap" come from one source and cannot disagree.
+    spentTodayUsd: policy.spentTodayUsd,
+    remainingUsd: Math.max(0, Math.min(policy.remainingTodayUsd, policy.dailyCapUsd - ourSpend)),
+    revoked: false,
   });
 });
 

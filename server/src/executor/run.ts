@@ -36,6 +36,39 @@ import { PLANNERS, observationFor, type TradeIntent } from './kinds/index.js';
 import { canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 
 /**
+ * Which agent gets the credit — and the blame — for a run.
+ *
+ * Every `append` in this file named its agent with a string literal: five said `'Yield Keeper'`
+ * and one said `'Drawdown Guard'`, whatever had actually run. So the audit trail credited Yield
+ * Keeper — the tier that moves idle cash into Aave and nothing else — with WETH recurring buys, an
+ * equity fill and every slippage failure in the log, while Drawdown Guard was credited with skips
+ * belonging to strategies it has never touched.
+ *
+ * That is worse here than almost anywhere else it could be. This trail is append-only and
+ * hash-chained precisely so it can be believed; an attribution column that is decorative makes the
+ * rest of the row harder to trust, not easier.
+ *
+ * Only four of the seven kinds correspond to a persona. The other three — a recurring buy, a
+ * rebalance, a grid — are not run by a character, they are run by the scheduler, and `xorr` is the
+ * name this file already uses for the system acting as itself. Inventing a fifth persona to fill
+ * the gap would be the same lie in a nicer costume.
+ */
+function agentForKind(kind: string): string {
+  switch (kind) {
+    case 'yield-rotation':
+      return 'Yield Keeper';
+    case 'exit-rules':
+      return 'Drawdown Guard';
+    case 'momentum':
+      return 'Momentum Scout';
+    case 'event-driven':
+      return 'Earnings Desk';
+    default:
+      return 'xorr';
+  }
+}
+
+/**
  * Our XorrAquaBook deployment, when there is one. Aqua only exists on Base mainnet, so on Sepolia
  * this is unset and every route falls to the aggregator — which the decision says out loud rather
  * than pretending it considered a book.
@@ -231,7 +264,7 @@ async function runStrategyInner(
         await append(
           {
             walletId,
-            agent: 'Yield Keeper',
+            agent: agentForKind(strategy.kind),
             action: `Would have bought ${units.toFixed(4)} ${strategy.symbol}`,
             detail: `Simulated · ${strategy.label} · $${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. No capital moved.`,
             kind: 'risk',
@@ -789,7 +822,7 @@ async function runStrategyInner(
       await append(
         {
           walletId,
-          agent: 'Yield Keeper',
+          agent: agentForKind(strategy.kind),
           action: describeLeg(intent, filledUnits, aqua ? 'aqua' : swapVm ? 'swapvm' : '1inch'),
           detail: intent.direct
             ? `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} moved. ${intent.because}`
@@ -892,7 +925,7 @@ async function runStrategyInner(
       await append(
         {
           walletId,
-          agent: 'Yield Keeper',
+          agent: agentForKind(strategy.kind),
           action: `Could not run ${strategy.label}`,
           detail: humanFailure(error),
           kind: 'block',
@@ -969,7 +1002,7 @@ async function finishNoop(
     await append(
       {
         walletId,
-        agent: 'Drawdown Guard',
+        agent: agentForKind(strategy.kind),
         action: `Nothing to do for ${strategy.label}`,
         detail,
         kind: 'risk',
@@ -997,7 +1030,7 @@ async function finishBlocked(
     await append(
       {
         walletId,
-        agent: 'Drawdown Guard',
+        agent: agentForKind(strategy.kind),
         action: `Skipped ${strategy.symbol}`,
         detail,
         kind: 'block',
