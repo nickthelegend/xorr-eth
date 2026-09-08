@@ -10,7 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppPrivyProvider } from '@/auth/PrivyProvider';
-import { colors } from '@/ui';
+import { PhoneFrame, colors } from '@/ui';
 import { useRegisterDevice } from '@/notifications/useRegisterDevice';
 import { useHydrateWallet } from '@/wallet/useHydrateWallet';
 import { useHydrateDelegation } from '@/wallet/useHydrateDelegation';
@@ -89,6 +89,12 @@ export default function RootLayout() {
         <DeviceRegistration />
         {/* The app is true-black by design; the OS theme never gets to change it. */}
         <StatusBar style="light" />
+        {/*
+          Inside the frame, so the tab bar and the chat sheet are constrained with the content —
+          both position themselves against their parent, and a per-screen fix would have left them
+          spanning the whole window.
+        */}
+        <PhoneFrame>
         <Stack
           screenOptions={{
             headerShown: false,
@@ -104,6 +110,7 @@ export default function RootLayout() {
           <Stack.Screen name="bot/[id]/settings" options={{ presentation: 'modal' }} />
           <Stack.Screen name="strategy/dca" options={{ presentation: 'modal' }} />
         </Stack>
+        </PhoneFrame>
         </ReachabilityProvider>
       </SafeAreaProvider>
       </AppPrivyProvider>

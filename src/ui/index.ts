@@ -45,6 +45,7 @@ export { Press, hitSlopFor, PRESSED_OPACITY, type PressProps } from './Press';
 export { easing, timing, useReducedMotion } from './motion';
 
 export { Screen, Fill, type ScreenProps } from './Screen';
+export { PhoneFrame } from './PhoneFrame';
 export { Row, type RowProps } from './Row';
 export { Pill, PillRow, PillWrap, ChoiceChip, type PillProps, type PillRowProps } from './Pill';
 export { Segmented, type SegmentedProps, type SegmentedOption } from './Segmented';
