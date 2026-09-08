@@ -19,6 +19,7 @@ import {
   Fill,
   IconButton,
   Keypad,
+  MINUS,
   Price,
   Screen,
   Segmented,
@@ -80,6 +81,12 @@ export default function YieldSetup() {
    */
   const idle = cash === undefined ? undefined : Math.max(cash - keepCashUsd, 0);
   const wouldMove = idle === undefined ? undefined : Math.min(idle, usd);
+  /*
+   * The same rule applied to the floor: you cannot hold back money you do not have. With an empty
+   * wallet the configured $100 would otherwise read as $100 sitting there being protected, which is
+   * the same small lie one line up, told about a different number.
+   */
+  const kept = cash === undefined ? undefined : Math.min(keepCashUsd, cash);
   const apy = rate.data?.estimatedApy;
 
   async function create() {
@@ -198,7 +205,10 @@ export default function YieldSetup() {
               label="Spendable cash"
               value={balance.loading ? '…' : cash === undefined ? '—' : money(cash)}
             />
-            <StatRow label="Kept back" value={money(keepCashUsd)} />
+            <StatRow
+              label="Kept back"
+              value={balance.loading ? '…' : kept === undefined ? MINUS : money(kept)}
+            />
             <StatRow
               label="Would move"
               value={

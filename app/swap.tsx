@@ -31,7 +31,7 @@ import {
   timing,
   useReducedMotion,
 } from '@/ui';
-import { percent } from '@/format';
+import { MINUS, percent } from '@/format';
 import { swapPct } from '@/state/derived';
 import { usePrice } from '@/data/usePrices';
 import { repos } from '@/data';
@@ -119,7 +119,19 @@ export default function Swap() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Eyebrow small>You pay</Eyebrow>
             <Text variant="footnote" color={colors.ink40}>
-              Balance {payHeld ? quantity(payHeld.units) : '0.0000'}
+              {/*
+                A dash while positions load, never a zero.
+
+                This was `payHeld ? quantity(payHeld.units) : '0.0000'`, so for the second or two
+                before the chain read returned — and on any read that failed — a funded wallet was
+                told "Balance 0.0000" in the same weight as the real figure. Being confidently
+                wrong about how much money someone has is the worst version of the not-yet-versus-
+                nothing conflation, and this screen is where they decide how much to sell.
+
+                `heldUnits` already distinguishes the three states for the guard below; the label
+                uses the same one so the two can never disagree.
+              */}
+              Balance {heldUnits === undefined ? MINUS : quantity(heldUnits)}
             </Text>
           </View>
           <View
