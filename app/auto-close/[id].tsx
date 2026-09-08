@@ -125,11 +125,28 @@ export default function AutoClose() {
   const armedTp = armedParams.takeProfitPct;
   const armedSl = armedParams.stopLossPct == null ? undefined : -Math.abs(armedParams.stopLossPct);
 
+  /*
+   * Seed the steppers from the rule that is actually armed, once it arrives.
+   *
+   * The take-profit and stop-loss live in the store, which is an external system — writing to it
+   * on arrival is what an effect is for. `trail` is this component's own `useState`, and seeding
+   * THAT from an effect is the cascading render `react-hooks/set-state-in-effect` exists to catch:
+   * it was the repository's only failing lint. Adjusting local state during render, guarded by the
+   * value it was seeded from, is React's documented answer and renders once instead of twice.
+   *
+   * `setTrail` was also missing from the dependency list while `setTp` and `setSl` were in it —
+   * moot now that it is out of the effect entirely.
+   */
   useEffect(() => {
     if (armedTp !== undefined && Number.isFinite(armedTp)) setTp(armedTp);
     if (armedSl !== undefined && Number.isFinite(armedSl)) setSl(armedSl);
-    if (armedTrail !== undefined && Number.isFinite(armedTrail)) setTrail(armedTrail);
-  }, [armedTp, armedSl, armedTrail, setTp, setSl]);
+  }, [armedTp, armedSl, setTp, setSl]);
+
+  const [seededTrail, setSeededTrail] = useState<number>();
+  if (armedTrail !== undefined && Number.isFinite(armedTrail) && armedTrail !== seededTrail) {
+    setSeededTrail(armedTrail);
+    setTrail(armedTrail);
+  }
 
   /**
    * The steppers edit inside state.md's manual range (TP 0.5–3.0, SL −3.0 to −0.5). A rule

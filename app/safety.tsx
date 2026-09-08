@@ -26,6 +26,7 @@ import {
   SheetCard,
   Text,
   colors,
+  NoteStrip,
   quantity,
   radius,
   size,
@@ -33,7 +34,6 @@ import {
 } from '@/ui';
 import { delegateUnusable, expiryNote, expiryState, killCta, killExplanation, killTitle } from '@/state/derived';
 import { useStore } from '@/state/store';
-import { NoteStrip } from '@/ui';
 import { useAllowlist } from '@/wallet/allowlist';
 import { useApprovals } from '@/wallet/useApprovals';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';

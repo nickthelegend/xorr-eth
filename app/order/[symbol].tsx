@@ -38,7 +38,8 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useDebounced } from '@/data/useDebounced';
 import { useStore } from '@/state/store';
-import { DEFAULT_BUY, isSettleable, isTradable } from '@/data/tradable';
+import { DEFAULT_BUY } from '@/data/tradable';
+import { useSettleable } from '@/data/useSettleable';
 
 type Side = 'buy' | 'sell';
 
@@ -63,12 +64,18 @@ export default function OrderTicket() {
    * Asked of the EXECUTOR, not of the static list. The two disagree on the tokenized equities:
    * their addresses are real on Base and they do not function on a fork of it, so the constant said
    * tradable while the chain said otherwise, and this screen rendered a live price and an enabled
-   * Buy for a fill that reverts. `isTradable` is still the pre-answer default — refusing a perfectly
-   * good trade for the second before the fetch lands would be its own bug — and the server's answer
-   * narrows it the moment it arrives.
+   * Buy for a fill that reverts.
+   *
+   * The pre-answer default used to be the static list, on the reasoning that refusing a perfectly
+   * good trade for the second before the fetch lands would be its own bug. That second is not a
+   * second against this executor — the Buy pair stayed live for several visible seconds on a
+   * simulator — and an enabled Buy is a promise. So the wait is now a state of its own: drawn in
+   * place, disabled, live only once the answer says so.
    */
-  const settleable = useAsync(() => isSettleable(symbol), [symbol]);
-  const tradable = settleable.data ?? isTradable(symbol);
+  // 'checking' is rendered, not guessed through — see useSettleable. The CTA is drawn in place
+  // and disabled until the executor confirms this symbol can settle here.
+  const settleable = useSettleable(symbol);
+  const tradable = settleable !== 'no';
 
   const orderAmt = useStore((s) => s.orderAmt);
   const pressKey = useStore((s) => s.pressKey);
@@ -284,7 +291,9 @@ export default function OrderTicket() {
           }
           backgroundColor={side === 'buy' ? colors.candleUp : colors.candleDown}
           color={colors.ink}
-          disabled={overBalance || amount <= 0 || filled !== undefined}
+          disabled={
+            settleable === 'checking' || overBalance || amount <= 0 || filled !== undefined
+          }
           loading={placing}
           onPress={place}
         />

@@ -13,6 +13,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
+import { chainLabel } from '@/chain';
 import {
   AreaChart,
   AssetMark,
@@ -48,7 +49,8 @@ import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
 import { usePrice } from '@/data/usePrices';
 import { rangeChange } from '@/state/derived';
-import { isSettleable, isTradable, settlementSymbol } from '@/data/tradable';
+import { settlementSymbol } from '@/data/tradable';
+import { useSettleable } from '@/data/useSettleable';
 
 const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
 /** The timeframe each range pill maps to when asking for real candles. */
@@ -149,6 +151,14 @@ export default function AssetDetail() {
     return () => clearTimeout(t);
   }, [warmingAny, candles, reloadQuote]);
 
+  /*
+   * Asked of the executor, like the order ticket. A Buy button that leads to a ticket the chain
+   * cannot settle is the same lie one screen earlier.
+   */
+  // 'checking' is rendered, not guessed through — see useSettleable.
+  const settleable = useSettleable(symbol ?? '');
+  const tradable = settleable !== 'no';
+
   if (inst.error) {
     return (
       <Screen>
@@ -156,13 +166,6 @@ export default function AssetDetail() {
       </Screen>
     );
   }
-
-  /*
-   * Asked of the executor, like the order ticket. A Buy button that leads to a ticket the chain
-   * cannot settle is the same lie one screen earlier.
-   */
-  const settleable = useAsync(() => isSettleable(symbol ?? ''), [symbol]);
-  const tradable = settleable.data ?? isTradable(symbol ?? '');
 
   return (
     <Screen gutter="none">
@@ -328,12 +331,14 @@ export default function AssetDetail() {
               <Button
                 label="Sell"
                 variant="secondary"
+                disabled={settleable === 'checking'}
                 onPress={() => router.push(`/order/${settlementSymbol(symbol ?? '')}?side=sell`)}
               />
             }
             right={
               <Button
                 label="Buy"
+                disabled={settleable === 'checking'}
                 onPress={() => router.push(`/order/${settlementSymbol(symbol ?? '')}?side=buy`)}
               />
             }
@@ -341,7 +346,17 @@ export default function AssetDetail() {
         ) : (
           <View style={{ marginTop: space.s14, paddingVertical: space.s14, alignItems: 'center' }}>
             <Text variant="secondary" align="center">
-              Not tradable on Base. There is no token for this market to settle into.
+              {/*
+                This said "Not tradable on Base. There is no token for this market to settle into."
+                The order ticket had already been corrected away from that sentence and this screen
+                was missed — so the Stocks tab listed NVDAc at a live 1inch price ON BASE, and
+                tapping it said there is no token for it on Base. Both halves were wrong for an
+                equity: the token exists and is busy on Base mainnet; what it does not do is
+                function on a fork of it. `chainLabel` names the chain this build actually settles
+                on, which makes the sentence true for an index that has no instrument anywhere and
+                for an equity that has one everywhere but here.
+              */}
+              {`${symbol} cannot be settled on ${chainLabel}, so there is no order to place.`}
             </Text>
           </View>
         )}
