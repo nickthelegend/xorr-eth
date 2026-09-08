@@ -34,6 +34,7 @@ import Svg, {
   Rect,
   Stop,
 } from 'react-native-svg';
+import { Placeholder } from './States';
 import { Text, Value } from './Text';
 import { colors, orbBloom, radius, size as metrics, space, type Gradient } from './tokens';
 
@@ -237,19 +238,30 @@ export function AssetMark({
   gradient,
   size = metrics.mark,
   uri,
+  pending = false,
   style,
   testID,
 }: {
   gradient: Gradient;
   size?: number;
   /**
-   * The asset's real logo, from `/market/logos`. Null or absent keeps the gradient.
+   * The asset's real logo, from `/market/logos`. Null keeps the gradient.
    *
    * The gradient is not a placeholder to be ashamed of — it is the honest mark for an instrument
    * with no issuer and no token, which is every commodity, index and pre-IPO name in the list. It
    * also renders underneath while the image loads, so a row never flashes empty.
    */
   uri?: string | null;
+  /**
+   * The lookup is still in flight.
+   *
+   * Without this the mark had two states for three facts, and the gradient carried two of them:
+   * "this instrument has no logo" and "the logo has not arrived". They look identical and mean
+   * opposite things — one is final, one resolves a moment later — so a Markets list mid-load was
+   * indistinguishable from one where every issuer had declined to have a mark. Same conflation the
+   * dashes had, and the same fix: say which.
+   */
+  pending?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
@@ -258,6 +270,18 @@ export function AssetMark({
   // A logo that 404s or is malformed falls back to the gradient rather than leaving a hole.
   const [failed, setFailed] = React.useState(false);
   const showLogo = !!uri && !failed;
+
+  // Nothing is known yet, so nothing is claimed: a pulsing disc rather than an identity.
+  if (pending && !showLogo) {
+    return (
+      <Placeholder
+        height={size}
+        width={size}
+        style={[{ borderRadius: size / 2 }, style]}
+        testID={testID}
+      />
+    );
+  }
 
   return (
     <View testID={testID} style={[{ width: size, height: size }, style]}>

@@ -38,7 +38,7 @@ import {
 import { usePrices } from '@/data/usePrices';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { useLogos } from '@/data/useLogos';
+import { logoProps, useLogos } from '@/data/useLogos';
 import { watchlistGroups } from '@/data/fixtures/series';
 import { useStore } from '@/state/store';
 
@@ -96,7 +96,7 @@ export default function Watchlist() {
             return (
               <Row
                 key={r.sym}
-                left={<AssetMark gradient={assetGradient(r.sym)} uri={logos[r.sym]} size={32} />}
+                left={<AssetMark gradient={assetGradient(r.sym)} {...logoProps(logos, r.sym)} size={32} />}
                 title={r.sym}
                 middle={
                   <View style={{ marginHorizontal: space.s10 }}>

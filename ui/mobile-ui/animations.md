@@ -33,6 +33,7 @@ to show that the app registered a tap.
 | KYC progress | `width` (%) | 250ms | One step per tap, so the longer duration reads as progress. |
 | Button hover | `background` | default (~150ms) | `#fff → rgba(255,255,255,.88)`; `#1B1C1E → #252629`. |
 | Pressed state | `opacity → .85` | instant | Native `Pressable` feedback; not a CSS transition. |
+| Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 
 ## Not animated, on purpose
 
@@ -54,3 +55,33 @@ Two places would genuinely benefit, both currently unbuilt:
 - **Order fill confirmation** — a 250ms scale-in on the filled-order chat bubble, once, on arrival.
 
 Anything beyond those two, don't.
+
+## The skeleton pulse
+
+The loading blocks used to be static grey, on the reading that §5's ban on entrance animations and
+staggered list reveals also ruled out a shimmer. The ban is right; that conclusion was too broad.
+
+What §5 forbids is **content arriving with a flourish** — a fade-in, a slide, a stagger down a list
+— because it dramatises data appearing and, on a price list, a movement that means nothing reads as
+a movement that means something. A uniform opacity pulse on a block that is *not content* does none
+of that. It is not an entrance: the block is already there, and it is replaced instantly when the
+real thing lands.
+
+It earns its place because a static grey block cannot say the one thing that matters: **still
+coming**. Without it the app has two appearances for three facts — an empty row, a loading row and a
+finished row where an issuer simply has no logo all look the same. That is the same "nothing" versus
+"not yet" conflation this app fixes everywhere else, and the asset mark is where it bit: a Markets
+list mid-load was indistinguishable from one where every logo lookup had come back empty.
+
+Rules it still obeys:
+
+- **One property.** Opacity, nothing else. No sweeping gradient, no translation — a highlight
+  travelling across rows in sequence *is* a staggered reveal and stays banned.
+- **Uniform.** Every block pulses together. No per-row offset.
+- **Shallow.** Down to .45, not to zero. A skeleton must not out-contrast the content beside it.
+- **Off under reduced motion**, where the block is simply grey.
+- **Never on a price.** It appears only where a value is absent. The instant a real figure exists,
+  the block is gone — the price rule is untouched.
+
+900ms because the interaction scale does not apply. 150/180/250 is calibrated for a transition the
+user *caused*; nobody pressed a skeleton. At 250 it strobes. At 900 it breathes.

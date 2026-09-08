@@ -108,22 +108,59 @@ describe('type scale — design.md §2', () => {
 });
 
 describe('motion — animations.md', () => {
-  it('durations are 150 / 180 / 250 and nothing else', () => {
-    expect(Object.values(duration).sort((a, b) => a - b)).toEqual([150, 180, 250]);
+  /*
+   * 150/180/250 is the INTERACTION scale and is still closed. `pulse` is not on it: it is the
+   * ambient skeleton loop, which nobody triggers and which is not going anywhere, and at 250 it
+   * strobes. animations.md carries the row and the reasoning. Anything else new still has to argue
+   * its way in here first.
+   */
+  it('interaction durations are 150 / 180 / 250, and the only other one is the skeleton pulse', () => {
+    const { pulse, ...interaction } = duration;
+    expect(Object.values(interaction).sort((a, b) => a - b)).toEqual([150, 180, 250]);
+    expect(pulse).toBe(900);
   });
 
   // The whole animated inventory, and each one is a row in animations.md's table:
   //   Switch     knob transform + track background   180ms
   //   Segmented  thumb background                    150ms
   //   Progress   track width                         250ms  ("reads as progress")
-  // A fourth entry appearing here means a primitive started animating something the spec
+  //   States     skeleton block opacity, looping     900ms  (the only loop in the app)
+  // A fifth entry appearing here means a primitive started animating something the spec
   // does not sanction. Add the row to animations.md first, or take the animation out.
-  it('only Switch, Segmented and Progress animate', () => {
+  it('only Switch, Segmented, Progress and the skeleton animate', () => {
     const animated = sources()
       .filter(({ src }) => /from 'react-native-reanimated'/.test(src))
       .map(({ rel }) => rel)
       .sort();
-    expect(animated).toEqual(['Progress.tsx', 'Segmented.tsx', 'Switch.tsx', 'motion.ts']);
+    expect(animated).toEqual([
+      'Progress.tsx',
+      'Segmented.tsx',
+      'States.tsx',
+      'Switch.tsx',
+      'motion.ts',
+    ]);
+  });
+
+  /*
+   * The loop is allowed in exactly one file. `withRepeat` anywhere else is how an app acquires a
+   * pulsing dot, a breathing button and a spinning badge one reasonable-seeming commit at a time.
+   */
+  it('nothing else in the design system loops', () => {
+    const looping = sources()
+      .filter(({ src }) => /withRepeat/.test(stripComments(src)))
+      .map(({ rel }) => rel);
+    expect(looping).toEqual(['States.tsx']);
+  });
+
+  /*
+   * The skeleton may pulse; a figure may never. `Placeholder` renders an `Animated.View` and stands
+   * in for a value that is ABSENT — the moment a real one exists the block is gone, so the price
+   * rule is untouched. This pins that it never becomes a text node.
+   */
+  it('the skeleton animates a block, never a value', () => {
+    const src = stripComments(fs.readFileSync(path.join(UI, 'States.tsx'), 'utf8'));
+    expect(/Animated\.Text/.test(src)).toBe(false);
+    expect(/Animated\.View/.test(src)).toBe(true);
   });
 
   it('no spring, no bounce, no custom bezier', () => {

@@ -124,7 +124,7 @@ export default function PositionScreen() {
           background="none"
           onPress={() => goBack()}
         />
-        {p ? <AssetMark gradient={assetGradient(p.symbol)} uri={logo} size={26} /> : null}
+        {p ? <AssetMark gradient={assetGradient(p.symbol)} {...logo} size={26} /> : null}
         <Text variant="cardTitle" numberOfLines={1}>
           {p ? `${p.symbol} ${p.side}` : 'Position'}
         </Text>

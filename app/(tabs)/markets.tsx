@@ -34,7 +34,7 @@ import { Sparkline } from '@/ui/charts';
 import { Icon } from '@/design/Icon';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { useLogos } from '@/data/useLogos';
+import { logoProps, useLogos } from '@/data/useLogos';
 import { useStore } from '@/state/store';
 import type { Instrument } from '@/data/types';
 
@@ -134,7 +134,7 @@ export default function MarketsScreen() {
         ) : loading && !data ? (
           // Was `null`. Every other list in the app shows LoadingRows; this one rendered an empty
           // black screen under a "0 shown" line for as long as the slowest call took.
-          <LoadingRows count={8} height={size.rowLg} />
+          <LoadingRows count={8} height={size.rowLg} spark />
         ) : (
           <FlashList
             data={rows}
@@ -147,7 +147,7 @@ export default function MarketsScreen() {
                 left={
                   <AssetMark
                     gradient={{ c1: item.c1, c2: item.c2 }}
-                    uri={logos[item.sym]}
+                    {...logoProps(logos, item.sym)}
                     size={size.mark}
                   />
                 }

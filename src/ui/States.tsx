@@ -1,49 +1,103 @@
 /**
  * States.tsx — loading, error and empty. PLAN.md 10.11 [G17].
  *
- * animations.md §5 bans entrance animations and staggered list reveals, which rules out the
- * usual shimmer skeleton. The deliberate replacement: static grey blocks at the real row
- * height that swap instantly for content. Nothing moves; nothing fades.
- *
  * The height match matters more than it looks. A loading state shorter than the row it
  * stands in for makes the list jump when data lands, and a jump on a price list reads as a
  * market move.
+ *
+ * **On the pulse.** These were static blocks, on the reading that animations.md §5 bans entrance
+ * animations and staggered list reveals and therefore "rules out the usual shimmer skeleton". The
+ * ban is real and the conclusion was too broad: what §5 forbids is content ARRIVING with a flourish
+ * — a fade-in, a slide, a stagger down a list — because that dramatises data appearing. A uniform
+ * opacity pulse on a block that is not content does none of that. It says one thing, which a static
+ * grey block cannot: *still coming*. That is exactly the distinction this app makes everywhere else
+ * between "nothing" and "not yet", and a skeleton indistinguishable from an empty row is the same
+ * conflation in another costume.
+ *
+ * It is off under reduced motion, where the block is simply grey.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { Button } from './Button';
 import { Press } from './Press';
 import { Text } from './Text';
-import { colors, divider, radius, size, space } from './tokens';
+import { duration, timing, useReducedMotion } from './motion';
+import { chart, colors, divider, radius, size, space } from './tokens';
 
-/** A static placeholder block. No shimmer, no pulse — see the module docblock. */
+/** How far the pulse dims. Shallow on purpose — a skeleton should not compete with content. */
+const PULSE_TO = 0.45;
+
+/**
+ * A placeholder block that breathes.
+ *
+ * `pulse={false}` for the rare case where one sits next to real content and the movement would
+ * pull the eye off it.
+ */
 export function Placeholder({
   height,
   width = '100%',
+  pulse = true,
   style,
+  testID,
 }: {
   height: number;
   width?: DimensionValue;
+  pulse?: boolean;
   style?: StyleProp<ViewStyle>;
+  testID?: string;
 }) {
+  const reduced = useReducedMotion();
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    if (!pulse || reduced) {
+      opacity.value = 1;
+      return;
+    }
+    // `true` reverses, so it breathes rather than snapping back to full at the loop boundary.
+    opacity.value = withRepeat(withTiming(PULSE_TO, timing(duration.pulse, reduced)), -1, true);
+  }, [pulse, reduced, opacity]);
+
+  const anim = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
   return (
-    <View
+    <Animated.View
+      testID={testID}
+      accessibilityLabel="Loading"
       style={[
         { height, width, borderRadius: radius.square, backgroundColor: colors.surfaceAlt },
         style,
+        anim,
       ]}
     />
   );
 }
 
-/** Rows-shaped loading state, so the list does not change height when data lands. */
+/**
+ * Rows-shaped loading state, so the list does not change height when data lands.
+ *
+ * `spark` reserves the sparkline's width as well. A market row is mark · name · **glyph** · price,
+ * and a skeleton that omitted the glyph left the price block to slide left when the series
+ * arrived — on a price column, which is the one place in the app nothing is allowed to move
+ * without meaning it.
+ *
+ * The widths vary per row rather than sitting in a perfect column. Identical rows read as a
+ * rendered table that has finished; slightly ragged ones read as content still filling in, which
+ * is what is actually true.
+ */
+const NAME_W = ['46%', '38%', '52%', '42%'] as const;
+const SUB_W = ['30%', '26%', '34%', '28%'] as const;
+
 export function LoadingRows({
   count = 6,
   height = size.rowLg,
+  spark = false,
   testID,
 }: {
   count?: number;
   height?: number;
+  spark?: boolean;
   testID?: string;
 }) {
   return (
@@ -58,9 +112,12 @@ export function LoadingRows({
         >
           <Placeholder height={size.mark} width={size.mark} style={{ borderRadius: radius.full }} />
           <View style={{ flex: 1, gap: space.s6 }}>
-            <Placeholder height={12} width="45%" />
-            <Placeholder height={10} width="30%" />
+            <Placeholder height={12} width={NAME_W[i % NAME_W.length]} />
+            <Placeholder height={10} width={SUB_W[i % SUB_W.length]} />
           </View>
+          {spark ? (
+            <Placeholder height={chart.spark.height * 0.6} width={chart.spark.width} />
+          ) : null}
           <View style={{ alignItems: 'flex-end', gap: space.s6 }}>
             <Placeholder height={12} width={64} />
             <Placeholder height={10} width={44} />

@@ -287,6 +287,15 @@ export const duration = Object.freeze({
   base: 180,
   /** Leaderboard re-sort, KYC progress. Long enough for the eye to follow one bar. */
   slow: 250,
+  /**
+   * The skeleton pulse, and the only duration outside the 150/180/250 interaction scale.
+   *
+   * That scale is calibrated for a transition the user CAUSED — under 150 reads as a glitch, over
+   * 250 reads as lag on a control they just touched. A skeleton is neither: nobody pressed it, and
+   * it is not going anywhere. At 250 it strobes; at this it breathes, which is the whole job —
+   * saying "still coming" without asking to be looked at.
+   */
+  pulse: 900,
 } as const);
 
 /**

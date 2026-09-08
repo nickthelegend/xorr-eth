@@ -25,7 +25,7 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { useLogos } from '@/data/useLogos';
+import { logoProps, useLogos } from '@/data/useLogos';
 import type { Instrument } from '@/data/types';
 
 const PAGE = 25;
@@ -86,7 +86,7 @@ export default function ClassList() {
                 left={
                   <AssetMark
                     gradient={{ c1: item.c1, c2: item.c2 }}
-                    uri={logos[item.sym]}
+                    {...logoProps(logos, item.sym)}
                     size={size.mark}
                   />
                 }

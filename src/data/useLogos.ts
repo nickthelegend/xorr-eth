@@ -96,9 +96,30 @@ export function useLogos(symbols: readonly string[]): Record<string, string | nu
   return out;
 }
 
-/** One symbol, for the screens that show a single asset. */
-export function useLogo(symbol: string | undefined): string | null {
+/**
+ * Everything `AssetMark` needs for one symbol, so no call site has to remember the three states.
+ *
+ * The map already distinguishes them — absent is "still resolving", `null` is "no registry issues
+ * one", a string is the logo — but `logos[sym]` collapses the first two to falsy at the call site,
+ * which is exactly how every list ended up rendering a mid-load row as though every issuer had
+ * declined to have a mark. Spreading this instead makes that unrepresentable.
+ */
+export function logoProps(
+  logos: Record<string, string | null>,
+  symbol: string,
+): { uri: string | null; pending: boolean } {
+  return { uri: logos[symbol] ?? null, pending: !(symbol in logos) };
+}
+
+/**
+ * One symbol, for the screens that show a single asset. Spread straight onto `AssetMark`.
+ *
+ * Returns the same shape as `logoProps` rather than a bare url, for the same reason: a screen that
+ * has not heard back yet is not a screen whose asset has no logo.
+ */
+export function useLogo(symbol: string | undefined): { uri: string | null; pending: boolean } {
   const symbols = useMemo(() => (symbol ? [symbol] : []), [symbol]);
   const logos = useLogos(symbols);
-  return symbol ? (logos[symbol] ?? null) : null;
+  if (!symbol) return { uri: null, pending: false };
+  return logoProps(logos, symbol);
 }

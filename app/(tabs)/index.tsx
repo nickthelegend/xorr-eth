@@ -242,7 +242,7 @@ export default function Home() {
           <View>
             <SectionHeader title="Coins" onPress={() => router.push('/watchlist')} />
             <Row
-              left={<AssetMark gradient={assetGradient(DEFAULT_BUY)} uri={featuredLogo} size={32} />}
+              left={<AssetMark gradient={assetGradient(DEFAULT_BUY)} {...featuredLogo} size={32} />}
               title={DEFAULT_BUY}
               secondary={
                 featuredHeld

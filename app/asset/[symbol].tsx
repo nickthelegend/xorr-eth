@@ -216,7 +216,7 @@ export default function AssetDetail() {
           */}
           <AssetMark
             gradient={i ? { c1: i.c1, c2: i.c2 } : assetGradient(symbol ?? '')}
-            uri={logo}
+            {...logo}
             size={26}
           />
           <Text variant="cardTitleLg" numberOfLines={1}>
