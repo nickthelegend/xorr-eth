@@ -101,7 +101,22 @@ const inflight = new Map<string, Promise<unknown>>();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function rawGet<T>(url: string, timeoutMs: number, headers: Record<string, string> = {}): Promise<T> {
+/**
+ * Per-call overrides.
+ *
+ * `attempts` exists for callers whose data is not worth waiting for. The retry ladder is right for
+ * a price — a scheduled buy must not be dropped because a feed was busy — and wrong for a logo,
+ * where five attempts with exponential backoff means twenty-five seconds spent on decoration, in a
+ * host lane that a price is queued behind. One attempt, then take the gradient.
+ */
+export type GetOptions = { attempts?: number };
+
+async function rawGet<T>(
+  url: string,
+  timeoutMs: number,
+  headers: Record<string, string> = {},
+  opts: GetOptions = {},
+): Promise<T> {
   const lane = laneFor(url);
   const host = new URL(url).host;
 
@@ -118,7 +133,7 @@ async function rawGet<T>(url: string, timeoutMs: number, headers: Record<string,
    * not politely return 503. So the whole attempt loop is wrapped, and any failure counts.
    */
   try {
-    return await attempt<T>(url, timeoutMs, headers, lane);
+    return await attempt<T>(url, timeoutMs, headers, lane, opts.attempts ?? maxAttempts());
   } catch (e) {
     lane.failures += 1;
     if (lane.failures >= BREAKER_THRESHOLD && lane.openUntil <= Date.now()) {
@@ -134,10 +149,10 @@ async function attempt<T>(
   timeoutMs: number,
   headers: Record<string, string>,
   lane: Lane,
+  attempts: number,
 ): Promise<T> {
   let lastStatus = 0;
   let lastError: Error | undefined;
-  const attempts = maxAttempts();
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const wait = spacingMs() - (Date.now() - lane.lastRequestAt);
     if (wait > 0) await sleep(wait);
@@ -192,6 +207,7 @@ export async function getJson<T>(
   ttlMs = 30_000,
   timeoutMs = 15_000,
   headers: Record<string, string> = {},
+  opts: GetOptions = {},
 ): Promise<T> {
   const hit = cache.get(url);
   if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
@@ -202,7 +218,7 @@ export async function getJson<T>(
   if (pending) return pending as Promise<T>;
 
   const lane = laneFor(url);
-  const run = lane.queue.then(() => rawGet<T>(url, timeoutMs, headers));
+  const run = lane.queue.then(() => rawGet<T>(url, timeoutMs, headers, opts));
   lane.queue = run.catch(() => undefined);
 
   const tracked = run.then(

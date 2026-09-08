@@ -14,6 +14,13 @@ const APP = path.join(ROOT, 'app');
 /** The design system. `src/design` was the layer it replaced; only the icon set and the
  *  identity gradients survive there, and neither is a component or a token. */
 const UI = path.join(ROOT, 'src/ui');
+/**
+ * The chat. It is screen-shaped code that does not live under `app/` — the conversation is rendered
+ * by both the `/bot` route and the tab-bar sheet, so it was extracted to a component. Scanning it
+ * here keeps the accessibility, motion and voice rules over it; leaving it out would have made
+ * "move it out of app/" a way to opt a surface out of its own audit.
+ */
+const CHAT = path.join(ROOT, 'src/chat');
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!fs.existsSync(dir)) return out;
@@ -38,7 +45,7 @@ function stripComments(src: string): string {
  * sees; they are not loosened for anything a user can reach.
  */
 const screenFiles = walk(APP).filter((f) => !f.includes('_layout') && !f.includes(`${path.sep}_dev${path.sep}`));
-const allFiles = [...screenFiles, ...walk(UI)];
+const allFiles = [...screenFiles, ...walk(UI), ...walk(CHAT)];
 const rel = (f: string) => path.relative(ROOT, f);
 
 /**

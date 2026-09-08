@@ -151,8 +151,9 @@ export default function UiScratch() {
   const [sl, setSl] = useState(-1.0);
   const [auto, setAuto] = useState(true);
   const [alertOn, setAlertOn] = useState(true);
-  const [tab, setTab] = useState<TabKey>('agents');
+  const [tab, setTab] = useState<TabKey>('home');
   const [killed, setKilled] = useState(false);
+  const [chatTapped, setChatTapped] = useState(false);
 
   /* The faces are loaded once in `app/_layout.tsx`, which holds the splash until they are
      ready — so by the time any screen renders they are there. This gallery had its own
@@ -772,10 +773,18 @@ export default function UiScratch() {
         {/* -------------------------------------------------------- tab bar */}
 
         <Section title="TabBar · design.md §4">
-          <Case label="Agents centre, with the kill-switch dot — tap the tabs and the switch">
+          <Case label="Four tabs and the raised chat button — tap the tabs, the button and the switch">
             <View style={{ borderRadius: radius.card, overflow: 'hidden' }}>
-              <TabBar active={tab} onSelect={setTab} agentsLive={!killed} />
+              <TabBar
+                active={tab}
+                onSelect={setTab}
+                agentsLive={!killed}
+                onChat={() => setChatTapped((c) => !c)}
+              />
             </View>
+            <Text variant="footnote" color={colors.ink40}>
+              {chatTapped ? 'Chat opened' : 'Chat closed'}
+            </Text>
             <SwitchRow
               label="Agents are live"
               on={!killed}

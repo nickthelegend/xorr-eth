@@ -38,6 +38,7 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useHasHydrated, useStore } from '@/state/store';
 import { DEFAULT_BUY } from '@/data/tradable';
+import { useLogo } from '@/data/useLogos';
 import { CatchUp } from '@/home/CatchUp';
 
 /** The three equal actions. screens.md: `flex:1`, gutter-padded, never fixed-width. */
@@ -61,6 +62,9 @@ export default function Home() {
   const balance = useAsync(() => repos.portfolio.balance(), []);
   const agents = useAsync(() => repos.bot.listAgents(), []);
   const featured = useAsync(() => repos.markets.quotes([DEFAULT_BUY]), []);
+  // The featured coin is a real token, so it wears its real logo. `Cash` below keeps its
+  // gradient: a dollar balance is not an instrument and no registry issues it a mark.
+  const featuredLogo = useLogo(DEFAULT_BUY);
   // The held quantity was hardcoded at 1,750.30. It comes from the position book now.
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const staking = useAsync(() => repos.yield.staking(), []);
@@ -238,7 +242,7 @@ export default function Home() {
           <View>
             <SectionHeader title="Coins" onPress={() => router.push('/watchlist')} />
             <Row
-              left={<AssetMark gradient={assetGradient(DEFAULT_BUY)} size={32} />}
+              left={<AssetMark gradient={assetGradient(DEFAULT_BUY)} uri={featuredLogo} size={32} />}
               title={DEFAULT_BUY}
               secondary={
                 featuredHeld

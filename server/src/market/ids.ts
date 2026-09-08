@@ -57,3 +57,19 @@ export const COINGECKO_PRICE_URL =
 
 /** The shape that URL returns. */
 export type CoingeckoPrices = Record<string, { usd?: number; usd_24h_change?: number }>;
+
+/**
+ * Every logo in one request, for exactly the reason above.
+ *
+ * `/coins/{id}` returns a logo but costs one rate-limited request per symbol, and the lane in
+ * `http/get.ts` serialises them per host — so thirteen crypto rows meant thirteen queued calls,
+ * each riding the 429 ladder to about twenty-eight seconds. `/coins/markets` answers for all of
+ * them at once, and `market_data` is already in the response whether we read it or not.
+ */
+export const COINGECKO_IMAGE_URL =
+  'https://api.coingecko.com/api/v3/coins/markets' +
+  `?vs_currency=usd&ids=${[...new Set(Object.values(COINGECKO_IDS))].join(',')}` +
+  '&per_page=250&page=1&sparkline=false&locale=en';
+
+/** The subset of that response this reads. */
+export type CoingeckoMarket = { id?: string; image?: string };

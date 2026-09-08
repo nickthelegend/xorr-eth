@@ -23,6 +23,7 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useLogos } from '@/data/useLogos';
 
 const FIELD_H = 46;
 /** With no query, show a sample rather than all 45 — the list is a starting point. */
@@ -42,6 +43,10 @@ export default function Search() {
       (i) => i.sym.toLowerCase().includes(needle) || i.name.toLowerCase().includes(needle),
     );
   }, [data, q]);
+
+  // Real logos for whatever the query matched, same as every other list of instruments.
+  const symbols = useMemo(() => results.map((i) => i.sym), [results]);
+  const logos = useLogos(symbols);
 
   return (
     <Screen>
@@ -93,7 +98,7 @@ export default function Search() {
             {results.map((i) => (
               <Row
                 key={`${i.classId}-${i.sym}`}
-                left={<AssetMark gradient={{ c1: i.c1, c2: i.c2 }} size={32} />}
+                left={<AssetMark gradient={{ c1: i.c1, c2: i.c2 }} uri={logos[i.sym]} size={32} />}
                 title={i.sym}
                 secondary={`${i.name} · ${i.tag}`}
                 value={<Price>{i.px}</Price>}

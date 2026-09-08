@@ -22,7 +22,6 @@ import {
   Candlestick,
   DeltaChip,
   ErrorState,
-  Fill,
   IconButton,
   NoteStrip,
   Pill,
@@ -40,6 +39,7 @@ import {
   pnlTone,
   price as fmtPrice,
   quantity,
+  size,
   space,
   tightProjection,
   toCandles,
@@ -58,13 +58,19 @@ const RANGES = ['1D', '1W', '1M', '1Y', 'All'] as const;
 /**
  * Candles or line, as a visible control.
  *
- * Labelled with glyphs rather than words: at this width "Candles"/"Line" would push the range
- * pills off the row, and the two shapes read faster than either word does.
+ * Words, not glyphs. This shipped as `▮` and `∿` on the theory that two shapes read faster than
+ * two words and cost less width — but at the 13px the control type is set in, `▮` is a two-pixel
+ * mark and `∿` is barely a dot, and neither says anything to a screen reader, which gets the raw
+ * character. A control nobody can read is not a compact control.
  */
 const CHART_VIEWS: { value: number; label: string }[] = [
-  { value: 0, label: '▮' },
-  { value: 1, label: '∿' },
+  { value: 0, label: 'Candles' },
+  { value: 1, label: 'Line' },
 ];
+
+/** Wide enough for "Candles" at 13/600, and comfortably past the 44pt minimum target. */
+const CHART_VIEW_SEGMENT = 58;
+const CHART_VIEW_W = CHART_VIEW_SEGMENT * 2 + space.s4 + size.segPad * 2;
 
 /** The timeframe each range pill maps to when asking for real candles. */
 const RANGE_TF = { '1D': '1H', '1W': '4H', '1M': '1D', '1Y': '1W', All: '1W' } as const;
@@ -266,12 +272,49 @@ export default function AssetDetail() {
         ) : null}
       </View>
 
+      {/*
+        The chart type, visibly.
+
+        Both charts have been here since the beginning and the only way to swap them was to tap the
+        chart itself — an affordance with nothing on screen to suggest it existed, so the line view
+        may as well not have shipped. The tap still works; this is what says so.
+
+        Above the chart rather than beside the range pills, which is where it went first: five range
+        pills and a two-word control do not fit one 402pt row, and what that shipped was "All"
+        sliced in half by the control's left edge. They also answer different questions — the pills
+        pick a period, this picks a rendering — and the one that belongs to the chart sits with it.
+      */}
+      {hasSeries ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            marginTop: space.s12,
+            paddingHorizontal: space.gutter,
+          }}
+        >
+          <Segmented
+            options={CHART_VIEWS}
+            value={candleView ? 0 : 1}
+            onChange={(v) => setCandleView(v === 0)}
+            height={size.segThumbSm}
+            /*
+             * An explicit width, because `Segmented` has no intrinsic one: design.md §5 gives the
+             * thumb `flex: 1`, which is right for the full-width control it usually is and means
+             * that anywhere else it collapses to its own 4pt padding — which is exactly what
+             * shipped first, a two-pixel white sliver against the bezel.
+             */
+            style={{ width: CHART_VIEW_W }}
+          />
+        </View>
+      ) : null}
+
       {hasSeries ? (
         <Press
           onPress={() => setCandleView((v) => !v)}
           accessibilityRole="button"
           accessibilityLabel={`${i?.name ?? symbol} ${candleView ? 'candlestick' : 'price'} chart, ${RANGES[range]}. Switch to the ${candleView ? 'line' : 'candle'} view.`}
-          style={{ marginTop: space.s18, paddingHorizontal: space.gutter }}
+          style={{ marginTop: space.s10, paddingHorizontal: space.gutter }}
         >
           {candleView ? (
             <Candlestick
@@ -304,30 +347,11 @@ export default function AssetDetail() {
         </View>
       )}
 
-      {/*
-        The range pills, and — visibly — the chart type.
-
-        Both charts have been here since the beginning and the only way to swap them was to tap
-        the chart itself, an affordance with nothing on screen to suggest it existed. So the line
-        view may as well not have shipped. The control sits at the end of the same row, because it
-        answers the same question the range pills do: what am I looking at.
-      */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <PillRow style={{ marginTop: space.s16, flexGrow: 1 }} contentPadding={space.gutter}>
-          {RANGES.map((r, idx) => (
-            <Pill key={r} label={r} selected={idx === range} onPress={() => setRange(idx)} />
-          ))}
-        </PillRow>
-        {hasSeries ? (
-          <View style={{ marginTop: space.s16, paddingRight: space.gutter }}>
-            <Segmented
-              options={CHART_VIEWS}
-              value={candleView ? 0 : 1}
-              onChange={(v) => setCandleView(v === 0)}
-            />
-          </View>
-        ) : null}
-      </View>
+      <PillRow style={{ marginTop: space.s16 }} contentPadding={space.gutter}>
+        {RANGES.map((r, idx) => (
+          <Pill key={r} label={r} selected={idx === range} onPress={() => setRange(idx)} />
+        ))}
+      </PillRow>
 
       <View style={{ marginTop: space.s14, paddingHorizontal: space.gutter }}>
         {held ? (
