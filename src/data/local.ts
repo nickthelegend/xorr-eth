@@ -11,7 +11,6 @@
  */
 import { assetClasses } from './fixtures/markets';
 import { agentFixtures } from './fixtures/agents';
-import { alertFixtures } from './fixtures/alerts';
 import { sleeveFixtures } from './fixtures/sleeves';
 import {
   StillWarming,
@@ -421,17 +420,26 @@ export const LocalRepositories: Repositories = {
   alerts: {
     async list(): Promise<Alert[]> {
       /*
-       * The user's own alerts, persisted. The catalogue is the starting set for someone who has
-       * never made one — product config, not a stand-in for saved state.
+       * The user's own alerts, persisted. Nothing else.
        *
-       * Which is only true if we can tell the two apart. This swallowed the error and returned
-       * the catalogue, so a failed read rendered five alerts and a confident "2 of 5 on" for a
-       * user whose real alerts we had not managed to fetch — and if any of theirs were off, the
-       * screen said the opposite of the truth. An empty list is a new user; a thrown request is
-       * an outage, and the screen already knows how to say so.
+       * A thrown request is an outage and the screen already knows how to say so — that part was
+       * right. What was wrong was the other half: an empty list fell through to a "starting
+       * catalogue" of fixtures, defended in the old comment here as product config rather than a
+       * stand-in for saved state. It was not either.
+       *
+       *   - It listed `NVDAx earnings` and `SOL above $95`. This app's tokenized Nvidia is
+       *     `NVDAc`; `NVDAx` is the design prototype's spelling, which `fixtures/markets.ts` warns
+       *     about in its own header. SOL is not settleable on Base at all. So the catalogue
+       *     offered to watch two things that do not exist here.
+       *   - The header counted them: "2 of 5 on", stated about alerts nobody had set.
+       *   - The switches were live. Toggling one called `setEnabled` with a fixture id the server
+       *     has never seen, and `setEnabled` swallows its own failure — so the row flipped, the
+       *     store remembered it, and nothing was ever armed. A user could leave that screen
+       *     believing they had an alert on their position.
+       *
+       * A new user has no alerts. The screen says so and offers the button that makes one.
        */
-      const remote = await api.get<Alert[]>('/alerts');
-      return remote.length > 0 ? remote : alertFixtures;
+      return api.get<Alert[]>('/alerts');
     },
     async create(input: {
       kind: 'price' | 'agent' | 'risk';

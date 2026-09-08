@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import {
   IconButton,
   Button,
+  EmptyState,
   Fill,
   LoadingRows,
   NoteStrip,
@@ -107,6 +108,20 @@ export default function Alerts() {
           <LoadingRows count={5} height={ROW_H} />
         ) : (
           <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
+            {/*
+              No alerts is a real state, not a reason to show a catalogue.
+
+              This used to fall through to fixtures — five sample alerts, two of them on things
+              this app cannot trade, counted in the header as though the user had set them. An
+              empty list now says it is empty and points at the button that fixes that.
+            */}
+            {(data ?? []).length === 0 ? (
+              <EmptyState
+                text="You have not set any alerts yet. The switches below still control what the bot tells you about its own trades."
+                actionLabel="Add custom alert"
+                onAction={() => router.push('/alerts/new')}
+              />
+            ) : null}
             {(data ?? []).map((a) => {
               const on = alerts[a.name] ?? a.default;
               return (

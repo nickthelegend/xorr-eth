@@ -116,8 +116,20 @@ describe('leverage — screen 25 (margin $800, gold $3412.10)', () => {
 
   it('the warning names the consequence, and its colour band escalates', () => {
     expect(d.leverageWarning(2)).toBe('A 46% move against you wipes the margin.');
-    expect(d.leverageWarning(5)).toBe('A 18% move against you wipes the margin.');
+    // "An eighteen per cent move", not "a eighteen per cent move".
+    expect(d.leverageWarning(5)).toBe('An 18% move against you wipes the margin.');
     expect(d.leverageWarning(10)).toBe('A 9% move against you wipes the margin.');
+  });
+
+  it('the sentence and the liquidation price describe the same move', () => {
+    // They were computed separately — the price from a ratio, the sentence from three hardcoded
+    // strings — so nothing stopped them drifting into stating two different liquidation points.
+    const mark = 78_440;
+    for (const lev of d.LEVERAGE_OPTIONS) {
+      const drop = (mark - d.liquidation(lev, mark)) / mark;
+      const stated = Number(/(\d+)%/.exec(d.leverageWarning(lev))![1]);
+      expect(stated, `${lev}x`).toBe(Math.round(drop * 100));
+    }
     expect(d.leverageWarnBand(2)).toBe('calm');
     expect(d.leverageWarnBand(5)).toBe('warn');
     expect(d.leverageWarnBand(10)).toBe('danger');

@@ -14,6 +14,7 @@ import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import { chainLabel } from '@/chain';
+import { assetGradient } from '@/design/gradients';
 import {
   AreaChart,
   AssetMark,
@@ -204,7 +205,20 @@ export default function AssetDetail() {
             background="none"
             onPress={() => goBack()}
           />
-          {i ? <AssetMark gradient={{ c1: i.c1, c2: i.c2 }} uri={logo} size={26} /> : null}
+          {/*
+            The mark does not depend on the instrument being in a market class.
+
+            It used to: `i ? <AssetMark …>` meant the header was bare for anything the market list
+            does not carry — including WETH, which is the app's own default buy, sits on Home and in
+            Holdings wearing its real logo, and lost it on the one screen dedicated to it. The
+            instrument only ever supplied two gradient colours, and `assetGradient` derives those
+            from the symbol, so there is nothing to wait for.
+          */}
+          <AssetMark
+            gradient={i ? { c1: i.c1, c2: i.c2 } : assetGradient(symbol ?? '')}
+            uri={logo}
+            size={26}
+          />
           <Text variant="cardTitleLg" numberOfLines={1}>
             {i?.name ?? symbol}
           </Text>

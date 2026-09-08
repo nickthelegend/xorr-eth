@@ -127,13 +127,34 @@ export const LEVERAGE_OPTIONS = [2, 5, 10] as const;
 export function notional(lev: number, margin = PERP_MARGIN): number {
   return margin * lev;
 }
+/**
+ * How much of the margin an adverse move eats before liquidation.
+ *
+ * One constant, used by both the price and the sentence about it. They were separate: the price
+ * came from this ratio and the warning was three hardcoded strings, so changing the ratio would
+ * have moved the liquidation line while the sentence underneath kept quoting the old number — a
+ * screen stating two different liquidation points, one of them in the reassuring direction.
+ */
+const MARGIN_AT_RISK = 0.92;
+
 export function liquidation(lev: number, mark = GOLD_PRICE): number {
-  return mark * (1 - 0.92 / lev);
+  return mark * (1 - MARGIN_AT_RISK / lev);
 }
+
+/**
+ * "An", not "A", before eight, eleven and eighteen.
+ *
+ * The screen read "A 18% move against you wipes the margin." Written out it is "a eighteen
+ * per cent move", which is wrong — and it sits directly under the liquidation price on a
+ * leverage screen, which is the last place to look careless.
+ */
+function article(pct: number): 'A' | 'An' {
+  return /^(8|11|18)/.test(String(pct)) ? 'An' : 'A';
+}
+
 export function leverageWarning(lev: number): string {
-  if (lev >= 10) return 'A 9% move against you wipes the margin.';
-  if (lev >= 5) return 'A 18% move against you wipes the margin.';
-  return 'A 46% move against you wipes the margin.';
+  const pct = Math.round((MARGIN_AT_RISK / lev) * 100);
+  return `${article(pct)} ${pct}% move against you wipes the margin.`;
 }
 export type WarnBand = 'calm' | 'warn' | 'danger';
 export function leverageWarnBand(lev: number): WarnBand {
