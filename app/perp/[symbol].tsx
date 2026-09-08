@@ -18,6 +18,7 @@ import {
   ButtonPair,
   Fill,
   IconButton,
+  NoteStrip,
   Price,
   Row,
   Screen,
@@ -200,6 +201,23 @@ export default function PerpContract() {
             {summary.warning}
           </Text>
         </SheetCard>
+
+        {/*
+          The one thing this screen was not saying.
+          
+          `server/src/market/perp.ts` opens with "xorr does not run a perp venue and does not
+          pretend to", and it keeps that promise field by field: open interest, day volume and the
+          funding rate all come back null because they need a venue's order book, and the screen
+          prints an em dash for each. What neither side stated is the consequence of that for the
+          three numbers it DOES print. The leverage, the position size and the liquidation price
+          are arithmetic on a spot price — correct arithmetic about a contract nobody here offers.
+          
+          And the buttons underneath open `/order/:symbol`, which is the spot ticket. Someone who
+          sets 10x and taps Long gets an unleveraged spot buy. That gap is worth one paragraph.
+        */}
+        <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
+          {`xorr does not run a perpetual venue. The mark is a spot price, and the leverage, position size and liquidation above are what those figures would mean on a venue that offered them — nothing here is a live contract. Short and Long open the spot ticket for ${symbol}, unleveraged.`}
+        </NoteStrip>
 
         <StatGrid
           style={{ marginTop: space.s16 }}

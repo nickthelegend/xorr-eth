@@ -8,9 +8,10 @@
  */
 import React from 'react';
 import { ScrollView, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  EmptyState,
   Fill,
   IconButton,
   NoteStrip,
@@ -24,7 +25,41 @@ import { LEGAL } from '@/legal/documents';
 export default function LegalDoc() {
   const { doc } = useLocalSearchParams<{ doc: string }>();
   const goBack = useGoBack();
-  const entry = LEGAL[doc ?? 'terms'] ?? LEGAL.terms!;
+  /*
+   * An unknown slug is not the Terms.
+   *
+   * This read `LEGAL[doc ?? 'terms'] ?? LEGAL.terms!`, so /legal/anything rendered the Terms under
+   * the heading "Terms" and nothing said the requested document had not been found. For most
+   * routes that fallback is a harmless convenience; for legal documents it means someone who
+   * followed a stale or mistyped link to the risk disclosure reads the terms of service instead
+   * and has no way to notice. Say the document does not exist and point at the ones that do.
+   */
+  const entry = doc ? LEGAL[doc] : undefined;
+
+  if (!entry) {
+    return (
+      <Screen>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+          <IconButton
+            name="back"
+            accessibilityLabel="Back"
+            background="none"
+            onPress={() => goBack()}
+          />
+          <Text variant="screenTitle" numberOfLines={1} style={{ flex: 1 }}>
+            Not found
+          </Text>
+        </View>
+        <Fill style={{ marginTop: space.s18 }}>
+          <EmptyState
+            text={`There is no legal document called "${doc ?? ''}". The ones that exist are the terms, the privacy policy and the risk disclosure.`}
+            actionLabel="Read the terms"
+            onAction={() => router.replace('/legal/terms')}
+          />
+        </Fill>
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
