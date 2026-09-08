@@ -22,7 +22,12 @@ import {
   SELF_SIZING_KINDS,
   type StrategyRow,
 } from '../executor/run.js';
-import { TOKENS as VENUE_TOKENS, TOKENS, canonicalSymbol } from '../venues/oneinch.js';
+import {
+  SETTLEMENT_SYMBOL,
+  TOKENS as VENUE_TOKENS,
+  TOKENS,
+  canonicalSymbol,
+} from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { CHAIN_KEY } from '../evm/chains.js';
 import { equitiesFunctional, isStock } from '../venues/stocks.js';
@@ -293,6 +298,28 @@ strategyRoutes.post('/strategies', async (c) => {
           `${canonicalSymbol(body.symbol)} cannot be settled on ${CHAIN_KEY}. The tokenized ` +
           'equities are live on Base mainnet and do not function on a fork of it, so a strategy ' +
           'for one would schedule forever and fill never.',
+      },
+      400,
+    );
+  }
+
+  /*
+   * The settlement token is what a buy is PAID IN, so it cannot also be what a buy BUYS.
+   *
+   * The app offered USDC in the recurring-buy target list and this route accepted it: `USDC` is a
+   * token the executor knows, so the schema check and the equity check above both pass. The
+   * strategy was created, scheduled, and would have failed on every run until someone turned it
+   * off — 1inch rejects a swap whose source and destination match outright, `src and dst should be
+   * different`, HTTP 400. Same reasoning as the equity check directly above: refuse the impossible
+   * request at creation, in the executor, so no client can schedule it.
+   */
+  if (canonicalSymbol(body.symbol) === SETTLEMENT_SYMBOL) {
+    return c.json(
+      {
+        error: 'not_settleable_here',
+        message:
+          `${SETTLEMENT_SYMBOL} is what a buy is paid in, so there is no swap to make. ` +
+          'To put idle cash to work, supply it to Aave instead.',
       },
       400,
     );

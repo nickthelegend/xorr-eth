@@ -43,11 +43,17 @@ const CADENCES = [
  * What a recurring buy can actually buy. These are the Base tokens the executor can route
  * through 1inch and settle through XorrDelegation — offering a symbol it cannot route would
  * let a user schedule a strategy that can never execute.
+ *
+ * USDC used to be in this list and is exactly the case the paragraph above forbids. It is what a
+ * buy is PAID IN, so "Buy $50 of USDC, weekly" is a swap from USDC to USDC: 1inch rejects it
+ * outright — `src and dst should be different`, HTTP 400 — so the strategy would have been
+ * created, scheduled, and failed on every run for as long as it was left on. Idle USDC has its
+ * own tier, "Move idle cash to yield", which supplies it to Aave instead of swapping it for
+ * itself.
  */
 const SYMBOLS = [
   { value: 'WETH', label: 'WETH' },
   { value: 'CBBTC', label: 'CBBTC' },
-  { value: 'USDC', label: 'USDC' },
 ] as const;
 
 type Symbol = (typeof SYMBOLS)[number]['value'];

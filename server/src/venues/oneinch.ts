@@ -33,6 +33,14 @@ if (!API_KEY) {
  * token that chain has never heard of and the quote 400s. What the executor settles against is a
  * separate question, answered by ADDRESSES.
  */
+/**
+ * What every buy is paid in and every sell settles back into.
+ *
+ * Named rather than spelled `'USDC'` at each site because it is a role, not a ticker: the daily
+ * cap is denominated in it, and a strategy whose target IS it has no swap to make.
+ */
+export const SETTLEMENT_SYMBOL = 'USDC';
+
 export const TOKENS: Record<string, { address: Address; decimals: number }> = {
   ETH: { address: QUOTE_ADDRESSES.nativeEth, decimals: 18 },
   WETH: { address: QUOTE_ADDRESSES.wethBase, decimals: 18 },
