@@ -44,7 +44,8 @@
       ],
       "expo-web-browser",
       "expo-image",
-      "expo-font"
+      "expo-font",
+      "./plugins/with-spaces-in-project-path"
     ],
     "experiments": {
       "typedRoutes": true

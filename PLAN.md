@@ -152,7 +152,7 @@ Each names the specific external thing it waits on. None is a coding gap.
 | 5.2 | Privy policy attached to the user's embedded wallet | Privy requires the wallet's **owner** to authorise, and for an embedded wallet that is the user, not the app. `/safety` states this |
 | 5.3 | LLM agent voice | `OPENROUTER_API_KEY` exists nowhere in the repo. `/bot/say` reports `{"source":"fallback","reason":"no_key"}` rather than pretending |
 | 5.4 | Audit chain unbroken on Base Sepolia | Permanent by design — append-only by trigger, so it cannot be rewritten to look clean. The fork's chain is unbroken across 154 entries, which is the evidence the fix works |
-| 5.5 | iOS | This machine has Command Line Tools, not Xcode (`xcrun simctl` exits 72). Installing it needs the user's password. Unverified and not claimed |
+| 5.5 | iOS | ~~No Xcode~~ **Wrong — see the third execution pass.** Xcode was installed all along; `xcode-select` pointed at Command Line Tools, which is what made `xcrun` exit 72. The app now builds, installs and runs on an iPhone 17 Pro simulator |
 | 5.6 | A second chain deployment / other hackathons | Deferred by standing direction — ETH Online first. `XorrDelegation` is chain-agnostic and the venue adapter is one file, which is what makes it cheap later |
 
 ---
@@ -173,7 +173,7 @@ Every gap, tied to the task it blocks, ordered by cost.
 | Privy policy on the user's wallet | platform | 5.2 | **Blocked** |
 | No LLM credential | env | 5.3 | **Blocked** |
 | Sepolia audit chain forked at entry 2 | history | 5.4 | **Blocked**, permanent by design |
-| iOS unverified | no Xcode | 5.5 | **Blocked** |
+| ~~iOS unverified~~ | ~~no Xcode~~ | 5.5 | **Closed** — builds and runs; three space-in-path bugs fixed |
 
 **Mock/stub/TODO sweep: clean.** One hit across all of `src/`, `app/` and `server/src/` —
 `src/test/react-native-stub.ts`, a Node shim used only by unit tests. No mocked data, no stubbed
@@ -252,7 +252,7 @@ than the client knows, never more.
 | **5.2 — Privy policy on the user's wallet** | Privy requires the wallet's owner to authorise, and that is the user |
 | **5.3 — LLM voice** | `OPENROUTER_API_KEY` exists nowhere |
 | **5.4 — Sepolia audit chain** | Permanent by design — append-only, so it cannot be rewritten to look clean |
-| **5.5 — iOS** | No Xcode on this machine; installing it needs the user's password |
+| **5.5 — iOS** | ~~No Xcode~~ — misdiagnosed; closed in the third execution pass |
 | **5.6 — other hackathons** | Deferred by standing direction |
 
 
@@ -292,3 +292,79 @@ command.
   wallet.
 - **`OPENROUTER_API_KEY` (5.3).** Still absent from every env file. `/bot/say` reports
   `{"source":"fallback","reason":"no_key"}` rather than pretending.
+
+---
+
+## Third execution pass — Phases 4 and 5, one task at a time
+
+I had recorded these as blocked without attempting each one individually. This pass runs every task
+and writes down what the attempt actually returned, so the next reader can tell a wall from an
+assumption.
+
+### Phase 4 — The Graph composability
+
+| Attempted | Returned |
+|---|---|
+| `subgraph_create`, `graph_subgraph_create`, `create` on the deploy API | all `Method not found` |
+| A public Aqua subgraph to query instead of publishing our own | none exists |
+| Subgraph MCP endpoints | 404 / connection refused |
+| Token API MCP | wants a `thegraph.market` JWT that does not exist in this environment |
+| Studio in a browser | "DISCONNECTED WALLET"; `window.ethereum` is undefined and the connector list is Coinbase / WalletConnect / Safe, with no injected option |
+
+Unchanged and now evidenced: creating the slug needs a browser holding the account owner's wallet.
+4.2–4.5 are all downstream of it. Nothing in this repository can produce that signature.
+
+### Phase 5
+
+| # | Attempted | Returned |
+|---|---|---|
+| 5.2 | `attachPolicy()` against the user's embedded wallet | `401 Missing 'privy-authorization-signature'`. The wallet's `owner_id` is `xtsg811vra3rkbmb3ijq08xw`; our key quorum is `zixx49ik3ngslu9oay54q4li`. The owner authorises, and for an embedded wallet the owner is the user |
+| 5.3 | `OPENROUTER_API_KEY` | present only in `.env.example` |
+| 5.4 | `audit_log_is_append_only()` | raises on UPDATE OR DELETE — permanent by design, which is the point |
+| 5.5 | iOS | **was never blocked.** See below |
+
+### 5.5 — iOS was misdiagnosed, not blocked
+
+`/Applications/Xcode.app` has been on this machine the whole time. `xcode-select -p` returns
+`/Library/Developer/CommandLineTools`, which is what made `xcrun simctl` exit 72 and what I wrote
+down as "no Xcode". Exporting `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` makes the
+entire toolchain available without touching the machine's configuration.
+
+`npx expo prebuild --platform ios` then `pod-install` (117 pods) then `xcodebuild` failed — and the
+reason was worth having:
+
+> `bash: /Volumes/Extreme: No such file or directory`
+
+This checkout lives at `/Volumes/Extreme SSD/Projects/xorr-eth`. Three separate places pass that
+path through a shell without quoting it:
+
+| Where | Bug | Fix |
+|---|---|---|
+| `expo-constants/ios/EXConstants.podspec` | `bash -l -c "$PODS_TARGET_SRCROOT/…/get-app-config-ios.sh"` — the substitution is re-split by the inner shell | `patches/expo-constants+57.0.17.patch` |
+| `expo-constants/scripts/get-app-config-ios.sh` | `basename $PROJECT_DIR` returns `Extreme`, so the script `exit 0`s and **never generates `app.config`** — a silent runtime break, not just a build one | same patch |
+| `expo/scripts/react-native-xcode.sh` | `grep hermes-engine $PODS_PODFILE_DIR_PATH/Podfile.lock` finds nothing, so Hermes is silently disabled | `patches/expo+57.0.20.patch` |
+| the generated app target's "Bundle React Native code and images" phase | an unquoted backtick command substitution — the actual fatal one | `plugins/with-spaces-in-project-path.js` |
+
+`ios/` is generated and gitignored, so the fourth fix could not live in the project file; it is an
+Expo config plugin that re-applies on every prebuild. The first three are upstream source, so they
+are `patch-package` patches with `postinstall` wired up. All four are committed — a fresh clone into
+a path with a space builds.
+
+Then: `** BUILD SUCCEEDED **`, installed to an iPhone 17 Pro simulator, launched, Metro bundled
+**4,031 modules for iOS**, and `/welcome` renders — `docs/ios/welcome-iphone-17-pro.png`.
+
+**What is verified on iOS and what is not.** Verified: the app compiles, installs, launches, loads
+its bundle and renders. Not verified on iOS specifically: the signed-in flows. Driving them needs
+taps, and this session has no tap channel to the simulator — `xcrun simctl` has no input verb, the
+`simctl openurl` deep link is gated behind an "Open in xorr?" SpringBoard prompt that itself needs a
+tap, and Metro's inspector WebSocket answers `401`. Those flows are verified on web and on Android;
+on iOS they are not, and this says so rather than implying otherwise.
+
+The one thing a person still has to do — it needs a password, so I cannot:
+
+```
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+That is only for tooling that reads `xcode-select` instead of `DEVELOPER_DIR`; the build above did
+not need it.
