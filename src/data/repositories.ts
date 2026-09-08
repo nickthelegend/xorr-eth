@@ -229,7 +229,20 @@ export interface PerpRepository {
 
 export interface YieldRepository {
   /** `estimatedApy` is a FRACTION (0.0388 = 3.88%), not percentage points. */
-  staking(): Promise<{ estimatedApy: number; feed: 'live' | 'simulated'; note: string } | null>;
+  staking(): Promise<{
+    estimatedApy: number;
+    feed: 'live' | 'simulated';
+    note: string;
+    /**
+     * Whether this can be supplied on the chain this build trades.
+     *
+     * The rate is read from Base mainnet on every build, deliberately — Sepolia answers a rate
+     * query with a zeroed struct rather than an error, so asking it produces a confident 0.00%.
+     * The consequence is that a Sepolia build showed a real 4% and offered to sweep cash into a
+     * pool that is not deployed there, where the executor's own planner refuses every run.
+     */
+    availableHere?: boolean;
+  } | null>;
 }
 
 export interface AlertRepository {

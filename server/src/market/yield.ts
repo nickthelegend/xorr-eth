@@ -12,6 +12,8 @@
  */
 import { createPublicClient, http, type Address } from 'viem';
 import { base } from 'viem/chains';
+import { chain } from '../evm/chains.js';
+import { publicClient } from '../evm/client.js';
 
 /** Aave v3 Pool on Base. */
 const AAVE_V3_POOL: Address = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5';
@@ -78,6 +80,18 @@ export type SupplyYield = {
   feed: 'live';
   source: string;
   note: string;
+  /**
+   * Whether the strategy this rate advertises can actually run on the chain the executor trades.
+   *
+   * The rate above is deliberately read from Base mainnet on every build — see the comment on
+   * `USDC_BASE_MAINNET`, which explains that asking Sepolia produces a confident 0.00% instead of
+   * an error. That is right for the NUMBER and wrong for everything the app then says around it:
+   * the home screen offered "Idle USDC can earn about 4.07% a year on Aave" and /strategy/yield
+   * would happily build a sweep, on a Sepolia build where `planYieldRotation` refuses every run
+   * because there is no Aave pool at that address. The executor already performs exactly this
+   * check before supplying; it just never told anyone.
+   */
+  availableHere: boolean;
 };
 
 /**
@@ -131,11 +145,30 @@ export async function usdcReserve(): Promise<UsdcReserve> {
 
 export async function usdcSupplyYield(): Promise<SupplyYield> {
   const reserve = await usdcReserve();
+  const availableHere = await aavePoolIsDeployedHere();
   return {
     symbol: 'USDC',
     estimatedApy: reserve.apy,
     feed: 'live',
     source: `Aave v3 Pool ${AAVE_V3_POOL} on Base`,
-    note: 'Supplying USDC to Aave v3 on Base. The rate floats; it is not a promise.',
+    note: availableHere
+      ? 'Supplying USDC to Aave v3 on Base. The rate floats; it is not a promise.'
+      : `Aave v3 is not deployed on ${chain.name}, which is what this build trades, so nothing can be supplied here. This is Base mainnet's published rate, shown for reference.`,
+    availableHere,
   };
+}
+
+/**
+ * Is there actually an Aave pool on the chain the executor trades?
+ *
+ * The same `getCode` check `planYieldRotation` makes before it will supply anything, so the screen
+ * and the planner cannot disagree about whether this strategy is runnable. Cached because it is a
+ * property of the deployment, not of the moment — a pool does not appear mid-process.
+ */
+let deployedHere: boolean | undefined;
+async function aavePoolIsDeployedHere(): Promise<boolean> {
+  if (deployedHere !== undefined) return deployedHere;
+  const code = await publicClient.getCode({ address: AAVE_V3_POOL }).catch(() => undefined);
+  deployedHere = (code?.length ?? 0) > 4;
+  return deployedHere;
 }

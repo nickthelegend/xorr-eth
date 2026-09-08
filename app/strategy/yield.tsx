@@ -88,6 +88,8 @@ export default function YieldSetup() {
    */
   const kept = cash === undefined ? undefined : Math.min(keepCashUsd, cash);
   const apy = rate.data?.estimatedApy;
+  /* Only once the rate has actually loaded — an absent answer is not a refusal. */
+  const unavailable = rate.data != null && rate.data.availableHere === false;
 
   async function create() {
     if (usd <= 0) return;
@@ -262,11 +264,36 @@ export default function YieldSetup() {
         </Text>
       ) : null}
 
+      {/*
+        A sweep that cannot run is not worth creating.
+        
+        The rate above is Base mainnet's, on every build, because asking Sepolia for it returns a
+        zeroed reserve and therefore a confident 0.00% — the yield module says so at length. But
+        the executor's own planner checks `getCode` on the pool before it will supply anything and
+        returns null when there is nothing there, so on a build without Aave this screen was
+        offering to schedule a strategy guaranteed to do nothing on every run, for ever, silently.
+        The executor now reports that check as `availableHere` and this is the other half of it.
+      */}
+      {unavailable ? (
+        <Text
+          variant="secondarySm"
+          color={colors.sheet.muted}
+          align="center"
+          style={{ marginBottom: space.s12 }}
+        >
+          {rate.data?.note}
+        </Text>
+      ) : null}
+
       <Button
-        label={`Sweep up to ${money(usd, { decimals: 0 })} ${phrase(cadence)}`}
+        label={
+          unavailable
+            ? 'Not available on this network'
+            : `Sweep up to ${money(usd, { decimals: 0 })} ${phrase(cadence)}`
+        }
         backgroundColor={colors.candleUp}
         color={colors.ink}
-        disabled={usd <= 0}
+        disabled={usd <= 0 || unavailable}
         loading={busy}
         onPress={create}
       />

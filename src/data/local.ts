@@ -422,7 +422,13 @@ export const LocalRepositories: Repositories = {
       // Reads the live USDC supply rate on Aave v3 (Base). No live rate means no rate — quoting
       // the design's 12.6% would be advertising a yield nobody verified.
       const remote = await api
-        .get<{ symbol: string; estimatedApy: number; feed: 'live'; note: string }>('/yield/supply')
+        .get<{
+          symbol: string;
+          estimatedApy: number;
+          feed: 'live';
+          note: string;
+          availableHere?: boolean;
+        }>('/yield/supply')
         .catch(() => undefined);
       return remote ?? null;
     },
