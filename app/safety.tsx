@@ -82,6 +82,12 @@ export default function Safety() {
    * rather than being folded into either of the two that already existed.
    */
   const unusable = delegateUnusable(delegation, killed);
+  /*
+   * Is there a permission at all? Distinct from "is it revoked" — `stopped` covers that. A
+   * signed-out visitor, or a signed-in wallet that has never granted, has no permission, and the
+   * badge, title and explanation all have to say so rather than describing one that is not there.
+   */
+  const granted = delegation !== null && delegation !== undefined;
 
   // "2 addresses" was typed in. The allowlist is real and persisted; read it.
   const { addresses } = useAllowlist();
@@ -199,19 +205,27 @@ export default function Safety() {
             width: DOT,
             height: DOT,
             borderRadius: radius.full,
-            backgroundColor: unusable ? colors.down : killed ? colors.ink30 : colors.up,
+            backgroundColor:
+              unusable ? colors.down : killed || !granted ? colors.ink30 : colors.up,
           }}
         />
-        <Text variant="tagSm" color={unusable ? colors.down : killed ? colors.ink55 : colors.up}>
-          {unusable ? 'Disconnected' : killed ? 'Stopped' : 'Live'}
+        {/*
+          A green LIVE dot on a wallet that has granted nothing is the same false claim as the
+          title under it. `granted` is read from the delegation, which this screen already loads.
+        */}
+        <Text
+          variant="tagSm"
+          color={unusable ? colors.down : killed || !granted ? colors.ink55 : colors.up}
+        >
+          {unusable ? 'Disconnected' : !granted ? 'Not granted' : killed ? 'Stopped' : 'Live'}
         </Text>
       </View>
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s16 }}>
-        {killTitle(killed, unusable)}
+        {killTitle(killed, unusable, granted)}
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s8 }}>
-        {killExplanation(killed, hiredCount, unusable)}
+        {killExplanation(killed, hiredCount, unusable, granted)}
       </Text>
 
       {/*

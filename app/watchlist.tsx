@@ -51,7 +51,7 @@ export default function Watchlist() {
   const group = watchlistGroups[tab] ?? watchlistGroups[0]!;
   const symbols = useMemo(() => group.rows.map((r) => r.sym), [group]);
 
-  const { quotes } = usePrices(symbols);
+  const { quotes, loading: pricesLoading } = usePrices(symbols);
 
   // One pass over the visible group — nine symbols at most, and only when the tab changes.
   const { data: sparks } = useAsync(async () => {
@@ -100,13 +100,31 @@ export default function Watchlist() {
                   <View style={{ marginHorizontal: space.s10 }}>
                     {closes.length > 1 ? (
                       <Sparkline data={closes} />
-                    ) : q?.price !== undefined ? null : (
+                    ) : q?.price !== undefined || pricesLoading ? null : (
                       <Tag label="Simulated" small tone="warn" />
                     )}
                   </View>
                 }
-                value={<Price>{q?.price !== undefined ? fmtPrice(q.price) : r.px}</Price>}
-                delta={q?.change24h !== undefined ? percent(q.change24h, 2) : r.chg}
+                /*
+                  A dash means "there is no price for this". It must not also mean "the price has
+                  not arrived yet", and here it did: the fallback is `r.px`, which the generated
+                  fixture sets to "—" for every row. So the default tab rendered three dashes and a
+                  SIMULATED tag for sixteen seconds — for SOL and HYPE, which price perfectly well
+                  and were showing $103.17 and $84.19 on the Markets tab at the same moment.
+                  Same conflation already fixed on Markets and on Send.
+                */
+                value={
+                  <Price>
+                    {q?.price !== undefined
+                      ? fmtPrice(q.price)
+                      : pricesLoading
+                        ? '· · ·'
+                        : r.px}
+                  </Price>
+                }
+                delta={
+                  q?.change24h !== undefined ? percent(q.change24h, 2) : pricesLoading ? '' : r.chg
+                }
                 deltaTone={(q?.change24h !== undefined ? q.change24h >= 0 : r.up) ? 'up' : 'down'}
                 height={ROW_H}
                 onPress={() => router.push(`/asset/${r.sym}`)}

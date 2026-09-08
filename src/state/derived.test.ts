@@ -250,6 +250,22 @@ describe('kill switch — screen 20', () => {
   });
 
   /*
+   * No permission at all outranks every other state.
+   *
+   * The zero-agents sentence below said "the permission is live" to a wallet that had granted
+   * nothing — rendered directly above "Nothing is granted yet" on the same screen. Introduced by
+   * the fix for the zero case itself, which is why it gets its own test.
+   */
+  it('does not describe a permission that was never granted', () => {
+    const none = d.killExplanation(false, 0, false, false);
+    expect(none).toContain('No permission has been granted');
+    expect(none).not.toContain('the permission is live');
+    expect(d.killTitle(false, false, false)).toBe('No agents can trade');
+    // And an ungranted wallet with strategies somehow counted still must not claim they can trade.
+    expect(d.killExplanation(false, 3, false, false)).toContain('No permission has been granted');
+  });
+
+  /*
    * Zero is not "the bot is stopped" — that is what `killed` means, and it has its own sentence.
    * Under a green LIVE badge, "0 agents can place orders" read as a kill switch already pulled.
    */

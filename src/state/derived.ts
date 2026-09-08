@@ -272,8 +272,10 @@ export function delegateUnusable(
   return !killed && delegation?.delegateIsCurrent === false;
 }
 
-export function killTitle(killed: boolean, unusable = false): string {
+export function killTitle(killed: boolean, unusable = false, granted = true): string {
   if (unusable) return 'Agents cannot trade';
+  // "Agents are live" over an ungranted wallet is the same false claim as the explanation below.
+  if (!granted) return 'No agents can trade';
   return killed ? 'All agents stopped' : 'Agents are live';
 }
 /**
@@ -288,9 +290,26 @@ export function killTitle(killed: boolean, unusable = false): string {
  * And "1 agents" was reachable. The docblock above records seeing it on screen; nothing pluralised
  * it, because the only test used 3.
  */
-export function killExplanation(killed: boolean, liveAgents: number, unusable = false): string {
+export function killExplanation(
+  killed: boolean,
+  liveAgents: number,
+  unusable = false,
+  granted = true,
+): string {
   if (unusable) {
     return 'Your permission names a different bot key than the one running, so nothing can be placed. Grant again to reconnect. Your funds are untouched.';
+  }
+  /*
+   * No permission at all is its own state, and it outranks the rest.
+   *
+   * Without this the zero-agents branch below said "the permission is live" to a signed-out
+   * visitor — directly above the card that reads "Nothing is granted yet. No bot can touch this
+   * wallet until you sign a permission." Two contradictory sentences in one viewport, on the
+   * screen whose entire job is to say what the bot may do. Introduced by the fix for the previous
+   * bug in this same function, which is how a copy change becomes a correctness change.
+   */
+  if (!granted) {
+    return 'No permission has been granted, so nothing can trade. There is nothing to stop yet.';
   }
   if (killed) return 'Nothing will be placed until you resume. Open positions are untouched.';
   if (liveAgents === 0) {
