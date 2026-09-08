@@ -1,6 +1,12 @@
 /**
  * The executor and everything it needs to work.
  *
+ * At `/system`, not `/status`. Expo's dev server answers `/status` itself with a plain-text
+ * `packager-status:running`, so the route never reached the app router and the screen was
+ * unreachable in development — an easy thing to miss, because the URL loads and returns 200.
+ * Colliding with a well-known dev-server path is a trap worth designing out rather than working
+ * around.
+ *
  * `/health` names each dependency, whether it answered, how long it took and — importantly —
  * whether it is critical. That last field is why this is a screen rather than a green dot: gas
  * being low is not the same kind of fact as Postgres being down, and a single "healthy" badge

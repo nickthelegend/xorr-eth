@@ -42,13 +42,28 @@ export type VerifyReport = {
   at: string;
 };
 
-/** Whether the hash chain over the audit trail still holds. */
+/**
+ * Whether the hash chain over the audit trail still holds.
+ *
+ * `kind` is the field that matters and the reason this is not one boolean. The server draws a line
+ * the UI must not erase:
+ *
+ *   `content` — a row's stored hash does not match its own fields. Something EDITED the trail. That
+ *               is tampering, and it is the alarm the whole structure exists to raise.
+ *   `link`    — a row does not point at its predecessor, so rows fork instead of forming a line.
+ *               That is damage from a concurrent write. It is permanent, because the trail is
+ *               append-only, and it is not evidence that anyone altered a record.
+ *
+ * Reporting both as "broken" makes "two writers raced" read as "someone edited your audit log".
+ */
 export type ChainVerification = {
   ok: boolean;
-  entries: number;
-  /** The first sequence number where the chain breaks, if it does. */
-  brokenAt?: number | null;
-  detail?: string;
+  /** Rows examined. */
+  checked: number;
+  /** Rows whose own contents still hash to their stored hash, break or no break. */
+  intact: number;
+  brokenAtSeq?: string;
+  kind?: 'link' | 'content';
 };
 
 export type TokenApproval = {
@@ -70,15 +85,6 @@ export type Limits = {
   spentTodayUsd: number;
   remainingUsd: number;
   revoked: boolean;
-};
-
-export type AgentKey = {
-  id: string;
-  name: string;
-  scopes: string[];
-  revoked: boolean;
-  /** Null until the key is used once. Distinct from revoked, and worth showing separately. */
-  lastSeenAt: string | null;
 };
 
 export type DelegationParams = {
@@ -240,13 +246,29 @@ export type StrategyBacktest = {
   disclaimer: string;
 };
 
-/** What the executor has done, counted. Public — it names no wallet. */
+/**
+ * What the executor has done, counted. Public — it names no wallet.
+ *
+ * `failuresByCause` and `fillsByVenue` are the two worth rendering and the two easiest to miss. A
+ * failure rate says something is wrong and nothing about what; the causes are bucketed server-side
+ * from the stored error text into the things an operator would act on differently — a price that
+ * moved is the market, a revoked permission is the user, a venue that could not fill is us.
+ *
+ * `fillsByVenue` counts where trades actually settled, read from the audit trail's own wording. It
+ * is the claim the 1inch integration rests on, as a number.
+ */
 export type Metrics = {
   runs: Record<string, number>;
-  alerts: { enabled: number; fired: number };
+  /** Fills that did not happen because something broke, as a fraction of attempts. */
+  runFailureRate: number;
+  /** Last seven days, bucketed by cause. */
+  failuresByCause: Record<string, number>;
+  fillsByVenue: Record<string, number>;
   strategies: Record<string, number>;
+  alertsEnabled: number;
+  alertsFiredTotal: number;
   spentTodayUsd: number;
-  uptimeSec?: number;
+  uptimeSec: number;
 };
 
 /**
@@ -310,8 +332,15 @@ export const system = {
     api.get<VerifyReport>(`/verify${owner ? `?owner=${encodeURIComponent(owner)}` : ''}`),
   auditChain: () => api.get<ChainVerification>('/activity/verify'),
   approvals: () => api.get<Approvals>('/approvals'),
+  /*
+   * There is deliberately no `agentKeys()` here.
+   *
+   * `/agent/*` is the operator surface and authenticates with an agent key, not a user's Privy
+   * token — "Operator only, and the operator cannot trade". A screen was built against it and 401'd
+   * for every session, which is what a client method for a route this app cannot authenticate to
+   * will always produce.
+   */
   limits: () => api.get<Limits>('/limits'),
-  agentKeys: () => api.get<AgentKey[]>('/agent/keys'),
   delegationParams: () => api.get<DelegationParams>('/delegation/params'),
 
   /* the graph */

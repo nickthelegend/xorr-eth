@@ -134,7 +134,7 @@ export default function Network() {
               </SheetCard>
             ) : null}
 
-            <Button label="Everything the system needs" variant="ghost" onPress={() => router.push('/status')} />
+            <Button label="Everything the system needs" variant="ghost" onPress={() => router.push('/system')} />
           </ScrollView>
         )}
       </Fill>

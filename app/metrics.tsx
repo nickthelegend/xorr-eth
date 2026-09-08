@@ -24,7 +24,7 @@ import {
   radius,
   space,
 } from '@/ui';
-import { money } from '@/format';
+import { money, percent } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system } from '@/data/system';
 
@@ -96,6 +96,12 @@ export default function Metrics() {
                   </View>
                 ))
               )}
+              {runs.length > 0 ? (
+                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
+                  {percent(data.runFailureRate * 100, { digits: 1, explicitSign: false })} of
+                  attempts broke rather than filled.
+                </Text>
+              ) : null}
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
@@ -125,12 +131,68 @@ export default function Metrics() {
               )}
             </SheetCard>
 
+            {/*
+              Why runs failed, not only how many. A failure rate says something is wrong and
+              nothing about what; these buckets are the things an operator would act on
+              differently — the market, the user, or us.
+            */}
+            {Object.keys(data.failuresByCause).length > 0 ? (
+              <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+                <Text variant="footnote" color={colors.ink40}>
+                  WHY RUNS FAILED · LAST 7 DAYS
+                </Text>
+                {Object.entries(data.failuresByCause)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([cause, n]) => (
+                    <View
+                      key={cause}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        marginTop: space.s10,
+                      }}
+                    >
+                      <Text variant="secondarySm" color={colors.ink65}>
+                        {cause.replace(/_/g, ' ')}
+                      </Text>
+                      <Text variant="secondarySm">{n}</Text>
+                    </View>
+                  ))}
+              </SheetCard>
+            ) : null}
+
+            {Object.keys(data.fillsByVenue).length > 0 ? (
+              <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+                <Text variant="footnote" color={colors.ink40}>
+                  WHERE FILLS SETTLED
+                </Text>
+                {/* The claim the 1inch integration rests on, counted from the audit trail. */}
+                {Object.entries(data.fillsByVenue)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([venue, n]) => (
+                    <View
+                      key={venue}
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        marginTop: space.s10,
+                      }}
+                    >
+                      <Text variant="secondarySm" color={colors.ink65}>
+                        {venue}
+                      </Text>
+                      <Text variant="secondarySm">{n}</Text>
+                    </View>
+                  ))}
+              </SheetCard>
+            ) : null}
+
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
               <Text variant="footnote" color={colors.ink40}>
                 ALERTS
               </Text>
               <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
-                {data.alerts.enabled} enabled · {data.alerts.fired} fired
+                {data.alertsEnabled} enabled · {data.alertsFiredTotal} fired
               </Text>
             </SheetCard>
 

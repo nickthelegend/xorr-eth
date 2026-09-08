@@ -51,23 +51,33 @@ export default function AuditChain() {
               <Text variant="footnote" color={colors.ink40}>
                 HASH CHAIN
               </Text>
+              {/*
+                Three headlines, not two. "Someone edited this" and "two writers raced" are
+                different facts and the server distinguishes them deliberately; collapsing both to
+                "Broken" would make a concurrency bug read as tampering, which is the single most
+                alarming thing this screen could say wrongly.
+              */}
               <Text
                 variant="screenTitle"
-                color={data.ok ? colors.up : colors.down}
+                color={data.ok ? colors.up : data.kind === 'content' ? colors.down : colors.warn}
                 style={{ marginTop: space.s6 }}
               >
-                {data.ok ? 'Unbroken' : 'Broken'}
+                {data.ok ? 'Unbroken' : data.kind === 'content' ? 'Edited' : 'Forked'}
               </Text>
               <Text variant="secondary" color={colors.ink65} style={{ marginTop: space.s10 }}>
                 {data.ok
-                  ? `${data.entries} entries, each one committing to the hash of the entry before it.`
-                  : `The chain breaks at entry ${data.brokenAt ?? '—'}. Everything after it is no longer proof of anything.`}
+                  ? `${data.checked} entries, each one committing to the hash of the entry before it.`
+                  : data.kind === 'content'
+                    ? `Entry ${data.brokenAtSeq ?? '—'} does not hash to its own contents. Something changed a record after it was written.`
+                    : `Entry ${data.brokenAtSeq ?? '—'} does not point at the one before it. Two writers claimed the same predecessor — damage, not an edit.`}
               </Text>
-              {data.detail ? (
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
-                  {data.detail}
-                </Text>
-              ) : null}
+              {/*
+                `intact` is worth showing even when the chain holds: it is the count of rows whose
+                CONTENTS still verify, which is a different question from whether the links line up.
+              */}
+              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                {data.intact} of {data.checked} rows still hash to their own contents.
+              </Text>
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
@@ -78,7 +88,8 @@ export default function AuditChain() {
                 */}
                 A broken chain cannot be repaired, only reported. Recomputing the hashes would make
                 the trail verify again while proving nothing — which is exactly what an edited trail
-                would want to do.
+                would want to do. A fork stays forked for the same reason: the trail is append-only,
+                so there is no write that could straighten it.
               </Text>
             </SheetCard>
 

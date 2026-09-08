@@ -35,7 +35,6 @@ const GROUPS: Group[] = [
       { route: '/approvals', title: 'Approvals', detail: 'What the contract may pull, per token, from the chain' },
       { route: '/policy', title: 'Wallet policy', detail: 'What Privy refuses, independently of us' },
       { route: '/delegation', title: 'Permission', detail: 'The grant itself: key, venues, cap, expiry' },
-      { route: '/keys', title: 'API keys', detail: 'What can act on this account without you' },
       { route: '/venues', title: 'Venues', detail: 'Where a fill may go, enforced on-chain' },
       { route: '/sources', title: 'Sources', detail: 'Where every number in this app comes from' },
     ],
@@ -86,7 +85,7 @@ const GROUPS: Group[] = [
     title: 'Infrastructure',
     blurb: 'The machinery underneath, and whether it is working.',
     items: [
-      { route: '/status', title: 'System', detail: 'The executor and every dependency it needs' },
+      { route: '/system', title: 'System', detail: 'The executor and every dependency it needs' },
       { route: '/network', title: 'Network', detail: 'Which chain this build is really pointed at' },
       { route: '/graph', title: 'Subgraph', detail: 'How far behind the index is' },
       { route: '/graph/spends', title: 'Spend events', detail: 'The same money, recorded by someone else' },
