@@ -98,6 +98,74 @@ strategyRoutes.get('/strategies', async (c) => {
 });
 
 /**
+ * Every run this wallet's strategies have made.
+ *
+ * `strategy_runs` is where the product's central claim actually lives — "the bot trades unattended
+ * and every run is recorded, including the ones it refused". The table has been written on every
+ * tick since the scheduler existed and could only be read by the leaderboard, the alert evaluator
+ * and one verification check. Nothing showed it to the person whose money it is.
+ *
+ * Refusals are included and are the point. A list of fills is a highlight reel; `blocked` and
+ * `skipped` rows with their reason are what let someone see the limits doing their job.
+ *
+ * Joined to `strategies` so a row can say what it was trying to do — a run id and a status with no
+ * symbol attached is not something anyone can act on — and scoped by `wallet_id` through that join,
+ * which is what stops one caller reading another's runs.
+ */
+strategyRoutes.get('/runs', async (c) => {
+  const w = await currentWallet(c);
+  if (!w) return c.json([]);
+  const limit = Math.min(200, Math.max(1, Number(c.req.query('limit') ?? 100)));
+  const rows = await query<{
+    id: string;
+    strategy_id: string;
+    kind: string;
+    label: string;
+    symbol: string;
+    status: string;
+    usd: string | null;
+    units: string | null;
+    price: string | null;
+    signature: string | null;
+    error: string | null;
+    started_at: Date;
+    finished_at: Date | null;
+  }>(
+    `SELECT r.id, r.strategy_id, s.kind, s.label, s.symbol, r.status, r.usd, r.units, r.price,
+            r.signature, r.error, r.started_at, r.finished_at
+       FROM strategy_runs r
+       JOIN strategies s ON s.id = r.strategy_id
+      WHERE s.wallet_id = $1
+      ORDER BY r.started_at DESC
+      LIMIT $2`,
+    [w.id, limit],
+  );
+  return c.json(
+    rows.map((r) => ({
+      id: r.id,
+      strategyId: r.strategy_id,
+      kind: r.kind,
+      label: r.label,
+      symbol: r.symbol,
+      status: r.status,
+      /*
+       * NUMERIC comes back from pg as a string, deliberately — it is arbitrary precision and
+       * JavaScript numbers are not. Parsed here because these are display quantities with known
+       * small magnitudes, and null stays null: a blocked run has no price, and zero is not the
+       * same fact.
+       */
+      usd: r.usd === null ? null : Number(r.usd),
+      units: r.units === null ? null : Number(r.units),
+      price: r.price === null ? null : Number(r.price),
+      signature: r.signature,
+      error: r.error,
+      at: r.started_at.toISOString(),
+      finishedAt: r.finished_at ? r.finished_at.toISOString() : null,
+    })),
+  );
+});
+
+/**
  * Run one strategy now.
  *
  * A cadence is the point of the product, but it is useless for showing someone what the bot does:

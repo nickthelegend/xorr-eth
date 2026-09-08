@@ -101,6 +101,22 @@ export function mmss(seconds: number): string {
  * A settlement date relative to now — replaces the handoff's hardcoded "Tue, Sep 8" [G42].
  * Business days only, because bank transfers do not settle at weekends.
  */
+/**
+ * An address, short enough to read and long enough to check.
+ *
+ * Six leading characters and four trailing: the first six cover `0x` plus four of the address, and
+ * four at the end is what people actually compare against an explorer. Four-and-four, which the app
+ * also uses in one place, leaves only two real characters at the front.
+ *
+ * Anything not long enough to shorten is returned as-is rather than mangled — a short string here
+ * is a bug upstream, and hiding it behind an ellipsis would make it look deliberate.
+ */
+export function shortAddress(address: string, lead = 6, tail = 4): string {
+  const a = address.trim();
+  if (a.length <= lead + tail + 1) return a;
+  return `${a.slice(0, lead)}…${a.slice(-tail)}`;
+}
+
 export function businessDaysFromNow(days: number, now: Date = new Date()): string {
   const d = new Date(now.getTime());
   let added = 0;
