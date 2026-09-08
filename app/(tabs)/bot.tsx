@@ -139,7 +139,28 @@ export default function BotChat() {
     // numeric is rejected server-side before it can reach this thread.
     void repos.bot
       .ask({ agentId: agentIdFor(agentName), question: text, tone })
-      .then((reply) => append(botProse(agentName, [voice(reply.text)])))
+      /*
+       * A fallback line is not an answer, and must not be dressed as one.
+       *
+       * `ask` returns `{ text, source }` and this used only `text`. With no language model
+       * configured the server answers `source: 'fallback'` with a stock market remark, so asking
+       * "why did the CBBTC buy fail?" got back "Nothing worth chasing today. Ranges are thin and
+       * the tape is quiet." — a confident non-sequitur in the agent's own voice, which is exactly
+       * the canned-content-as-real-output this project refuses everywhere else.
+       *
+       * The reply still arrives; it just says what it is.
+       */
+      .then((reply) =>
+        append(
+          botProse(agentName, [
+            voice(
+              reply.source === 'fallback'
+                ? 'I cannot answer that here — no language model is configured in this build, and I will not read you a stock line as though it were an answer.'
+                : reply.text,
+            ),
+          ]),
+        ),
+      )
       .catch(() =>
         append(
           botProse(agentName, [voice('I could not answer that just now, so I will not guess.')]),
