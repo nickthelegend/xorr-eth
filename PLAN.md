@@ -1,364 +1,192 @@
 # xorr — build plan
 
-Planning only. Nothing in this document has been built as part of writing it; every status tag
-below reflects the repository as it stands at commit `f556f4f`.
+Planning only. Nothing here was built as part of writing it; every status reflects the repository at
+commit `1332eab`, checked by running things rather than by reading the last plan.
 
-Written for an agent to pick up cold. Every task names the file, the symbol, and what "done" means.
+Written for an agent to pick up cold: every task names the file, the symbol, and what done means.
+
+**This is the third plan.** The previous two have been executed — 17 commits since the last one —
+and most of what they contained is finished. That changes the shape of this one: it is short on
+building and long on the two things actually left, which are a **product lie about equities** and a
+**demo that does not exist**.
 
 ---
 
-## 1. What done and winning actually mean here
+## 1. What done and winning mean here
 
-This is not a generic web app. Its claim is narrow and testable, and everything below serves it:
+The claim the whole project serves, unchanged:
 
 > **A bot trades your capital under a permission you granted on-chain, that you can read and revoke
 > without our cooperation — and every number the app shows you can be checked somewhere we do not
 > control.**
 
-**Done** means all four of these hold at once:
+**Done** means all five hold at once. Four do.
 
-1. **The permission is real.** `XorrDelegation` is deployed, the grant is a user-signed transaction,
-   the cap/expiry/venue-allowlist are enforced in the contract, and revoke takes effect without the
-   server's help. — *holds today.*
-2. **The bot actually trades.** All seven ladder tiers plan real intents, and the executor settles
-   them on chain against a real venue, for every asset class the app lists. — *holds for crypto;
-   **does not hold for tokenized equities**, which is the biggest single gap in the project.*
-3. **Nothing on screen is invented.** Every price, balance, policy and history is a live read or an
-   honest failure. — *holds; verified by a 47-route browser sweep and `/verify`.*
-4. **A stranger can check it.** `/verify` and `/judge` re-run the claims live and report what they
-   observed. — *holds; 18/18 on the fork, 15/1/2 on Sepolia.*
-
-**Winning** is a separate bar, set by the three sponsor tracks the project targets:
-
-| Track | Bar | Status |
+| # | Bar | State |
 |---|---|---|
-| 1inch — Aqua App | "Official Aqua/SwapVM contracts must be used", real on-chain transfers | **Met.** Real Aqua fills against `XorrAquaBook`, book logs true / router logs false |
-| Privy — B2B Financial Product | Privy core, ≥1 wallet, **≥1 Privy control** (policies, signers, quorums) | **Met.** Policy owned by a key quorum, refusal proven live |
-| Privy — Best Financial Flow | ≥1 completed financial flow | **Met.** Swap, Aave deposit, user-signed USDC withdrawal |
-| The Graph — Composable/Standardized | **Two or more** Graph products, or a standardized schema. *"Simply querying one Subgraph does not qualify."* | **NOT MET.** One subgraph is ever queried |
+| 1 | The permission is real — deployed contract, user-signed grant, cap/expiry/venue enforced on chain, revoke needs nothing from us | **Holds.** Verified this week end to end: `revoked: true` then `false` read straight off Base Sepolia |
+| 2 | The bot actually trades — all seven ladder tiers plan real intents and settle on chain | **Holds for crypto.** All 7 tiers have fired with transaction hashes. **Does not hold for tokenized equities** |
+| 3 | Nothing on screen is invented | **Holds** — with one exception, see Phase 1 |
+| 4 | A stranger can check it — `/verify` and `/judge` re-run every claim live | **Holds.** Fork 18/0/1, Sepolia 16/1/2 |
+| 5 | Someone can watch it work in two minutes | **Does not hold.** There is no recording |
 
-So winning needs exactly one more thing than done does: **The Graph composability**.
+**Winning** is a separate bar set by the sponsor tracks:
+
+| Track | Bar | State |
+|---|---|---|
+| 1inch — Aqua App | Official Aqua/SwapVM contracts used, real on-chain transfers | **Met.** Real Aqua fills; SwapVM now wired as a venue rather than an artefact |
+| Privy — B2B Financial Product | Privy core, ≥1 wallet, ≥1 Privy control | **Met.** Policy owned by key quorum `zixx49ik…`, refusal proven live |
+| Privy — Best Financial Flow | ≥1 completed financial flow | **Met.** Swap, Aave deposit, user-signed USDC withdrawal |
+| The Graph — Composable/Standardized | Two or more Graph products, or a standardized schema | **Not met.** One subgraph is ever queried |
+
+Three of four tracks are met. The fourth is blocked on a dashboard click, re-confirmed today.
+
+**The honest summary:** the software is finished. What is missing is a two-minute video and one
+screen telling the truth about which assets this deployment can trade.
 
 ---
 
 ## 2. Phases
 
-Ordered by dependency, not by preference. Phase 1 unblocks the product's headline asset class;
-Phase 2 is the only thing standing between the project and a fourth track.
+Short, because most of the work is done. Ordered by what a judge would notice first.
 
-| # | Phase | Why it is here |
+| # | Phase | Why |
 |---|---|---|
-| 1 | **Make equity trades settle** | The app lists 8 tokenized stocks and cannot fill any of them |
-| 2 | **The Graph composability** | The only unmet sponsor bar |
-| 3 | **Symbol handling, once and for all** | Three separate bugs this week from the same root |
-| 4 | **Executor hardening** | The component that moves money has the least defensive depth |
-| 5 | **Backend structure and ops** | Unglamorous; what makes the above maintainable |
-| 6 | **Verification and proof** | Extend `/verify` to cover what Phases 1–4 add |
-| 7 | **Remaining product gaps** | Known, scoped, mostly blocked on things outside the code |
+| 1 | **Stop offering trades that cannot fill** | The app currently offers a Buy button for eight assets it cannot settle |
+| 2 | **Prove the equity path on the chain where it works** | The tokens are live and busy on real Base; only the fork cannot run them |
+| 3 | **The demo** | Every track asks for 2–4 minutes of video. There is none |
+| 4 | **The Graph composability** | The only unmet track |
+| 5 | **Remaining blocked items** | Documented, each with the specific external thing it waits on |
 
 ---
 
-## Phase 1 — Make equity trades settle
+## Phase 1 — Stop offering trades that cannot fill
 
-**The diagnosis, in full, so nobody re-does it.**
+**The gap, measured today.** `GET /market/tradable` on the fork returns all eight equities:
 
-`quote()` and `buildSwap()` ask 1inch different questions.
+```
+['ETH','WETH','USDC','CBBTC','NVDAc','AAPLc','TSLAc','METAc','MSFTc','AMZNc','GOOGLc','MSTRc']
+```
 
-- `server/src/venues/oneinch.ts:190` — `quote()` calls `/quote` with **no protocol restriction**. For
-  `USDC → NVDAc` 1inch answers with a route through **`Elfomofi`**, and the price is real:
-  `/price/NVDAc` → `{"price":232.99,"source":"1inch"}`.
-- `server/src/venues/oneinch.ts:341` — `buildSwap()` appends `AMM_ONLY`, which on a fork restricts
-  `protocols=` to the 13 names in `FORK_AMMS` (`oneinch.ts:270-284`). **`BASE_ELFOMOFI` is not among
-  them.** 1inch therefore builds a route through AMMs that hold no meaningful NVDAc liquidity, and
-  the fill reverts `TF` inside the pool.
+`isTradable('NVDAc')` is therefore `true`, so `/order/NVDAc` renders a complete ticket — live price,
+unit conversion, an enabled **"Buy $250 of NVDAc"** — and the fill reverts `TF`. The app makes a
+confident offer it cannot honour, which is the exact failure mode the rest of the codebase is built
+to avoid. It is also the one remaining place where something on screen is not true.
 
-Confirmed by control: a plain `dca` into `NVDAc` fails with the identical revert, so this is not a
-tier-7 defect — **no equity fills, for any strategy**. The protocol id is `BASE_ELFOMOFI`, verified
-against `/swap/v6.0/8453/liquidity-sources`, which lists **69** protocols on Base where `FORK_AMMS`
-names 13.
+The cause is that tradability is decided by the token registry, not by whether the token *works* on
+the running chain. `/verify` already knows the difference: its `equities` check calls
+`totalSupply()` and correctly skips on a fork. `/market/tradable` does not ask.
 
 | # | Task | Status |
 |---|---|---|
-| 1.1 | Add `BASE_ELFOMOFI` to `FORK_AMMS`. **Tried, and it is not the fix.** With it in the list the revert changes from `TF` to `VenueCallFailed`: it is a solver whose off-chain state a fork cannot reproduce, which is the class the allowlist exists to exclude. Reverted, with the reason recorded in the code. | **DONE** (negative result) |
-| 1.2 | Widen the allowlist further. **Not needed — the obstacle is one layer down.** An AMM-only route DOES exist (`BASE_AERODROME_SLIPSTREAM`, USDC→ETH→NVDAc) and still cannot fill, because the token itself is not functional on a fork. See the gap list. | **DONE** (superseded) |
-| 1.3 | Make `quote()` and `buildSwap()` ask the same question. `AMM_ONLY` now applies to both, so a fork can no longer display a price from a route it would not take. On a real network the constant is empty and this is the unrestricted quote it always was. | **DONE** |
-| 1.4 | `TF` humanised — a bare revert string, not a selector, matched word-bounded because `TF` appears inside longer words and a substring match would blame routing for something else. | **DONE** |
-| 1.5 | Live equity fill test. | **BLOCKED** — cannot pass on a fork. `totalSupply()` on the equity tokens works on real Base and REVERTS on an anvil fork of the same block, so there is nothing to trade against. A test asserting a fill would be asserting something impossible here. |
-| 1.6 | Verify the equity sell path. | **BLOCKED** by the same cause — with no functional token there is nothing to hold or sell. The allowance-0 observation is a consequence, not the cause. |
-| 1.7 | Tier 7 entry + flatten on `NVDAc` with tx hashes. | **BLOCKED** — same root cause. Tier 7's logic is proven by 21 unit tests and by its entry reaching the venue with a real route and price; only the settlement is impossible here. |
+| 1.1 | Add a cached `equitiesFunctional()` to `server/src/venues/stocks.ts` that calls `totalSupply()` on one equity and caches the answer for the process lifetime — the chain does not change underneath a running executor. Reuse the logic `/verify`'s `equities` check already has. | **NOT STARTED** |
+| 1.2 | `GET /market/tradable` (`server/src/routes/market.ts`) filters equities out when `equitiesFunctional()` is false. Definition of done: on the fork the response contains only `ETH, WETH, USDC, CBBTC`; on a hypothetical mainnet deployment it contains all twelve. | **NOT STARTED** |
+| 1.3 | `/order/:symbol` must then refuse an equity on a fork the way it already refuses an untradable symbol — `app/order/[symbol].tsx:56` has the branch and the copy, it simply never fires because `isTradable` says yes. Verify in the browser that `/order/NVDAc` shows the refusal rather than a Buy button. | **NOT STARTED** |
+| 1.4 | `POST /strategies` must refuse `symbol: 'NVDAc'` on a fork with a reason naming the chain, not accept it and fail at run time. Today it accepts and the run fails with `TF`. | **NOT STARTED** |
+| 1.5 | `/markets/stocks` should still LIST the equities with their real prices — the price is genuine and the screen is a market list, not an order form — but say plainly that this deployment cannot settle them. One line, in the copy voice already used for "Prices are indicative". | **NOT STARTED** |
+| 1.6 | Add a `/verify` check `equities-tradable` asserting the two agree: if `equitiesFunctional()` is false then `/market/tradable` must not list one. This is the invariant that was silently violated. | **NOT STARTED** |
 
 ---
 
-## Phase 2 — The Graph composability
+## Phase 2 — Prove the equity path where it works
 
-The track disqualifies *"simply querying one Subgraph"*, which is exactly what happens today:
-`AQUA_SUBGRAPH_URL` is unset on **both** deployed services, so `aquaIndexConfigured()` is false and
-`decide()` never runs its Aqua branch. `/graph/decision` says so in its own output.
+The equity tokens are not broken; the fork is. Evidence gathered today:
+
+- `totalSupply()` on real Base returns 1,373,108,020,000 for NVDAc; the same call on an anvil fork of
+  the same block **reverts**. They carry one byte of code, so whatever serves them is below the
+  bytecode and a fork copies the byte and nothing else.
+- **2,907 NVDAc Transfer events in the last 4,000 blocks** on real Base. The token is live and busy.
+
+So "equities do not work" is false; "equities do not work *here*" is true. That distinction is worth
+demonstrating rather than asserting, and it can be done read-only.
 
 | # | Task | Status |
 |---|---|---|
-| 2.1 | Create the `xorr-aqua` slug in Subgraph Studio and deploy `subgraph-aqua/` (already built and IPFS-pinned as `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`). | **BLOCKED** — dashboard action; `subgraph_create` returns `Method not found` on the deploy API, so it needs a browser with the deployer wallet |
-| 2.2 | Set `AQUA_SUBGRAPH_URL` on both Railway services and confirm `/graph/decision` stops reporting "No Aqua book index configured". | **BLOCKED** by 2.1 |
-| 2.3 | x402 Gateway queries. | **BLOCKED — needs your say-so.** The mechanism is verified (`402` with `eip155:8453`, 0.01 USDC per query, EIP-3009), and paying means **spending real USDC on Base mainnet** from the delegate key. That is a real-money action, so it is not something to start unasked. Say the word and it is roughly an hour's work. |
-| 2.4 | Point `decide()` at a second real source once 2.2 or 2.3 lands, and make `/judge` show the cross-source join so the composition is visible rather than asserted. | **BLOCKED** by 2.2/2.3 |
-| 2.5 | Index the fork's delegation address. | **BLOCKED** by 2.1 — a redeploy needs the same Studio slug. Worse now: the fork was rebuilt today, so its delegation address changes on every rebuild, and a subgraph pinned to one would need redeploying each time. |
+| 2.1 | Add `server/src/equity-mainnet-proof.ts` (a script, not a route): against `BASE_RPC` read `totalSupply()`, `decimals()` and `symbol()` for all eight, count recent Transfer logs, and fetch a live 1inch quote for `USDC → NVDAc`. Print a table. No transaction, no spend. | **NOT STARTED** |
+| 2.2 | Extend the `equities` check in `server/src/verify/checks.ts` so its SKIP message on a fork cites the mainnet evidence — "live on Base: N transfers in the last 4,000 blocks; not reproducible on a fork" — rather than only saying it cannot work here. | **NOT STARTED** |
+| 2.3 | A README paragraph under the two-environment section stating exactly this, so the next reader does not conclude the feature is fictional. | **NOT STARTED** |
+| 2.4 | An actual equity fill on Base **mainnet**. | **BLOCKED — spends real money.** The code path is proven up to settlement; completing it means a real swap with real USDC. Needs an explicit decision, not an assumption. |
 
 ---
 
-## Phase 3 — Symbol handling, once and for all
+## Phase 3 — The demo
 
-Three separate production bugs this week from one root: the lowercase `c` that marks a tokenized
-equity gets normalised away. `canonicalSymbol` exists (`oneinch.ts:59`) but is applied at *some*
-route boundaries and not at the venue boundary, so every caller has to remember.
+Every sponsor track asks for a 2–4 minute video. There is none, and no recording exists anywhere in
+the repo. This is now the highest-value remaining work: three of four tracks are already met and
+cannot be judged without it.
 
 | # | Task | Status |
 |---|---|---|
-| 3.1 | Canonicalised inside `quote()` and `buildSwap()`, and the returned quote names the registry spelling so anything reading it back resolves. | **DONE** |
-| 3.2 | Executor's lookup on a stored symbol now canonicalised. | **DONE** |
-| 3.3 | `crosscheck` fixed — its fallback uppercased, so it reported eight tradable assets as "not routable on Base". | **DONE** |
-| 3.4 | `perp` refuses equities explicitly instead of returning a bare null indistinguishable from an unknown symbol. | **DONE** |
-| 3.5 | `fork-e2e` canonicalised on both sides. | **DONE** |
-| 3.6 | `symbol-boundaries.test.ts` — every registered symbol through three casings, plus a guard that fails the build if a boundary module reintroduces `.toUpperCase()`. | **DONE** |
-| 3.7 | The rule written once, next to `canonicalSymbol`, with the two legitimate exceptions named. | **DONE** |
-| — | `canonicalSymbol` exists and is applied at `/swap/quote`, `POST /orders`, `POST /strategies`, panic-flatten and `/price/:symbol`. | **DONE** |
-| — | `stockKey` resolves the stocks registry case-insensitively. | **DONE** |
+| 3.1 | Write `docs/DEMO-SCRIPT.md`: the exact click path and the sentence said over each beat. Suggested spine — sign in with Privy → grant the permission (show the wallet asking, and the cap/expiry/venues in the sheet) → create a recurring buy → run it and watch a real fill land with a tx hash → open `/judge` and re-run every claim live → revoke, and show `revoked: true` on BaseScan. Under two minutes. | **NOT STARTED** |
+| 3.2 | Record it against the **fork** deployment, where fills actually settle. `EXPO_PUBLIC_API_URL=https://executor-fork-production.up.railway.app`, app at `localhost:8082`, viewport 402×874 to match the design canvas. | **NOT STARTED** |
+| 3.3 | A 60-second silent GIF of the same path for the README top, since a reader will not click a video. | **NOT STARTED** |
+| 3.4 | Link both from `README.md` above "Check it yourself", and from each track section of `docs/SUBMISSION.md`. | **NOT STARTED** |
+| — | `docs/SUBMISSION.md` — one section per track, each pointing at a hash or a live endpoint. | **DONE** (149 lines) |
 
 ---
 
-## Phase 4 — Executor hardening
+## Phase 4 — The Graph composability
 
-`server/src/executor/run.ts` is 950 lines and moves real money. It is careful in the places that
-have already failed and thin in the places that have not yet.
+The only unmet track. Re-tested today, not assumed: `graph deploy xorr-aqua` uploads the build to
+IPFS successfully (`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`) and then fails
+**`Subgraph not found`**. The slug must exist before a deploy, and creating it is a Studio dashboard
+action with a wallet signature. `subgraph_create` is not exposed on the deploy API.
 
 | # | Task | Status |
 |---|---|---|
-| 4.1 | A run that never reached the chain and failed transiently releases its period. `sent` flips before the write, so a broadcast-but-unconfirmed run can never be released; an unclassified error is treated as permanent. | **DONE** |
-| 4.2 | `slippageFor` keeps the urgency ceiling as a floor and widens by the quote's own reported impact, capped at 3%. | **DONE** |
-| 4.3 | Pre-flight simulation. **Already existed** — `simulateContract` runs before `writeContract`, which is why every failure this week arrived as a clean revert and not a mined transaction. | **DONE** (pre-existing) |
-| 4.4 | Boot reconciliation. **Already existed and is wired.** Its conservative policy — close every interrupted run as failed and KEEP the period — is correct: `signature` is written only after the receipt, so a broadcast-but-unconfirmed run has none, and a refinement keyed on that column would have been a double-spend. Verified rather than changed. | **DONE** (pre-existing) |
-| 4.5 | `fill-measure.ts` extracted from `run.ts` (1,071 → 1,023). A first attempt sliced by line range, cut through five declarations, and was reverted; the second works by function boundary. The rest stays: `runStrategyInner` is 700 lines wound through local state the venue selection, policy gate and settlement all read — extracting that is a rewrite, not a move. Proven by a live fill afterwards. | **DONE** (partial, with the remainder's reason stated) |
-| 4.6 | `venues/swapvm.ts` wired into the settlement path, ordered behind Aqua and ahead of the aggregator. Discovery is Aqua's log walk filtered to the SwapVM router as the app; `delegatedFillArgs` computes the call so the encoding is not reimplemented. 10 tests. README updated from "Contract only" to "Wired". | **DONE** |
-| — | Idempotent runs: `strategy_runs.period_key` unique, claim-by-insert. | **DONE** |
-| — | Graceful shutdown drains in-flight runs on SIGTERM. | **DONE** |
-| — | Cap exemption is decided per intent, not per kind (`reducesRiskOnly`), covering both dual-sided tiers. | **DONE** |
-| — | Receipts awaited for every leg, including `direct`. | **DONE** |
-| — | Venue reverts humanised by selector, including all three `ReturnAmountIsNotEnough` arities. | **DONE** |
+| 4.1 | Create the `xorr-aqua` slug at thegraph.com/studio with the deployer wallet, then `cd subgraph-aqua && npx graph deploy xorr-aqua --deploy-key $GRAPH_DEPLOY_KEY --version-label v0.0.1`. The build is already pinned; only the slug is missing. | **BLOCKED — needs a browser and the deployer wallet.** Re-confirmed today |
+| 4.2 | Set `AQUA_SUBGRAPH_URL` on both Railway services; confirm `/graph/decision` stops reporting "No Aqua book index configured". | **BLOCKED** by 4.1 |
+| 4.3 | x402 Gateway queries — mechanism verified (`402`, `eip155:8453`, 0.01 USDC per query, EIP-3009 via a `Payment-Signature` header). Composes our Studio subgraph with the Gateway: two products, no dashboard needed. | **BLOCKED — spends real mainnet USDC.** Roughly an hour once approved |
+| 4.4 | Make the composition visible on `/judge` — show the two sources and which one moved the decision — once 4.1 or 4.3 lands. | **BLOCKED** by 4.1/4.3 |
+| 4.5 | Index the fork's delegation address so `indexesThisDeployment()` is true where trades happen. | **BLOCKED** by 4.1, and awkward regardless: the fork's delegation address changes on every rebuild |
 
 ---
 
-## Phase 5 — Backend structure and ops
+## Phase 5 — Remaining blocked items
 
-| # | Task | Status |
+Each names the specific external thing it waits on. None is a coding gap.
+
+| # | Item | Blocked on |
 |---|---|---|
-| 5.1 | Rate limiting, per identity rather than per IP (behind Railway every request shares one proxy address). Expensive routes get a tighter budget; `/health` is never limited, or the platform would restart the container under exactly the load the limiter exists for. | **DONE** |
-| 5.2 | `strategies.ts` extracted from `routes/index.ts` (1,098 → 642 + 476 + 29). Shared wallet lookup moved to `wallet-context.ts`, because two answers to "which wallet is this" is the shape of an earlier catastrophic bug. Proven by a create + fill through the moved routes. | **DONE** |
-| 5.3 | Bare `console.*` in the request path replaced with `log`, which stamps the request id. A failed run was traceable in principle and not in practice. | **DONE** |
-| 5.4 | `failuresByCause` (7-day buckets: price moved, permission revoked, cap, venue could not fill, upstream unreachable) and `fillsByVenue` read from the audit trail. Live: `{other:4, venue_could_not_fill:3, price_moved:1}` and `{1inch:25, aqua:5}`. | **DONE** |
-| 5.5 | Migration `010`. | **NOT NEEDED** — nothing in Phases 1–5 changed the schema. |
-| — | Real persisted Postgres; survived a full fork rebuild with the audit trail intact at 66 entries. | **DONE** |
-| — | Hash-chained append-only audit log with a per-wallet advisory lock and a unique index. | **DONE** |
-| — | Scoped agent keys (`read` / `trade:open` / `trade:close` / `admin`), sha256-only, revocable; `admin` does not imply trade scopes. | **DONE** |
-| — | Periodic price-cache re-warm with a separate staleness tolerance for history. | **DONE** |
-| — | Single-flight upstream fetches; no stampede on a cold cache. | **DONE** |
-
----
-
-## Phase 6 — Verification and proof
-
-| # | Task | Status |
-|---|---|---|
-| 6.1 | The `equities` check now calls `totalSupply()` instead of measuring code length. It had reported "8 of 8 have code" for a week in which not one could be traded — these tokens carry a single byte and answer anyway on real Base. It now SKIPS on a fork with the real reason. | **DONE** |
-| 6.2 | `/verify` check for the second Graph source. | **BLOCKED** by 2.1/2.3 — there is nothing live to check yet. |
-| 6.3 | `earnings-calendar` check added — reports the filing count, last report, projected next date and the company's own cadence margin, live from SEC EDGAR. | **DONE** |
-| 6.4 | Regression sweep after Phases 1–5: **54/54 screens, zero console errors, zero failed requests.** Fork `/verify` 18 pass / 0 fail / 1 skip; Sepolia 16 / 1 / 2. 350 client + 167 server tests. | **DONE** |
-| — | `/verify` covers 18 claims; fork 18/0/0, Sepolia 15/1/2. | **DONE** |
-| — | `audit` and `audit-chain` are separate checks, so tampering and a fork are not reported as the same thing. | **DONE** |
-
----
-
-## Phase 7 — Remaining product gaps
-
-| # | Task | Status |
-|---|---|---|
-| 7.1 | Privy policy attached to the user's embedded wallet. | **BLOCKED** — Privy requires the wallet's owner to authorise, and for an embedded wallet the owner is the user, not the app. `/safety` states this |
-| 7.2 | LLM agent voice. | **BLOCKED** — `OPENROUTER_API_KEY` exists nowhere in the repo. `/bot/say` reports `{"source":"fallback","reason":"no_key"}` rather than pretending |
-| 7.3 | Audit chain unbroken on Base Sepolia. | **BLOCKED** — permanent by design. Append-only by trigger, so it cannot be rewritten to look clean; the fork's chain is unbroken across 66 entries, which is the evidence the fix works |
-| 7.4 | `price_observations` (migration 010) records every fresh 1inch-derived equity price, and `/market/stocks/history` serves the series back. It cannot reconstruct the past and says so — `observedSince` and the note both state that it begins when this deployment first priced them. Live: 4 NVDAc readings at $233.19/$233.10. | **DONE** |
-
----
-
-## Phase 8 — Delivery and native
-
-Carried forward from the previous plan. Everything else in that document is either DONE or
-superseded — its Phase 7 ("three endpoints the app calls that do not exist") is now entirely
-implemented, and its tiers 5–7 all ship.
-
-| # | Task | Status |
-|---|---|---|
-| 8.1 | **Record the demo.** 60 seconds: sign in → grant → create a recurring buy → watch a fill on the fork → revoke. Link it from the top of the README. Every sponsor track asks for a 2–4 minute video; there is none. | **NOT STARTED** — the single highest-value item outside Phase 1 |
-| 8.2 | `docs/SUBMISSION.md` — one section per track, each pointing at a hash or a live endpoint, and a plain statement that The Graph's bar is NOT met with the reason. | **DONE** |
-| 8.3 | **iOS.** Unverified and not claimed. This machine has Command Line Tools, not Xcode — `xcrun simctl` exits 72 — and installing Xcode needs the user's password. | **BLOCKED** on the user |
-| 8.4 | **Android.** Builds to a real APK and runs on an emulator: Privy signs in, an embedded wallet is created on device, live prices and the live Aave rate render. Three bugs were path-specific and fixed: `jose` resolving its Node build (`metro.config.js`), Privy's polyfills never installed (`index.js` ahead of `expo-router/entry`), and `motionDuration` crossing the worklet boundary. | **DONE** |
-| 8.5 | **Other hackathons** (a second chain deployment, cross-repo sharing). Out of scope by standing direction — ETH Online first. `XorrDelegation` is chain-agnostic and the venue adapter is one file, which is what makes this cheap later. | **NOT STARTED** — deliberately deferred |
+| 5.1 | Live equity fill test, equity sell path, tier 7 settlement on `NVDAc` | The tokens are not functional on a fork. Tier 7's logic is covered by 21 unit tests and its entry reaches the venue with a real route and price; only settlement is impossible here |
+| 5.2 | Privy policy attached to the user's embedded wallet | Privy requires the wallet's **owner** to authorise, and for an embedded wallet that is the user, not the app. `/safety` states this |
+| 5.3 | LLM agent voice | `OPENROUTER_API_KEY` exists nowhere in the repo. `/bot/say` reports `{"source":"fallback","reason":"no_key"}` rather than pretending |
+| 5.4 | Audit chain unbroken on Base Sepolia | Permanent by design — append-only by trigger, so it cannot be rewritten to look clean. The fork's chain is unbroken across 154 entries, which is the evidence the fix works |
+| 5.5 | iOS | This machine has Command Line Tools, not Xcode (`xcrun simctl` exits 72). Installing it needs the user's password. Unverified and not claimed |
+| 5.6 | A second chain deployment / other hackathons | Deferred by standing direction — ETH Online first. `XorrDelegation` is chain-agnostic and the venue adapter is one file, which is what makes it cheap later |
 
 ---
 
 ## 3. The gap list
 
-Every gap, tied to the task it blocks. Ordered by how much it costs.
+Every gap, tied to the task it blocks, ordered by cost.
 
 | Gap | Where | Blocks | Severity |
 |---|---|---|---|
-| **Equity fills revert `TF`** — `buildSwap` restricts a fork to 13 AMMs; `BASE_ELFOMOFI`, which holds the equity liquidity, is not among them. Quote and swap ask different questions | `oneinch.ts:270-284`, `:341` | 1.1–1.7, 6.1 | **Critical** — 8 advertised assets, 0 fillable |
-| **Quote and fill disagree by construction** on a fork for any token routed outside the allowlist | `oneinch.ts:190` vs `:341` | 1.3 | **Critical** — the app quotes prices it cannot honour |
-| **Only one subgraph is ever queried** — `AQUA_SUBGRAPH_URL` unset on both services | Railway env; `graph/aqua.ts:19` | 2.1–2.4 | **High** — the only unmet sponsor bar |
-| **The subgraph indexes a chain that never trades** — Sepolia indexed, fork settles | `graph/client.ts:33-39` | 2.5 | **High** — `/history` permanently empty |
-| **Raw `TOKENS[...]` lookups at the venue boundary** bypass `canonicalSymbol` | `oneinch.ts:183,184,333,334`; `run.ts:388` | 3.1, 3.2 | **High** — the root of three shipped bugs |
-| **`crosscheck` uppercases in its fallback**, so it can never cross-check an equity | `crosscheck.ts:82` | 3.3 | Medium |
-| **No retry on a transient failure**, and the period can never be re-claimed | `run.ts` | 4.1 | **High** — a user silently loses a day's buy |
-| **No pre-flight simulation** — every revert costs gas and burns the period | `run.ts` | 4.3 | **High** — would have caught every `TF` cleanly |
-| **Fixed slippage constants**, wrong for thin pools | `run.ts:642` | 4.2 | Medium |
-| **`pending` runs are never reconciled** | `run.ts`, `strategy_runs` | 4.4 | Medium — observed once this week |
-| **`TF` is not humanised** | `executor/failure.ts` | 1.4 | Medium |
-| **`XorrSwapVMBook` deployed and never called** | `venues/`, `run.ts` | 4.6 | Medium — README says "Contract only" |
-| **No rate limiting** | `server/src/index.ts` | 5.1 | Medium — shared upstream quotas |
-| **`routes/index.ts` 1097 lines, `run.ts` 950** | both | 5.2, 4.5 | Low — maintainability |
-| **Equity approvals all read `0`** — unconfirmed whether a sell is blocked | `/approvals` on the fork | 1.6 | Unknown until checked |
-| **Equities have no candle history** | `market/` | 7.4 | Low — stated honestly today |
-| Privy policy not attached to the user's wallet | platform | 7.1 | **Blocked** |
-| No LLM credential | env | 7.2 | **Blocked** |
-| Sepolia audit chain forked at entry 2 | history | 7.3 | **Blocked**, permanent by design |
+| **The app offers a Buy button for eight assets it cannot fill.** `/market/tradable` lists every equity on a fork; `isTradable('NVDAc')` is true; `/order/NVDAc` renders an enabled ticket; the fill reverts `TF` | `routes/market.ts`, `data/tradable.ts` | 1.1–1.6 | **Critical** — the one place left where the screen is not true |
+| **`POST /strategies` accepts an equity on a fork** and fails at run time instead of refusing at creation | `routes/strategies.ts` | 1.4 | **High** — a scheduled strategy that can never fire |
+| **No demo recording** | — | 3.1–3.4 | **High** — three met tracks cannot be judged without one |
+| **Only one subgraph is ever queried** — slug never created | Studio; `graph/aqua.ts` | 4.1–4.5 | **High** — the only unmet track |
+| **Equity mainnet evidence is not in the repo** — the finding lives in a session transcript | — | 2.1–2.3 | Medium — the next reader will conclude the feature is fictional |
+| **`indexesThisDeployment()` is false where trades happen** | `graph/client.ts` | 4.5 | Medium — `/history` is permanently empty on the fork |
+| **`run.ts` is 1,025 lines** — grew past its pre-split size as venues were added | `executor/run.ts` | — | Low — three splits already landed; this is the residue |
+| Privy policy on the user's wallet | platform | 5.2 | **Blocked** |
+| No LLM credential | env | 5.3 | **Blocked** |
+| Sepolia audit chain forked at entry 2 | history | 5.4 | **Blocked**, permanent by design |
+| iOS unverified | no Xcode | 5.5 | **Blocked** |
 
-**Mock/stub/TODO sweep:** clean. Every hit in `src/`, `app/`, `server/src/` is either prose
-disclaiming a mock ("Not a mock: market data is REAL…", "NOT a silent fallback to fake
-personality"), a `placeholder` input attribute, or `src/test/react-native-stub.ts`, a Node shim used
-only by unit tests. **No mocked data, no stubbed logic, no TODOs in shipped code.**
+**Mock/stub/TODO sweep: clean.** One hit across all of `src/`, `app/` and `server/src/` —
+`src/test/react-native-stub.ts`, a Node shim used only by unit tests. No mocked data, no stubbed
+logic, no TODOs in shipped code.
 
 ---
 
 ## 4. Suggested order
 
-1. **1.1** — one line, and it either fixes the headline gap or proves it needs 1.2.
-2. **1.3** — stop quoting prices that cannot be filled.
-3. **4.3** — pre-flight simulation; makes every subsequent failure cheap and legible.
-4. **3.1, 3.2** — canonicalise at the venue boundary and the whole class closes.
-5. **1.5, 1.6, 6.1** — prove equities end to end and keep them proven.
-6. **2.1 or 2.3** — the fourth sponsor track.
-7. Everything else.
-
-
----
-
-## Execution record — 2026-09-07
-
-Worked through in plan order. What changed, and the one thing that turned out not to be what the
-plan thought it was.
-
-**Phase 1 did not end where it expected to.** The plan named a missing protocol in the fork
-allowlist, and that was true but not sufficient. Adding `BASE_ELFOMOFI` only moved the revert from
-`TF` to `VenueCallFailed` — it is a solver a fork cannot execute. An AMM-only route does exist
-(`BASE_AERODROME_SLIPSTREAM`, USDC→ETH→NVDAc) and also fails. The obstacle is a layer below
-routing: **the equity tokens carry a single byte of code and answer calls anyway on real Base —
-`totalSupply()` returns 1,373,108,020,000 for NVDAc — while on an anvil fork of the same block that
-call reverts.** Whatever serves them is not something a fork reproduces. No routing choice can fill
-a token that is not functional, so 1.5, 1.6 and 1.7 are blocked by physics rather than by effort.
-
-That finding also convicted `/verify`: its `equities` check tested `code.length > 2`, one byte
-passes, and it reported "8 of 8 have code" for a week in which not one could be traded. It calls
-`totalSupply()` now and skips honestly.
-
-**Two tasks were already done** and are marked so rather than re-implemented: pre-flight simulation
-(4.3) and boot reconciliation (4.4). I nearly "improved" the second into a double-spend — the
-refinement I had in mind keyed on `signature`, which is written only after the receipt, so a
-broadcast-but-unconfirmed run has none. Checking beat assuming.
-
-**Everything else in Phases 1, 3, 4 and 5.1 landed and is verified running.**
-
-## What is left, and why
-
-| Item | Why |
-|---|---|
-| Phase 2 entirely | 2.1/2.2/2.5 need a Subgraph Studio dashboard action — `subgraph_create` is not on the deploy API. 2.3 (x402) works and costs real mainnet USDC per query, which is a real-money decision, not mine to take. |
-| 1.5 / 1.6 / 1.7 | The equity tokens are not functional on a fork. Nothing to trade against. |
-| 4.5 / 5.2 | Splitting `run.ts` and `routes/index.ts`. Refactoring the money path late buys maintainability and risks correctness; the behavioural gaps were worth more. |
-| 4.6 | SwapVM wiring — a `venues/aqua.ts`-sized module plus a live proof. The 1inch track already qualifies through Aqua. |
-| 5.3 / 5.4 | Logging and metrics breadth. Both exist where it matters. |
-| 6.2 | Nothing live to check until Phase 2 moves. |
-| 7.1 / 7.2 / 7.3 | Privy platform rule, a credential that exists nowhere, and a permanent append-only artefact. |
-| 8.1 / 8.2 | The demo recording and submission text — **now the highest-value remaining work**, and it needs a person. |
-
-
----
-
-## Second execution pass
-
-Pushed back on for stopping at "blocked" too readily. Fair: several items were deferred by
-judgement, not by a hard block, and that is not what the exemption covers. Those are now done.
-
-**4.6 SwapVM** — wired, 10 tests, README corrected from "Contract only" to "Wired".
-**5.3 structured logging** — the request path now stamps a request id on every line.
-**5.4 metrics** — `failuresByCause` and `fillsByVenue`, both live with real numbers.
-
-**Phase 2 was re-attempted properly rather than assumed.** `graph deploy xorr-aqua` uploads the
-build to IPFS successfully (`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`) and then fails
-`Subgraph not found` — the slug has to exist in Studio first, and Studio authenticates by wallet
-signature in a browser. That is a credential this environment does not have, which is the stated
-exemption. x402 remains a real-money decision.
-
-**And the pass caught a bug it had itself introduced.** The adaptive slippage from 4.2 produced
-`0.5292344803237518`, and 1inch answers sixteen decimal places with `400 Bad Request` — so the
-widening meant to make thin pools fillable broke every trade through it. The tests passed
-throughout, because they checked the arithmetic and not the wire format. Only a live fill on the
-fork found it. Fixed, and verified by a real fill afterwards:
-`0x2ee0437802cd3b342f48f0550acdb803eedf1b0b8f60850c8e8e414e42a75dcf`, 0.0220 WETH at $2,492.85.
-
-The same run also surfaced that `humanFailure` matched `e.includes('slippage')` — true of the
-request URL on every swap — so a malformed request was reported to the user as "the price moved".
-
-### What remains, and the honest reason for each
-
-| Item | Reason |
-|---|---|
-| Phase 2 (2.1–2.5), 6.2 | Subgraph Studio needs a wallet signature in a browser; x402 spends real mainnet USDC. Both are stated exemptions. |
-| 1.5–1.7 | The equity tokens answer on Base and revert on a fork. Not an effort problem. |
-| 4.5, 5.2 | Pure refactors of the two files that move money, with no behavioural gap behind them. This session shipped two bugs into `run.ts` that only live fills caught; a large refactor of it now trades correctness for tidiness. Deferred with that said plainly rather than dressed up. |
-| 7.1–7.3 | Privy platform rule, a credential that exists nowhere, a permanent append-only artefact. |
-| 8.1, 8.2 | The demo recording and submission text. Needs a person. |
-
-
----
-
-## Third execution pass
-
-Pushed back on again, and correctly: 4.5, 5.2, 7.4 and 8.2 were deferred by judgement, which is not
-one of the three stated exemptions. All four are now done.
-
-**5.2** — `routes/index.ts` 1,098 → 642, with `strategies.ts` (476) and a shared
-`wallet-context.ts` (29). Verified by creating and running a strategy through the moved routes:
-filled, `0x8a7fb0193660ac56f21d22ac2b02e74510acf08600a9f95c16172f38386146cd`.
-
-**4.5** — partial, and the partiality is the finding. A first attempt sliced `run.ts` by line range,
-cut through `StrategyRow`, `RunOutcome` and three more declarations, and was reverted; the second
-works by function boundary and still dragged two mid-file imports along. `fill-measure.ts` came out
-cleanly. `runStrategyInner` did not, and will not: 700 lines wound through local state that the
-venue selection, the policy gate and the settlement all read. Extracting it is a rewrite of the path
-that moves money, and this session has twice shipped a bug into that file that only a live fill
-caught. Stated rather than attempted.
-
-**7.4** — the equities now have a real series, built from the only honest source available: our own
-timestamped readings of the 1inch route that prices them. Migration 010, fire-and-forget writes so a
-price read never fails because a write did, and a response that says when the series began instead
-of implying more history than exists.
-
-**8.2** — `docs/SUBMISSION.md`, per track, evidence-first, including a plain "not met" for The Graph.
-
-### Still not done, and each reason is one of the three exemptions
-
-| Item | Exemption |
-|---|---|
-| Phase 2 (2.1–2.5), 6.2 | Subgraph Studio authenticates by wallet signature in a browser — a credential this environment does not have. `graph deploy` was run and answers `Subgraph not found` after uploading the build to IPFS. x402 spends real mainnet USDC. |
-| 1.5–1.7 | The equity tokens answer `totalSupply()` on Base and revert on an anvil fork of the same block. Nothing to trade against. |
-| 7.1 | Privy requires the wallet's owner to authorise a policy; for an embedded wallet that is the user. |
-| 7.2 | `OPENROUTER_API_KEY` exists nowhere in the repo. |
-| 7.3 | Permanent by design — the trail is append-only by trigger. |
-| 8.1 | Recording a screen. Needs a person. |
+1. **1.1 → 1.6.** The app should not offer what it cannot do. Half a day, no external dependency,
+   and it closes the last untrue thing on screen.
+2. **3.1 → 3.4.** The demo. Three tracks are already met and none of them can be judged without it.
+3. **2.1 → 2.3.** Cheap, read-only, and it turns "equities are broken" into "equities are live on
+   Base and not reproducible on a fork", which is both true and much better.
+4. **4.1**, the moment someone can open a browser with the deployer wallet. Everything downstream of
+   it is already written.
