@@ -120,7 +120,22 @@ export interface PortfolioRepository {
    * be withdrawn first. A screen that sweeps idle cash has to know which is which, and a single
    * total cannot tell it. `null` for the same reason as above.
    */
-  balance(): Promise<{ total: number; cash: number; supplied: number } | null>;
+  /**
+   * What the CHAIN says this wallet holds, split three ways.
+   *
+   * `holdings` is per-symbol and was being dropped on the way through — the server has always sent
+   * it. Without it, any screen wanting a breakdown had to fall back to `positions()`, which is the
+   * DB's position ledger and a different source: it tracks cost basis and can drift from the chain.
+   * The two then disagreed by hundreds of dollars on two screens that link to each other.
+   *
+   * For "what do I hold", the chain wins. `positions()` remains right for "what did I pay".
+   */
+  balance(): Promise<{
+    total: number;
+    cash: number;
+    supplied: number;
+    holdings: { symbol: string; units: number; usd: number }[];
+  } | null>;
   /**
    * Profit actually taken, by symbol and in total.
    *

@@ -40,24 +40,38 @@ const BAR_H = 6;
 
 export default function Allocation() {
   const goBack = useGoBack();
-  const positions = useAsync(() => repos.portfolio.positions(), []);
   const balance = useAsync(() => repos.portfolio.balance(), []);
 
+  /*
+   * From the chain, not from the position ledger.
+   *
+   * This was built on `positions()`, which is what the DB recorded paying for things. That is the
+   * right source for cost basis and the wrong one for "where is my money" — the two drifted, and
+   * this screen showed WETH at $1,211 while `/balance`, reading the chain, showed $682 of holdings.
+   * Two screens that link to each other, disagreeing by five hundred dollars about the same
+   * position. The chain is what you actually hold.
+   */
   const rows = useMemo(() => {
-    const held = (positions.data ?? [])
-      .filter((p) => p.notional > 0)
-      .map((p) => ({ symbol: p.symbol, usd: p.notional }));
+    const held = (balance.data?.holdings ?? [])
+      .filter((h) => h.usd > 0)
+      .map((h) => ({ symbol: h.symbol, usd: h.usd }));
     const cash = balance.data?.cash ?? 0;
-    // Cash last, and only when there is some. A zero-width bar labelled "Cash" is noise.
-    return cash > 0 ? [...held, { symbol: 'Cash', usd: cash }] : held;
-  }, [positions.data, balance.data]);
+    const supplied = balance.data?.supplied ?? 0;
+    return [
+      ...held,
+      // Only when there is some. A zero-width bar with a label is noise.
+      ...(supplied > 0 ? [{ symbol: 'Supplied', usd: supplied }] : []),
+      ...(cash > 0 ? [{ symbol: 'Cash', usd: cash }] : []),
+    ];
+  }, [balance.data]);
 
-  const total = useMemo(() => rows.reduce((sum, r) => sum + r.usd, 0), [rows]);
+  /* The chain's own total, not a sum of the slices — so the headline cannot drift from `/balance`. */
+  const total = balance.data?.total ?? 0;
   const symbols = useMemo(() => rows.map((r) => r.symbol), [rows]);
   const logos = useLogos(symbols);
 
-  const error = positions.error ?? balance.error;
-  const loading = (positions.loading && !positions.data) || (balance.loading && !balance.data);
+  const error = balance.error;
+  const loading = balance.loading && !balance.data;
 
   return (
     <Screen gutter="none">
@@ -67,7 +81,7 @@ export default function Allocation() {
 
       <Fill style={{ marginTop: space.s16, paddingHorizontal: space.gutter }}>
         {error ? (
-          <ErrorState error={error} onRetry={positions.reload} />
+          <ErrorState error={error} onRetry={balance.reload} />
         ) : loading ? (
           <View style={{ gap: space.s12 }}>
             <Placeholder height={70} />

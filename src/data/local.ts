@@ -355,10 +355,21 @@ export const LocalRepositories: Repositories = {
     },
     async balance() {
       const b = await api
-        .get<{ usd: number; cashUsd: number; suppliedUsd?: number }>('/wallet/balance')
+        .get<{
+          usd: number;
+          cashUsd: number;
+          suppliedUsd?: number;
+          holdings?: { symbol: string; units: number; usd: number }[];
+        }>('/wallet/balance')
         .catch(() => undefined);
       if (!b) return null;
-      return { total: b.usd, cash: b.cashUsd, supplied: b.suppliedUsd ?? 0 };
+      return {
+        total: b.usd,
+        cash: b.cashUsd,
+        supplied: b.suppliedUsd ?? 0,
+        // Was dropped here. See the note on the interface — it cost two screens their agreement.
+        holdings: b.holdings ?? [],
+      };
     },
     async close(input): Promise<PositionClose> {
       // No catch. A sale that did not happen must surface on the screen that asked for it —
