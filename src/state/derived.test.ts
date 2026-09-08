@@ -240,6 +240,27 @@ describe('kill switch — screen 20', () => {
   });
 
   /*
+   * "1 agents" was reachable and the docblock in derived.ts records seeing it on screen; the only
+   * test used 3, so nothing caught it.
+   */
+  it('counts one thing as one thing', () => {
+    expect(d.killExplanation(false, 1)).toBe(
+      '1 agent can place orders inside your limits right now.',
+    );
+  });
+
+  /*
+   * Zero is not "the bot is stopped" — that is what `killed` means, and it has its own sentence.
+   * Under a green LIVE badge, "0 agents can place orders" read as a kill switch already pulled.
+   */
+  it('says the permission is live and unused, not that nothing can trade', () => {
+    const live = d.killExplanation(false, 0);
+    expect(live).toContain('the permission is live');
+    expect(live).not.toContain('0 agents');
+    expect(live).not.toBe(d.killExplanation(true, 0));
+  });
+
+  /*
    * The third state. A grant that names a delegate the executor is not is unusable, and the
    * screen reported it as "Agents are live — 1 agents can place orders inside your limits right
    * now." while not one order could be placed.

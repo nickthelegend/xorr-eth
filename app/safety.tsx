@@ -47,10 +47,21 @@ const SETTING_ROW = 52;
 export default function Safety() {
   const router = useRouter();
   const goBack = useGoBack();
-  // How many agents can actually place an order right now, from the server. Counting a
-  // boolean in browser state would make the kill switch's own explanation a guess.
+  /*
+   * How many things can actually place an order right now, from the server. Counting a boolean in
+   * browser state would make the kill switch's own explanation a guess.
+   *
+   * This counted HIRED AGENTS alone, and that is not the set that can trade. A wallet with no
+   * agent hired and five live strategies read "0 agents can place orders inside your limits right
+   * now" under a green LIVE badge — while one of those strategies was placing an order. A live
+   * strategy is scheduled against this permission exactly as a hired agent is; both stop when the
+   * switch below is pulled, so both belong in the sentence that says what the switch stops.
+   */
   const roster = useAsync(() => repos.bot.listAgents(), []);
-  const hiredCount = (roster.data ?? []).filter((a) => a.hired).length;
+  const strategies = useAsync(() => repos.strategies.list(), []);
+  const hiredCount =
+    (roster.data ?? []).filter((a) => a.hired).length +
+    (strategies.data ?? []).filter((s) => s.state === 'live').length;
 
   const killed = useStore((s) => s.killed);
   const setKilled = useStore((s) => s.setKilled);

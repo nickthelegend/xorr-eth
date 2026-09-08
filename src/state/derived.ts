@@ -276,13 +276,29 @@ export function killTitle(killed: boolean, unusable = false): string {
   if (unusable) return 'Agents cannot trade';
   return killed ? 'All agents stopped' : 'Agents are live';
 }
+/**
+ * What is actually able to place an order, said in a sentence that survives the number being one.
+ *
+ * `liveAgents` used to be the count of HIRED agents, which is not the same set as the things that
+ * can trade: a wallet with no agent hired and five live strategies was told "0 agents can place
+ * orders inside your limits right now" — under a green LIVE badge headed "Agents are live", on the
+ * screen whose entire job is to say what the bot may do, minutes after one of those strategies
+ * placed an order. Callers pass everything scheduled against the permission now.
+ *
+ * And "1 agents" was reachable. The docblock above records seeing it on screen; nothing pluralised
+ * it, because the only test used 3.
+ */
 export function killExplanation(killed: boolean, liveAgents: number, unusable = false): string {
   if (unusable) {
     return 'Your permission names a different bot key than the one running, so nothing can be placed. Grant again to reconnect. Your funds are untouched.';
   }
-  return killed
-    ? 'Nothing will be placed until you resume. Open positions are untouched.'
-    : `${liveAgents} agents can place orders inside your limits right now.`;
+  if (killed) return 'Nothing will be placed until you resume. Open positions are untouched.';
+  if (liveAgents === 0) {
+    // Not "0 agents can place orders", which reads as a stopped bot next to a LIVE badge. The
+    // permission is live and unused, and those are different facts.
+    return 'Nothing is scheduled right now, but the permission is live — anything you start can place orders inside your limits.';
+  }
+  return `${liveAgents} ${liveAgents === 1 ? 'agent' : 'agents'} can place orders inside your limits right now.`;
 }
 export function killCta(killed: boolean, unusable = false): string {
   if (unusable) return 'Reconnect agents';
