@@ -239,22 +239,34 @@ export default function OrderTicket() {
           justifyContent: 'center',
         }}
       >
-        {QUICK.map((q) => (
-          <Pill
-            key={q}
-            label={q}
-            light
-            onPress={() =>
-              setOrderAmt(
-                q === 'Max'
-                  ? availableUsd === undefined
-                    ? ''
-                    : String(Math.floor(availableUsd))
-                  : q.slice(1),
-              )
-            }
-          />
-        ))}
+        {QUICK.map((q) => {
+          /*
+           * "Max" with no balance yet used to CLEAR the field.
+           *
+           * `availableUsd === undefined ? ''` — so on a ticket opened before `/wallet/balance`
+           * answered, which against this executor is the first twenty seconds, tapping Max wiped
+           * the $250 the screen had just proposed and disabled the button. A control that destroys
+           * the user's input because our own data is late is worse than one that does nothing, so
+           * it is disabled until the number it inserts is actually known.
+           */
+          const maxUnknown = q === 'Max' && availableUsd === undefined;
+          return (
+            <Pill
+              key={q}
+              label={q}
+              light
+              disabled={maxUnknown}
+              onPress={
+                maxUnknown
+                  ? undefined
+                  : () =>
+                      setOrderAmt(
+                        q === 'Max' ? String(Math.floor(availableUsd!)) : q.slice(1),
+                      )
+              }
+            />
+          );
+        })}
       </View>
 
       <Fill style={{ marginTop: space.s12, justifyContent: 'center' }}>
