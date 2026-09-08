@@ -12,6 +12,7 @@ import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  EmptyState,
   Button,
   Fill,
   IconButton,
@@ -79,6 +80,18 @@ export default function Allowlist() {
       </Text>
 
       <Fill style={{ marginTop: space.s20 }}>
+        {/*
+          An empty list rendered as an empty screen: a title, a sentence and then nothing at all
+          down to the button. Every other list in the app says why it is empty; this one, which is
+          empty for every new wallet, said nothing.
+        */}
+        {addresses.length === 0 && !adding ? (
+          <EmptyState
+            text="No addresses yet. Until you add one, funds cannot leave this wallet at all — which is the point."
+            actionLabel="Add an address"
+            onAction={() => setAdding(true)}
+          />
+        ) : null}
         {addresses.map((a) => {
           const pending = pendingFor(a);
           return (
