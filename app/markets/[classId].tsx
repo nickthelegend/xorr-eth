@@ -55,7 +55,13 @@ export default function ClassList() {
           </Text>
         </View>
         <Text variant="footnote" color={colors.ink28}>
-          {rows.length} of {cls?.instruments.length ?? 0} markets
+          {/*
+            "0 of 0 markets" is a claim, and while the classes are loading it is a false one — this
+            screen showed it for a full twenty seconds before rendering nine. The list below already
+            renders LoadingRows for exactly that window; this line was still asserting a count.
+            Same fix as the Markets tab.
+          */}
+          {loading && !data ? 'Loading markets' : `${rows.length} of ${cls?.instruments.length ?? 0} markets`}
         </Text>
       </View>
 

@@ -36,7 +36,9 @@ event-driven earnings strategy last. Every tier settles on chain through 1inch.
 **The bar:** official Aqua/SwapVM contracts must be used, with on-chain execution of token
 transfers.
 
-**Both are used, and both settle real trades.**
+**Aqua settles real trades. SwapVM is built, tested and wired into the settlement path, and has
+not settled one** — `/metrics` reports `fillsByVenue` with no `swapvm` key at all. Said here
+because the audit trail this submission invites you to check would say it anyway.
 
 `XorrAquaBook` is a real Aqua app. The proof script `server/src/live-aqua.ts` runs twelve checks
 end to end and passes all twelve, including the two that actually matter:
@@ -61,7 +63,13 @@ off-chain.
 Venue selection is ordered Aqua → SwapVM → aggregator, and never on a close, because an exit has to
 be certain and a book deep enough to buy into may not be deep enough to sell out of.
 
-`/metrics` counts where trades actually settled: **`{1inch: 25, aqua: 5}`** at the time of writing.
+`/metrics` counts where trades actually settled: **`{1inch: 33, aqua: 5}`** — live, and checkable
+with `curl -s .../metrics | jq .fillsByVenue`. Two caveats a judge should have rather than
+discover: the counter is cumulative in Postgres, and the five Aqua fills were made against an
+earlier anvil instance, so their hashes do not resolve on the fork running today. And nothing
+ships a maker book at boot — `fork-bootstrap.ts` deploys `XorrAquaBook` and never calls `ship`,
+which `server/src/live-aqua.ts` does by hand — so until that is run after a rebuild, the Aqua
+branch finds no book and falls through to the aggregator.
 
 **Also used:** Aggregation API v6 for quotes and swap calldata, and the Spot Price API as an
 independent second opinion — `/market/crosscheck` reports both prices, their spread, and whether
