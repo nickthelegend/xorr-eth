@@ -20,6 +20,7 @@ import { evaluate } from '../rules/engine.js';
 import { speak, fallbackLine } from './llm.js';
 import { TONE_INSTRUCTIONS, type ToneId } from './tone.js';
 import { readPolicy } from '../evm/delegation.js';
+import { SETTLEMENT_SYMBOL } from '../venues/oneinch.js';
 import type { Address } from 'viem';
 
 /**
@@ -109,13 +110,24 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
    *
    * The fallback was `'SOL'` — Solana, in an app that settles on Base, where it has no token, no
    * route and no way to fill. A wallet with no strategies got a proposal for an instrument the
-   * executor would refuse at the venue. The settlement default is the one the rest of the client
-   * already uses for "pick one".
+   * executor would refuse at the venue.
+   *
+   * `PORTFOLIO` was excluded because it names a rebalance rather than an instrument. USDC needed
+   * the same exclusion for the same reason and did not have it: the yield strategy supplies cash
+   * to Aave, so its `symbol` is legitimately USDC, and once a wallet had one it was the newest row
+   * this query could find. Every proposal run then asked for a price and a range for the asset
+   * everything is priced IN, got nothing, and wrote "Proposed nothing — No live market for USDC."
+   * into the activity log. Four of those in a row are the first thing on the fork wallet's
+   * Activity screen, which reads as a broken bot rather than a quiet one.
+   *
+   * A proposal is a TRADE, so the symbol has to be something there is a market for. The settlement
+   * asset has no market against itself.
    */
   const strat = await one<{ symbol: string }>(
-    `SELECT symbol FROM strategies WHERE wallet_id=$1 AND symbol <> 'PORTFOLIO'
+    `SELECT symbol FROM strategies WHERE wallet_id=$1
+       AND symbol <> 'PORTFOLIO' AND symbol <> $2
      ORDER BY created_at DESC LIMIT 1`,
-    [walletId],
+    [walletId, SETTLEMENT_SYMBOL],
   );
   const symbol = strat?.symbol ?? DEFAULT_PROPOSAL_SYMBOL;
 
