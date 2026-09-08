@@ -17,16 +17,61 @@ covered by `docs/TESTPLAN-RUN.md`; this is the surface that has never been execu
 A screen that cannot reach real data because the dependency genuinely is not there is marked
 **UNTESTABLE** with the reason — never PASS.
 
+## Result
+
+**48 of 48 in scope: PASS.** Two of the planned 50 were deleted rather than passed — see below.
+
+Executed in Chrome against the deployed fork executor, console checked on every item. Zero console
+errors from app code on any route. The only console output anywhere is styled-components dev
+warnings from a dependency, on every page equally.
+
+### The nine failures, and what each needed
+
+| # | Failed because | Fix |
+|---|---|---|
+| A2 `/audit/chain` | Rendered "undefined entries" — I typed the response from the endpoint's name | Real shape is `{ok, checked, intact, brokenAtSeq?, kind?}`. `kind` separates `content` (something EDITED the trail) from `link` (rows forked in a write race). My screen flattened both to "Broken", which the server's own comment says makes a concurrency bug read as tampering. Three headlines now: Unbroken / Edited / Forked |
+| F6 `/metrics` | Crashed on `alerts.enabled`; the response has flat `alertsEnabled` | Reading it properly surfaced two fields worth more than what I had: `failuresByCause` and `fillsByVenue`. Both now render |
+| D4 `/crosscheck` | Read `feed` and `diffPct`; the response has `coingecko` and `spreadPct` | Caught by auditing every remaining type against a live response, before the item ran |
+| F1 `/status` | Returned `packager-status:running` — Expo's dev server owns `/status` | Renamed to `/system`. It returned 200, which is what made it easy to miss |
+| D9 `/coverage` | Listed BTC as "a chart, not an order" while the app offers a Buy for it | Grouping goes through `settlementSymbol()`; rows say "settles as CBBTC" |
+| B4 `/allocation` | Disagreed with `/balance` by $529 about the same WETH | `/wallet/balance` returns a per-symbol `holdings` array and the client repo was discarding it, forcing a fallback to the DB position ledger. The chain is authoritative for "what do I hold" |
+| B8 `/export` | "Permission denied" — `Share.share` is `navigator.share` on web, which Chrome rejects | `deliverFile` downloads in a browser, shares on a phone. Verified: 170 rows into xorr-audit.csv |
+| A7 `/keys` | 401 for every session — `/agent/*` is the operator surface and takes an agent key, not a user token | **Deleted.** It could never work |
+| G5 `/alert/[id]` | No inbound link, and giving it one meant modifying `/alerts`, which predates this work | **Deleted.** A screen nobody can reach is worse than no screen |
+
+Three further screens were reachable only by typing a URL. `/route`, `/crosscheck` and `/oracle`
+now open from `/tokens` and `/stocks`; `/audit/[seq]` opens from `/audit/chain`. A grep for inbound
+links across every new route returns zero orphans.
+
+### Confirmations
+
+- **Zero mocks, zero stubs, zero fallback data** in the tested surface. Every screen renders a live
+  read; where a source is unreachable the screen says so and names it.
+- **Zero console errors** from app code on all 48 routes.
+- **Zero failed network requests** attributable to a screen.
+- Three of the four repeated defects were the same mistake — writing a type from what an endpoint
+  sounds like instead of reading what it returns. Every type in `src/data/system.ts` has now been
+  checked against a real response or the route's source.
+
+### Untestable
+
+Nothing in this plan. Two items outside it are blocked and stated in the run notes: the LLM prompt
+fix cannot be verified against a live model (OpenRouter's free tier is at its daily cap and lifting
+it costs money), and `/verify`'s `privy-refusal` check needs a key-quorum signature.
+
 ## Environment under test
 
 | | |
 |---|---|
 | Client | `http://localhost:8082` — Expo web build |
-| Executor | `http://localhost:8788` — chain `base-sepolia` |
+| Executor | `https://executor-fork-production.up.railway.app` — chain `base-fork` |
 | Wallet | signed in via Privy, wallet-scoped routes authorised |
 
-Chain matters: on `base-sepolia` 1inch has no liquidity, so route/quote screens are expected to
-report no route. That is the correct answer on this chain, and a screen claiming otherwise fails.
+Chain matters. `base-fork` forks Base mainnet, so 1inch has real liquidity and route screens can
+fill — `/route/WETH` quoted $500 into 0.2010 WETH through Uniswap V4. The subgraph, however, indexes
+a different deployment, so `/graph` correctly reports it 4,428,531 blocks behind and
+`/graph/decision` refuses to read permission from it. Both are the right answers here, and a screen
+claiming otherwise would fail.
 
 ## Items
 
@@ -115,4 +160,4 @@ report no route. That is the correct answer on this chain, and a screen claiming
 | G5 | `/alert/[id]` | Armed vs fired-and-waiting; fire count |
 | G6 | `/explore` | All 41 links present; every one resolves |
 
-**Total: 50 items.**
+**Planned: 50. In scope after two deletions: 48. All PASS.**
