@@ -6,7 +6,9 @@
  * it invents is rejected rather than rendered.
  */
 import 'dotenv/config';
-import { PERSONAS, systemPrompt, type PersonaId } from './personas.js';
+import { PERSONAS, systemPrompt, type PersonaId, type Venue } from './personas.js';
+import { CHAIN_KEY } from '../evm/chains.js';
+import { TOKENS } from '../venues/oneinch.js';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -76,6 +78,20 @@ const REPAIR_HINT: Record<VoiceViolation, string> = {
   too_long: 'Too long. Two sentences at most.',
 };
 
+/**
+ * The venue every persona is told about.
+ *
+ * `TOKENS` is the registry the executor actually routes against, so this cannot drift from what a
+ * fill can touch — which is the whole point. It is deliberately NOT `/market/tradable`: that route
+ * probes the chain to see whether the equities function on a fork, and a system prompt must not
+ * cost an RPC round trip on every message. Naming a token the fork cannot settle is a much smaller
+ * error than describing a market that does not exist here at all.
+ */
+const VENUE: Venue = {
+  chain: CHAIN_KEY === 'base-sepolia' ? 'Base Sepolia' : 'Base',
+  tradable: Object.keys(TOKENS),
+};
+
 export async function speak(params: {
   persona: PersonaId;
   toneInstruction: string;
@@ -108,7 +124,7 @@ export async function speak(params: {
         max_tokens: 160,
         temperature: 0.7,
         messages: [
-          { role: 'system', content: systemPrompt(persona, params.toneInstruction) },
+          { role: 'system', content: systemPrompt(persona, params.toneInstruction, VENUE) },
           { role: 'user', content: params.situation },
         ],
       }),

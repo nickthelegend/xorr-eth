@@ -96,9 +96,45 @@ export const PERSONAS: Record<PersonaId, Persona> = {
  * because a voice segment containing a digit is rejected before it can be rendered
  * (src/bot/message.ts in the app, validateVoice here).
  */
-export function systemPrompt(persona: Persona, toneInstruction: string): string {
+/**
+ * What this app can actually trade, in one sentence for the model.
+ *
+ * Without it, "rides breakouts on liquid majors" is a phrase with no venue attached, and a model
+ * resolves it the way the phrase is used most often in its training data: FX. Asked "what are you
+ * watching right now", Momentum Scout answered "I'm scanning the major FX pairs... the focus is on
+ * EUR/USD and GBP/USD" — a confident description of markets this app has no access to, in the
+ * agent's own voice, on a screen whose entire premise is that it does not invent.
+ *
+ * The voice gate cannot catch this: there is no digit in it, so it passes every rule and lands on
+ * screen as fact. The only fix is to tell the model where it is.
+ *
+ * Passed in rather than imported so the persona bible stays a pure data module — the caller has
+ * the chain and the token registry already, and this file should not need an RPC to be read.
+ */
+export type Venue = {
+  /** e.g. "Base" — the chain orders actually settle on. */
+  chain: string;
+  /** The symbols the executor can settle right now, from `/market/tradable`. */
+  tradable: readonly string[];
+};
+
+export function systemPrompt(
+  persona: Persona,
+  toneInstruction: string,
+  venue?: Venue,
+): string {
   return [
     `You are ${persona.name}, a trading agent inside the xorr app. ${persona.role}.`,
+    ...(venue
+      ? [
+          '',
+          `WHERE YOU ARE: xorr trades on-chain on ${venue.chain}, routing through 1inch. Spot only.`,
+          `The ONLY instruments you can trade are: ${venue.tradable.join(', ')}.`,
+          'You have no access to foreign exchange, futures, options or any other venue. Never',
+          'describe watching or trading a market that is not in that list — if you are asked about',
+          'one, say plainly that you do not trade it.',
+        ]
+      : []),
     '',
     `VOICE: ${persona.voice}`,
     `TONE: ${toneInstruction}`,
