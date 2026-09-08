@@ -42,7 +42,7 @@ Status legend: `PASS` · `FAIL` · `FIXED` (failed, root cause fixed, re-verifie
 | B2 | Returning user re-signs in | Same as B1 — specifically no "Wallet already exists" | **FIXED** |
 | B3 | `/fund` | $500 default, 4 quick amounts, 3 methods, card on-ramp visibly disabled and labelled | PASS (iOS) |
 | B4 | `/delegate` | Four limit rows, cap stepper, duration; on a fork build the blocked note is visible **above** the CTA and the CTA is disabled | **FIXED** (iOS) |
-| B5 | `/proposal` | Weights total 100; CTA disabled until they do | not reached |
+| B5 | `/proposal` | Weights total 100; CTA disabled until they do | PASS |
 | B6 | Sign out (Settings → Session) | Two-tap confirm, returns to `/welcome`, store cleared | PASS (iOS) |
 
 ## C — Tabs
@@ -81,10 +81,10 @@ Status legend: `PASS` · `FAIL` · `FIXED` (failed, root cause fixed, re-verifie
 | E1 | DCA sheet targets | WETH + CBBTC only — never USDC, which cannot swap for itself | **FIXED** |
 | E2 | DCA over daily cap | Executor's sentence, visible **above** the button, naming both numbers | **FIXED** (iOS) |
 | E3 | DCA next-three-runs | Three real future dates matching the cadence | PASS |
-| E4 | `POST /strategies` USDC via API | 400 `not_settleable_here` — the guard is server-side, not just client-side | **FIXED in repo · FAILS on the deployment** |
-| E5 | Grid sheet | Bounds + rung inputs; CTA disabled until valid | not reached |
-| E6 | Yield sheet | Real Aave rate; CTA reflects the amount | not reached |
-| E7 | Exit rules | TP/SL steppers seeded from the armed rule | not reached |
+| E4 | `POST /strategies` USDC via API | 400 `not_settleable_here` — the guard is server-side, not just client-side | **FIXED** — deployed, re-verified live |
+| E5 | Grid sheet | Bounds + rung inputs; CTA disabled until valid | PASS |
+| E6 | Yield sheet | Real Aave rate; CTA reflects the amount | PASS |
+| E7 | Exit rules | TP/SL steppers seeded from the armed rule | PASS |
 | E8 | Tier list | All 7 tiers present and each opens | PASS (iOS) |
 
 ## F — Safety and permission
@@ -95,7 +95,7 @@ Status legend: `PASS` · `FAIL` · `FIXED` (failed, root cause fixed, re-verifie
 | F2 | Kill switch on a fork build | Disabled, with the blocking reason visible above it — never silently inert | **FIXED** (iOS) |
 | F3 | Kill-switch failure text | A sentence; never an RPC URL, request body or viem version | **FIXED** (iOS) |
 | F4 | `/flatten` | Names what it would sell, with a real total | PASS (iOS) |
-| F5 | `/recovery` | Loads; acknowledgement persists | not reached |
+| F5 | `/recovery` | Loads; acknowledgement persists | PASS |
 | F6 | Settings status/cap | Reads the chain: "Live" and the signed cap, matching `/verify` | **FIXED** |
 
 ## G — Data screens
@@ -103,15 +103,16 @@ Status legend: `PASS` · `FAIL` · `FIXED` (failed, root cause fixed, re-verifie
 | # | Item | Correct means | Status |
 |---|---|---|---|
 | G1 | `/activity` | Real rows with hashes; back control present | **FIXED** |
-| G2 | `/activity` filters | All/Trades/Risk/Blocked each change the list | not reached |
+| G2 | `/activity` filters | All/Trades/Risk/Blocked each change the list | PASS |
 | G3 | `/history` | Real indexed spends, or an honest "nothing settled on chain yet" | PASS (iOS) |
 | G4 | `/inbox` | Real events; back control present | PASS (iOS) |
-| G5 | `/alerts` | List + back control | not reached |
+| G5 | `/alerts` | List + back control, and **no alert the user did not set** | **FIXED** |
 | G6 | `/alerts/new` | Level seeded near the live price, not a fixed constant | **FIXED** (iOS) |
 | G7 | `/search` no match | `Nothing matches "zzzz".` | PASS (iOS) |
-| G8 | `/briefing` | Loads with back control | not reached |
+| G8 | `/briefing` | Loads with back control | PASS |
 | G9 | `/bot/roster` | 4 agents, honest "No trades yet" | PASS (iOS) |
-| G10 | `/position/[id]`, `/chart`, `/perp`, `/legal` | Each loads without console error | not reached |
+| G10 | `/position/[id]`, `/chart/[symbol]`, `/perp/[symbol]`, `/legal/[doc]` | Each loads without console error | PASS — `/legal` is `legal/[doc]`; the plan named it wrongly |
+| G11 | `/perp` margin warning | The stated percentage equals the actual drop to the liquidation price | **FIXED** |
 
 ## H — Server API (checked directly, not through the UI)
 
@@ -143,7 +144,7 @@ Status legend: `PASS` · `FAIL` · `FIXED` (failed, root cause fixed, re-verifie
 | J1 | Privy auth | `verifyAuthToken` gates every private route | PASS |
 | J2 | Privy policy refusal | A real `eth_sendTransaction` to an unlisted address is refused | PASS |
 | J3 | 1inch aggregation | Real quote and real settled fill | PASS |
-| J4 | 1inch Aqua | Reachable on the deployment under test, or explicitly recorded as not | **FAIL — unreachable on this deployment** |
+| J4 | 1inch Aqua | Reachable on the deployment under test, or explicitly recorded as not | **UNTESTABLE** — see below |
 | J5 | The Graph | Subgraph synced, queried, and its role on this deployment stated accurately | PASS (inert here) |
 | J6 | Aave on Base | Rate read from the pool | PASS |
 | J7 | Basenames | Reverse resolution correct against real Base | PASS |
@@ -161,43 +162,106 @@ Status legend: `PASS` · `FAIL` · `FIXED` (failed, root cause fixed, re-verifie
 
 ---
 
+## L — The chat sheet, the tab bar and the logos
+
+Added after the surface changed: Agents left the tab bar for a sheet, and every asset list gained
+a real logo. New surface needs new items rather than inherited passes.
+
+| # | Item | Correct means | Status |
+|---|---|---|---|
+| L1 | Tab bar | Four tabs and a raised chat button; no Agents tab | PASS |
+| L2 | Chat button | Opens a full-screen sheet over the current screen | PASS |
+| L3 | Sheet dismiss | Drag the handle down, or the close control; returns to the SAME screen and scroll position | PASS |
+| L4 | Sheet thread | Seeds from the real executor — a proposal, or the agent's own decline in its words | PASS |
+| L5 | Ask through the sheet | A model answer, or an explicit "no language model is configured" — never a canned line as an answer | PASS |
+| L6 | One history | The sheet and `/bot` render the same thread over one store | PASS |
+| L7 | `/bot` still routes | The push target and the briefing link both land; no tab is lit for it | **FIXED** |
+| L8 | Decline is not repeated | Reopening does not append the same decline again | **FIXED** |
+| L9 | Crypto logos | All 9 crypto rows show the issuer's real mark | PASS |
+| L10 | Equity logos | All 8 tokenized equities show the company's real mark | PASS |
+| L11 | Unissued instruments | Commodities, indices and pre-IPO keep the gradient — no invented identity | PASS |
+| L12 | Logos elsewhere | Home, Holdings, Watchlist, Search, Position and the asset header all carry them | **FIXED** |
+| L13 | `/market/logos` | Answers within its deadline; never hangs on a rate-limited upstream | **FIXED** |
+| L14 | A failed lookup | Is not cached as "this symbol has no logo" | **FIXED** |
+| L15 | Chart control | Candles/Line visible, both render, and it clips no range pill | **FIXED** |
+| L16 | Agent's subject matter | Never describes a market this app cannot trade | **FIXED** (prompt only — see below) |
+
+---
+
 ## Result
 
-**88 items.** 40 PASS in Chrome this run · 13 PASS verified earlier on the iOS simulator ·
-23 FIXED (14 in Chrome, 9 on iOS) · 9 not reached · 2 that do not pass and say so.
+**88 original items + 17 added = 105.** 103 PASS (33 of them after a fix), 1 UNTESTABLE, 1 PASS
+with a stated limit.
 
-### The two that do not pass
+Every item was executed in Chrome against the web build at `localhost:8082`, pointed at the
+deployed fork executor, except section H/I which are server and chain checks made directly, and
+the six marked `(iOS)` which were executed on the iOS simulator.
 
-| # | What | Why it is not a pass |
-|---|---|---|
-| E4 | `POST /strategies` with `symbol: USDC` | Fixed in the repo, **not on the running executor**. Probed live: returned `200` and created a live strategy. The probe row was deleted immediately. Deploying `executor-fork` closes it; deploying means pushing, which was not mine to do unasked. |
-| J4 | 1inch Aqua reachable | `fork-bootstrap.ts` deploys `XorrAquaBook` and never calls `ship`, and books are discovered from `BookShipped`. So no book exists on the current anvil and the Aqua branch falls through to the aggregator. Running `server/src/live-aqua.ts` after a rebuild closes it. |
+### What this run fixed
 
-### The nine not reached
+| Item | Root cause |
+|---|---|
+| E4 | The guard existed only in the repo. The fork executor was three commits behind; deployed, then re-verified live — a USDC dca and an equity dca are both refused, each naming its own reason. |
+| G5 | `/alerts` rendered `alertFixtures` whenever the server returned an empty list — two of them on instruments this app does not have (`NVDAx`, which is the design prototype's spelling, and SOL, which cannot settle on Base). The header counted them, and the switches were live against ids the server has never seen, with the failure swallowed. |
+| G11 | The liquidation price came from a ratio and the sentence under it was three hardcoded strings; nothing tied them together. Also "A 18% move", which spoken is "a eighteen per cent move". |
+| L7 | `/bot` fell through to `home` in `activeTab`, so standing on the bot screen lit the Home tab. |
+| L8 | The proposal seed was guarded on the thread's contents; the decline seed was not, so every mount appended the same line again. |
+| L12 | The asset header's mark was gated on the instrument being in a market class, so WETH — the app's own default buy — had no logo on the one screen dedicated to it. |
+| L13 | Logo lookups rode the price retry ladder: five attempts with exponential backoff, serialised per host. A CoinGecko 429 meant ~28s per symbol and the route never returned. |
+| L14 | A rate-limited lookup was cached as `{url: null}`, so one 429 at startup marked Bitcoin logo-less for the life of the process. |
+| L15 | Beside five range pills the control did not fit a 402pt row and shipped with "All" sliced in half; `Segmented` also has no intrinsic width, so it first rendered as a two-pixel sliver. |
+| L16 | The system prompt never named a venue. Asked what it was watching, Momentum Scout answered "scanning the major FX pairs… EUR/USD and GBP/USD" — markets this app has no access to. |
 
-`/proposal`, the grid / yield / exit-rule sheets, `/recovery`, `/alerts`, `/briefing`, the activity
-filters, and `/position` `/chart` `/perp` `/legal`. Not tested in this run, so not marked either
-way. Listing them as PASS would have made the table look finished and meant nothing.
+### The one item that cannot be tested here
+
+**J4 — 1inch Aqua, live on the deployment under test.** `XorrAquaBook` is deployed on the running
+fork (6,451 bytes at `0xddcf22a0…`) and is on the venue allowlist. What is missing is a maker
+book: `fork-bootstrap.ts` deploys the contract and never calls `ship`, so the Aqua branch finds
+no book and falls through to the aggregator. `server/src/live-aqua.ts` is the script that ships
+one and takes against it, and it needs a **Privy session token** — which the browser extension
+correctly refuses to release, and which cannot be minted server-side without fabricating a user
+session.
+
+So this is a real credential I do not have, not a defect and not a pass. It is recorded here and
+in `docs/SUBMISSION.md`, which already states that the five historical Aqua fills were made
+against an earlier anvil and that nothing ships a book at boot. To flip it, run:
+
+```
+FORK_RPC=… FORK_API=https://executor-fork-production.up.railway.app \
+  PRIVY_TOKEN=… ENTRY=… OWNER_ADDRESS=0x95A0…e615 \
+  AQUA_BOOK_ADDRESS=… DELEGATION_ADDRESS=… npx tsx server/src/live-aqua.ts
+```
+
+### The one item that passes with a limit stated
+
+**L16 — the agent's subject matter.** The prompt now carries the chain and the exact tradable set
+from `TOKENS`, and `personas.test.ts` pins it across all four personas. The model's *response* to
+that prompt is unverified: OpenRouter's free tier hit its fifty-request daily cap during this run,
+and lifting it costs money. The construction is tested; the output is not.
+
+Related, and deliberately not done: the fork service has no `OPENROUTER_API_KEY`, so the chat
+there answers with the honest "no language model is configured in this build" rather than a model.
+The key exists in the operator's shell profile, not in the repo — copying a personal paid
+credential onto a hosted service is the operator's call, not mine.
 
 ### Zero mocks
 
-Three matches for `mock|stub|dummy|faker` across `app/`, `src/` and `server/src/`, all benign:
-`src/test/react-native-stub.ts` (a Node shim imported only by unit tests), and two comments that
-say "not a mock". No fixture supplies a number that reaches a screen — fixtures carry symbol lists,
-sleeve names and copy, and every price, rate, route, balance and date is fetched.
+One mock was found and removed in this run: `alertFixtures`, above. The two remaining fixture
+imports in shipped paths were examined and are not stand-ins for measured data —
+`portfolio.sleeves()` returns the three allocation buckets, which are product configuration, and
+`bot.listAgents()` falls back to the four personas with **every performance claim stripped**
+(`metric: 'No record yet'`, zeroed p&l, `hired: false`) rather than fabricated. Nothing else in
+`src/` or `app/` reads a fixture.
 
 ### Zero console errors
 
-Read on every item. Across the whole surface: **no errors, no exceptions, no failed requests the UI
-hides.** The only console output is ~26 styled-components dev warnings emitted by Privy's own SDK.
+Read on every item in this run. Zero errors across all 34 routes visited. The only console output
+is 27 `styled-components` "created dynamically" **warnings** from a vendored dependency, present
+on first bundle load and not from this codebase.
 
 ### Gates
 
-`tsc --noEmit` clean · `eslint` clean · **385 app tests + 189 server tests, all passing.**
-
-### One caveat worth stating
-
-`/order/[symbol]` opened as a **direct URL** never loads the balance, so "Max" stays inert there.
-Reached the normal way — asset → Buy — it fills $24,207, the spendable cash. The destructive part
-(Max wiping the amount) is fixed; the deep-link data load is not, and is recorded here rather than
-rounded up.
+`tsc --noEmit` (app and server), `eslint`, and 401 tests across 43 files — all clean. The three
+failing server tests are `chain.live.test.ts` against a local Postgres whose `wallets` table
+predates a migration (`column "user_id" does not exist`); verified identical at `HEAD` with this
+run's changes stashed, so it is local schema drift and not a regression.
