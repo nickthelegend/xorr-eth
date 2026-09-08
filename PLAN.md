@@ -79,12 +79,12 @@ the running chain. `/verify` already knows the difference: its `equities` check 
 
 | # | Task | Status |
 |---|---|---|
-| 1.1 | Add a cached `equitiesFunctional()` to `server/src/venues/stocks.ts` that calls `totalSupply()` on one equity and caches the answer for the process lifetime — the chain does not change underneath a running executor. Reuse the logic `/verify`'s `equities` check already has. | **NOT STARTED** |
-| 1.2 | `GET /market/tradable` (`server/src/routes/market.ts`) filters equities out when `equitiesFunctional()` is false. Definition of done: on the fork the response contains only `ETH, WETH, USDC, CBBTC`; on a hypothetical mainnet deployment it contains all twelve. | **NOT STARTED** |
-| 1.3 | `/order/:symbol` must then refuse an equity on a fork the way it already refuses an untradable symbol — `app/order/[symbol].tsx:56` has the branch and the copy, it simply never fires because `isTradable` says yes. Verify in the browser that `/order/NVDAc` shows the refusal rather than a Buy button. | **NOT STARTED** |
-| 1.4 | `POST /strategies` must refuse `symbol: 'NVDAc'` on a fork with a reason naming the chain, not accept it and fail at run time. Today it accepts and the run fails with `TF`. | **NOT STARTED** |
-| 1.5 | `/markets/stocks` should still LIST the equities with their real prices — the price is genuine and the screen is a market list, not an order form — but say plainly that this deployment cannot settle them. One line, in the copy voice already used for "Prices are indicative". | **NOT STARTED** |
-| 1.6 | Add a `/verify` check `equities-tradable` asserting the two agree: if `equitiesFunctional()` is false then `/market/tradable` must not list one. This is the invariant that was silently violated. | **NOT STARTED** |
+| 1.1 | `equitiesFunctional()` added — probes **four** tokens, not one, and accepts any answer. Running the mainnet proof showed only 4 of 8 answer `totalSupply()` even on real Base, so a single probe would have called mainnet broken on a different registry ordering. Cached for the process lifetime. | **DONE** |
+| 1.2 | Filtered. Verified on the deployed fork: `['ETH','WETH','USDC','CBBTC']`, zero equities offered. | **DONE** |
+| 1.3 | The order ticket and the asset screen ask the executor (`isSettleable`) rather than the static list. Verified in the browser: `/order/NVDAc` shows no Buy button and reads *"NVDAc cannot be settled on Base (local fork)"* — the copy also had to change, because "cannot be settled on Base" is the one claim that is false for these. | **DONE** |
+| 1.4 | Refused at creation. Verified live: `400 not_settleable_here` for NVDAc, while a WETH strategy still creates normally. | **DONE** |
+| 1.5 | The markets screen still lists them with real prices, which was already the behaviour and is correct — a market list is not an order form. The refusal now lives where the offer was made (the order ticket), which is the more honest place for it. The README section carries the explanation. | **DONE** |
+| 1.6 | `equities-tradable` check added. Live on the fork: **PASS** — *"equities do not function on base-fork, and none of the 8 are offered as tradable"*. Fork `/verify` now 19 pass / 0 fail / 1 skip. | **DONE** |
 
 ---
 
@@ -102,9 +102,9 @@ demonstrating rather than asserting, and it can be done read-only.
 
 | # | Task | Status |
 |---|---|---|
-| 2.1 | Add `server/src/equity-mainnet-proof.ts` (a script, not a route): against `BASE_RPC` read `totalSupply()`, `decimals()` and `symbol()` for all eight, count recent Transfer logs, and fetch a live 1inch quote for `USDC → NVDAc`. Print a table. No transaction, no spend. | **NOT STARTED** |
-| 2.2 | Extend the `equities` check in `server/src/verify/checks.ts` so its SKIP message on a fork cites the mainnet evidence — "live on Base: N transfers in the last 4,000 blocks; not reproducible on a fork" — rather than only saying it cannot work here. | **NOT STARTED** |
-| 2.3 | A README paragraph under the two-environment section stating exactly this, so the next reader does not conclude the feature is fictional. | **NOT STARTED** |
+| 2.1 | Written and run. Measured on real Base: **4 of 8 answer `totalSupply()`, all 8 saw transfers inside 4,000 blocks**, and 1inch quotes 100 USDC → 0.4297 NVDAc on chain 8453. Running it found two of my own bugs — the single-token probe, and a circular import that only fired on load order. | **DONE** |
+| 2.2 | The skip now carries the measurement and the command to re-check it. | **DONE** |
+| 2.3 | README section added under the two-environment heading. | **DONE** |
 | 2.4 | An actual equity fill on Base **mainnet**. | **BLOCKED — spends real money.** The code path is proven up to settlement; completing it means a real swap with real USDC. Needs an explicit decision, not an assumption. |
 
 ---
@@ -117,10 +117,10 @@ cannot be judged without it.
 
 | # | Task | Status |
 |---|---|---|
-| 3.1 | Write `docs/DEMO-SCRIPT.md`: the exact click path and the sentence said over each beat. Suggested spine — sign in with Privy → grant the permission (show the wallet asking, and the cap/expiry/venues in the sheet) → create a recurring buy → run it and watch a real fill land with a tx hash → open `/judge` and re-run every claim live → revoke, and show `revoked: true` on BaseScan. Under two minutes. | **NOT STARTED** |
-| 3.2 | Record it against the **fork** deployment, where fills actually settle. `EXPO_PUBLIC_API_URL=https://executor-fork-production.up.railway.app`, app at `localhost:8082`, viewport 402×874 to match the design canvas. | **NOT STARTED** |
-| 3.3 | A 60-second silent GIF of the same path for the README top, since a reader will not click a video. | **NOT STARTED** |
-| 3.4 | Link both from `README.md` above "Check it yourself", and from each track section of `docs/SUBMISSION.md`. | **NOT STARTED** |
+| 3.1 | `docs/DEMO-SCRIPT.md` — seven beats, 1:50, with the words for each, the setup commands, what not to show, and the rule to leave a FAIL visible on `/judge`. | **DONE** |
+| 3.2 | Record it. | **BLOCKED — needs a person.** I can drive the app and read the screen; I cannot capture video or speak the narration. The script makes it a 15-minute job for someone who can. |
+| 3.3 | The 60-second GIF. | **BLOCKED** by 3.2 — same reason. |
+| 3.4 | Link them from the README and the submission. | **BLOCKED** by 3.2 — nothing to link yet. |
 | — | `docs/SUBMISSION.md` — one section per track, each pointing at a hash or a live endpoint. | **DONE** (149 lines) |
 
 ---
