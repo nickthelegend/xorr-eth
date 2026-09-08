@@ -102,7 +102,15 @@ export default function TradeSettings() {
     <Screen>
       <Text variant="screenTitle">Trade Settings</Text>
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        You can change these anytime. The agent always stays within these limits.
+        {/*
+          "The agent" read as the one you just tapped Get Started on, because this screen is
+          reached at /bot/:id/settings. It is not. `commit()` calls `signGrant(cap, runFor)` with
+          no agent in it, and `repos.wallet.delegation()` reads one policy back — there is a single
+          on-chain permission per wallet, and every agent runs inside it. Someone who set a $200
+          cap here believing it applied to Earnings Desk alone would have set it for all four.
+        */}
+        You can change these anytime. This is one on-chain permission for the whole wallet, so
+        every agent you run stays inside these limits — not just this one.
       </Text>
 
       {/*
