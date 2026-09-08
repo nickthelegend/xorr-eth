@@ -39,6 +39,7 @@ import { useAsync } from '@/data/useAsync';
 import { apiReason } from '@/data/api';
 import { useSwapQuote } from '@/data/useSwapQuote';
 import { useStore } from '@/state/store';
+import { useRouter } from 'expo-router';
 
 /** The pair the swap card opens on. Both must exist in server/src/venues/oneinch.ts TOKENS. */
 const PAY = 'WETH';
@@ -53,8 +54,11 @@ const SEAM_PULL = -14;
 
 export default function Swap() {
   const goBack = useGoBack();
+  const router = useRouter();
   const swapAmt = useStore((s) => s.swapAmt);
   const bumpSwap = useStore((s) => s.bumpSwap);
+  // The order ticket works in dollars; the swap composes in units. Handed over on the way there.
+  const setOrderAmt = useStore((s) => s.setOrderAmt);
   const reduced = useReducedMotion();
   // WETH, not SOL: this app settles on Base, and the pay side has to be a token the
   // delegation can actually route. Quoting a chain we do not trade would put a number on
@@ -256,11 +260,26 @@ export default function Swap() {
         </View>
       </Fill>
 
+      {/*
+        This button did nothing. `onPress={() => goBack()}` — it reviewed nothing, swapped nothing
+        and silently returned to the previous screen, so the whole of Swap was a dead end: compose
+        an amount, read a real route and a real price impact, press the only primary control, and
+        land back on Home with the trade unmade.
+
+        Paying WETH to receive USDC is a sell of WETH, and this app already has one of those: the
+        order ticket, which quotes it, caps it by the position, signs it and reports the fill. The
+        composed amount is carried across in dollars, the unit the ticket works in. A second
+        implementation of selling is exactly what `portfolio.close` exists to avoid.
+      */}
       <Button
         label="Review swap"
         style={{ marginTop: space.s14 }}
-        disabled={overBalance}
-        onPress={() => goBack()}
+        disabled={overBalance || payQuote?.price === undefined}
+        onPress={() => {
+          if (payQuote?.price === undefined) return;
+          setOrderAmt(String(Math.max(1, Math.round(swapAmt * payQuote.price))));
+          router.push(`/order/${PAY}?side=sell`);
+        }}
       />
       {overBalance ? (
         <Text
