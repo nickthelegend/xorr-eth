@@ -46,7 +46,15 @@ export default function Assets() {
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const realised = useAsync(() => repos.portfolio.realised(), []);
 
-  const weights = (sleeves.data ?? []).map((s) => s.weight);
+  /*
+   * The mix the user APPROVED, not the fixture defaults.
+   *
+   * `sleeves()` returns product config — the three sleeve names, colours and starting weights —
+   * and the proposal screen lets the user move those weights before approving them. This screen
+   * read the fixture, so a user who had rebalanced to 70/20/10 was shown 55/30/15.
+   */
+  const approvedWeights = useStore((st) => st.weights);
+  const weights = (sleeves.data ?? []).map((sleeve, i) => approvedWeights[i] ?? sleeve.weight);
   // Real holdings from the position book. This previously listed watchlist FIXTURES, so it
   // showed assets the user did not own at prices that never moved.
   const holdings = positions.data ?? [];
@@ -70,7 +78,17 @@ export default function Assets() {
         ) : null}
 
         <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s20 }}>
-          <Eyebrow small>Allocation</Eyebrow>
+          {/*
+            "Allocation" was a claim about what the wallet HOLDS, and these numbers are not that.
+            They are the target mix — product config the user adjusts and approves on the proposal
+            screen — sitting directly above the real Holdings list. So a wallet holding no
+            tokenized equities displayed "Tokenized equities 30%" as though it did. The numbers are
+            fine; the word was wrong, and the caption now says which of the two this is.
+          */}
+          <Eyebrow small>Target mix</Eyebrow>
+          <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s6 }}>
+            What you asked the bot to aim for. Holdings below are what it actually owns.
+          </Text>
           {/* The 8pt stacked proportion bar from screen 10, reused verbatim. */}
           <View style={{ flexDirection: 'row', gap: space.s2, height: BAR_H, marginTop: space.s12 }}>
             {(sleeves.data ?? []).map((s, i) => (
@@ -85,7 +103,7 @@ export default function Assets() {
             ))}
           </View>
           <View style={{ marginTop: space.s14, gap: space.s10 }}>
-            {(sleeves.data ?? []).map((s) => (
+            {(sleeves.data ?? []).map((s, i) => (
               <View
                 key={s.name}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}
@@ -101,7 +119,7 @@ export default function Assets() {
                 <Text variant="body" style={{ flex: 1 }}>
                   {s.name}
                 </Text>
-                <Price color={colors.ink55}>{s.weight}%</Price>
+                <Price color={colors.ink55}>{weights[i] ?? s.weight}%</Price>
               </View>
             ))}
           </View>
