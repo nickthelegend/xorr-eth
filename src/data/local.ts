@@ -452,9 +452,5 @@ export const LocalRepositories: Repositories = {
       // shows the lock it can read.
       return (await api.get<PrivyPolicyView>('/privy/policy').catch(() => undefined)) ?? null;
     },
-
-    async balance() {
-      return api.get<{ sol: number; usd: number }>('/wallet/balance');
-    },
   },
 };

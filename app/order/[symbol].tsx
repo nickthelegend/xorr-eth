@@ -36,6 +36,7 @@ import { api } from '@/data/api';
 import { unitsFor, usePrice } from '@/data/usePrices';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { useDebounced } from '@/data/useDebounced';
 import { useStore } from '@/state/store';
 import { DEFAULT_BUY, isSettleable, isTradable } from '@/data/tradable';
 
@@ -81,12 +82,19 @@ export default function OrderTicket() {
     if (sideParam === 'buy' || sideParam === 'sell') setSide(sideParam);
   }, [sideParam, setSide]);
 
-  // The bot can only trade what has settled, so the ticket has to know the balance. "Max"
-  // used to be the string '4862' — the handoff's design total — which was both a hardcoded
-  // number and the wrong one, and nothing stopped a user composing an order past their
-  // holdings.
-  const { data: bal } = useAsync(() => repos.wallet.balance(), []);
-  const availableUsd = bal?.usd;
+  /*
+   * The bot can only trade what has settled, so the ticket has to know the balance. "Max"
+   * used to be the string '4862' — the handoff's design total — which was both a hardcoded
+   * number and the wrong one, and nothing stopped a user composing an order past their holdings.
+   *
+   * It then read `repos.wallet.balance().usd`, which is the wallet's TOTAL value — cash plus
+   * open positions plus USDC supplied to Aave. None of the last two can pay for a swap. On a
+   * wallet holding $24,207 of cash inside $24,993 of value, "Max" composed a $24,993 buy, passed
+   * the over-balance guard, and could only fail at the venue. `cash` is the number that can
+   * actually be spent, and it is the one the home screen's "Available to trade" row already uses.
+   */
+  const { data: bal } = useAsync(() => repos.portfolio.balance(), []);
+  const availableUsd = bal?.cash;
 
   // A SELL is not a spend. It reduces a position the user already holds, so what caps it is
   // the position, not the balance — and it goes through the same close path screen 22 uses
@@ -109,16 +117,23 @@ export default function OrderTicket() {
    * number moves with the size the way a real cost does — and when it cannot be answered the row
    * says so rather than falling back to arithmetic.
    */
-  const quoteFor = amount > 0 && symbol ? `${side}:${symbol}:${amount}:${held?.mark ?? 0}` : '';
+  /*
+   * Debounced, and that is not a nicety — see useDebounced. Every keypress fired a real 1inch
+   * quote, and the executor serialises 1inch in one lane, so the swap the ORDER needed queued
+   * behind the quotes drawn for the "At worst" line. One measured buy waited 153 seconds and then
+   * failed on slippage, because the price had moved while it waited for its own decoration.
+   */
+  const quoted = useDebounced(amount);
+  const quoteFor = quoted > 0 && symbol ? `${side}:${symbol}:${quoted}:${held?.mark ?? 0}` : '';
   const routeQuote = useAsync(
     () =>
-      amount > 0 && (side === 'buy' || (held?.mark ?? 0) > 0)
+      quoted > 0 && (side === 'buy' || (held?.mark ?? 0) > 0)
         ? api.get<{ minimumOut: number; venues: string[]; slippagePct: number }>(
             side === 'buy'
-              ? `/swap/quote?in=USDC&out=${encodeURIComponent(symbol)}&amount=${amount}`
+              ? `/swap/quote?in=USDC&out=${encodeURIComponent(symbol)}&amount=${quoted}`
               : // A sell is entered in dollars; the route is quoted in units, so it needs the
                 // mark. Only a held position can be sold, and a held position has one.
-                `/swap/quote?in=${encodeURIComponent(symbol)}&out=USDC&amount=${amount / (held?.mark || 1)}`,
+                `/swap/quote?in=${encodeURIComponent(symbol)}&out=USDC&amount=${quoted / (held?.mark || 1)}`,
           )
         : Promise.resolve(null),
     [quoteFor],
@@ -165,7 +180,6 @@ export default function OrderTicket() {
         // instant you tap it leaves you unsure whether anything happened.
         setTimeout(() => goBack(), 1200);
       } else {
-        // The policy engine's own sentence — "the daily cap is spent", not "409".
         // The policy engine's own sentence — "the daily cap is spent", not "409".
         setRefusal(res.detail ?? res.reason ?? res.error ?? `The order came back "${res.status}".`);
       }

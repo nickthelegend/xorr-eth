@@ -244,7 +244,6 @@ export interface WalletRepository {
    * A repository method would imply the server could do it, and the whole safety claim rests on
    * the fact that it cannot.
    */
-  balance(): Promise<{ sol: number; usd: number }>;
 }
 
 export type Repositories = {
