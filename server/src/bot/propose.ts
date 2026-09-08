@@ -19,6 +19,16 @@ import { getJson } from '../http/get.js';
 import { evaluate } from '../rules/engine.js';
 import { speak, fallbackLine } from './llm.js';
 import { TONE_INSTRUCTIONS, type ToneId } from './tone.js';
+import { readPolicy } from '../evm/delegation.js';
+import type { Address } from 'viem';
+
+/**
+ * What the bot proposes on when the wallet has no strategy to take a hint from.
+ *
+ * WETH: the deepest book this executor can route and settle on Base. The previous default was
+ * `'SOL'`, which has no token on this chain at all.
+ */
+const DEFAULT_PROPOSAL_SYMBOL = 'WETH';
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';
 const IDS: Record<string, string> = {
@@ -73,20 +83,41 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
   );
   if (open) return { created: false, reason: 'already_open', detail: 'A proposal is already waiting.' };
 
-  const del = await one<{ daily_cap_usd: string; expires_at: Date; revoked: boolean }>(
-    `SELECT daily_cap_usd, expires_at, revoked FROM delegations
-     WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
-    [walletId],
-  );
+  /*
+   * Read the CHAIN, like every other path that asks this question.
+   *
+   * This read the `delegations` table, which only has a row when the grant came through this
+   * executor. A permission granted any other way — a script, another device, the contract
+   * directly — is invisible to it, so the Agents tab told a wallet with a live $2,810/day
+   * on-chain cap "No trading permission has been granted." and the bot proposed nothing, ever.
+   * `/judge` asserts on that very screen that the permission is "read from the chain, never from
+   * our database"; this was the one path where that was not true.
+   *
+   * `readPolicy` is what `/orders`, `/strategies` and `run.ts` already use.
+   */
+  const ownerAddress = (
+    await one<{ address: string }>(`SELECT address FROM wallets WHERE id = $1`, [walletId])
+  )?.address as Address | undefined;
+  if (!ownerAddress) {
+    return { created: false, reason: 'no_wallet', detail: 'This wallet has no address on file.' };
+  }
+  const del = await readPolicy(ownerAddress);
   if (!del) return { created: false, reason: 'no_delegation', detail: 'No trading permission has been granted.' };
 
-  // Propose on a symbol the user actually has a strategy for, or SOL as the default book.
+  /*
+   * Propose on a symbol the user actually has a strategy for.
+   *
+   * The fallback was `'SOL'` — Solana, in an app that settles on Base, where it has no token, no
+   * route and no way to fill. A wallet with no strategies got a proposal for an instrument the
+   * executor would refuse at the venue. The settlement default is the one the rest of the client
+   * already uses for "pick one".
+   */
   const strat = await one<{ symbol: string }>(
     `SELECT symbol FROM strategies WHERE wallet_id=$1 AND symbol <> 'PORTFOLIO'
      ORDER BY created_at DESC LIMIT 1`,
     [walletId],
   );
-  const symbol = strat?.symbol ?? 'SOL';
+  const symbol = strat?.symbol ?? DEFAULT_PROPOSAL_SYMBOL;
 
   const [price, band] = await Promise.all([priceOf(symbol).catch(() => 0), range(symbol)]);
   if (!price || !band) {
@@ -94,12 +125,11 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
   }
 
   // Size it at a quarter of the remaining daily cap, so a proposal can never be the whole budget.
-  const cap = Number(del.daily_cap_usd);
   const verdict = await evaluate({
     walletId,
     usd: 1,
-    dailyCapUsd: cap,
-    delegationExpiresAt: new Date(del.expires_at),
+    dailyCapUsd: del.dailyCapUsd,
+    delegationExpiresAt: new Date(del.expiresAt),
     delegationRevoked: del.revoked,
   });
   if (!verdict.allowed) return { created: false, reason: verdict.reason, detail: verdict.detail };
@@ -137,7 +167,7 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
     entry: money(price),
     stop: money(stop),
     target: money(target),
-    rationale: `Risking ${money(risk * units)} to make ${money(risk * 2 * units)}. Within your ${money(cap)} daily cap.`,
+    rationale: `Risking ${money(risk * units)} to make ${money(risk * 2 * units)}. Within your ${money(del.dailyCapUsd)} daily cap.`,
     onApprove: `Filled ${units.toFixed(4)} ${symbol} at ${money(price)}. Stop set at ${money(stop)}.`,
     onSkip: `Skipped. I will not re-propose ${symbol} today.`,
   };
