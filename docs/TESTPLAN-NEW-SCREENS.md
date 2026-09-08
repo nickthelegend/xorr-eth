@@ -59,6 +59,35 @@ Nothing in this plan. Two items outside it are blocked and stated in the run not
 fix cannot be verified against a live model (OpenRouter's free tier is at its daily cap and lifting
 it costs money), and `/verify`'s `privy-refusal` check needs a key-quorum signature.
 
+## H · Base mainnet (added 2026-09-09)
+
+Run by `npm run readiness:base --prefix server` against the live chain, read-only.
+
+| # | Item | Correct means | Status |
+|---|---|---|---|
+| H1 | chain identity | `eth_chainId` returns 8453 and a current block | **PASS** — block 51,054,818 |
+| H2 | token registry | every token answers `decimals()` at its registered address | **PASS** — 11/11, including all eight equities |
+| H3 | venue allowlist | code at every address the grant permits | **PASS** — 1inch 24,151 bytes; Aave 1,933 bytes |
+| H4 | Aave rate | a live `currentLiquidityRate` | **PASS** — 4.08% |
+| H5 | 1inch route | a real route for a real size | **PASS** — 100 USDC → 0.040118 WETH via Tesseraswap, Aerodrome V3 |
+| H6 | explorer links | resolve to basescan on `base` | **PASS** |
+| H7 | delegation contract | deployed, with code | **BLOCKED** — not deployed; deployer holds 0 ETH on Base |
+| H8 | RPC provider | an endpoint that survives app load | **WARN** — `mainnet.base.org` throttles; set a dedicated provider |
+| H9 | Base web build | a bundle that is actually for Base | **PASS** — `npm run build:base`; "settles on Base" folded in, fork branch eliminated, boots clean in Chrome |
+| H10 | wrong-chain build | refuses rather than producing a Sepolia artifact | **PASS** — refuses localhost, and refuses an executor whose `/health` says `base-fork` |
+
+H7 is the only thing between this build and Base mainnet. It spends real gas, it is irreversible,
+and the address becomes what users sign permissions against — so it is a person's decision, and it
+is blocked on funding regardless. docs/BASE-MAINNET.md has the command.
+
+## Phase 4 — full re-run
+
+Every item re-executed after all fixes, on 2026-09-09. **Zero regressions.** The `balance()` change
+was additive, so the pre-existing screens that consume it — Home and `/asset/[symbol]` — were
+re-checked specifically and are unaffected.
+
+Zero console errors from app code on any route, on the re-run as on the first pass.
+
 ## Environment under test
 
 | | |
