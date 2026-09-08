@@ -46,7 +46,6 @@ export default function Settings() {
   // no claim to make, so say that instead.
   const unreachable = walletError !== undefined && !wallet;
   const delegation = useStore((s) => s.delegation);
-  const cap = useStore((s) => s.cap);
   const killed = useStore((s) => s.killed);
   const recoveryBackedUp = useStore((s) => s.recoveryBackedUp);
   const { addresses } = useAllowlist();
@@ -159,7 +158,14 @@ export default function Settings() {
             title="Daily cap"
             value={
               delegation ? (
-                <Price color={colors.ink55}>{capLabel(cap)}</Price>
+                /*
+                  The cap that was SIGNED, not the one the slider is sitting on.
+
+                  `cap` is a local preference the user can move without granting anything, so this
+                  row reported a number the chain had never seen — on the row whose whole job is to
+                  say how much the bot may spend. `dailyCapUsd` comes off the delegation itself.
+                */
+                <Price color={colors.ink55}>{capLabel(delegation.dailyCapUsd)}</Price>
               ) : (
                 <Text variant="rowPrimary" color={colors.ink38}>
                   —

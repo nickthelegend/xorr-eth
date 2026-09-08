@@ -182,12 +182,6 @@ export default function GrantDelegation() {
           </NoteStrip>
         ) : null}
 
-        {userSigningWorks ? null : (
-          <NoteStrip kind="blocked" style={{ marginTop: space.s10 }}>
-            {userSigningNote}
-          </NoteStrip>
-        )}
-
         {error ? (
           <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s14 }}>
             {error}
@@ -195,6 +189,20 @@ export default function GrantDelegation() {
         ) : null}
         </ScrollView>
       </Fill>
+
+      {/*
+        The reason the button below is dead has to sit next to the button below.
+
+        This note lived at the end of the scroll area, under two other strips, so the first thing a
+        user saw on a fork build was a greyed-out "Sign this permission" with no visible
+        explanation — the explanation was a scroll away. Pinned here it is the last thing read
+        before the control it is about, which is the only place it does any good.
+      */}
+      {userSigningWorks ? null : (
+        <NoteStrip kind="blocked" style={{ marginBottom: space.s10 }}>
+          {userSigningNote}
+        </NoteStrip>
+      )}
 
       <Button
         label="Sign this permission"

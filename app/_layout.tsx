@@ -13,6 +13,7 @@ import { AppPrivyProvider } from '@/auth/PrivyProvider';
 import { colors } from '@/ui';
 import { useRegisterDevice } from '@/notifications/useRegisterDevice';
 import { useHydrateWallet } from '@/wallet/useHydrateWallet';
+import { useHydrateDelegation } from '@/wallet/useHydrateDelegation';
 import { ReachabilityProvider } from '@/net/Reachability';
 
 /**
@@ -47,6 +48,9 @@ function DeviceRegistration() {
  */
 function WalletHydration() {
   useHydrateWallet();
+  // The permission governing the user's money, read from the chain rather than remembered from
+  // whichever screen last wrote it. See useHydrateDelegation.
+  useHydrateDelegation();
   return null;
 }
 
