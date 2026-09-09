@@ -417,6 +417,48 @@ passed.**
   needs Base or a Base fork." 1inch has no Sepolia deployment. Real fills are verified on the fork,
   where `fillsByVenue` reads `{swapvm: 2, 1inch: 36, aqua: 5}`.
 
+## Second pass — correcting the record
+
+The first pass reported 247/248. Three of those PASS marks were **inferred, not observed**, and one
+criterion in §0 was never exercised at all. Re-run and corrected:
+
+| ID | What the first pass actually did | What the second pass did |
+|---|---|---|
+| G5 | Tested a **transport failure** (`Failed to fetch`) and marked the 5xx item passed from it | Injected a real `500` with a body. The screen shows the server's own sentence — "The executor hit an unexpected error reading your positions." — and offers **Try again**, correct for a transient failure. **PASS** |
+| G8 | Never tested | Submitted the new-alert form and navigated away 150ms later, mid-flight. Exactly **one** `POST /alerts` was sent, exactly **one** row exists, the app landed cleanly on the wallet. **PASS** |
+| G17 | Ran the harness at **402px** and never tested 375 | Emulated a real 375×812 device across 19 screens: zero horizontal scroll, zero clipped controls. **PASS** |
+| §0 screen class | "every control either navigates or is visibly disabled — no dead controls" was written and never swept | Clicked **every** non-destructive control on `/settings`, `/activity`, `/safety`, `/limits`, `/holdings`, `/explore` (42 controls — the hub that links to every screen) and `/order/WETH`. **Zero dead controls.** Two flags were false positives, each run down individually |
+
+The two false positives are worth naming, because dismissing them without checking would have been
+the same mistake as inferring a PASS:
+
+- **"Close" on `/settings`** appeared dead. It calls `useGoBack`, which handles an empty history —
+  but my sweep had pushed `/settings` as its own previous entry, so "back" went from `/settings` to
+  `/settings`. On a real page load it navigates to `/`. My harness's fault, not the app's.
+- **"$100" on the order ticket** appeared dead. The amount was already $100 when the sweep clicked
+  it. Verified working: $123 → $100 → $500.
+
+### What the sweep found that the first pass missed
+
+**Every selected control in the app announced no state on web.** Four components set
+`accessibilityState={{ selected }}`; React Native Web maps that to `aria-selected`, which is invalid
+on `role="button"` and is dropped. The rendered markup for all three options of a segmented control
+was, in full, `role="button" tabindex="0" type="button"`.
+
+`role="tab"` fared no better, and there the attribute IS valid: the tab bar on every screen
+announced Home, Markets, Trade and Assets with **no current tab**. A screen-reader user could not
+tell which tab they were on, which filter was applied, or which tone was selected.
+
+Nothing in the source looks wrong — the intent is written down in all four components and the
+platform discards it silently. Fixed by adding the attribute valid for each role
+(`aria-pressed` / `aria-selected` / `aria-checked`) alongside the existing native prop.
+
+Fixing it introduced a second defect, caught by re-checking rather than by assuming: `Pill`
+defaulted `selected` to `false`, so the `$100` / `$500` / `Max` action chips began reporting
+`aria-pressed="false"` — "toggle button, not pressed" about a button that is not a toggle. The
+default is now undefined, so only callers that mean it get the attribute. Verified live: the action
+chips omit it, the activity filters carry exactly one `true`.
+
 ### Evidence the checks were real
 
 - The whole kill-switch loop, signed in a browser: **LIVE → user signs `revoke()` → chain reads
