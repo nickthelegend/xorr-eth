@@ -430,9 +430,25 @@ routes.get('/delegation/params', async (c) => {
 });
 
 /** Record a grant the user already signed, so the audit trail has it. */
+/**
+ * A 32-byte transaction hash, and nothing else.
+ *
+ * Both record routes took `z.string()`, so any text at all was accepted, written into the
+ * append-only audit trail, and rendered there as a TRANSACTION with a block-explorer link. Passing
+ * `"0xabc"` produced a permanent entry — "Trading permission granted · TRANSACTION 0xabc" — whose
+ * link 404s for anyone who follows it. `waitForTx` swallows the failure for a malformed hash, so
+ * nothing downstream noticed.
+ *
+ * The policy itself is still read from the chain and always was; this is about not writing an
+ * unverifiable claim into a record that cannot be corrected afterwards.
+ */
+const TxHash = z
+  .string()
+  .regex(/^0x[0-9a-fA-F]{64}$/, 'must be a 32-byte transaction hash, 0x followed by 64 hex digits');
+
 routes.post('/delegation/record', async (c) => {
   const body = z
-    .object({ txHash: z.string(), dailyCapUsd: z.number().positive(), expiresAt: z.number() })
+    .object({ txHash: TxHash, dailyCapUsd: z.number().positive(), expiresAt: z.number() })
     .parse(await c.req.json());
   const w = await requireWallet(c);
 
@@ -482,7 +498,7 @@ routes.post('/delegation/record', async (c) => {
 
 /** Record a revoke the user already signed. */
 routes.post('/delegation/revoke', async (c) => {
-  const body = z.object({ txHash: z.string().optional() }).parse(await c.req.json().catch(() => ({})));
+  const body = z.object({ txHash: TxHash.optional() }).parse(await c.req.json().catch(() => ({})));
   const w = await requireWallet(c);
 
   const policy = await readPolicy(w.address as Address);
