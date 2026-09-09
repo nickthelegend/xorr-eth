@@ -35,6 +35,7 @@ import {
 import {
   delegateUnusable,
   delegationExpired,
+  permissionUnreadable,
   expiryNote,
   expiryState,
   killCta,
@@ -48,7 +49,7 @@ import { useApprovals } from '@/wallet/useApprovals';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { errorText } from '@/data/apiError';
+import { errorText, NotSignedIn } from '@/data/apiError';
 
 /** The state chip's dot. 7pt — screens.md gives this one exactly. */
 const DOT = 7;
@@ -165,18 +166,34 @@ export default function Safety() {
    * their money right now. On a screen whose subject IS that permission, that is the wrong
    * default.
    */
+  /*
+   * The failure is KEPT, not swallowed.
+   *
+   * `.catch(() => undefined)` discarded it, so an unreachable executor left `delegation` null and
+   * this screen announced "No permission has been granted" over a live on-chain grant. A read we
+   * could not complete has to say so.
+   */
+  const [delegationError, setDelegationError] = useState<unknown>(undefined);
   useEffect(() => {
     let alive = true;
     void repos.wallet
       .delegation()
       .then((d) => {
-        if (alive) setDelegation(d);
+        if (!alive) return;
+        setDelegation(d);
+        setDelegationError(undefined);
       })
-      .catch(() => undefined);
+      .catch((e: unknown) => {
+        // A signed-out visitor has no permission, which is an answer rather than a failed read.
+        if (alive && !(e instanceof NotSignedIn)) setDelegationError(e);
+      });
     return () => {
       alive = false;
     };
   }, [setDelegation]);
+
+  /** Could not be read — distinct from read and absent. Outranks every other state below. */
+  const unreadable = permissionUnreadable(delegationError, delegation);
 
   // Signed by the user, on-chain. This is why "under a second across every device" is true
   // without any server needing to be reachable.
@@ -259,8 +276,13 @@ export default function Safety() {
             width: DOT,
             height: DOT,
             borderRadius: radius.full,
-            backgroundColor:
-              unusable || expired ? colors.down : killed || !granted ? colors.ink30 : colors.up,
+            backgroundColor: unreadable
+              ? colors.ink30
+              : unusable || expired
+                ? colors.down
+                : killed || !granted
+                  ? colors.ink30
+                  : colors.up,
           }}
         />
         {/*
@@ -269,25 +291,41 @@ export default function Safety() {
         */}
         <Text
           variant="tagSm"
-          color={unusable || expired ? colors.down : killed || !granted ? colors.ink55 : colors.up}
+          color={
+            unreadable
+              ? colors.ink55
+              : unusable || expired
+                ? colors.down
+                : killed || !granted
+                  ? colors.ink55
+                  : colors.up
+          }
         >
-          {unusable
-            ? 'Disconnected'
-            : !granted
-              ? 'Not granted'
-              : expired
-                ? 'Expired'
-                : killed
-                  ? 'Stopped'
-                  : 'Live'}
+          {/*
+            "Unknown" outranks everything. Saying "Not granted" because the request failed is the
+            one claim this screen must never make — see `permissionUnreadable`.
+          */}
+          {unreadable
+            ? 'Unknown'
+            : unusable
+              ? 'Disconnected'
+              : !granted
+                ? 'Not granted'
+                : expired
+                  ? 'Expired'
+                  : killed
+                    ? 'Stopped'
+                    : 'Live'}
         </Text>
       </View>
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s16 }}>
-        {killTitle(killed, unusable, granted, expired)}
+        {unreadable ? 'Could not read your permission' : killTitle(killed, unusable, granted, expired)}
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s8 }}>
-        {killExplanation(killed, hiredCount, unusable, granted, expired)}
+        {unreadable
+          ? 'This screen could not reach the executor, so it cannot tell you what the bot is allowed to do. Whatever is granted on chain is still in force — this is a gap in what we can show you, not a change to your permission.'
+          : killExplanation(killed, hiredCount, unusable, granted, expired)}
       </Text>
 
       {/*
@@ -565,7 +603,7 @@ export default function Safety() {
         promises something about a stop that cannot happen either. The screen keeps one action, in
         the card that explains it.
       */}
-      {granted ? (
+      {granted && !unreadable ? (
         <>
           <Button
             label={killCta(killed, unusable, granted, expired)}

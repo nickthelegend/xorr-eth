@@ -278,6 +278,38 @@ describe('kill switch — screen 20', () => {
   });
 
   /*
+   * A read that failed is not a permission that is absent.
+   *
+   * `/safety` loaded the delegation with `.catch(() => undefined)`, so an unreachable executor
+   * left it null and the screen announced "NOT GRANTED · No permission has been granted, so
+   * nothing can trade" over a live $1,600/day grant. Observed by cutting the executor off in a
+   * browser with that grant on chain.
+   */
+  describe('a permission we could not read', () => {
+    const err = new Error('Failed to fetch');
+
+    it('is unknown, not absent', () => {
+      expect(d.permissionUnreadable(err, null)).toBe(true);
+      expect(d.permissionUnreadable(err, undefined)).toBe(true);
+    });
+
+    it('is not claimed when the read succeeded', () => {
+      expect(d.permissionUnreadable(undefined, null)).toBe(false);
+      expect(d.permissionUnreadable(undefined, { revoked: false })).toBe(false);
+    });
+
+    it('does not override a permission we did read', () => {
+      // A stale error alongside real data must not blank out the real data.
+      expect(d.permissionUnreadable(err, { revoked: false })).toBe(false);
+    });
+
+    it('is not claimed for a signed-out visitor', () => {
+      // They genuinely have no permission. That is an answer, not a failure to get one.
+      expect(d.permissionUnreadable(err, null, true)).toBe(false);
+    });
+  });
+
+  /*
    * The fourth state: a permission that ran out on schedule.
    *
    * The expiry BANNER on the safety screen has read this since it was added; the badge above it

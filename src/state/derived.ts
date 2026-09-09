@@ -322,6 +322,29 @@ export function delegationExpired(
   return !killed && expiryState(delegation?.expiresAt, now) === 'expired';
 }
 
+/**
+ * We could not read the permission — which is not the same as there not being one.
+ *
+ * `/safety` loaded the delegation with `.catch(() => undefined)`, so a request that failed left
+ * `delegation` null and the screen said **NOT GRANTED · "No permission has been granted, so
+ * nothing can trade."** With the executor unreachable and a live $1,600/day grant on chain, every
+ * word of that was false.
+ *
+ * It is the same defect as the one `positions()` had — a failed read rendered as a definitive
+ * negative — on the screen least able to afford it: a user told they have granted nothing may
+ * believe their money is untouchable when a bot is in fact authorised to spend it.
+ *
+ * `NotSignedIn` is excluded deliberately. A signed-out visitor genuinely has no permission, and
+ * that is an answer rather than a failure to get one.
+ */
+export function permissionUnreadable(
+  loadError: unknown,
+  delegation: unknown,
+  signedOut = false,
+): boolean {
+  return Boolean(loadError) && !signedOut && (delegation === null || delegation === undefined);
+}
+
 export function killTitle(
   killed: boolean,
   unusable = false,
