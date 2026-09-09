@@ -96,9 +96,9 @@ must exist before a deploy and creating it is a Studio dashboard action with a w
 
 | # | Task | Status |
 |---|---|---|
-| 2.1 | Create the `xorr-aqua` slug at thegraph.com/studio with the deployer wallet, then `cd subgraph-aqua && npx graph deploy xorr-aqua --deploy-key $GRAPH_DEPLOY_KEY --version-label v0.0.1` | **BLOCKED** — needs a browser and the deployer wallet |
+| 2.1 | Create the `xorr-aqua` slug at thegraph.com/studio with the deployer wallet, then `cd subgraph-aqua && npx graph deploy xorr-aqua --deploy-key $GRAPH_DEPLOY_KEY --version-label v0.0.1` | **BLOCKED — credential does not exist in this repo.** Re-tested three ways rather than assumed: (a) the deploy still uploads to IPFS as `Qmctad…` and then fails `Subgraph not found`; (b) `subgraph_create` on `api.studio.thegraph.com/deploy/` answers `-32601 Method not found`, with and without the deploy key, so there is no API path; (c) opened thegraph.com/studio in a browser — it reads **"NOT LOGGED IN · Sign message to use Studio"**, and `.env` contains **no private key of any kind**, so the SIWE signature cannot be produced here. The browser half of this blocker is solved; the wallet half is not. |
 | 2.2 | Set `AQUA_SUBGRAPH_URL` on both Railway executor services; confirm `/graph/decision` stops reporting "No Aqua book index configured". The consumer is `server/src/graph/aqua.ts`, which already throws `AquaIndexUnavailable` when the var is empty | **BLOCKED** by 2.1 |
-| 2.3 | x402 Gateway queries — mechanism already verified (`402`, `eip155:8453`, 0.01 USDC per query, EIP-3009 via a `Payment-Signature` header). Composes the Studio subgraph with the Gateway: two Graph products, no dashboard needed | **BLOCKED** — spends real mainnet USDC |
+| 2.3 | x402 Gateway queries — mechanism already verified (`402`, `eip155:8453`, 0.01 USDC per query, EIP-3009 via a `Payment-Signature` header). Composes the Studio subgraph with the Gateway: two Graph products, no dashboard needed | **BLOCKED — spends real mainnet USDC.** Not attempted; this is one of the three things worth pausing for, and it also needs a signing key the repo does not have |
 | 2.4 | Surface the composition on `/judge`: show both sources and which one moved the routing decision | **BLOCKED** by 2.1 or 2.3 |
 
 ## Phase 3 — Make SwapVM a real fill

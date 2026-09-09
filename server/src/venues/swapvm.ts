@@ -26,8 +26,9 @@
  */
 import { decodeAbiParameters, encodeAbiParameters, parseAbiParameters, type Address, type Hex } from 'viem';
 import { log } from '../http/request-id.js';
-import { publicClient } from '../evm/client.js';
+import { publicClient, delegateAccount } from '../evm/client.js';
 import { AQUA_EVENTS, aquaAddress } from './aqua.js';
+import { DELEGATION_ABI, DELEGATION_ADDRESS } from '../evm/delegation.js';
 
 /**
  * The official 1inch SwapVM router on Base — the Aqua "app" a SwapVM book is shipped under.
@@ -45,21 +46,35 @@ export function swapVmBookAddress(): Address | undefined {
 }
 
 /**
- * The `ISwapVM.Order` layout, as `orderFor` builds it and `shipArgs` encodes it.
+ * The `ISwapVM.Order` layout — three fields, exactly as the interface declares it.
  *
- * Only the fields a taker needs to reconstruct the order for `delegatedFillArgs` are named; the
- * hook targets and their calldata are carried through untouched, because re-encoding a field we do
- * not understand is how a fill starts failing for reasons nobody can read.
+ * This described FOUR: `(address maker, address receiver, uint256 makerTraits, bytes program)`.
+ * The real struct in `lib/swap-vm/src/interfaces/ISwapVM.sol` is
+ *
+ *     struct Order { address maker; MakerTraits traits; bytes data; }
+ *
+ * with `type MakerTraits is uint256`. Everything a taker needs is packed INTO `traits` by
+ * `MakerTraitsLib.build` — the receiver, the hook flags and their targets — which is why there is no
+ * separate `receiver` field to name.
+ *
+ * The wrong shape decoded silently rather than throwing: an ABI decoder handed a 3-field payload
+ * and a 4-field layout reads the `bytes` offset as `makerTraits` and comes back with
+ * `makerTraits: 96, program: '0x'`. `openPrograms()` then treated the result as a valid order and
+ * `delegatedFillArgs` reverted on it — and the catch above logs that as "another app's payload",
+ * which is exactly what it looks like. That is why SwapVM never filled: not a missing maker, a
+ * layout that could not have worked if one had existed.
+ *
+ * Found by writing `live-swapvm.ts` and watching `shipArgs` revert on an order the book itself had
+ * just built.
  */
-const ORDER_TUPLE = parseAbiParameters(
-  '(address maker, address receiver, uint256 makerTraits, bytes program)',
-);
+const ORDER_TUPLE = parseAbiParameters('(address maker, uint256 traits, bytes data)');
 
 export type SwapVmOrder = {
   maker: Address;
-  receiver: Address;
-  makerTraits: bigint;
-  program: Hex;
+  /** `MakerTraits`, a packed uint256: receiver, hook flags and their targets all live in here. */
+  traits: bigint;
+  /** The shipped program bytecode the router executes at fill time. */
+  data: Hex;
 };
 
 export function decodeOrder(encoded: Hex): SwapVmOrder {
@@ -82,9 +97,8 @@ const BOOK_ABI = [
         type: 'tuple',
         components: [
           { name: 'maker', type: 'address' },
-          { name: 'receiver', type: 'address' },
-          { name: 'makerTraits', type: 'uint256' },
-          { name: 'program', type: 'bytes' },
+          { name: 'traits', type: 'uint256' },
+          { name: 'data', type: 'bytes' },
         ],
       },
       { name: 'principal', type: 'address' },
@@ -213,6 +227,37 @@ export async function buildSwapVmFill(params: {
     if (!args) continue;
 
     const [token, venue, amount, data] = args;
+
+    /*
+     * Simulate the real `spend()` before offering this program to the settlement path.
+     *
+     * `delegatedFillArgs` is an ENCODER. It is a pure view that returns calldata for any order it
+     * is handed, including one that cannot fill, so "the view returned bytes" says nothing about
+     * whether the trade would go through. This function used to return the first program it could
+     * encode, and the first program on Aqua is not the first program that still has inventory.
+     *
+     * That cost a real fill: a maker whose strategy had been superseded was still `Shipped` in
+     * Aqua's logs, so it was still discovered, and the fill reverted three frames deep with
+     * `SafeBalancesForTokenNotInActiveStrategy`. Worse than the revert is what follows it — the
+     * caller prefers a SwapVM plan over the aggregator, so a stale program does not degrade to a
+     * worse fill, it loses the trade entirely.
+     *
+     * So the test is the transaction itself, from the delegate that will send it. A candidate that
+     * cannot fill is skipped and the loop moves on; if none can, the caller routes to 1inch, which
+     * is the correct outcome rather than a failure.
+     */
+    const fillable = await publicClient
+      .simulateContract({
+        account: delegateAccount,
+        address: DELEGATION_ADDRESS,
+        abi: DELEGATION_ABI,
+        functionName: 'spend',
+        args: [params.owner, token, venue, amount, data],
+      })
+      .then(() => true)
+      .catch(() => false);
+    if (!fillable) continue;
+
     return { token, venue, amount, data, order: p.order, hash: p.hash };
   }
   return undefined;

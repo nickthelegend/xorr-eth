@@ -15,17 +15,23 @@ process.env.XORR_CHAIN ??= 'base-sepolia';
 process.env.SWAPVM_BOOK_ADDRESS ??= '0x6cc8379b893d0239392720368f901b56c0f51e53';
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { encodeAbiParameters, parseAbiParameters } from 'viem';
 
 const getLogs = vi.fn();
 const readContract = vi.fn();
 const getBlockNumber = vi.fn(async () => 1_000_000n);
+/** The dry run of `spend()` that decides whether a discovered program can actually fill. */
+const simulateContract = vi.fn(async () => ({ request: {} }));
 
 vi.mock('../evm/client.js', () => ({
   publicClient: {
     getLogs: (...a: unknown[]) => getLogs(...a),
     readContract: (...a: unknown[]) => readContract(...a),
     getBlockNumber: () => getBlockNumber(),
+    simulateContract: (...a: unknown[]) => simulateContract(...a),
   },
+  delegateAccount: { address: '0xC38f38f45463f77bD823FebE16b15714Eb98c8A5' },
+  walletClient: {},
 }));
 
 const { openPrograms, buildSwapVmFill, encodeOrder, decodeOrder, swapVmBookAddress } = await import(
@@ -36,11 +42,16 @@ const SWAP_VM = '0x111111338c5091E8440b67B168bAe16a668AC0De';
 const OTHER_APP = '0xff0845130ca2b077c0cdf964d162fb00e869c199';
 const MAKER = '0x02a54677000000000000000000000000000000aa';
 
-const order = (program: `0x${string}` = '0xdeadbeef') => ({
+/**
+ * `ISwapVM.Order` — three fields. It used to be built here with four, matching a wrong ORDER_TUPLE,
+ * and the round-trip test below passed because it encoded and decoded through the SAME wrong
+ * layout. Self-consistency is not agreement with the chain, which is what the assertion added
+ * below now pins.
+ */
+const order = (data: `0x${string}` = '0xdeadbeef') => ({
   maker: MAKER as `0x${string}`,
-  receiver: '0x0000000000000000000000000000000000000000' as `0x${string}`,
-  makerTraits: 1n,
-  program,
+  traits: 1n,
+  data,
 });
 
 /** A `Shipped`/`Docked` log as viem decodes it: every parameter non-indexed. */
@@ -53,6 +64,8 @@ const evt = (app: string, hash: string, strategy: string, block: bigint, logInde
 beforeEach(() => {
   getLogs.mockReset();
   readContract.mockReset();
+  simulateContract.mockReset();
+  simulateContract.mockResolvedValue({ request: {} });
 });
 
 describe('the order round-trips through the wire format', () => {
@@ -60,8 +73,32 @@ describe('the order round-trips through the wire format', () => {
     const o = order('0xc0ffee');
     const back = decodeOrder(encodeOrder(o));
     expect(back.maker.toLowerCase()).toBe(MAKER.toLowerCase());
-    expect(back.program).toBe('0xc0ffee');
-    expect(back.makerTraits).toBe(1n);
+    expect(back.data).toBe('0xc0ffee');
+    expect(back.traits).toBe(1n);
+  });
+
+  /*
+   * The assertion the old test was missing.
+   *
+   * A round trip through our own encoder proves the encoder agrees with the decoder and nothing
+   * more — both were wrong together for as long as this file has existed, describing a four-field
+   * order against a three-field struct. What matters is agreeing with the CHAIN, so this pins the
+   * layout against the interface: `struct Order { address maker; MakerTraits traits; bytes data; }`
+   * in lib/swap-vm/src/interfaces/ISwapVM.sol, where `type MakerTraits is uint256`.
+   *
+   * Decoding a payload encoded to the real three-field shape is the check. Under the old layout it
+   * came back `traits: 96n` — an ABI offset read as a value — with an empty program, which is
+   * exactly what `delegatedFillArgs` reverted on.
+   */
+  it('matches the three-field struct the contract declares', () => {
+    const real = encodeAbiParameters(
+      parseAbiParameters('(address maker, uint256 traits, bytes data)'),
+      [{ maker: MAKER as `0x${string}`, traits: 7n, data: '0xbeef' }] as never,
+    );
+    const back = decodeOrder(real);
+    expect(back.maker.toLowerCase()).toBe(MAKER.toLowerCase());
+    expect(back.traits).toBe(7n);
+    expect(back.data).toBe('0xbeef');
   });
 });
 
@@ -72,7 +109,7 @@ describe('discovery filters on the SwapVM app, not ours', () => {
     const found = await openPrograms();
     expect(found).toHaveLength(1);
     expect(found[0]!.hash).toBe('0xaa');
-    expect(found[0]!.order.program).toBe('0xdeadbeef');
+    expect(found[0]!.order.data).toBe('0xdeadbeef');
   });
 
   it('ignores books shipped under another app — Aqua is shared liquidity', async () => {
@@ -140,6 +177,59 @@ describe('building the fill', () => {
     // "Nothing shipped" and "the query broke" are the same answer to the caller unless one speaks.
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  /*
+   * Discovery finds every program still shipped; it cannot tell which ones still have inventory.
+   * A maker whose strategy was superseded stays `Shipped` in Aqua's logs forever, and the encoder
+   * happily builds calldata for it — so without this filter the settlement path would prefer a
+   * dead program over the aggregator and lose the trade outright.
+   */
+  it('skips a program whose fill would revert, and takes the next one', async () => {
+    getLogs
+      .mockResolvedValueOnce([
+        evt(SWAP_VM, '0xaa', encodeOrder(order('0xdead')), 10n, 0),
+        evt(SWAP_VM, '0xbb', encodeOrder(order('0xbeef')), 11n, 0),
+      ])
+      .mockResolvedValueOnce([]);
+    readContract
+      .mockResolvedValueOnce([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xstale'])
+      .mockResolvedValueOnce([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xlive']);
+    simulateContract
+      .mockRejectedValueOnce(new Error('SafeBalancesForTokenNotInActiveStrategy'))
+      .mockResolvedValueOnce({ request: {} });
+
+    const fill = await buildSwapVmFill(params);
+    expect(fill?.data).toBe('0xlive');
+    expect(fill?.hash).toBe('0xbb');
+  });
+
+  it('returns undefined when no discovered program can fill, so the caller routes to 1inch', async () => {
+    getLogs
+      .mockResolvedValueOnce([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)])
+      .mockResolvedValueOnce([]);
+    readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
+    simulateContract.mockRejectedValue(new Error('TakerTraitsInsufficientMinOutputAmount'));
+
+    expect(await buildSwapVmFill(params)).toBeUndefined();
+  });
+
+  it('simulates as the delegate that will send it, against the real spend()', async () => {
+    getLogs
+      .mockResolvedValueOnce([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)])
+      .mockResolvedValueOnce([]);
+    readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
+
+    await buildSwapVmFill(params);
+    const sim = simulateContract.mock.calls[0]![0] as {
+      functionName: string;
+      account: { address: string };
+      args: unknown[];
+    };
+    // Simulating anything else would prove a different transaction than the one we send.
+    expect(sim.functionName).toBe('spend');
+    expect(sim.account.address).toBe('0xC38f38f45463f77bD823FebE16b15714Eb98c8A5');
+    expect(sim.args[4]).toBe('0xcafe');
   });
 
   it('refuses a zero minimum rather than filling at any price', async () => {
