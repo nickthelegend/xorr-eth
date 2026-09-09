@@ -25,8 +25,7 @@ import { withdrawCalldata } from '../venues/aave.js';
 import { suppliedUsd } from '../evm/balances.js';
 import { publicClient } from '../evm/client.js';
 import { ADDRESSES } from '../evm/chains.js';
-import { one } from '../db/index.js';
-import { requireUser } from '../auth/middleware.js';
+import { currentWallet } from './wallet-context.js';
 import { isAddress, type Address } from 'viem';
 import { addressOfBasename, basenameOf } from '../evm/basename.js';
 import type { Context } from 'hono';
@@ -44,11 +43,17 @@ const MAX_UINT256 = (1n << 256n) - 1n;
  * This module is mostly public routes and has no wallet helper of its own; the two below are the
  * exceptions because a supplied balance belongs to somebody.
  */
+/*
+ * Delegates to `currentWallet` rather than asking again.
+ *
+ * This was its own `WHERE user_id = $1 LIMIT 1` with no ORDER BY — one of nine such copies, each
+ * free to return a different wallet than the others on an account with more than one row. The
+ * damage is not that a query is duplicated: it is that your agents, your alerts, your limits and
+ * your trades could each be resolved against a DIFFERENT wallet within one signed-in session.
+ * One definition, in `wallet-context`, is the whole point of that module.
+ */
 async function currentWalletFor(c: Context): Promise<{ address: string } | undefined> {
-  const { userId } = requireUser(c);
-  return await one<{ address: string }>(`SELECT address FROM wallets WHERE user_id = $1 LIMIT 1`, [
-    userId,
-  ]);
+  return currentWallet(c);
 }
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';

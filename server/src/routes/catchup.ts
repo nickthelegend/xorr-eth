@@ -16,8 +16,8 @@
  *     has not done anything yet, or a returning one is buried under a month.
  */
 import { Hono } from 'hono';
-import { one, query } from '../db/index.js';
-import { requireUser } from '../auth/middleware.js';
+import { query } from '../db/index.js';
+import { currentWallet } from './wallet-context.js';
 
 export const catchup = new Hono();
 
@@ -32,11 +32,15 @@ type Entry = {
 };
 
 catchup.get('/catchup', async (c) => {
-  const { userId } = requireUser(c);
-  const w = await one<{ id: string; last_seen_at: Date | null }>(
-    `SELECT id, last_seen_at FROM wallets WHERE user_id = $1 LIMIT 1`,
-    [userId],
-  );
+  /*
+   * The SAME wallet every other route resolves, not a second guess at it.
+   *
+   * This was `WHERE user_id = $1 LIMIT 1` with no ORDER BY — the exact shape `wallet-context`
+   * exists to prevent — so on an account with two wallet rows the catch-up could summarise a
+   * different wallet's trail than the one the app is showing, and could pick differently between
+   * calls.
+   */
+  const w = await currentWallet(c);
   if (!w) return c.json({ since: null, entries: [], counts: {}, isFirstVisit: true });
 
   const since = w.last_seen_at;
@@ -75,8 +79,7 @@ catchup.get('/catchup', async (c) => {
 
 /** Acknowledge: everything up to now has been seen. Deliberately explicit. */
 catchup.post('/catchup/seen', async (c) => {
-  const { userId } = requireUser(c);
-  const w = await one<{ id: string }>(`SELECT id FROM wallets WHERE user_id = $1 LIMIT 1`, [userId]);
+  const w = await currentWallet(c);
   if (!w) return c.json({ ok: false }, 400);
   await query(`UPDATE wallets SET last_seen_at = now() WHERE id = $1`, [w.id]);
   return c.json({ ok: true, seenAt: new Date().toISOString() });

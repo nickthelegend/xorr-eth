@@ -15,6 +15,8 @@ export type WalletRow = {
   kind: string;
   cluster: string;
   user_id: string;
+  /** When the user last read their catch-up. Distinct from `active_at`; see migration 011. */
+  last_seen_at: Date | null;
 };
 
 /**
@@ -27,14 +29,24 @@ export type WalletRow = {
  * free to return either, differently between calls.
  *
  * Which it returns decides whose policy is read, whose balance is shown and whose trail is written,
- * so "whatever Postgres feels like" is not an acceptable answer. Newest wins: the most recent
- * connect is the wallet the app is actually using, and the ordering is a total one because `id` is
- * the primary key and breaks any tie in `created_at`.
+ * so "whatever Postgres feels like" is not an acceptable answer.
+ *
+ * It was then "newest row wins", which is still a guess, and on the E2E account it guessed wrong:
+ * the app signs in as an embedded wallet created on the 5th while the newest row is a connected
+ * one from the 8th. Everything downstream read the wrong wallet — /limits reported a $0 cap and
+ * `no_delegation` for an account holding a live $1,600 on-chain grant, and refused to create a
+ * strategy on those grounds. The app was right and the server was answering about someone else.
+ *
+ * `active_at` is stamped by `/wallet/connect`, which is the app stating the address it is on. So
+ * the answer is now something the client asserts each session rather than something inferred from
+ * row age. `created_at` and `id` still break ties, and `id` being the primary key makes the
+ * ordering total.
  */
 export async function currentWallet(c: Context): Promise<WalletRow | undefined> {
   const { userId } = requireUser(c);
   return one<WalletRow>(
-    `SELECT * FROM wallets WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+    `SELECT * FROM wallets WHERE user_id = $1
+      ORDER BY active_at DESC NULLS LAST, created_at DESC, id DESC LIMIT 1`,
     [userId],
   );
 }

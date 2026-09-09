@@ -89,8 +89,10 @@ routes.post('/wallet/create', async (c) => {
   }
 
   const row = await one<WalletRow>(
-    `INSERT INTO wallets (id, user_id, address, kind, cluster) VALUES ($1,$2,$3,'embedded',$4)
-     ON CONFLICT (address) DO UPDATE SET user_id = EXCLUDED.user_id RETURNING *`,
+    `INSERT INTO wallets (id, user_id, address, kind, cluster, active_at)
+     VALUES ($1,$2,$3,'embedded',$4, now())
+     ON CONFLICT (address) DO UPDATE
+       SET user_id = EXCLUDED.user_id, active_at = now() RETURNING *`,
     [randomUUID(), userId, address, CHAIN_KEY],
   );
   await append({
@@ -153,8 +155,12 @@ routes.post('/wallet/connect', async (c) => {
   const known = await one<{ id: string }>(`SELECT id FROM wallets WHERE address = $1`, [body.address]);
 
   const row = await one<WalletRow>(
-    `INSERT INTO wallets (id, user_id, address, kind, cluster) VALUES ($1,$2,$3,'connected',$4)
-     ON CONFLICT (address) DO UPDATE SET kind='connected', user_id = EXCLUDED.user_id RETURNING *`,
+    // `active_at` is the point of this call as much as the row is: the app is telling us which of
+    // this user's addresses it is on, and that is what `currentWallet` orders by.
+    `INSERT INTO wallets (id, user_id, address, kind, cluster, active_at)
+     VALUES ($1,$2,$3,'connected',$4, now())
+     ON CONFLICT (address) DO UPDATE
+       SET kind='connected', user_id = EXCLUDED.user_id, active_at = now() RETURNING *`,
     [randomUUID(), userId, body.address, CHAIN_KEY],
   );
 

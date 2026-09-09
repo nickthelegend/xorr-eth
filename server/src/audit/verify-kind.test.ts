@@ -109,4 +109,39 @@ describe('verify says which property failed', () => {
     expect(r.intact).toBe(3);
     expect(r.kind).toBe('link');
   });
+
+  /*
+   * The tally is the difference between "this broke once, months ago" and "this is still
+   * breaking". `/verify` reported only the first break, so those two read identically on screen.
+   */
+  it('counts every fork, not only the first, and names the newest', async () => {
+    const a = row(1, GENESIS);
+    const forked = row(2, 'ee'.repeat(32));
+    const good = row(3, forked.hash);
+    const forkedAgain = row(4, 'dd'.repeat(32));
+    rows.push(a, forked, good, forkedAgain);
+    const r = await verify('w1');
+    expect(r.linkBreaks).toBe(2);
+    expect(r.brokenAtSeq).toBe('2');
+    expect(r.lastBreakSeq).toBe('4');
+  });
+
+  it('reports a single old fork as one break with nothing after it', async () => {
+    const a = row(1, GENESIS);
+    const forked = row(2, 'ee'.repeat(32));
+    rows.push(a, forked, row(3, forked.hash), row(4, row(3, forked.hash).hash));
+    const r = await verify('w1');
+    expect(r.linkBreaks).toBe(1);
+    expect(r.lastBreakSeq).toBe('2');
+  });
+
+  it('an unbroken chain has no breaks to count', async () => {
+    const a = row(1, GENESIS);
+    const b = row(2, a.hash);
+    rows.push(a, b);
+    const r = await verify('w1');
+    expect(r.ok).toBe(true);
+    expect(r.linkBreaks).toBe(0);
+    expect(r.lastBreakSeq).toBeUndefined();
+  });
 });

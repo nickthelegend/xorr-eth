@@ -14,7 +14,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
 import { append } from '../audit/log.js';
-import { requireUser } from '../auth/middleware.js';
+import { currentWallet } from '../routes/wallet-context.js';
 import { PERSONAS, type PersonaId } from '../bot/personas.js';
 import { leaderboard } from './leaderboard.js';
 
@@ -31,10 +31,17 @@ type AgentRow = {
   created_at: Date;
 };
 
+/*
+ * Delegates to `currentWallet` rather than asking again.
+ *
+ * This was its own `WHERE user_id = $1 LIMIT 1` with no ORDER BY — one of nine such copies, each
+ * free to return a different wallet than the others on an account with more than one row. The
+ * damage is not that a query is duplicated: it is that your agents, your alerts, your limits and
+ * your trades could each be resolved against a DIFFERENT wallet within one signed-in session.
+ * One definition, in `wallet-context`, is the whole point of that module.
+ */
 async function walletId(c: Context): Promise<string | undefined> {
-  const { userId } = requireUser(c);
-  const w = await one<{ id: string }>(`SELECT id FROM wallets WHERE user_id = $1 LIMIT 1`, [userId]);
-  return w?.id;
+  return (await currentWallet(c))?.id;
 }
 
 /** The palette a persona is drawn with. Product config, not measured data — legitimately local. */

@@ -111,8 +111,22 @@ describe('the agent roster is persisted', () => {
         agentId: agent.id,
       }),
     });
-    // The wallet may already be at its cap; that is a legitimate reason to skip, not a failure.
-    if (created.status !== 200) return;
+    /*
+     * A full cap is a legitimate reason to skip. Nothing else is.
+     *
+     * This was a bare `if (created.status !== 200) return`, so when the wallet had no on-chain
+     * delegation the whole test returned before asserting anything and reported PASS — the firing
+     * behaviour it exists to check was never exercised. A test that cannot run must say so.
+     */
+    if (created.status !== 200) {
+      const why = (await created.clone().json()) as { error?: string };
+      expect(
+        why.error,
+        `strategy creation failed with "${why.error}", which is not a cap limit — this test ` +
+          'did not run. Grant the test wallet a delegation on this chain.',
+      ).toMatch(/cap|limit|exceed/i);
+      return;
+    }
     const mine = (await created.json()) as { id: string };
 
     const fired = (await (await req(`/agents/${agent.id}`, { method: 'DELETE' })).json()) as {

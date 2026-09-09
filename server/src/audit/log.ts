@@ -199,6 +199,20 @@ export type VerifyResult = {
   kind?: 'link' | 'content';
   /** Rows whose own contents still hash to their stored hash, break or no break. */
   intact: number;
+  /**
+   * How many link breaks there are, and where the LAST one is.
+   *
+   * `brokenAtSeq` names the first, which was the only number reported — and on a trail carrying
+   * one old fork, "forks at entry 2" is indistinguishable from "forks at entry 2 and is still
+   * forking today". That is the difference between damage that was contained and damage that is
+   * ongoing, and it was the one thing the walk would not say.
+   *
+   * The advisory lock in `append` is what stopped it. This is how a reader confirms that, instead
+   * of taking it on faith.
+   */
+  linkBreaks: number;
+  /** Seq of the most recent link break, when there is one. */
+  lastBreakSeq?: string;
 };
 
 export async function verify(walletId: string): Promise<VerifyResult> {
@@ -210,6 +224,8 @@ export async function verify(walletId: string): Promise<VerifyResult> {
   let brokenAtSeq: string | undefined;
   let kind: 'link' | 'content' | undefined;
   let intact = 0;
+  let linkBreaks = 0;
+  let lastBreakSeq: string | undefined;
 
   for (const r of rows) {
     const expected = hashEntry({
@@ -239,14 +255,24 @@ export async function verify(walletId: string): Promise<VerifyResult> {
       brokenAtSeq = r.seq;
     }
 
-    if (r.prev_hash !== prev && kind === undefined) {
-      kind = 'link';
-      brokenAtSeq = r.seq;
+    /*
+     * Every link break is counted, not only the first.
+     *
+     * `kind`/`brokenAtSeq` still name the first one, because that is where the line stops being
+     * one line. The tally is what says whether the damage is historical or current.
+     */
+    if (r.prev_hash !== prev) {
+      linkBreaks += 1;
+      lastBreakSeq = r.seq;
+      if (kind === undefined) {
+        kind = 'link';
+        brokenAtSeq = r.seq;
+      }
     }
     prev = r.hash;
   }
 
-  return { ok: kind === undefined, brokenAtSeq, checked: rows.length, kind, intact };
+  return { ok: kind === undefined, brokenAtSeq, checked: rows.length, kind, intact, linkBreaks, lastBreakSeq };
 }
 
 const CSV_COLUMNS = [

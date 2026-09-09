@@ -79,7 +79,9 @@ describe('every path the client calls exists on the server', () => {
     expect(
       body,
       `${method} ${path} returned a bare 404 — the client calls a route that does not exist`,
-    ).toMatch(/not_found|no_feed|no_wallet/);
+      // `unknown_agent` is the same shape of answer: a handler ran, looked, and said the thing
+      // you named is not on your roster. The route exists, which is the only claim here.
+    ).toMatch(/not_found|no_feed|no_wallet|unknown_agent/);
     // Generous on purpose. This checks that a route EXISTS, and one of them — the backtest —
     // legitimately replays ninety days of real history on a cold cache. Speed is a different
     // test's problem; a route that is missing is this one's.

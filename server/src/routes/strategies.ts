@@ -412,6 +412,35 @@ strategyRoutes.post('/strategies', async (c) => {
    * with a real $1,600 on-chain cap accepted a $999,999/day strategy, because the guard's failure
    * mode was to wave everything through. Absent permission has to mean refuse, not allow.
    */
+  /*
+   * WHOSE agent, before WHETHER you may trade.
+   *
+   * This ran below the delegation gate, so naming an agent that is not yours reported "grant
+   * permission first" — you would grant it, retry, and only then be told the real problem. A
+   * malformed request is malformed regardless of permission state, and answering the fixable
+   * thing first is the difference between one round trip and two.
+   *
+   * It also made the isolation test vacuous: another wallet's agent id was refused for having no
+   * delegation rather than for belonging to someone else, so the test passed green without ever
+   * reaching the rule it exists to check.
+   *
+   * The query is scoped to this wallet, so the answer is only ever about your own roster and
+   * names nothing belonging to anyone else.
+   */
+  let attached: { id: string; name: string } | undefined;
+  if (body.agentId) {
+    attached = await one<{ id: string; name: string }>(
+      `SELECT id, name FROM agents WHERE id = $1 AND wallet_id = $2 AND hired = true`,
+      [body.agentId, w.id],
+    );
+    if (!attached) {
+      return c.json(
+        { error: 'unknown_agent', message: 'That agent is not one you have hired.' },
+        400,
+      );
+    }
+  }
+
   const policy = await readPolicy(w.address as Address);
   if (!policy || policy.revoked) {
     return c.json(
@@ -495,19 +524,9 @@ strategyRoutes.post('/strategies', async (c) => {
    * an instruction rather than on its own initiative — 'Wallet connected' is written the same way.
    */
   let agentName = 'xorr';
-  if (body.agentId) {
-    const agent = await one<{ id: string; name: string }>(
-      `SELECT id, name FROM agents WHERE id = $1 AND wallet_id = $2 AND hired = true`,
-      [body.agentId, w.id],
-    );
-    if (!agent) {
-      return c.json(
-        { error: 'unknown_agent', message: 'That agent is not one you have hired.' },
-        400,
-      );
-    }
-    agentId = agent.id;
-    agentName = agent.name;
+  if (attached) {
+    agentId = attached.id;
+    agentName = attached.name;
   }
 
   const row = await one<StrategyRow>(

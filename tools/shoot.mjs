@@ -94,6 +94,59 @@ const ROUTES = [
   // `/_dev/components` was never a route — the design harness lives at `/_dev/ui`, and
   // `/_dev/ui-edge` was not swept at all, so the one screen whose whole job is to render every
   // edge case was the one screen nothing checked.
+  /*
+   * Everything below was reachable and never asserted.
+   *
+   * The list above covered 49 paths of 98 route files, so half the app was verified only as
+   * "rendered without erroring" — which is how `/verify` came to report "0 Failed" by never asking
+   * about the wallet it had, and passed every sweep while doing it. These are the rest.
+   */
+  ['50-explore', '/explore'],
+  ['51-limits', '/limits'],
+  ['52-balance', '/balance'],
+  ['53-delegation', '/delegation'],
+  ['54-approvals', '/approvals'],
+  ['55-verify', '/verify'],
+  ['56-metrics', '/metrics'],
+  ['57-system', '/system'],
+  ['58-network', '/network'],
+  ['59-rates', '/rates'],
+  ['60-graph', '/graph'],
+  ['61-graph-decision', '/graph/decision'],
+  ['62-graph-spends', '/graph/spends'],
+  ['63-audit-chain', '/audit/chain'],
+  ['64-runs', '/runs'],
+  ['65-proposals', '/proposals'],
+  ['66-pnl', '/pnl'],
+  ['67-disposals', '/disposals'],
+  ['68-spend', '/spend'],
+  ['69-schedule', '/schedule'],
+  ['70-allocation', '/allocation'],
+  ['71-sources', '/sources'],
+  ['72-sponsors', '/sponsors'],
+  ['73-venues', '/venues'],
+  ['74-tokens', '/tokens'],
+  ['75-coverage', '/coverage'],
+  ['76-movers', '/movers'],
+  ['77-stocks', '/stocks'],
+  ['78-earnings', '/earnings'],
+  ['79-funding', '/funding'],
+  ['80-compare', '/compare'],
+  ['81-roster-compare', '/roster-compare'],
+  ['82-risk', '/risk'],
+  ['83-policy', '/policy'],
+  ['84-profile', '/profile'],
+  ['85-notifications', '/notifications'],
+  ['86-catchup', '/catchup'],
+  ['87-export', '/export'],
+  ['88-basename', '/basename'],
+  ['89-backtest', '/backtest'],
+  ['90-sell-everything', '/sell-everything'],
+  ['91-voice', '/voice'],
+  ['92-not-found', '/no-such-screen-exists'],
+  ['93-oracle-equity', '/oracle/NVDAc'],
+  ['94-crosscheck', '/crosscheck/WETH'],
+  ['95-route', '/route/WETH'],
   ['46-dev-ui', '/_dev/ui'],
   ['46b-dev-ui-edge', '/_dev/ui-edge'],
   ['47-dev-fidelity', '/_dev/fidelity'],
@@ -146,7 +199,12 @@ const EXPECT = {
    * agent's name. The assertion was pinning the bug in place. What has to be true is that the
    * line says something about the agent's actual state.
    */
-  '25-bot': { must: [/No proposal right now|Watching|Proposed|Waiting/] },
+  /*
+   * The old pattern listed four sentences the screen never says. What makes `/bot` correct is
+   * that the agent answered TODAY — a proposal or a decline, either is the product — so this
+   * asserts the persona and a message under today's divider instead of guessing the wording.
+   */
+  '25-bot': { must: [/Momentum Scout|Value Hunter|Range Keeper|Risk Warden/, /Today/] },
   '26-bot-roster': { must: [/Momentum Scout/] },
   '27-bot-leaderboard': { must: [/Momentum Scout|Leaderboard|leaderboard/] },
   // Whichever agent the id names — and never a different one silently substituted.
@@ -211,6 +269,73 @@ const EXPECT = {
    * the redirect held. What is NOT accepted is the dev screen appearing in a production build —
    * that would be the real defect, and it would fail the first alternative's absence.
    */
+  /*
+   * The previously unasserted half. Each one names the thing that would be WRONG if the screen
+   * silently degraded — a number missing, a provenance label dropped, an empty state replaced by a
+   * confident zero.
+   */
+  '50-explore': { must: [/Explore/, /MARKETS/, /Safety|Permission/] },
+  // The cap and the spend must both be money, not a bare 0 — see the $0-with-no-reason bug.
+  '51-limits': { must: [/REMAINING TODAY/, /\$[\d,]+\.\d\d/, /cap/] },
+  '52-balance': { must: [/TOTAL/, /\$[\d,]+\.\d\d/, /Cash/] },
+  '53-delegation': { must: [/STATE/, /Daily cap/, /0x[0-9a-fA-F]{4}/] },
+  // "read from the chain rather than from our record of it" is the claim this screen exists for.
+  '54-approvals': { must: [/Approvals/, /read from the chain/i, /USDC/] },
+  /*
+   * A verification console that reports zero failures because it never asked is worse than one
+   * that reports a failure. It asks about the signed-in wallet now, so a Failed count must appear
+   * and the not-asked count must not be the majority.
+   */
+  '55-verify': { must: [/Passed/, /Failed/, /Not asked/, /\d+ Passed/] },
+  '56-metrics': { must: [/RUNS BY OUTCOME|STRATEGIES BY STATE/, /\d+/] },
+  '57-system': { must: [/EXECUTOR/, /base-sepolia|base-fork|base/, /postgres/] },
+  '58-network': { must: [/CHAIN/, /BLOCK/, /[\d,]{6,}/] },
+  // The rate, and where it came from. A number with no provenance is the failure here.
+  '59-rates': { must: [/\d+\.\d+%/, /Aave/] },
+  '60-graph': { must: [/INDEXED TO/, /[\d,]{6,}/] },
+  '61-graph-decision': { must: [/Decision|router/i] },
+  '62-graph-spends': { must: [/Spend events|Reconstructed/i] },
+  // A forked chain must say so rather than render as healthy.
+  '63-audit-chain': { must: [/HASH CHAIN/, /Entry|Forked|unbroken/i] },
+  '64-runs': { must: [/Runs/, /All/] },
+  '65-proposals': { must: [/Proposals/, /All/] },
+  '66-pnl': { must: [/Realised/] },
+  '67-disposals': { must: [/Disposals/] },
+  '68-spend': { must: [/Spend/, /contract|day/i] },
+  '69-schedule': { must: [/runs next|scheduled/i] },
+  '70-allocation': { must: [/Allocation/] },
+  '71-sources': { must: [/Sources/, /Every number/i] },
+  '72-sponsors': { must: [/Integrations|Sponsors/, /1inch/i] },
+  '73-venues': { must: [/Venues/, /fill is allowed/i] },
+  '74-tokens': { must: [/Tokens/, /settle/i] },
+  '75-coverage': { must: [/Coverage/, /PRICED/i] },
+  // Real feeds unlabelled, synthetic ones labelled — the whole point of this screen.
+  '76-movers': { must: [/Movers/, /UP|DOWN/, /SIMULATED/] },
+  '77-stocks': { must: [/Equities/, /\$[\d,]+/] },
+  '78-earnings': { must: [/Earnings/, /EDGAR/i] },
+  '79-funding': { must: [/Funding/] },
+  '80-compare': { must: [/Compare/] },
+  '81-roster-compare': { must: [/Compare agents/i] },
+  '82-risk': { must: [/Risk limits/i] },
+  // Privy holds the key; the app must not claim it attached the policy itself.
+  '83-policy': { must: [/PRIVY POLICY/i], never: [/we attached/i] },
+  '84-profile': { must: [/ADDRESS|This wallet/i] },
+  '85-notifications': { must: [/Notifications/] },
+  '86-catchup': { must: [/Since you (looked|were)/i] },
+  '87-export': { must: [/Export/, /audit trail/i] },
+  '88-basename': { must: [/Basename/i] },
+  '89-backtest': { must: [/Backtest/, /real past prices|WETH/i] },
+  '90-sell-everything': { must: [/would sell|preview/i] },
+  '91-voice': { must: [/Voice/] },
+  /*
+   * The app's own 404, not expo-router's development fallback. `Sitemap` appearing here means the
+   * dev screen is back, and the URL being echoed means the reflection is back.
+   */
+  '92-not-found': { must: [/There is nothing here/], never: [/Unmatched Route/, /Sitemap/] },
+  // No oracle for a crypto symbol is a real answer; a retry on it is not.
+  '93-oracle-equity': { must: [/NVDAc/, /Readings|oracle/i] },
+  '94-crosscheck': { must: [/CROSS-CHECK/i, /agree|differ/i] },
+  '95-route': { must: [/Route/, /USDC/] },
   '46-dev-ui': { must: [/Design system|TOTAL VALUE/] },
   '46b-dev-ui-edge': { must: [/Edge cases|TOTAL VALUE/] },
   '47-dev-fidelity': { must: [/Fidelity|fidelity|TOTAL VALUE/] },
@@ -348,6 +473,14 @@ const resolveIds = async () => {
  * state, handled honestly by the app — and it is not the state a user is in, so measuring it tells
  * you nothing about whether the chart works. Waiting makes the sweep repeatable instead of a race.
  */
+/**
+ * How long a screen may take to finish saying what it has to say, past the first six seconds.
+ *
+ * Sized on the slowest real screen rather than a round number: `/verify` runs its checks against
+ * live chain, subgraph and Aave calls and lands around twenty seconds cold.
+ */
+const SETTLE_BUDGET_MS = 30_000;
+
 const waitForWarm = async () => {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
@@ -429,12 +562,29 @@ const main = async () => {
      * wallet as a content failure.
      */
     await page.waitForTimeout(6000);
+    /*
+     * Then WAIT FOR THE CONTENT, rather than asserting once and hoping six seconds was enough.
+     *
+     * Two screens do real work before they can say anything: `/bot` asks the proposal engine for
+     * today's decision, and `/verify` runs twenty live checks against the chain, the subgraph and
+     * Aave. Both finish well past six seconds, so the harness was screenshotting them mid-flight
+     * and calling a slow screen a broken one — and on `/bot` it read yesterday's message and
+     * reported the absence of today's as a defect in the app.
+     *
+     * Polling the assertion fixes that class of failure everywhere instead of hand-tuning a
+     * timeout per screen: a screen that is already settled costs nothing, and a slow one is given
+     * until the budget runs out before it is called wrong.
+     */
+    let full = await page.innerText('body').catch(() => '');
+    for (let waited = 0; waited < SETTLE_BUDGET_MS && contentFailures(stem, full).length; waited += 1000) {
+      await page.waitForTimeout(1000);
+      full = await page.innerText('body').catch(() => '');
+    }
     await page.screenshot({ path: path.join(OUT, `${stem}.png`) });
     // Privy's own SDK logs two of these from its confirmation modal and balance reader. They are
     // third-party and attributed rather than excused.
     const bad = [...new Set(errors)].filter((e) => !/isActive|balanceOf|styled-components/i.test(e));
     const net = [...new Set(netFail)];
-    const full = await page.innerText('body').catch(() => '');
     if (process.env.QA_TRACE) {
       const w = await page
         .evaluate(() => {

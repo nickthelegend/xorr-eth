@@ -119,6 +119,31 @@ export async function policyFor(owner: string): Promise<Policy | null> {
   return d.policy;
 }
 
+/**
+ * Any policy the index currently considers live — not revoked, not expired.
+ *
+ * For tests that need a permitted owner to reason about. Hardcoding one made the suite depend on
+ * a grant staying unexpired forever: `decide` began answering "The permission has expired", which
+ * is the CORRECT answer, and two live tests reported it as a defect in the agent.
+ *
+ * Asking the index for a live one instead keeps the test as real as it was — same subgraph, same
+ * indexed chain data — and lets it stay true as grants come and go.
+ */
+export async function anyLivePolicy(): Promise<Policy | null> {
+  const d = await gql<{ policies: Policy[] }>(
+    `query L($now: BigInt!) {
+      policies(
+        where: { revoked: false, expiresAt_gt: $now }
+        orderBy: expiresAt
+        orderDirection: desc
+        first: 1
+      ) { id owner delegate dailyCap expiresAt revoked totalSpent }
+    }`,
+    { now: String(Math.floor(Date.now() / 1000)) },
+  );
+  return d.policies[0] ?? null;
+}
+
 export async function spendsFor(owner: string, first = 100): Promise<Spend[]> {
   const d = await gql<{ spends: Spend[] }>(
     `query S($owner: Bytes!, $first: Int!) {

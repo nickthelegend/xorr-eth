@@ -33,7 +33,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "3/3\nFund the wallet\nThe bot can only trade what has settled. You can top up or withdraw whenever you like.\n$500\n$250\n$500\n$1,000\n$2,500\nHOW YOU ARE PAYING\nTransfer from an exchange\nWithdraw to your address\nFREE\nOn-chain deposit\nUSDC on Base Sepolia\nON-CHAIN\nCard on-ramp\nNot enabled in this build\nSOON\nFee\nFree\nAvailable\nThu, Sep 10\nSEND USDC TO\n0x95A0b368588713011a15f4b1041423f31B08e615\nOn Base Sep"
+  "text": "3/3\nFund the wallet\nThe bot can only trade what has settled. You can top up or withdraw whenever you like.\n$500\n$250\n$500\n$1,000\n$2,500\nHOW YOU ARE PAYING\nTransfer from an exchange\nWithdraw to your address\nFREE\nOn-chain deposit\nUSDC on Base Sepolia\nON-CHAIN\nCard on-ramp\nNot enabled in this build\nSOON\nFee\nFree\nAvailable\nFri, Sep 11\nSEND USDC TO\n0x95A0b368588713011a15f4b1041423f31B08e615\nOn Base Sep"
  },
  {
   "stem": "05-delegate",
@@ -69,7 +69,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\n$4,404\n+0.27%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nP"
+  "text": "Markets\nCrypto\nStocks\nCommodities\nIndices\nPre-IPO\nPrices are indicative — no tokenized commodity routes on Base yet\n9 shown · 24/7\nXAUT\nGold · Perp · spot feed\n$4,400\n+0.89%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nP"
  },
  {
   "stem": "09-markets-crypto",
@@ -78,7 +78,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Crypto\n9 of 9 markets\n9 markets · spot, settled on Base through 1inch\nBTC\nBitcoin · Perp\n$78,735\n+0.03%\nETH\nEthereum · Perp\n$2,495\n−0.09%\nSOL\nSolana · Spot · Perp\n$103.27\n−0.82%\nXRP\nXRP · Perp\n$1.42\n−1.06%\nDOGE\nDogecoin · Perp\n$0.0891\n−1.64%\nHYPE\nHyperliquid · Spot · Perp\n$85.52\n+1.52%\nAAVE\nAave · Spot · Perp\n$129.43\n−0.55%\nLINK\nChainlink · Perp\n$12.01\n−5.88%\nTON\nToncoin · Spot · Perp\n$1.39\n−1.36%"
+  "text": "Crypto\n9 of 9 markets\n9 markets · spot, settled on Base through 1inch\nBTC\nBitcoin · Perp\n$78,282\n−0.29%\nETH\nEthereum · Perp\n$2,470\n−0.57%\nSOL\nSolana · Spot · Perp\n$102.41\n−0.75%\nXRP\nXRP · Perp\n$1.40\n−1.12%\nDOGE\nDogecoin · Perp\n$0.0869\n−3.22%\nHYPE\nHyperliquid · Spot · Perp\n$85.27\n+1.05%\nAAVE\nAave · Spot · Perp\n$125.83\n−2.56%\nLINK\nChainlink · Perp\n$11.78\n−5.91%\nTON\nToncoin · Spot · Perp\n$1.38\n−1.31%"
  },
  {
   "stem": "10-markets-stocks",
@@ -87,7 +87,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$224.84\nAAPLc\nApple · Tokenized share\n$314.78\nTSLAc\nTesla · Tokenized share\n$370.53\nMETAc\nMeta · Tokenized share\n$652.82\nMSFTc\nMicrosoft · Tokenized share\n$495.16\nAMZNc\nAmazon · Tokenized share\n$252.95\nGOOGLc\nAlphabet · Tokenized share\n$331.08\nMSTRc\nMicroStrategy · Tokenized share\n$135.26"
+  "text": "Stocks\n8 of 8 markets\nTokenized shares on Base · routed through 1inch\nNVDAc\nNvidia · Tokenized share\n$224.53\nAAPLc\nApple · Tokenized share\n$316.86\nTSLAc\nTesla · Tokenized share\n$368.93\nMETAc\nMeta · Tokenized share\n$653.36\nMSFTc\nMicrosoft · Tokenized share\n$493.82\nAMZNc\nAmazon · Tokenized share\n$253.38\nGOOGLc\nAlphabet · Tokenized share\n$332.44\nMSTRc\nMicroStrategy · Tokenized share\n$133.79"
  },
  {
   "stem": "11-markets-commodities",
@@ -96,7 +96,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\n$4,404\n+0.27%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot feed\nSIMULATED\n$"
+  "text": "Commodities\n9 of 9 markets\nPrices are indicative — no tokenized commodity routes on Base yet\nXAUT\nGold · Perp · spot feed\n$4,400\n+0.87%\nXAGT\nSilver · Perp · spot feed\nSIMULATED\n$38.71\n−0.61%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nHG\nCopper · Perp · delivery ref\nSIMULATED\n$4.62\n−0.28%\nPL\nPlatinum · Perp · spot feed\nSIMULATED\n$"
  },
  {
   "stem": "12-markets-indices",
@@ -123,7 +123,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$370.33\nSOL\n$103.29\n−0.82%\nHYPE\n$85.55\n+1.48%"
+  "text": "Markets\nConviction List\nStocks\nDefi\nTOKENS · 3 MARKETS · 24H\nTSLAc\n$368.93\nSOL\n$102.41\n−0.76%\nHYPE\n$85.27\n+1.02%"
  },
  {
   "stem": "15-search",
@@ -132,7 +132,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Search\nBTC\nBitcoin · Perp\n$78,758\n+0.03%\nETH\nEthereum · Perp\n$2,495\n−0.09%\nSOL\nSolana · Spot · Perp\n$103.29\n−0.82%\nXRP\nXRP · Perp\n$1.42\n−1.06%\nDOGE\nDogecoin · Perp\n$0.0891\n−1.70%\nHYPE\nHyperliquid · Spot · Perp\n$85.55\n+1.48%\nAAVE\nAave · Spot · Perp\n$129.42\n−0.59%\nLINK\nChainlink · Perp\n$12.01\n−5.88%\nTON\nToncoin · Spot · Perp\n$1.39\n−1.48%\nNVDAc\nNvidia · Tokenized share\n$224.83\nAAPLc\nApple · Tokenized"
+  "text": "Search\nBTC\nBitcoin · Perp\n$78,283\n−0.31%\nETH\nEthereum · Perp\n$2,469\n−0.59%\nSOL\nSolana · Spot · Perp\n$102.41\n−0.76%\nXRP\nXRP · Perp\n$1.40\n−1.19%\nDOGE\nDogecoin · Perp\n$0.0869\n−3.26%\nHYPE\nHyperliquid · Spot · Perp\n$85.27\n+1.02%\nAAVE\nAave · Spot · Perp\n$125.73\n−2.59%\nLINK\nChainlink · Perp\n$11.78\n−6.10%\nTON\nToncoin · Spot · Perp\n$1.38\n−1.42%\nNVDAc\nNvidia · Tokenized share\n$224.51\nAAPLc\nApple · Tokenized"
  },
  {
   "stem": "16-asset",
@@ -141,7 +141,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Bitcoin\n$78,758\nup 0.0% today\nCandles\nLine\n$78,567\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
+  "text": "Bitcoin\n$78,283\ndown 0.3% today\nCandles\nLine\n$78,112\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nSell\nBuy"
  },
  {
   "stem": "17-asset-stock",
@@ -150,7 +150,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Nvidia\n$224.74\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nNVDAc cannot be settled on Base Sepolia, so there is no order to place."
+  "text": "Nvidia\n$224.47\nSpot price. No price history for this market.\nNo chart for this market yet.\n1D\n1W\n1M\n1Y\nAll\nYour position\nNone\nNo agent holds this yet. Set up a recurring buy and it will start.\nNVDAc cannot be settled on Base Sepolia, so there is no order to place."
  },
  {
   "stem": "18-chart",
@@ -159,7 +159,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USD\n$78,567\n−0.09%\n−$72.00 today\n79.8K\n79.4K\n78.9K\n78.4K\n78.0K\n$78,567\n15m\n1H\n4H\n1D\n1W\n7 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
+  "text": "BTC/USD\n$78,112\n−0.56%\n−$437.00 today\n79.8K\n79.4K\n78.9K\n78.4K\n78.0K\n$78,112\n15m\n1H\n4H\n1D\n1W\n6 of the last 12 closes were up. Momentum Scout is watching the range high before it adds.\nShort\nLong"
  },
  {
   "stem": "19-order",
@@ -168,7 +168,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "WETH\nBuy\nSell\n$250\n0.1002 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst, via Uniswap V3, Aerodrome Gauge Caps\n0.0996 WETH\nBuy $250 of WETH\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
+  "text": "WETH\nBuy\nSell\n$250\n0.1013 WETH\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst, via Tesseraswap, Uniswap V4\n0.1006 WETH\nBuy $250 of WETH\nThat is more than the $0.00 you have settled.\nAuto Close is on: TP +1.0% / SL −1.0% — make $25.00 or lose $25.00"
  },
  {
   "stem": "20-order-stock",
@@ -177,7 +177,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "NVDAc\nBuy\nSell\n$250\n1.1121 NVDAc\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst, via Tesseraswap\n1.1087 NVDAc\nNVDAc cannot be settled on Base Sepolia, so there is no order to place.\nThat is more than the $0.00 you have settled."
+  "text": "NVDAc\nBuy\nSell\n$250\n1.1137 NVDAc\n$100\n$500\nMax\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nAt worst, via Tesseraswap\n1.1104 NVDAc\nNVDAc cannot be settled on Base Sepolia, so there is no order to place.\nThat is more than the $0.00 you have settled."
  },
  {
   "stem": "21-swap",
@@ -186,7 +186,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Swap\nYOU PAY\nBalance 0.0000\n0.1000\n$249.58\nWETH\nYOU RECEIVE\n$248.75\nat least $248.00 after slippage\nUSDC\nRoute\nBest of 2 venues\nYou receive at least\n248.0021 USDC\nPrice impact\n0.375%\nMax slippage\n0.30%\nReview swap\nYou hold no WETH. There is nothing to swap."
+  "text": "Swap\nYOU PAY\nBalance 0.0000\n0.1000\n$246.97\nWETH\nYOU RECEIVE\n$246.29\nat least $245.55 after slippage\nUSDC\nRoute\nElfomofi\nYou receive at least\n245.5532 USDC\nPrice impact\n0.286%\nMax slippage\n0.30%\nReview swap\nYou hold no WETH. There is nothing to swap."
  },
  {
   "stem": "22-perp",
@@ -195,7 +195,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "BTC/USDT\n$78,774\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$64,280\nFunding\n—\nAn 18% move against you wipes the margin.\nxorr does not run a perpetual venue. The mark is a spot price, and the leverage, position size and liquidation above are what those figures would mean on a venue that offered them — nothing here is a live cont"
+  "text": "BTC/USDT\n$78,307\n+$0.00 vs index\nPERPETUAL\nNO EXPIRY\nMAX 10X\nLeverage\non $800 margin\n5x\n2x\n5x\n10x\nPosition size\n$4,000\nLiquidation\n$63,899\nFunding\n—\nAn 18% move against you wipes the margin.\nxorr does not run a perpetual venue. The mark is a spot price, and the leverage, position size and liquidation above are what those figures would mean on a venue that offered them — nothing here is a live cont"
  },
  {
   "stem": "23-position",
@@ -218,11 +218,13 @@
  {
   "stem": "25-bot",
   "route": "/bot",
-  "ok": true,
+  "ok": false,
   "errors": [],
   "network": [],
-  "content": [],
-  "text": "Watching 14 markets\nMomentum Scout\nRides breakouts on liquid majors\nToday\nPROPOSED TRADE\nexpires 4:06\nBuy 0.1603 WETH\n$400.00\nENTRY\n$2,495.73\nSTOP\n$2,470.77\nTARGET\n$2,545.64\nRisking $4.00 to make $8.00. Within your $1,600.00 daily cap.\nSkip\nApprove\nHome\nMarkets\nTrade\nAssets"
+  "content": [
+   "missing /No proposal right now|Watching|Proposed|Waiting/"
+  ],
+  "text": "Momentum Scout\nRides breakouts on liquid majors\nToday\nMomentum Scout\nWETH is mid-range so there is nothing worth proposing\nHome\nMarkets\nTrade\nAssets"
  },
  {
   "stem": "26-bot-roster",
@@ -267,7 +269,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nRETURN\n+29.0%\nMAX DD\n−5.5%\nSHARPE\n2.5\nTRADES\n1\nIf you'd started with\n−\n$5,000\n+\n$6,450.00\n+$1,450.00\ncoingecko market_chart, daily closes · 20-day breakout, 8% stop · Entries and stops fill at the daily close, so a stop is only checked once a day. Nothing here is a promise.\nRun this s"
+  "text": "Backtest\nMomentum Scout, run against real history at your current limits. Nothing here is a promise.\n30d\n90d\n6m\n1y\nRETURN\n+27.7%\nMAX DD\n−5.5%\nSHARPE\n2.4\nTRADES\n1\nIf you'd started with\n−\n$5,000\n+\n$6,385.00\n+$1,385.00\ncoingecko market_chart, daily closes · 20-day breakout, 8% stop · Entries and stops fill at the daily close, so a stop is only checked once a day. Nothing here is a promise.\nRun this s"
  },
  {
   "stem": "31-strategies",
@@ -285,7 +287,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Recurring buy\nWETH\nCBBTC\n$50\nof WETH, weekly\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nNEXT THREE RUNS\nWed, Sep 16\n$50\nWed, Sep 23\n$50\nWed, Sep 30\n$50\nBuy $50 of WETH, weekly\nRuns on schedule inside your daily cap. Pause or cancel any time."
+  "text": "Recurring buy\nWETH\nCBBTC\n$50\nof WETH, weekly\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nNEXT THREE RUNS\nThu, Sep 17\n$50\nThu, Sep 24\n$50\nThu, Oct 1\n$50\nBuy $50 of WETH, weekly\nRuns on schedule inside your daily cap. Pause or cancel any time."
  },
  {
   "stem": "32b-strategy-yield",
@@ -294,7 +296,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Idle cash to yield\nAAVE V3 · USDC SUPPLY\nFloats with the pool. Not a promise.\n3.71%\n$250\nswept at most, daily\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nALWAYS KEEP SPENDABLE\n$50\n$100\n$250\n$500\nIF IT RAN NOW\nSpendable cash\n$0.00\nKept back\n$0.00\nWould move\nnothing\nBelow $25 it leaves the cash alone — the gas costs more than the yield.\nNEXT THREE RUNS\nThu, Sep 10\nup to $250\nFri, Sep 11"
+  "text": "Idle cash to yield\nAAVE V3 · USDC SUPPLY\nFloats with the pool. Not a promise.\n3.78%\n$250\nswept at most, daily\nDaily\nWeekly\nEvery 2 wks\nMonthly\n1\n2\n3\n4\n5\n6\n7\n8\n9\n.\n0\n⌫\nALWAYS KEEP SPENDABLE\n$50\n$100\n$250\n$500\nIF IT RAN NOW\nSpendable cash\n$0.00\nKept back\n$0.00\nWould move\nnothing\nBelow $25 it leaves the cash alone — the gas costs more than the yield.\nNEXT THREE RUNS\nFri, Sep 11\nup to $250\nSat, Sep 12"
  },
  {
   "stem": "32c-strategy-grid",
@@ -303,7 +305,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,496.31\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
+  "text": "Range accumulation\nWETH\nCBBTC\nWETH right now\n$2,470.87\nSuggest\nBOTTOM OF RANGE\nTOP OF RANGE\nRUNGS\n2\n4\n6\n8\nEACH RUNG BUYS\nAt most $200.00 at work — one rung each, and it never buys the same rung twice.\nIf WETH leaves the range it stops rather than chasing. You keep whatever it bought on the way down, which is the risk you are taking.\nCheck daily\nCheck weekly\nSet a range and a rung size\nThe first ru"
  },
  {
   "stem": "32d-yield-position",
@@ -330,7 +332,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n18/20\nverified · 1 failing\n1 skipped — each says why on its own row. Skipped is not passed.\nPASS\nThe app is talking to a real chain.\nchain 84532 (base-sepolia) at block 46602600\nPASS\nXorrDelegation is deployed and has code.\n7157 bytes at "
+  "text": "Check it yourself\nRe-run\nEvery claim this app makes about itself, checked against the chain, the index and the feeds right now — not when this was written.\nOWNER\n18/20\nverified · 1 failing\n1 skipped — each says why on its own row. Skipped is not passed.\nPASS\nThe app is talking to a real chain.\nchain 84532 (base-sepolia) at block 46609972\nPASS\nXorrDelegation is deployed and has code.\n7157 bytes at "
  },
  {
   "stem": "33-holdings",
@@ -348,7 +350,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nxorr · 04:47 PM\nView on BaseScan ›\nSkipped a proposal\nSkipped. I will not re-propose WETH today.\nMomentum Scout · 06:39 AM\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nxorr · 06:39 AM\nView on BaseScan ›"
+  "text": "Activity\nEvery action an agent took, and every one it chose not to take.\nAll\nTrades\nRisk\nBlocked\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nMomentum Scout · 09:08 PM\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nxorr · 04:47 PM\nView on BaseScan ›\nSkipped a proposal\nSkipped. I will not re-propose WETH today.\nMomentum Scout · 06:39 AM\nTrading "
  },
  {
   "stem": "35-history",
@@ -366,7 +368,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Briefing\nLoaded 10:35 PM\nOnly what moved your book, and what each agent did about it.\nMACRO\n28m\nU.S. Bank tests proprietary stablecoin in cross-border Stellar transaction\nNo agent comment — this build has no language model configured.\nMACRO\n37m\nBitcoin fails to reclaim $80K as Bessent fuels yen strength around 153 per dollar\nNo agent comment — this build has no language model configured.\nON-CHAIN\n"
+  "text": "Briefing\nLoaded 2:41 AM\nOnly what moved your book, and what each agent did about it.\nMACRO\n1h\nDoubleZero adds Kalshi election market data ahead of US midterms\nNo agent comment — this build has no language model configured.\nMACRO\n2h\nConsensys to split into MetaMask and institutional blockchain company\nNo agent comment — this build has no language model configured.\nMACRO\n4h\nTRM Labs doubles valuatio"
  },
  {
   "stem": "37-inbox",
@@ -375,7 +377,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026. · 04:47 PM\nSkipped a proposal\nSkipped. I will not re-propose WETH today. · 06:39 AM\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026. · 06:39 AM\nEnded Testplan DCA WETH\nIt will not run again. Your history and "
+  "text": "Inbox\nEverything the bot would have interrupted you for, whether or not it reached your phone.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing. · 09:08 PM\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026. · 04:47 PM\nSkipped a proposal\nSkipped. I will not re-propose WETH today. · 06:39 AM\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep "
  },
  {
   "stem": "38-safety",
@@ -411,7 +413,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "New alert\nAlerts interrupt you. Circuit breakers stop the bot. This creates the first kind.\nSYMBOL\nABOVE\nThe executor watches this, not your phone — so it still fires with the app closed. It notifies once, then turns itself off.\nAlert me when WETH is above $2622"
+  "text": "New alert\nAlerts interrupt you. Circuit breakers stop the bot. This creates the first kind.\nSYMBOL\nABOVE\nThe executor watches this, not your phone — so it still fires with the app closed. It notifies once, then turns itself off.\nAlert me when WETH is above $2594"
  },
  {
   "stem": "42-allowlist",
@@ -450,13 +452,431 @@
   "text": "Terms\nDraft — September 2026\nWhat xorr is\nxorr is software that runs trading strategies on your behalf. It is not a broker, an exchange, or a custodian.\nYour funds stay in a wallet you control. xorr never holds them and cannot move them to an address you have not allowlisted.\nWhat you are agreeing to\nWhen you grant the bot permission to trade, you are authorising software to place orders with your"
  },
  {
+  "stem": "50-explore",
+  "route": "/explore",
+  "ok": false,
+  "errors": [],
+  "network": [],
+  "content": [
+   "missing /Markets/"
+  ],
+  "text": "Explore\nEverything the app can tell you about itself.\nPROOF\nEverything this product claims, and how to check it.\nVerification\nTwenty claims, run live, each with its evidence\nThe trail\nWhether the hash chain still holds\nApprovals\nWhat the contract may pull, per token, from the chain\nWallet policy\nWhat Privy refuses, independently of us\nPermission\nThe grant itself: key, venues, cap, expiry\nVenues\nWh"
+ },
+ {
+  "stem": "51-limits",
+  "route": "/limits",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Today's limit\nREMAINING TODAY\n$1,600.00\n$0.00 spent\n$1,600.00 cap\nThe cap resets at midnight UTC. It is enforced on the chain and again by the executor before every run, and the stricter of the two is the one that binds."
+ },
+ {
+  "stem": "52-balance",
+  "route": "/balance",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Balance\nTOTAL\n$0.00\nCash\n$0.00\n+0.0%\nSpendable today. This is what the cap draws from.\nHeld\n$0.00\n+0.0%\nMarked at the price a sale would actually get, not a feed.\nSupplied\n$0.00\n+0.0%\nEarning at Aave. Withdraw before it can be spent.\nWhere it sits"
+ },
+ {
+  "stem": "53-delegation",
+  "route": "/delegation",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Permission\nSTATE\nLive\nDaily cap\n$1,600.00\nExpires\n9/10/2026 · 0 days\nOwner\n0x95A0…e615\nDelegate\n0xC38f…c8A5\nVENUES IT MAY REACH\n0x1111…2A65"
+ },
+ {
+  "stem": "54-approvals",
+  "route": "/approvals",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Approvals\nWhat the delegation contract may take from this wallet, token by token, read from the chain rather than from our record of it.\nSpender\n0xb14C…0a4e\nOne token is approved without a limit.\nUSDC\nLimited\n0x036C…CF7e\n48000 USDC\n48000000000\nWETH\nUnlimited\n0x4200…0006\n115792089237316195423570985008687907853269984665640564039457584007913129639935"
+ },
+ {
+  "stem": "55-verify",
+  "route": "/verify",
+  "ok": false,
+  "errors": [],
+  "network": [],
+  "content": [
+   "missing /\\d+ Passed/"
+  ],
+  "text": "Verification\nEach row is a claim, the call that tests it, and what came back. Run against whatever this build is actually pointed at.\n18\nPassed\n1\nFailed\n1\nNot asked\nbase-sepolia · 9/10/2026, 2:43:51 AM\nThe app is talking to a real chain.\neth_chainId + eth_blockNumber against https://sepolia.base.org\nchain 84532 (base-sepolia) at block 46610071\nXorrDelegation is deployed and has code.\neth_getCode 0"
+ },
+ {
+  "stem": "56-metrics",
+  "route": "/metrics",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Metrics\nEverything this executor has done, across every wallet on it — not only yours.\nRUNS BY OUTCOME\nfailed\n6\nskipped\n1\n100.0% of attempts broke rather than filled.\nSTRATEGIES BY STATE\nended\n4\nlive\n4\nWHY RUNS FAILED · LAST 7 DAYS\nother\n6\nALERTS\n2 enabled · 1 fired\nSPENT TODAY\n$0.00\nUTC day, every wallet on this executor."
+ },
+ {
+  "stem": "57-system",
+  "route": "/system",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "System\nEXECUTOR\nUp\nbase-sepolia · up 4h\n0xb14C…0a4e\npostgres\n4ms\nresponded at 2026-09-09T21:14:09.475Z\nrpc\n106ms\nbase-sepolia at block 46610080\ndelegation\n109ms\n7157 bytes\ngas\nnot critical\n106ms\n0.0500 ETH"
+ },
+ {
+  "stem": "58-network",
+  "route": "/network",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Network\nCHAIN\nbase-sepolia\nBase Sepolia. Transactions are real and settle, but 1inch has no liquidity here, so swaps cannot fill.\nBLOCK\n46,610,085\nRPC answered in 108ms\nDELEGATION CONTRACT\n0xb14C…0a4e\n0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e\nGAS WALLET\n0.0500 ETH\nEverything the system needs"
+ },
+ {
+  "stem": "59-rates",
+  "route": "/rates",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Rate\nUSDC AT AAVE\n3.78%\nAave v3 is not deployed on Base Sepolia, which is what this build trades, so nothing can be supplied here. This is Base mainnet's published rate, shown for reference.\nYOURS\n$0.00 supplied · $0.00 idle\nAt today's rate, the idle balance would earn about $0.00 over a year — if the rate held, which it will not.\nSupply or withdraw"
+ },
+ {
+  "stem": "60-graph",
+  "route": "/graph",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Subgraph\nINDEXED TO\n46,610,092\nNo indexing errors.\n2 blocks behind the head.\nSpend events\nRouting decision"
+ },
+ {
+  "stem": "61-graph-decision",
+  "route": "/graph/decision",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Decision\nWhat the router would choose for this size, from what the subgraph knows about this wallet.\n$100.00\n$500.00\n$2,500.00\nact\nyes\nsizeUsd\n100\nobservedRemainingUsd\n1600\nroute\n{\"venue\":\"1inch\",\"why\":\"No Aqua book index configured for this deployment.\"}\nrationale\nPermission is live on-chain and today has room. No Aqua book index configured for this deployment."
+ },
+ {
+  "stem": "62-graph-spends",
+  "route": "/graph/spends",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Spend events\nReconstructed from what the contract emitted, indexed by The Graph — a second record of the same money, kept by someone other than us.\nThe subgraph has indexed no spends for this wallet."
+ },
+ {
+  "stem": "63-audit-chain",
+  "route": "/audit/chain",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "The trail\nHASH CHAIN\nForked\nEntry 2 does not point at the one before it. Two writers claimed the same predecessor — damage, not an edit.\n51 of 51 rows still hash to their own contents.\nA broken chain cannot be repaired, only reported. Recomputing the hashes would make the trail verify again while proving nothing — which is exactly what an edited trail would want to do. A fork stays forked for the "
+ },
+ {
+  "stem": "64-runs",
+  "route": "/runs",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Runs\nAll\nFilled\nRefused\nFailed\nWETH\n$30 of WETH · 9/9/2026, 9:01:32 AM\nFailed\nWETH\n$30 of WETH · 9/9/2026, 9:00:58 AM\nFailed\nWETH\nTestplan DCA WETH · 9/9/2026, 8:58:42 AM\nFailed\nWETH\nbad kind · 9/9/2026, 8:58:33 AM\nSkipped"
+ },
+ {
+  "stem": "65-proposals",
+  "route": "/proposals",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Proposals\nAll\nApproved\nSkipped\nExpired\nMomentum Scout\nExpired unanswered\nBuy 0.1603 WETH · $400.00\n9/9/2026, 10:32:51 PM\nMomentum Scout\nExpired unanswered\nBuy 0.1592 WETH · $400.00\n9/9/2026, 12:52:38 PM\nMomentum Scout\nExpired unanswered\nBuy 0.1599 WETH · $400.00\n9/9/2026, 12:38:13 PM\nMomentum Scout\nExpired unanswered\nBuy 0.1600 WETH · $400.00\n9/9/2026, 12:20:23 PM\nMomentum Scout\nSkipped\nBuy 0.1600"
+ },
+ {
+  "stem": "66-pnl",
+  "route": "/pnl",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Realised\nNothing has been sold yet, so nothing is realised."
+ },
+ {
+  "stem": "67-disposals",
+  "route": "/disposals",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Disposals\nOne row per sale, with the cost it was matched against.\nNothing has been sold, so there is nothing to report."
+ },
+ {
+  "stem": "68-spend",
+  "route": "/spend",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Spend\nDay by day, from what the contract emitted.\nThe subgraph has indexed no spending for this wallet."
+ },
+ {
+  "stem": "69-schedule",
+  "route": "/schedule",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "What runs next\nNothing is scheduled. No live strategy has a next run."
+ },
+ {
+  "stem": "70-allocation",
+  "route": "/allocation",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Allocation\nNothing is held and there is no cash, so there is nothing to divide."
+ },
+ {
+  "stem": "71-sources",
+  "route": "/sources",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Sources\nEvery number in this app comes from one of these. None of them are us.\nThe chain\nreachable\nBalances, the delegation policy, approvals, and every transaction\nDirect RPC reads. Nothing about your money is taken from our database.\n1inch\nSwap routes, execution prices, and every tokenized equity price\nAggregation v6 for routes; the equities are priced by probing a real buy, because they have no"
+ },
+ {
+  "stem": "72-sponsors",
+  "route": "/sponsors",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Integrations\nWhat each one does here, and the evidence it is doing it.\n1inch\nPartly\nEvery trade. The executor asks the Aggregation router for a route, fills against it, and the price you get is the route's price — not a feed's.\nNo fills through 1inch on this deployment yet. Routes still quote live.\nInspect a live route\nThe Graph\nLive\nWhat the chain recorded, as opposed to what we intended. The bot"
+ },
+ {
+  "stem": "73-venues",
+  "route": "/venues",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Venues\nWhere a fill is allowed to go. Anything not here reverts on-chain, whatever the executor intended.\nCONTRACT\n0xb14C…0a4e\nsigns as 0xC38f…c8A5\nONE VENUE\n0x111111125421cA6dc452d289314280a0f8842A65\nTOKENS IT MAY PULL\nUSDC\n0x036CbD53842c5426634e7929541eC2318f3dCF7e\nWETH\n0x4200000000000000000000000000000000000006"
+ },
+ {
+  "stem": "74-tokens",
+  "route": "/tokens",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Tokens\nWhat the executor can settle on this chain. Anything not here is a chart you can look at, not an order you can place.\nETH\n18 dp\n0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\nRoute ›\nCross-check ›\nWETH\n18 dp\n0x4200000000000000000000000000000000000006\nRoute ›\nCross-check ›\nUSDC\n6 dp\n0x036CbD53842c5426634e7929541eC2318f3dCF7e\nRoute ›\nCross-check ›\nCBBTC\n8 dp\n0xcbB7C0000aB88B473b1f5aFd9ef808440eed"
+ },
+ {
+  "stem": "75-coverage",
+  "route": "/coverage",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Coverage\nPRICED AND SETTLEABLE\nA chart you can read and an order that can fill.\nBTC\nsettles as CBBTC\nCBBTC\nETH\nsettles as WETH\nUSDC\nWETH\nPRICED ONLY\nA real market with a real price, which this chain cannot settle. Chart, not order.\nAAVE\nDOGE\nHYPE\nLINK\nPAXG\nSOL\nTON\nXAUT\nXRP\nSETTLEABLE ONLY\nThe executor can route these, and no feed on this build prices them.\nETH"
+ },
+ {
+  "stem": "76-movers",
+  "route": "/movers",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Movers\nAcross every class, sorted by how far they moved.\nUP\nXAI\nxAI · Pre-IPO perp\nSIMULATED\n$74.15\n+5.62%\nOPENAI\nOpenAI · Pre-IPO perp\nSIMULATED\n$164.20\n+3.40%\nNG\nNatural Gas · Perp · ICE feed\nSIMULATED\n$3.18\n+2.51%\nPPLX\nPerplexity · Pre-IPO perp\nSIMULATED\n$61.92\n+2.05%\nCL\nWTI Crude · Perp · ICE feed\nSIMULATED\n$71.84\n+1.92%\nBZ\nBrent Crude · Perp · ICE feed\nSIMULATED\n$75.30\n+1.66%\nDBRK\nDatabricks "
+ },
+ {
+  "stem": "77-stocks",
+  "route": "/stocks",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Equities\nPriced by asking 1inch what a real buy would cost — not by a feed.\nNVDAc\nNVIDIA Corporation · Tesseraswap, Uniswap V3, Aerodrome Slipstream\n$224.22\nAAPLc\nApple Inc. · Metric\n$316.83\nTSLAc\nTesla Inc. · Aerodrome Slipstream, Elfomofi\n$368.75\nMETAc\nMeta Platforms Inc. · Metric\n$654.10\nMSFTc\nMicrosoft Corporation · Aerodrome Slipstream\n$493.80\nAMZNc\nAmazon.com Inc. · Aerodrome Slipstream\n$253"
+ },
+ {
+  "stem": "78-earnings",
+  "route": "/earnings",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Earnings\nFiling dates from EDGAR, and what the cadence implies about the next one.\nNVDAc\nAAPLc\nTSLAc\nMETAc\nMSFTc\nAMZNc\nGOOGLc\nMSTRc\nPROJECTED NEXT\nNov 25, 2026\nA projection from this company's own filing cadence, give or take 7 days. Nobody has filed this.\nMedian gap 91 days · CIK 1045810\nFILED\nAug 26, 2026\n98 days\nMay 20, 2026\n84 days\nFeb 25, 2026\n98 days\nNov 19, 2025\n84 days\nAug 27, 2025\n91 days"
+ },
+ {
+  "stem": "79-funding",
+  "route": "/funding",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Funding\nMark against oracle, across the perps this build prices. xorr does not run a perp venue, so the mark IS the spot price — the difference below is zero by construction, not two sources agreeing.\nBTC\n$78,218\nMark vs index\n+0.000%\nFunding\n—\nMax lev\n10x\nETH\n$2,469\nMark vs index\n+0.000%\nFunding\n—\nMax lev\n10x\nSOL\n$102.40\nMark vs index\n+0.000%\nFunding\n—\nMax lev\n10x\nXRP\n$1.40\nMark vs index\n+0.000%\n"
+ },
+ {
+  "stem": "80-compare",
+  "route": "/compare",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Compare\nBoth normalised to where they started, so the shapes are comparable.\nFIRST\nETH\nWETH\nUSDC\nCBBTC\nNVDAc\nAAPLc\nTSLAc\nMETAc\nMSFTc\nAMZNc\nGOOGLc\nMSTRc\nSECOND\nETH\nWETH\nUSDC\nCBBTC\nNVDAc\nAAPLc\nTSLAc\nMETAc\nMSFTc\nAMZNc\nGOOGLc\nMSTRc"
+ },
+ {
+  "stem": "81-roster-compare",
+  "route": "/roster-compare",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Compare agents\nMomentum Scout\nRides breakouts on liquid majors\n30d\n+$0.00\nWon\n0%\nTrades\n0\nEarnings Desk\nTrades tokenized equity earnings\n30d\n+$0.00\nWon\n0%\nTrades\n0\nYield Keeper\nMoves idle cash into the best rate\n30d\n+$0.00\nWon\n0%\nTrades\n0\nDrawdown Guard\nCuts risk when the book bleeds\nhired\n30d\n+$0.00\nWon\n0%\nTrades\n0\nPast performance of a strategy says nothing about tomorrow."
+ },
+ {
+  "stem": "82-risk",
+  "route": "/risk",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Risk limits\nWhat each agent holds itself to, on top of the cap the contract enforces.\nNo agent carries its own limits. The daily cap and the venue allowlist are the only things constraining them, and those are enforced on-chain."
+ },
+ {
+  "stem": "83-policy",
+  "route": "/policy",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Wallet policy\nPRIVY POLICY\nNot attached\nThe policy exists but is not attached to this wallet. Attaching it is authorised by the wallet owner, which is you — not us.\nxorr wallet policy (base-sepolia)\nWOULD ALLOW\nXorrDelegation — grant, revoke\n0xb14c…0a4e\nUSDC — approve, transfer\n0x036c…cf7e\nWETH — approve, transfer\n0x4200…0006\ncbBTC — approve, transfer\n0xcbb7…33bf\nOWNED BY\nKey quorum zixx49ik3ngslu"
+ },
+ {
+  "stem": "84-profile",
+  "route": "/profile",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "This wallet\nADDRESS\nNo name\n0x95A0b368588713011a15f4b1041423f31B08e615\nConnected wallet\nON THE RECORD\nblock\n35\nrisk\n18\nPermission\nApprovals"
+ },
+ {
+  "stem": "85-notifications",
+  "route": "/notifications",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Notifications\nA trade went through\nEvery fill the bot places.\nA trade was stopped\nYour cap, expiry or allowlist refused something. This is the one worth keeping on.\nAn alert you set\nPrice levels and risk thresholds.\nEverything sold\nWhen you ask to be flattened.\nTurning off \"a trade was stopped\" means the limits can refuse something and you will not hear about it until you open the app."
+ },
+ {
+  "stem": "86-catchup",
+  "route": "/catchup",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Since you looked\nSince 9/9/2026, 9:01:52 AM.\n11\nblock\n7\nrisk\nProposed nothing\n02:46 AM\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\n02:45 AM\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\n02:38 AM\nWETH is mid-range, so there is nothing worth proposing.\nTrading permission granted\n10:17 PM\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nSkipped a p"
+ },
+ {
+  "stem": "87-export",
+  "route": "/export",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Export\nThe audit trail\nEvery action and every non-action, hash-chained, in the order they happened. This is what the bot did — including what it refused to do.\nCSV\nJSON\nDisposals\nOne row per sale with the cost it was matched against. A different document from the trail, and the one an accountant actually wants.\nCSV\nSome sales have no recorded cost, and the disposals file marks those rather than qu"
+ },
+ {
+  "stem": "88-basename",
+  "route": "/basename",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Basenames\nLook it up\nAn address resolves to its name, and a name resolves to the address it points at. Resolution runs against the chain, not a list we keep."
+ },
+ {
+  "stem": "89-backtest",
+  "route": "/backtest",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Backtest\nA weekly buy, over real past prices. Nothing is created.\nETH\nWETH\nUSDC\nCBBTC\nNVDAc\nAAPLc\nTSLAc\nMETAc\nMSFTc\nAMZNc\nGOOGLc\nMSTRc\n30d\n90d\n6m\n1y\n$25.00\n$50.00\n$100.00\n$250.00\nRun it\nPick a market, a window and a size. The result is computed from daily closes the executor already holds, not from a model."
+ },
+ {
+  "stem": "90-sell-everything",
+  "route": "/sell-everything",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "What would sell\nA preview. Nothing here sells anything.\nNothing is held above the dust threshold, so flattening would sell nothing."
+ },
+ {
+  "stem": "91-voice",
+  "route": "/voice",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Voice\nEvery reply is written under one of these. The rules about numbers do not change.\nDry\nIn use\nUnderstated. States what it did and why, with the occasional flat aside.\nWrite plainly with dry understatement. One short aside at most, and only about the market — never about the user or their money.\nSharp\nMore opinionated about the market. Same restraint about your money.\nBe more opinionated and d"
+ },
+ {
+  "stem": "92-not-found",
+  "route": "/no-such-screen-exists",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Not found\nThere is nothing here\nNo screen is registered at /no-such-screen-exists. It may have been a stale link.\nGo to your wallet\nEverything this app can show you"
+ },
+ {
+  "stem": "93-oracle-equity",
+  "route": "/oracle/NVDAc",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "NVDAc\nReadings this executor took, not a vendor's series.\n125 readings since 2026-09-07T13:04:29.567Z.\n9/10/2026, 2:47:20 AM\n$224.22\n9/10/2026, 2:42:03 AM\n$224.41\n9/10/2026, 2:37:23 AM\n$224.47\n9/10/2026, 2:36:41 AM\n$224.47\n9/10/2026, 2:35:46 AM\n$224.51\n9/10/2026, 2:34:58 AM\n$224.53\n9/9/2026, 10:36:10 PM\n$224.97\n9/9/2026, 10:31:23 PM\n$224.81\n9/9/2026, 10:30:43 PM\n$224.74\n9/9/2026, 10:29:59 PM\n$224."
+ },
+ {
+  "stem": "94-crosscheck",
+  "route": "/crosscheck/WETH",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "WETH\nCROSS-CHECK\nThey agree\nTwo independent sources within 0.19%.\n1inch\n$2,464\nthe pools a fill would touch\nCoinGecko\n$2,469\nthe reference price\nDIFFERENCE\n0.19%\nThe executor fills at the 1inch side. Where they diverge, that is the number that decides what you actually pay."
+ },
+ {
+  "stem": "95-route",
+  "route": "/route/WETH",
+  "ok": true,
+  "errors": [],
+  "network": [],
+  "content": [],
+  "text": "Route\nUSDC into WETH, quoted live. Nothing here places an order.\n$100.00\n$500.00\n$2,500.00\n$10,000.00\nYOU WOULD RECEIVE\n0.2023 WETH\nAt worst 0.2017, at 0.3% slippage.\nTHROUGH\nElfomofi\nAerodrome Slipstream\nPRICE IMPACT\n0.15%\nBest of 2 venues"
+ },
+ {
   "stem": "46-dev-ui",
   "route": "/_dev/ui",
   "ok": true,
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n8 stopped by your limits · 7 risk checks\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nSkipped a proposal\nSkipped. I will not re-propose WETH today.\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nand 12 more ›\nAgents ›\n1 hired\nDrawdown Guard\nAct"
+  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n13 stopped by your limits · 7 risk checks\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nand 17 more ›\nAgents ›\n1 hired\nDrawdo"
  },
  {
   "stem": "46b-dev-ui-edge",
@@ -465,7 +885,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n8 stopped by your limits · 7 risk checks\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nSkipped a proposal\nSkipped. I will not re-propose WETH today.\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nand 12 more ›\nAgents ›\n1 hired\nDrawdown Guard\nAct"
+  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n13 stopped by your limits · 7 risk checks\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nand 17 more ›\nAgents ›\n1 hired\nDrawdo"
  },
  {
   "stem": "47-dev-fidelity",
@@ -474,7 +894,7 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n8 stopped by your limits · 7 risk checks\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nSkipped a proposal\nSkipped. I will not re-propose WETH today.\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nand 12 more ›\nAgents ›\n1 hired\nDrawdown Guard\nAct"
+  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n13 stopped by your limits · 7 risk checks\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nand 17 more ›\nAgents ›\n1 hired\nDrawdo"
  },
  {
   "stem": "48-dev-boom",
@@ -483,6 +903,6 @@
   "errors": [],
   "network": [],
   "content": [],
-  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n8 stopped by your limits · 7 risk checks\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nSkipped a proposal\nSkipped. I will not re-propose WETH today.\nTrading permission granted\nUp to $1,600 a day, expiring Thu Sep 10 2026.\nand 12 more ›\nAgents ›\n1 hired\nDrawdown Guard\nAct"
+  "text": "Wallet\nTOTAL VALUE\n$0.00\nSend\nSwap\nMore\nCash\nAvailable to trade\n$0.00\nSINCE YOU WERE LAST HERE\nGot it\n13 stopped by your limits · 7 risk checks\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nProposed nothing\nWETH is mid-range, so there is nothing worth proposing.\nand 17 more ›\nAgents ›\n1 hired\nDrawdo"
  }
 ]

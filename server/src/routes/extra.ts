@@ -22,11 +22,17 @@ import { health as graphHealth, dailySpendFor, indexDescription, spendsFor } fro
 
 export const extra = new Hono();
 
-/** Scoped to the authenticated Privy user — never "the first wallet row". */
+/*
+ * Delegates to `currentWallet` rather than asking again.
+ *
+ * This was its own `WHERE user_id = $1 LIMIT 1` with no ORDER BY — one of nine such copies, each
+ * free to return a different wallet than the others on an account with more than one row. The
+ * damage is not that a query is duplicated: it is that your agents, your alerts, your limits and
+ * your trades could each be resolved against a DIFFERENT wallet within one signed-in session.
+ * One definition, in `wallet-context`, is the whole point of that module.
+ */
 async function walletId(c: Context): Promise<string | undefined> {
-  const { userId } = requireUser(c);
-  const w = await one<{ id: string }>(`SELECT id FROM wallets WHERE user_id = $1 LIMIT 1`, [userId]);
-  return w?.id;
+  return (await currentWallet(c))?.id;
 }
 
 extra.get('/agents/leaderboard', async (c) => {

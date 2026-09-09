@@ -7,6 +7,7 @@
  */
 import { Hono } from 'hono';
 import { requireUser } from '../auth/middleware.js';
+import { currentWallet } from './wallet-context.js';
 import {
   allowedDestinations,
   ensurePolicy,
@@ -15,16 +16,13 @@ import {
   rpcAsWallet,
   demoWalletId,
 } from '../auth/privyPolicy.js';
-import { one } from '../db/index.js';
 
 export const privyRoutes = new Hono();
 
 /** What Privy enforces on the signed-in user's wallet, read from Privy. */
 privyRoutes.get('/privy/policy', async (c) => {
-  const { userId } = requireUser(c);
-  const w = await one<{ address: string }>(`SELECT address FROM wallets WHERE user_id = $1 LIMIT 1`, [
-    userId,
-  ]);
+  // The same wallet every other route resolves; see `wallet-context`.
+  const w = await currentWallet(c);
   if (!w) return c.json({ error: 'no_wallet' }, 400);
   const [status, policy] = await Promise.all([
     policyStatus(w.address),

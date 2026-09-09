@@ -23,7 +23,8 @@ import { log } from '../http/request-id.js';
 import { z } from 'zod';
 import type { Address } from 'viem';
 import { requireUser } from '../auth/middleware.js';
-import { one, tx } from '../db/index.js';
+import { currentWallet } from './wallet-context.js';
+import { tx } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { holdings } from '../evm/balances.js';
 import { closeAsDelegate, readPolicy, waitForTx } from '../evm/delegation.js';
@@ -50,11 +51,10 @@ type Leg = {
 };
 
 panic.get('/panic/preview', async (c) => {
-  const { userId } = requireUser(c);
-  const w = await one<{ id: string; address: string }>(
-    `SELECT id, address FROM wallets WHERE user_id = $1 LIMIT 1`,
-    [userId],
-  );
+  requireUser(c);
+  // `currentWallet`, not another unordered `LIMIT 1`: selling down the wrong one of a user's
+  // wallet rows is the worst outcome any of these copies could produce.
+  const w = await currentWallet(c);
   if (!w) return c.json({ legs: [], totalUsd: 0 });
   const held = await holdings(w.address as Address);
   const legs = held.filter((h) => h.usd >= DUST_USD);
@@ -70,11 +70,10 @@ panic.get('/panic/preview', async (c) => {
 });
 
 panic.post('/panic/flatten', async (c) => {
-  const { userId } = requireUser(c);
-  const w = await one<{ id: string; address: string }>(
-    `SELECT id, address FROM wallets WHERE user_id = $1 LIMIT 1`,
-    [userId],
-  );
+  requireUser(c);
+  // `currentWallet`, not another unordered `LIMIT 1`: selling down the wrong one of a user's
+  // wallet rows is the worst outcome any of these copies could produce.
+  const w = await currentWallet(c);
   if (!w) return c.json({ error: 'no_wallet' }, 400);
   const owner = w.address as Address;
 
@@ -406,7 +405,7 @@ export const CloseInput = z.object({
 });
 
 panic.post('/positions/close', async (c) => {
-  const u = requireUser(c);
+  requireUser(c);
   /*
    * `user_id`, which is the column that exists.
    *
@@ -415,10 +414,9 @@ panic.post('/positions/close', async (c) => {
    * every asset. It was never caught because nothing exercised the route against a real
    * database with a real session: the coverage test only asks whether a path 404s.
    */
-  const w = await one<{ id: string; address: string }>(
-    `SELECT id, address FROM wallets WHERE user_id = $1 LIMIT 1`,
-    [u.userId],
-  );
+  // `currentWallet`, not another unordered `LIMIT 1`: selling down the wrong one of a user's
+  // wallet rows is the worst outcome any of these copies could produce.
+  const w = await currentWallet(c);
   if (!w) return c.json({ status: 'blocked', reason: 'no_wallet' }, 409);
 
   const body = CloseInput.parse(await c.req.json());

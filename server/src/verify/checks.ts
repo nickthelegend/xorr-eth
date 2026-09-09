@@ -344,10 +344,22 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
          * that is the same property working, not an inconvenience to be hidden.
          */
         if (r.kind === 'link') {
+          /*
+           * Say whether it is still happening.
+           *
+           * "forks at entry 2" reads the same whether that fork is four months old or was written
+           * this morning, and those are opposite facts about whether the lock works. The tally
+           * settles it, so the sentence names the count and the newest one rather than only the
+           * oldest.
+           */
+          const since =
+            r.linkBreaks <= 1
+              ? `Exactly one, at entry ${r.brokenAtSeq}, and none since — the lock holds.`
+              : `${r.linkBreaks} forks, the newest at entry ${r.lastBreakSeq}.`;
           throw new Error(
             `forks at entry ${r.brokenAtSeq} — two writers claimed one predecessor before the ` +
-              'append lock existed. Permanent: the trail is append-only, so it cannot be ' +
-              `rewritten to look clean. All ${r.intact} rows are individually unaltered.`,
+              `append lock existed. ${since} Permanent: the trail is append-only, so it cannot ` +
+              `be rewritten to look clean. All ${r.intact} rows are individually unaltered.`,
           );
         }
         if (!r.ok) throw new Error(`chain broken at entry ${r.brokenAtSeq}`);
