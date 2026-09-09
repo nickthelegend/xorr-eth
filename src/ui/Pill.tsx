@@ -63,6 +63,12 @@ export function Pill({
       hitHeight={size.pillH}
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      /*
+       * See `Segmented.tsx`: React Native Web drops `accessibilityState.selected`, so the line
+       * above reaches the DOM as nothing and this control announces no state at all. The web
+       * attribute valid for THIS role is added alongside it; native keeps reading the line above.
+       */
+      aria-pressed={selected}
       style={[
         {
           flexGrow: 0,

@@ -54,6 +54,12 @@ export function RadioCard({
       disabled={!onPress}
       accessibilityRole="radio"
       accessibilityState={{ selected }}
+      /*
+       * See `Segmented.tsx`: React Native Web drops `accessibilityState.selected`, so the line
+       * above reaches the DOM as nothing and this control announces no state at all. The web
+       * attribute valid for THIS role is added alongside it; native keeps reading the line above.
+       */
+      aria-checked={selected}
       accessibilityLabel={detail ? `${title}, ${detail}` : title}
       style={[
         {

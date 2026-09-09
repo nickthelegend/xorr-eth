@@ -183,6 +183,12 @@ export function TabBar({ active, onSelect, agentsLive, onChat, style, testID }: 
             onPress={() => onSelect(tab)}
             accessibilityRole="tab"
             accessibilityState={{ selected }}
+            /*
+             * `aria-selected` IS valid on `role="tab"` — and React Native Web still does not emit
+             * it, so the tab bar on every screen announced four identical tabs with no current
+             * one. Added explicitly.
+             */
+            aria-selected={selected}
             accessibilityLabel={TAB_LABEL[tab]}
             style={{
               flex: 1,

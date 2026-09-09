@@ -120,6 +120,23 @@ function Segment({
       hitHeight={height}
       accessibilityRole="button"
       accessibilityState={{ selected }}
+      /*
+       * `aria-pressed` as well, because on web the line above reaches the DOM as nothing.
+       *
+       * React Native Web maps `accessibilityState.selected` to `aria-selected`, which is invalid
+       * on `role="button"` and is therefore dropped. The rendered markup was exactly
+       * `role="button" tabindex="0" type="button"` on all three options of a segmented control —
+       * so a screen reader announced "Dry, button / Sharp, button / Flat, button" with no way to
+       * tell which one is active, on a control whose only job is to show which one is active.
+       *
+       * The intent was already in the code and the platform discarded it. `aria-pressed` is valid
+       * on a button role and survives, which is what makes this a fix rather than a second
+       * declaration of the same wish. Native keeps reading `accessibilityState`.
+       *
+       * This is one component behind Buy/Sell on the order ticket, the chart timeframes, the goal
+       * picker and the strategy filters — ten screens, not one.
+       */
+      aria-pressed={selected}
       style={{ flex: 1 }}
     >
       <Animated.View
