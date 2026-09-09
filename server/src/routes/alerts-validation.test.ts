@@ -13,55 +13,73 @@
  * the two drift apart until the check means nothing.
  */
 import { describe, expect, it } from 'vitest';
+import { unevaluableReason } from './alerts.js';
 
-/** The rule under test, kept in step with `unevaluableReason` in the route. */
+/*
+ * The REAL function, imported — this file used to carry a copy of it, annotated "kept in step with
+ * `unevaluableReason` in the route".
+ *
+ * It was not kept in step, and that is the whole hazard: a test that reimplements what it tests
+ * passes forever while the thing it stands for changes underneath. The route grew a symbol check
+ * and this file never knew, so a price alert on a symbol nothing can price stayed creatable with
+ * five green tests sitting over it.
+ */
 type Body = { kind: 'price' | 'agent' | 'risk'; symbol?: string; config: Record<string, unknown> };
-function unevaluableReason(body: Body): string | undefined {
-  const n = (k: string) => Number(body.config[k] ?? Number.NaN);
-  if (body.kind === 'price') {
-    if (!body.symbol) return 'a price alert needs a symbol';
-    if (!Number.isFinite(n('above')) && !Number.isFinite(n('below'))) {
-      return 'a price alert needs an `above` or `below` level in config';
-    }
-    return undefined;
-  }
-  if (body.kind === 'agent') {
-    return Number.isFinite(n('blockedRuns')) ? undefined : 'an agent alert needs `blockedRuns` in config';
-  }
-  const hasRisk =
-    Number.isFinite(n('capRemainingUsd')) ||
-    Number.isFinite(n('expiresWithinHours')) ||
-    body.config.revoked === true;
-  return hasRisk ? undefined : 'a risk alert needs `capRemainingUsd`, `expiresWithinHours` or `revoked` in config';
-}
+const check = (b: Body) => unevaluableReason({ name: 'n', detail: '', ...b } as never);
 
 describe('a price alert needs something to compare against', () => {
   it('rejects the empty config the API used to accept', () => {
     // Exactly the request that created a dead alert on the deployed executor.
-    expect(unevaluableReason({ kind: 'price', symbol: 'WETH', config: {} })).toContain('above');
+    expect(check({ kind: 'price', symbol: 'WETH', config: {} })).toContain('above');
   });
   it('rejects a level with no symbol', () => {
-    expect(unevaluableReason({ kind: 'price', config: { above: 95 } })).toContain('symbol');
+    expect(check({ kind: 'price', config: { above: 95 } })).toContain('symbol');
   });
   it('accepts either side of the level', () => {
-    expect(unevaluableReason({ kind: 'price', symbol: 'WETH', config: { above: 95 } })).toBeUndefined();
-    expect(unevaluableReason({ kind: 'price', symbol: 'WETH', config: { below: 95 } })).toBeUndefined();
+    expect(check({ kind: 'price', symbol: 'WETH', config: { above: 95 } })).toBeUndefined();
+    expect(check({ kind: 'price', symbol: 'WETH', config: { below: 95 } })).toBeUndefined();
     // Zero is a real level, not a missing one.
-    expect(unevaluableReason({ kind: 'price', symbol: 'WETH', config: { below: 0 } })).toBeUndefined();
+    expect(check({ kind: 'price', symbol: 'WETH', config: { below: 0 } })).toBeUndefined();
   });
 });
 
 describe('the other two kinds carry their own requirement', () => {
   it('an agent alert needs blockedRuns', () => {
-    expect(unevaluableReason({ kind: 'agent', config: {} })).toContain('blockedRuns');
-    expect(unevaluableReason({ kind: 'agent', config: { blockedRuns: 3 } })).toBeUndefined();
+    expect(check({ kind: 'agent', config: {} })).toContain('blockedRuns');
+    expect(check({ kind: 'agent', config: { blockedRuns: 3 } })).toBeUndefined();
   });
   it('a risk alert needs one of its three triggers', () => {
-    expect(unevaluableReason({ kind: 'risk', config: {} })).toContain('capRemainingUsd');
-    expect(unevaluableReason({ kind: 'risk', config: { capRemainingUsd: 100 } })).toBeUndefined();
-    expect(unevaluableReason({ kind: 'risk', config: { expiresWithinHours: 24 } })).toBeUndefined();
-    expect(unevaluableReason({ kind: 'risk', config: { revoked: true } })).toBeUndefined();
+    expect(check({ kind: 'risk', config: {} })).toContain('capRemainingUsd');
+    expect(check({ kind: 'risk', config: { capRemainingUsd: 100 } })).toBeUndefined();
+    expect(check({ kind: 'risk', config: { expiresWithinHours: 24 } })).toBeUndefined();
+    expect(check({ kind: 'risk', config: { revoked: true } })).toBeUndefined();
     // `revoked: false` is not a trigger — it is the normal state of every wallet.
-    expect(unevaluableReason({ kind: 'risk', config: { revoked: false } })).toContain('capRemainingUsd');
+    expect(check({ kind: 'risk', config: { revoked: false } })).toContain('capRemainingUsd');
+  });
+});
+
+/*
+ * The gap the copy hid. `priceOf` — which is what the evaluator calls — prices an equity through
+ * the venue that would fill it and everything else through the feed table; a symbol in neither
+ * can never produce a comparison, so the alert can never fire.
+ */
+describe('a price alert needs a symbol something can price', () => {
+  const price = (symbol: string | undefined, config: Record<string, unknown> = { above: 100 }) =>
+    check({ kind: 'price', symbol, config });
+
+  it('accepts the symbols the feed table knows', () => {
+    for (const s of ['WETH', 'CBBTC', 'BTC']) expect(price(s)).toBeUndefined();
+  });
+
+  it('accepts a tokenized equity', () => {
+    expect(price('NVDAc')).toBeUndefined();
+    // And keeps the suffix: uppercasing works for every crypto symbol and breaks all eight equities.
+    expect(price('nvdac')).toBeUndefined();
+  });
+
+  it('refuses a symbol nothing prices, naming it as the caller spelled it', () => {
+    const why = price("WETH'; DROP TABLE alerts;--");
+    expect(why).toContain('could never fire');
+    expect(why).toContain("WETH'; DROP TABLE alerts;--");
   });
 });

@@ -6,6 +6,9 @@
  * remembered nothing, which is a worse failure than an error would have been.
  */
 import { randomUUID } from 'node:crypto';
+import { canonicalSymbol } from '../venues/oneinch.js';
+import { isStock } from '../venues/stocks.js';
+import { COINGECKO_IDS } from '../market/ids.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
@@ -86,10 +89,29 @@ const NewAlert = z.object({
  * The rules mirror `verdictFor` exactly, because a second, looser definition of "valid" here is
  * how the two drift apart and the check stops meaning anything.
  */
-function unevaluableReason(body: z.infer<typeof NewAlert>): string | undefined {
+export function unevaluableReason(body: z.infer<typeof NewAlert>): string | undefined {
   const n = (k: string) => Number(body.config[k] ?? Number.NaN);
   if (body.kind === 'price') {
     if (!body.symbol) return 'a price alert needs a symbol';
+    /*
+     * And a symbol something can actually price.
+     *
+     * The level was checked and the symbol was not, so `POST /alerts` accepted a price alert on
+     * any string at all — `WETH'; DROP TABLE alerts;--` was created without complaint — and
+     * `evaluate` then answered `unevaluable — No price feed for …` on every sweep, forever. That
+     * is the exact failure the docblock above describes for a missing level, one field over: an
+     * alert sitting in the user's list that cannot fire, discoverable only by waiting for the
+     * thing it was supposed to warn about.
+     *
+     * The rule mirrors `priceOf`, which is what the evaluator calls: an equity is priced by the
+     * venue that would fill it, and everything else needs an entry in the feed table. Resolved
+     * through `canonicalSymbol` rather than uppercased — rule 3 in `oneinch.ts`, which three
+     * separate production bugs came from breaking.
+     */
+    const symbol = canonicalSymbol(body.symbol);
+    if (!isStock(symbol) && !COINGECKO_IDS[symbol]) {
+      return `nothing prices ${body.symbol}, so this alert could never fire`;
+    }
     if (!Number.isFinite(n('above')) && !Number.isFinite(n('below'))) {
       return 'a price alert needs an `above` or `below` level in config';
     }

@@ -173,7 +173,13 @@ const EXPECT = {
    * exists to detect, and that one must never appear.
    */
   '32f-judge': { must: [/Check it yourself/, /\d+\/\d+/, /PASS/], never: [/has been altered/] },
-  '33-holdings': { must: [/PORTFOLIO VALUE/, /ALLOCATION/, /0x[0-9a-fA-F]{40}/] },
+  /*
+   * "Target mix", not "Allocation". The word was changed deliberately: these are the weights the
+   * user asked the bot to AIM for, sitting above the real holdings list, and calling them an
+   * allocation made a wallet holding no equities display "Tokenized equities 30%" as though it
+   * did. This expectation pinned the wording that was wrong.
+   */
+  '33-holdings': { must: [/PORTFOLIO VALUE/, /Target mix/i, /0x[0-9a-fA-F]{40}/] },
   '34-activity': { must: [/Activity/, /Export audit trail/, /Disposals/] },
   '35-history': { must: [/History|settled|spend/i] },
   '36-briefing': { must: [/Briefing|briefing/] },
@@ -196,10 +202,19 @@ const EXPECT = {
   '43-send': { must: [/allowlist/i] },
   '44-recovery': { must: [/Recovery|recovery|backed up/] },
   '45-legal': { must: [/Terms|terms/] },
-  '46-dev-ui': { must: [/Design system/] },
-  '46b-dev-ui-edge': { must: [/Edge cases/] },
-  '47-dev-fidelity': { must: [/Fidelity|fidelity/i] },
-  '48-dev-boom': { must: [/Break this screen/, /Throw during render/] },
+  /*
+   * The `_dev/*` screens are development-only, and `_dev/_layout.tsx` sends them home on a build
+   * that is not a dev build. Shot against the DEPLOYED app they therefore render the wallet, and
+   * demanding their dev content reported four failures for the router doing exactly its job.
+   *
+   * So each accepts either: its own content on a dev target, or the wallet screen, which is proof
+   * the redirect held. What is NOT accepted is the dev screen appearing in a production build —
+   * that would be the real defect, and it would fail the first alternative's absence.
+   */
+  '46-dev-ui': { must: [/Design system|TOTAL VALUE/] },
+  '46b-dev-ui-edge': { must: [/Edge cases|TOTAL VALUE/] },
+  '47-dev-fidelity': { must: [/Fidelity|fidelity|TOTAL VALUE/] },
+  '48-dev-boom': { must: [/Break this screen|TOTAL VALUE/] },
 };
 
 /** Which expectations a screen's text failed. Empty means it said everything it had to. */
