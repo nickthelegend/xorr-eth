@@ -58,8 +58,7 @@ export function ScreenError({ error, retry }: { error: Error; retry: () => void 
           label="Try again"
           height={44}
           style={{ marginTop: space.s4 }}
-          onPress={retry}
-        />
+          onPress={retry} testID="boundary-retry" />
       </SheetCard>
     </Screen>
   );

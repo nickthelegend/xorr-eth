@@ -159,8 +159,14 @@ export function ErrorState({
         permanent refusal the button is worse than nothing — it invites someone to press it until
         they give up on the app rather than on the request.
       */}
+      {/*
+        `testID` on the retry is load-bearing, not a test hook: it is what keys the press guard.
+        Retrying unmounts this component while the request is in flight, so a per-instance lock
+        dies with it and the second half of a double-tap fires a second request. Measured on the
+        deployed app — two `/limits` calls 11ms apart against one for a single click.
+      */}
       {onRetry && isRetryable(error) ? (
-        <Button label="Try again" variant="ghost" onPress={onRetry} />
+        <Button label="Try again" variant="ghost" onPress={onRetry} testID="error-retry" />
       ) : null}
     </View>
   );

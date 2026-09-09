@@ -43,3 +43,36 @@ export function createPressGuard(): PressGuard {
     },
   };
 }
+
+/**
+ * Guards that survive the button being torn down and rebuilt.
+ *
+ * The lock used to live in a `useRef`, which ties it to one component INSTANCE — and a press that
+ * makes its own button unmount takes the lock with it. Retry is exactly that shape: pressing "Try
+ * again" puts the screen into its loading state, `ErrorState` disappears, the request fails, and
+ * `ErrorState` comes back as a NEW instance holding a NEW, unlocked guard. The 800ms timeout from
+ * the first press is still pending, on an object nothing can reach any more.
+ *
+ * Measured on the deployed app, not reasoned about: a real double-click on "Try again" produced
+ * two `/limits` requests **11ms apart**, against one for a single click.
+ *
+ * Keyed by `testID`, and only by `testID`. Keying on the label would make every "Continue" in the
+ * app share one lock, so pressing Continue on one step and again on the next inside 800ms would
+ * silently swallow the second — trading a harmless duplicate request for a dead button, which is
+ * the worse failure. A button with no `testID` keeps exactly the behaviour it had.
+ */
+const shared = new Map<string, PressGuard>();
+
+export function pressGuardFor(key: string | undefined): PressGuard {
+  if (!key) return createPressGuard();
+  const existing = shared.get(key);
+  if (existing) return existing;
+  const made = createPressGuard();
+  shared.set(key, made);
+  return made;
+}
+
+/** Test seam. The registry is module state and would otherwise leak between cases. */
+export function resetSharedGuards(): void {
+  shared.clear();
+}

@@ -143,10 +143,19 @@ Real, low severity, none blocking a track.
 
 | # | Task | Status |
 |---|---|---|
-| 5.1 | `server/src/executor/run.ts` is **1,058 lines** and grew again as venues were added. Split the venue-selection block (Aqua → SwapVM → aggregator) into `executor/settle.ts`, leaving `run.ts` as gates plus orchestration | **NOT STARTED** |
-| 5.2 | End-to-end double-tap on a primary action could not be reproduced — Chrome's click injection stopped landing mid-run, so six attempts produced zero records. The guard now has 7 tests (`src/ui/pressGuard.test.ts`), but the gesture itself is unproven. Re-run test-plan item G7 in a working browser | **NOT STARTED** |
-| 5.3 | README test counts say 432/214/54; actual is **445/214/54** after the press-guard tests. Re-check the numbers in the Tests section against a real run | **NOT STARTED** |
-| 5.4 | The fork's audit trail carries developer session names — `FINAL fill after slippage fix`, `T7 entry FIRE 3`, `QA — daily WETH`. Append-only by design, so they cannot be removed; decide whether the demo should use a wallet whose trail is clean instead | **NOT STARTED** |
+| 5.1 | Split into `executor/settle.ts` (167 lines); `run.ts` is **964**. Verified behaviour-preserving by running it, not by reading it — a real $40 order through the redeployed executor still settles on the maker's SwapVM program | **DONE** |
+| 5.2 | End-to-end double-tap on a primary action could not be reproduced — Chrome's click injection stopped landing mid-run, so six attempts produced zero records. The guard now has 7 tests (`src/ui/pressGuard.test.ts`), but the gesture itself is unproven. Re-run test-plan item G7 in a working browser | **IN PROGRESS** |
+| 5.3 | Counts corrected against real runs: **456** app+executor, **218** executor alone, **54** contract. Fixing the second number meant fixing the command: `(cd server && npm test)` could not COLLECT `news/feed.test.ts`, because `venues/oneinch.ts` throws without `ONEINCH_API_KEY` and only the ROOT vitest config loaded `.env`. Also deleted `server/vitest.config.mts`, which vitest never read — verified by breaking it deliberately and watching the suite pass | **DONE** |
+| 5.4 | **No change needed, and now established rather than assumed.** The hosted bundle was downloaded and searched: it contains exactly one executor URL, `executor-production-1659` — the Sepolia deployment. The fork's developer-named rows live in a different database that the hosted app never queries, so nothing a judge can reach displays them | **DONE — not needed** |
+
+**Phase 5 surfaced a defect the plan did not know about, on the hosted app.** A permission that had
+expired thirteen hours earlier still showed a green **Live** badge headed "Agents are live", with
+"Your permission has expired" a scroll below it on the same screen, and `/limits` reporting `$0
+left today` under a $1,600 cap with nothing spent and no reason given for the zero. Expiry was
+never one of the safety screen's states — `delegateUnusable`'s own docblock says a policy can be
+"unrevoked, unexpired, cap intact", so the case was known and unchecked. The button offered **Stop
+all agents**, which would have sent `revoke()` for a grant the contract already considers over.
+Fixed as a fourth state built on the `expiryState` the banner already used, 11 tests. **G14** below.
 
 ## Phase 6 — Blocked on an external thing
 
@@ -199,6 +208,7 @@ Every gap, tied to the task it blocks, ordered by cost. Verified by running thin
 | **G4** | **SwapVM has never settled a fill.** `fillsByVenue` = `{1inch: 35, aqua: 5}`; no maker has shipped a program | `server/src/venues/swapvm.ts` | 3.1–3.3 | Medium — the one sponsor claim resting on tests, though the README says "Wired" not "Done" |
 | **G5** | **`indexesThisDeployment()` is false on the fork**, so `/history` has nothing to say where the trades actually are. Both screens now state this instead of claiming "nothing has settled", which is honest but not fixed | `server/src/graph/client.ts` | 4.3 | Medium |
 | **G13** | ~~**Safety offered "Stop all agents" on a wallet with nothing granted**, and pressing it would have revoked a policy that never existed~~ | `src/state/derived.ts`, `app/safety.tsx` | 1.3 | **CLOSED** — found in the demo's closing frame, fixed and deployed |
+| **G14** | ~~**An expired permission read as Live** on the hosted app — green badge, "Agents are live", and a **Stop all agents** button that would have revoked a grant the contract already considers over~~ | `src/state/derived.ts`, `app/safety.tsx`, `app/limits.tsx`, `server/src/routes/index.ts` | 5.x | **CLOSED** — found by reading the hosted executor's own `/limits`, fixed with 11 tests |
 | **G6** | **`run.ts` is 1,058 lines** — grew past its post-split size again as venues were added | `server/src/executor/run.ts` | 5.1 | Low |
 | **G7** | **The double-tap gesture is unproven end to end.** The guard has 7 tests; the browser could not deliver the gesture | `src/ui/pressGuard.ts` | 5.2 | Low |
 | **G8** | **README test counts are stale** — says 432, actual 445 | `README.md` | 5.3 | Low |

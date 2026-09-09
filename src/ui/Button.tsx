@@ -24,7 +24,7 @@
 import React from 'react';
 import { ActivityIndicator, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Press } from './Press';
-import { DOUBLE_TAP_MS, createPressGuard } from './pressGuard';
+import { DOUBLE_TAP_MS, pressGuardFor } from './pressGuard';
 import { Text } from './Text';
 import { border, colors, radius, size, space } from './tokens';
 
@@ -98,21 +98,37 @@ export interface ButtonProps {
 function useGuardedPress(
   onPress: (() => void | Promise<unknown>) | undefined,
   loading: boolean,
+  testID?: string,
 ) {
-  // The lock itself lives in `pressGuard.ts`, where it can be tested; see the note there.
-  const guard = React.useRef(createPressGuard());
+  /*
+   * The lock itself lives in `pressGuard.ts`, where it can be tested; see the note there.
+   *
+   * Keyed by `testID` when there is one, so it outlives a press that unmounts its own button —
+   * the retry case, where the guard was measurably useless. Without a `testID` this is a fresh
+   * per-instance guard, exactly as before.
+   */
+  const guard = React.useMemo(() => pressGuardFor(testID), [testID]);
+
+  const wasLoading = React.useRef(loading);
   React.useEffect(() => {
-    // A screen that finished its own work and cleared `loading` releases the guard with it, so a
-    // handler that never returns a promise still cannot wedge the button shut.
-    if (!loading) guard.current.release();
-  }, [loading]);
+    /*
+     * A screen that finished its own work and cleared `loading` releases the guard with it, so a
+     * handler that never returns a promise still cannot wedge the button shut.
+     *
+     * On the TRANSITION out of loading, not on every render where loading is false. Releasing
+     * unconditionally also fired on mount, which for a keyed guard means the remount that the key
+     * exists to survive would immediately unlock it — the bug, reintroduced by its own fix.
+     */
+    if (wasLoading.current && !loading) guard.release();
+    wasLoading.current = loading;
+  }, [loading, guard]);
 
   return React.useCallback(() => {
-    if (!onPress || !guard.current.take()) return;
+    if (!onPress || !guard.take()) return;
     const result = onPress();
     if (result && typeof (result as Promise<unknown>).finally === 'function') {
       void (result as Promise<unknown>).finally(() => {
-        guard.current.release();
+        guard.release();
       });
       return;
     }
@@ -130,9 +146,9 @@ function useGuardedPress(
      * and are untouched; this is only the one primary action a screen has.
      */
     setTimeout(() => {
-      guard.current.release();
+      guard.release();
     }, DOUBLE_TAP_MS);
-  }, [onPress]);
+  }, [onPress, guard]);
 }
 
 export function Button({
@@ -148,7 +164,7 @@ export function Button({
   testID,
 }: ButtonProps) {
   const skin = SKINS[variant];
-  const press = useGuardedPress(onPress, loading);
+  const press = useGuardedPress(onPress, loading, testID);
   const bg = disabled ? DISABLED.bg : (backgroundColor ?? skin.bg);
   const fg = disabled ? DISABLED.fg : (color ?? skin.fg);
   const h = height ?? skin.height;
