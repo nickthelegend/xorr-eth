@@ -11,6 +11,7 @@
  * portfolio would actually earn, and anyone can verify it against app.aave.com.
  */
 import { createPublicClient, http, type Address } from 'viem';
+import { pastTheThrottle } from '../evm/throttle.js';
 import { base } from 'viem/chains';
 import { chain } from '../evm/chains.js';
 import { publicClient } from '../evm/client.js';
@@ -112,12 +113,22 @@ export type UsdcReserve = {
 };
 
 export async function usdcReserve(): Promise<UsdcReserve> {
-  const data = await client.readContract({
-    address: AAVE_V3_POOL,
-    abi: POOL_ABI,
-    functionName: 'getReserveData',
-    args: [USDC_BASE_MAINNET],
-  });
+  /*
+   * Through the throttle guard, because this reads the FREE public Base endpoint.
+   *
+   * It answers a rate limit as a JSON-RPC error inside a 200 that viem does not retry, so a burst
+   * of reads made this route report "no reserve" about a pool that is very much live — the same
+   * wrong-number-that-looks-measured this file's docblock exists to prevent, arriving by a
+   * different door.
+   */
+  const data = await pastTheThrottle(() =>
+    client.readContract({
+      address: AAVE_V3_POOL,
+      abi: POOL_ABI,
+      functionName: 'getReserveData',
+      args: [USDC_BASE_MAINNET],
+    }),
+  );
 
   // currentLiquidityRate is an annualised per-second rate in ray. Aave's own UI compounds it per
   // second; the linear rate is the conservative of the two, so quote that.

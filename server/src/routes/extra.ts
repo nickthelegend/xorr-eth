@@ -13,6 +13,7 @@ import { briefing } from '../news/feed.js';
 import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
 import { quote, canonicalSymbol } from '../venues/oneinch.js';
+import { compareVenues } from '../venues/compare.js';
 import { requireUser } from '../auth/middleware.js';
 import { currentWallet } from './wallet-context.js';
 import { readPolicy } from '../evm/delegation.js';
@@ -428,6 +429,34 @@ extra.get('/swap/quote', async (c) => {
     return c.json(q);
   } catch (e) {
     // No route is a real answer. The screen says so rather than showing a computed guess.
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+/**
+ * What every venue would give for the same trade.
+ *
+ * `settle.ts` picks one and the trail names it. This says what the other two would have done, so
+ * "Aqua filled this" can become "Aqua filled this and beat the aggregator by 11 bps" — the second
+ * is a claim about the routing, and the first is only a label.
+ *
+ * A quote surface: it builds nothing submittable and touches no permission.
+ */
+extra.get('/route/compare', async (c) => {
+  const w = await currentWallet(c);
+  if (!w) return c.json({ error: 'no_wallet' }, 400);
+  try {
+    return c.json(
+      await compareVenues({
+        owner: w.address as Address,
+        // Not `.toUpperCase()`: tokenized equities are `NVDAc`, and uppercasing them names a
+        // symbol the registry has never heard of.
+        inSymbol: canonicalSymbol(c.req.query('in') ?? 'USDC'),
+        outSymbol: canonicalSymbol(c.req.query('out') ?? 'WETH'),
+        amount: Number(c.req.query('amount') ?? 100),
+      }),
+    );
+  } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
 });

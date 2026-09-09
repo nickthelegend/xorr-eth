@@ -233,11 +233,24 @@ export function equitiesFunctional(): Promise<boolean> {
     if (probes.length === 0) return false;
     const { publicClient } = await import('../evm/client.js');
     const { erc20Abi } = await import('viem');
+    /*
+     * Each probe past the throttle guard, because a rate limit here answers the wrong question.
+     *
+     * The `.catch(() => 0n)` below is meant to absorb "this token has no code on this chain",
+     * which is the case this function exists to detect. A throttled read fails identically, so a
+     * burst against the free public endpoint could make all four probes look dead and report
+     * live mainnet equities as unavailable.
+     */
+    const { pastTheThrottle } = await import('../evm/throttle.js');
     const answers = await Promise.all(
       probes.map((p) =>
-        publicClient
-          .readContract({ address: p.address, abi: erc20Abi, functionName: 'totalSupply' })
-          .catch(() => 0n),
+        pastTheThrottle(() =>
+          publicClient.readContract({
+            address: p.address,
+            abi: erc20Abi,
+            functionName: 'totalSupply',
+          }),
+        ).catch(() => 0n),
       ),
     );
     return answers.some((a) => a > 0n);

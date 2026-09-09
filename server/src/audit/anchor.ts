@@ -195,6 +195,24 @@ export async function anchorWallet(
   });
   await publicClient.waitForTransactionReceipt({ hash: txHash });
 
+  /*
+   * Then wait until a READ can see it.
+   *
+   * A receipt means some node mined the block; it does not mean the next `eth_call` lands on a
+   * node that has it. Base Sepolia's public endpoint is load-balanced, and the read immediately
+   * after a confirmed anchor reliably came back empty — so the screen refetched and said "NOT YET
+   * ANCHORED" about a commitment it had just made. That is the worst possible moment to be wrong,
+   * because it is the moment someone is watching to see whether this works.
+   *
+   * Bounded, and non-fatal: the anchor IS published either way, so a slow read must not turn a
+   * successful write into a reported failure.
+   */
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const seen = await latestAnchor(owner).catch(() => undefined);
+    if (seen && seen.head.toLowerCase() === local.head.toLowerCase()) break;
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+
   return { anchored: true, txHash, head: local.head, entryCount: local.entryCount };
 }
 

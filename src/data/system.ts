@@ -12,7 +12,7 @@
  * 1.15e77 and every screen comparing it would be comparing a lie.
  */
 import { api } from './api';
-import type { AnchorReport } from './types';
+import type { AnchorReport, RouteComparison } from './types';
 
 /* ─────────────────────────────────────────────────────────── trust and proof */
 
@@ -356,6 +356,11 @@ export const system = {
   verifyReport: (owner?: string) =>
     api.get<VerifyReport>(`/verify${owner ? `?owner=${encodeURIComponent(owner)}` : ''}`),
   auditChain: () => api.get<ChainVerification>('/activity/verify'),
+  /* Every venue asked the same question, refusals included. */
+  routeCompare: (inSymbol: string, outSymbol: string, amount: number) =>
+    api.get<RouteComparison>(
+      `/route/compare?in=${encodeURIComponent(inSymbol)}&out=${encodeURIComponent(outSymbol)}&amount=${amount}`,
+    ),
   /* What Base holds about this trail, and whether we still agree with it. */
   auditAnchor: () => api.get<AnchorReport>('/audit/anchor'),
   anchorNow: () =>

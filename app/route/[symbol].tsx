@@ -31,6 +31,8 @@ import {
 } from '@/ui';
 import { money, percent, quantity } from '@/format';
 import { useSwapQuote } from '@/data/useSwapQuote';
+import { useAsync } from '@/data/useAsync';
+import { system } from '@/data/system';
 import { settlementSymbol } from '@/data/tradable';
 
 /**
@@ -125,9 +127,90 @@ export default function RouteInspector() {
                 {data.route}
               </Text>
             </SheetCard>
+
+            {/*
+              The other two venues, asked the same question.
+              `settle.ts` chooses between Aqua, SwapVM and the aggregator in a documented order,
+              and the trail names whichever filled — so "Aqua filled this" was a label with nothing
+              behind it. What makes it a claim is what the others would have done, refusals
+              included: a maker quotes what they hold, and "no book is deep enough at this size" is
+              information rather than an absence.
+            */}
+            <VenueComparison inSymbol={PAYS_WITH} outSymbol={into} amount={usd} />
           </ScrollView>
         )}
       </Fill>
     </Screen>
+  );
+}
+
+/** How each venue is named on screen. The trail uses the same words. */
+const VENUE_LABEL: Record<string, string> = {
+  aqua: '1inch Aqua',
+  swapvm: '1inch SwapVM',
+  '1inch': '1inch Aggregation',
+};
+
+function VenueComparison({
+  inSymbol,
+  outSymbol,
+  amount,
+}: {
+  inSymbol: string;
+  outSymbol: string;
+  amount: number;
+}) {
+  const { data, loading, error } = useAsync(
+    () => system.routeCompare(inSymbol, outSymbol, amount),
+    [inSymbol, outSymbol, amount],
+  );
+
+  /*
+   * A failed comparison is silent rather than an error state.
+   *
+   * The quote above it is the answer the user came for and is already on screen; turning a
+   * secondary panel's failure into a screen-level error would replace working content with a
+   * retry button. It reappears on its own when the call succeeds.
+   */
+  if (error) return null;
+  if (loading && !data) return <Placeholder height={140} />;
+  if (!data) return null;
+
+  return (
+    <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
+      <Text variant="footnote" color={colors.ink40}>
+        EVERY VENUE, SAME SIZE
+      </Text>
+      {data.quotes.map((q) => (
+        <View key={q.venue} style={{ marginTop: space.s10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.s10 }}>
+            <Text
+              variant="secondary"
+              color={q.venue === data.best ? colors.up : colors.ink65}
+              style={{ flexShrink: 1 }}
+            >
+              {VENUE_LABEL[q.venue] ?? q.venue}
+            </Text>
+            <Text variant="secondary" color={q.served ? colors.ink : colors.ink28}>
+              {q.served ? `${quantity(q.outAmount)} ${outSymbol}` : 'cannot serve'}
+            </Text>
+          </View>
+          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
+            {q.served ? q.detail : q.reason}
+          </Text>
+        </View>
+      ))}
+      {/*
+        The margin, only when there was something to beat. `edgeBps` is deliberately absent when a
+        single venue answered, because "0 bps better" reads as a tie rather than as no competition.
+      */}
+      <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s12 }}>
+        {data.edgeBps !== undefined
+          ? `${VENUE_LABEL[data.best ?? ''] ?? data.best} wins by ${data.edgeBps} bps.`
+          : data.best
+            ? `Only ${VENUE_LABEL[data.best] ?? data.best} can serve this size, so there is nothing to compare it against.`
+            : 'No venue can serve this size right now.'}
+      </Text>
+    </SheetCard>
   );
 }

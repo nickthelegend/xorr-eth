@@ -350,3 +350,24 @@ export type AnchorReport = {
   latest: AuditAnchor | null;
   history: AuditAnchor[];
 };
+
+/**
+ * What each settlement venue would give for the same trade.
+ *
+ * A refusal is an answer here, not an omission: "no maker book is deep enough at $2,500" is the
+ * information, and a comparison that dropped the venues which could not serve would read as
+ * "1inch is the only venue" — a different and false claim.
+ */
+export type VenueQuote =
+  | { venue: 'aqua' | 'swapvm' | '1inch'; served: true; outAmount: number; detail: string }
+  | { venue: 'aqua' | 'swapvm' | '1inch'; served: false; reason: string };
+
+export type RouteComparison = {
+  inSymbol: string;
+  outSymbol: string;
+  amount: number;
+  quotes: VenueQuote[];
+  best?: 'aqua' | 'swapvm' | '1inch';
+  /** Undefined when only one venue served — "better than nothing" is not a margin. */
+  edgeBps?: number;
+};

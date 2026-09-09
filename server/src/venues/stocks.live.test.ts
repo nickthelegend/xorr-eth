@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { createPublicClient, http, erc20Abi } from 'viem';
 import { base } from 'viem/chains';
 import { STOCKS } from './stocks.js';
+import { pastTheThrottle } from '../evm/throttle.js';
 import { quote } from './oneinch.js';
 
 /**
@@ -17,31 +18,6 @@ import { quote } from './oneinch.js';
  */
 const client = createPublicClient({ chain: base, transport: http('https://mainnet.base.org') });
 
-/**
- * Retry, but ONLY when the RPC said it was rate limiting.
- *
- * `mainnet.base.org` is the free public endpoint and throttles after a short burst —
- * `base-readiness.ts` documents the same behaviour and spaces its reads for it. It answers a
- * throttle as a JSON-RPC error inside a 200 whose detail reads `over rate limit`, which viem's
- * transport does not treat as retryable, so the multicall below failed and the suite reported real
- * deployed tokens as missing.
- *
- * Narrow on purpose. A blanket retry would make a genuinely dead token take four times as long to
- * report and would be the kind of "make the red go away" change this repo argues against; matching
- * the throttle's own words means every other failure still fails on the first attempt.
- */
-async function pastTheThrottle<T>(work: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await work();
-    } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      const throttled = /over rate limit|429|too many requests/i.test(m);
-      if (!throttled || attempt === 4) throw e;
-      await new Promise((r) => setTimeout(r, 1_500 * (attempt + 1)));
-    }
-  }
-}
 
 describe('tokenized equities on Base', () => {
   it('every address is a real token with the symbol and decimals we claim', async () => {

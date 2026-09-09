@@ -50,12 +50,20 @@ beforeAll(() => {
  * cache, not the behaviour.
  */
 async function generate(): Promise<Response> {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  /*
+   * Ten attempts, because this runs alongside the rest of the suite.
+   *
+   * Alone, the route answers in under a second. Run with forty other live files competing for the
+   * same price upstreams it stays warming far longer, and six attempts landed just short — the
+   * test failed for load it created rather than for the behaviour it names. The failure message
+   * below still fires if it never warms, so patience here buys reliability without buying silence.
+   */
+  for (let attempt = 0; attempt < 10; attempt += 1) {
     const res = await req('/proposals/generate', { method: 'POST', body: '{}' });
     if (res.status !== 503) return res;
     await new Promise((r) => setTimeout(r, 3000));
   }
-  throw new Error('the proposal engine stayed warming for six attempts');
+  throw new Error('the proposal engine stayed warming for ten attempts');
 }
 
 describe('a decline is recorded when it changes, not when it is re-observed', () => {

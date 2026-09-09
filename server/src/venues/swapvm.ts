@@ -171,6 +171,16 @@ export type SwapVmFill = {
   data: Hex;
   order: SwapVmOrder;
   hash: Hex;
+  /**
+   * The floor the program is bound to, in OUT-token units.
+   *
+   * A SwapVM maker does not quote a price: the router computes the fill at execution and the
+   * bytecode enforces a minimum below which it reverts. That floor is the only number this venue
+   * actually promises, so it is the only one worth reporting — and it is exposed here rather than
+   * left as a local so a comparison surface can name it without recomputing the arithmetic and
+   * risking a second, drifting implementation of it.
+   */
+  minOut: bigint;
 };
 
 /**
@@ -258,7 +268,7 @@ export async function buildSwapVmFill(params: {
       .catch(() => false);
     if (!fillable) continue;
 
-    return { token, venue, amount, data, order: p.order, hash: p.hash };
+    return { token, venue, amount, data, order: p.order, hash: p.hash, minOut };
   }
   return undefined;
 }
