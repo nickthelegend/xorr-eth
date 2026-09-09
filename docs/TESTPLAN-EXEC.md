@@ -607,3 +607,110 @@ user-facing route with no budget. `/perp/BTC` hung sixty seconds, `/yield/supply
 - `tools/shoot.mjs`, the project's own harness: **54 of 54 screens**, console, network and content.
 - 47 GET endpoints, all 2xx, spot-checked for live values rather than shapes.
 - 489 unit tests, 54 contract tests, both typechecks, lint.
+
+## Pass 6 — the server was answering about a different wallet
+
+The five passes before this one tested screens and routes. This one tested the *test suite*, and
+that is where the real defect was hiding.
+
+### The defect
+
+Nine routes each answered "which wallet is this user's" with their own copy of
+`SELECT … FROM wallets WHERE user_id = $1 LIMIT 1` — no `ORDER BY`, so Postgres was free to return
+either row, and free to return a different one between calls. `wallet-context.ts` exists to be the
+single answer and says so in its own docblock: two copies of "which wallet is this" is *"exactly
+the shape of bug that made the previous build read the first wallet row"*. `extra.ts` carried the
+comment **"Scoped to the authenticated Privy user — never 'the first wallet row'"** directly above
+a query that read the first wallet row.
+
+A Privy user really does end up with two rows: web Privy lists any injected browser extension
+alongside the embedded wallet. The E2E account has exactly that.
+
+**Observed, against the deployed executor:**
+
+| | |
+|---|---|
+| Wallet the app signs in as | `0x95A0b368…` — the embedded one |
+| Wallet the server resolved | `0xD9B4b074…` |
+| `/limits` said | `dailyCapUsd: 0, revoked: true` |
+| The chain said | `dailyCap: 1600000000`, unrevoked, expiring 2026-09-10T05:44:58Z |
+| `POST /strategies` said | `no_delegation` — refused |
+
+The app was right and the server was answering about someone else. Agents, alerts, prices, Privy
+policy, catch-up and panic-sell could each land on a different wallet within one signed-in session.
+`/panic/flatten` is the one that matters most: it sells positions.
+
+Pass 3 had already verified the *client* half of this — "the embedded wallet was selected correctly
+in a Chrome holding two injected extension wallets ahead of it, the app registered `0x95A0b368…`,
+not `0xD9B4b074…`". Same two addresses. It verified the client and assumed the server agreed.
+
+### The fix
+
+`currentWallet` was ordering by `created_at DESC` — "newest row wins", which is still a guess, and
+here it guessed wrong: the app uses an embedded wallet created on the 5th while the newest row is a
+connected one from the 8th. `/wallet/connect` is the app *stating* the address it is on, so it now
+stamps `active_at` (migration 011) and that is what the ordering reads. Which wallet is a fact the
+client asserts each session, not something inferred from row age.
+
+Deliberately not `last_seen_at`: `/catchup` subtracts that one to decide what is new, and writing
+it on every app load would empty the window every time.
+
+All nine call sites now go through `currentWallet`. `grep -rn "FROM wallets WHERE user_id" src/`
+returns only the one definition.
+
+**Verified after deploy:** `/wallet` → `0x95A0b368…`; `/limits` → `dailyCapUsd: 1600, revoked:
+false`; `/catchup`, `/privy/policy`, `/panic/preview` all 200; and the `/limits` screen in a browser
+reads **REMAINING TODAY $1,600.00 · $0.00 spent · $1,600.00 cap**.
+
+### Two tests were passing without testing anything
+
+Worth naming separately, because a green suite is what let the defect above survive five passes.
+
+- **`agents.live.test.ts`** — "firing pauses its strategies" did `if (created.status !== 200)
+  return;` under the comment *"the wallet may already be at its cap; that is a legitimate reason to
+  skip"*. A full cap is. `no_delegation` is not — the test returned before asserting anything and
+  reported PASS. It now distinguishes the two and says when it could not run.
+- **`decide.live.test.ts`** — "sizes DOWN when asked for more than the remaining cap" excused any
+  refusal as *"also a correct outcome"*, so it kept passing after its hardcoded owner's grant
+  expired and `decide()` began answering "The permission has expired" — the correct answer, reported
+  as a defect by two sibling tests and silently swallowed by this one. It now resolves a
+  currently-permitted owner from the index (`anyLivePolicy`) instead of hardcoding one that expires.
+
+### Smaller things this pass closed
+
+- **`/verify` could not say whether the audit chain is still breaking.** It reported the first link
+  break only, so "forks at entry 2" read identically whether that fork was months old or written
+  this morning — opposite facts about whether the append lock works. The walk now counts every
+  break and names the newest. Live, on the production trail: **"Exactly one, at entry 2, and none
+  since — the lock holds."** That is the answer the screen owed a reader, and it is the fix's own
+  evidence.
+- **Wrong error first.** Creating a strategy that named an agent that was not yours reported "grant
+  permission first" — you would grant it, retry, and only then be told the real problem. Ownership
+  is a property of the request and is checked before the permission gate now. It also made the
+  isolation test vacuous: another wallet's agent id was refused for the wrong reason.
+- **The harness called two slow screens broken.** It asserted content once after a flat six
+  seconds. `/bot` waits on the proposal engine and `/verify` on twenty live chain, subgraph and
+  Aave calls; both land well past six. On `/bot` it read *yesterday's* message and reported the
+  absence of today's as an app defect — when a cleared thread showed today's decline rendering
+  correctly. It polls the assertion now, which fixes the whole class rather than two timeouts.
+- **`50-explore` expected `/Markets/`.** The heading is `MARKETS`. My expectation was wrong, not
+  the app.
+
+### Standing, unfixed, and honest about it
+
+- **`audit-chain` still FAILS on `/verify`, and should.** One fork at entry 2, from before the
+  append lock existed. The trail is append-only by trigger, so it cannot be repaired — a log that
+  can be rewritten to look correct proves nothing. Root cause is fixed
+  (`pg_advisory_xact_lock` per wallet, plus a unique-index backstop that migration 008
+  deliberately skips on a database already carrying the duplicate) and the screen now proves the
+  fix held.
+- **`equities` is UNTESTABLE on this chain, not PASS.** The tokens are live on Base mainnet — 4 of
+  8 answer `totalSupply()`, all 8 saw transfers within 4,000 blocks — and a fork copies their one
+  byte of code with nothing to serve it.
+
+### Suite state at the end of this pass
+
+- Server: **305 passed, 1 skipped, 0 failed** across 40 files, against a real Postgres, the
+  deployed contract, the deployed subgraph and live 1inch/Aave/CoinGecko calls. Four were failing
+  when this pass began; two of the four had been green while testing nothing.
+- Both typechecks clean, including `--noUnusedLocals` for every file this pass touched.
