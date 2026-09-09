@@ -484,7 +484,19 @@ strategyRoutes.post('/strategies', async (c) => {
   // An agent id from another wallet must not be attachable. Verified here rather than trusted,
   // because the alternative is a strategy that reports to an agent its owner cannot see or fire.
   let agentId: string | null = null;
-  let agentName = 'Yield Keeper';
+  /*
+   * Nobody's persona until one is actually chosen.
+   *
+   * This defaulted to 'Yield Keeper', so every strategy created without an explicit agent was
+   * credited to the tier that only ever moves idle cash into Aave — including a plain WETH
+   * recurring buy, which was visible on the deployed build as "Created $50 of WETH, daily ·
+   * Yield Keeper". Same mistake as the five literals in `executor/run.ts`, in the one place that
+   * writes the row a user sees first.
+   *
+   * The user created this. `xorr` is the name this codebase already uses for the system acting on
+   * an instruction rather than on its own initiative — 'Wallet connected' is written the same way.
+   */
+  let agentName = 'xorr';
   if (body.agentId) {
     const agent = await one<{ id: string; name: string }>(
       `SELECT id, name FROM agents WHERE id = $1 AND wallet_id = $2 AND hired = true`,
