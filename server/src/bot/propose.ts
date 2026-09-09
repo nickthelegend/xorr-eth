@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { one, query } from '../db/index.js';
 import { priceOf } from '../market/prices.js';
 import { getJson } from '../http/get.js';
+import { COINGECKO_IDS } from '../market/ids.js';
 import { evaluate } from '../rules/engine.js';
 import { speak } from './llm.js';
 import { TONE_INSTRUCTIONS, type ToneId } from './tone.js';
@@ -29,13 +30,29 @@ import type { Address } from 'viem';
  * WETH: the deepest book this executor can route and settle on Base. The previous default was
  * `'SOL'`, which has no token on this chain at all.
  */
-const DEFAULT_PROPOSAL_SYMBOL = 'WETH';
+/** Exported so a test can assert the price map can actually resolve it. */
+export const DEFAULT_PROPOSAL_SYMBOL = 'WETH';
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';
-const IDS: Record<string, string> = {
-  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple', DOGE: 'dogecoin',
-  HYPE: 'hyperliquid', AAVE: 'aave', LINK: 'chainlink', TON: 'the-open-network',
-};
+/*
+ * The price-feed ids, IMPORTED. This file used to keep its own copy.
+ *
+ * The copy held nine symbols — BTC, ETH, SOL, XRP, DOGE, HYPE, AAVE, LINK, TON — while
+ * `market/ids.ts` holds fourteen. The five it was missing were XAUT, PAXG, WETH, USDC and CBBTC:
+ * every asset this app can actually settle on Base.
+ *
+ * `DEFAULT_PROPOSAL_SYMBOL` is `WETH`. So `range()` looked up a symbol its own map did not have,
+ * returned `null`, and `propose()` reported `no_market_data` — writing "Proposed nothing — No live
+ * market for WETH." into the permanent audit trail on every run, about an asset whose price the
+ * same executor was serving to `/price/WETH` and `/market/ohlc` at that moment. The proposal
+ * engine, which exists to show what the bot chose to do, could not propose anything for any
+ * tradable symbol.
+ *
+ * A second copy of a mapping is a second thing to keep current, and this is what it cost. Same
+ * mistake as the `delegations` table being read for enforcement, one file over.
+ */
+export const PRICE_IDS = COINGECKO_IDS;
+const IDS = PRICE_IDS;
 
 export type ProposalPayload = {
   symbol: string;

@@ -13,6 +13,21 @@ import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+/*
+ * The credentials, loaded the way the vitest configs and `demo.mjs` load them.
+ *
+ * This sweep signs in with `PRIVY_APP_ID`/`PRIVY_APP_SECRET` and asserts its own preconditions,
+ * printing "SIGN-IN FAILED … screens will be signed out" when it cannot. That message is only
+ * useful if the variables were ever going to be there: a plain node script reads no `.env`, so
+ * running it the way the README documents shot every authenticated screen in its signed-out state
+ * and said so in one line above a wall of passing output.
+ */
+try {
+  process.loadEnvFile(new URL('../.env', import.meta.url));
+} catch {
+  // No `.env` is legitimate; the sign-in check below reports what it could not do.
+}
+
 const BASE = process.env.APP_URL ?? 'http://localhost:8082';
 const API = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8788';
 const OUT = path.resolve(import.meta.dirname, '../docs/screens');
