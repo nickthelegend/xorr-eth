@@ -22,6 +22,7 @@ import {
   type StockQuote,
 } from './marketData';
 import { ApiError, NotSignedIn, api, apiReason } from './api';
+import { absentOrThrow } from './apiError';
 import type {
   ActivityEvent,
   Agent,
@@ -531,12 +532,7 @@ export const LocalRepositories: Repositories = {
      * grant exists, which is the other legitimate null.
      */
     async delegation(): Promise<Delegation | null> {
-      try {
-        return (await api.get<Delegation | null>('/delegation')) ?? null;
-      } catch (e) {
-        if (e instanceof NotSignedIn) return null;
-        throw e;
-      }
+      return absentOrThrow(() => api.get<Delegation | null>('/delegation'));
     },
     async privyPolicy(): Promise<PrivyPolicyView | null> {
       // Null on failure rather than throwing: this is a second opinion about safety, and a screen

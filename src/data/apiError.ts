@@ -124,3 +124,34 @@ export class TimedOut extends Error {
     this.name = 'TimedOut';
   }
 }
+
+/**
+ * Read something that may legitimately be absent, without turning a FAILURE into an absence.
+ *
+ * `repos.wallet.delegation()` was written as
+ *
+ *     (await api.get('/delegation').catch(() => undefined)) ?? null
+ *
+ * so an unreachable executor produced `null` — the same value the route returns for a wallet that
+ * has granted nothing. `/safety` reads exactly that to choose between LIVE and NOT GRANTED, and
+ * with the executor down and a live $1,600/day grant on chain it announced "No permission has been
+ * granted, so nothing can trade."
+ *
+ * `useHydrateDelegation` already had a catch for this case, commented "A failed read is not 'no
+ * permission'", which could never fire against a function that never threw.
+ *
+ * `NotSignedIn` is the one error that IS an absence: no session means no permission, which is an
+ * answer rather than a failure to get one. Everything else propagates so the caller can say it
+ * could not find out.
+ *
+ * Extracted here for the same reason `errorText` and `pressGuard` were: the part worth testing was
+ * the part a test could not reach, because `local.ts` pulls in the whole Expo runtime.
+ */
+export async function absentOrThrow<T>(read: () => Promise<T | null | undefined>): Promise<T | null> {
+  try {
+    return (await read()) ?? null;
+  } catch (e) {
+    if (e instanceof NotSignedIn) return null;
+    throw e;
+  }
+}
