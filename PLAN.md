@@ -144,7 +144,7 @@ Real, low severity, none blocking a track.
 | # | Task | Status |
 |---|---|---|
 | 5.1 | Split into `executor/settle.ts` (167 lines); `run.ts` is **964**. Verified behaviour-preserving by running it, not by reading it — a real $40 order through the redeployed executor still settles on the maker's SwapVM program | **DONE** |
-| 5.2 | End-to-end double-tap on a primary action could not be reproduced — Chrome's click injection stopped landing mid-run, so six attempts produced zero records. The guard now has 7 tests (`src/ui/pressGuard.test.ts`), but the gesture itself is unproven. Re-run test-plan item G7 in a working browser | **IN PROGRESS** |
+| 5.2 | Run, and it **FAILED** — the guard did not hold. A real double-click on "Try again" on the deployed app produced two `/limits` requests **11ms apart**, against one for a single click. The lock lived in a `useRef`, so it belonged to one component instance, and retry is the press that destroys its own button: `ErrorState` unmounts, the request fails, and it returns holding a fresh unlocked guard. Fixed by keying the guard on `testID` so the lock survives the remount; 4 more tests, re-verified in the browser | **DONE** |
 | 5.3 | Counts corrected against real runs: **456** app+executor, **218** executor alone, **54** contract. Fixing the second number meant fixing the command: `(cd server && npm test)` could not COLLECT `news/feed.test.ts`, because `venues/oneinch.ts` throws without `ONEINCH_API_KEY` and only the ROOT vitest config loaded `.env`. Also deleted `server/vitest.config.mts`, which vitest never read — verified by breaking it deliberately and watching the suite pass | **DONE** |
 | 5.4 | **No change needed, and now established rather than assumed.** The hosted bundle was downloaded and searched: it contains exactly one executor URL, `executor-production-1659` — the Sepolia deployment. The fork's developer-named rows live in a different database that the hosted app never queries, so nothing a judge can reach displays them | **DONE — not needed** |
 
@@ -205,14 +205,14 @@ Every gap, tied to the task it blocks, ordered by cost. Verified by running thin
 | **G1** | **The demo recording predates 86 commits** and was shot against localhost, which no longer resembles what the hosted link shows | `docs/demo/*` | 1.1–1.5 | **High** — it is the first thing a judge watches, and it now misrepresents the product |
 | **G2** | **Only one subgraph is ever queried** — the `xorr-aqua` slug was never created, so `AQUA_SUBGRAPH_URL` is empty and `aqua.ts` throws `AquaIndexUnavailable` | Studio; `server/src/graph/aqua.ts` | 2.1–2.4 | **High** — the only unmet sponsor track |
 | **G3** | **`XorrDelegation` is not on Base mainnet** — `eth_getCode` returns `0x`, deployer holds 0 ETH | — | 4.1–4.4 | **High** — gates bars 2 and 6, and the `/history` gap below |
-| **G4** | **SwapVM has never settled a fill.** `fillsByVenue` = `{1inch: 35, aqua: 5}`; no maker has shipped a program | `server/src/venues/swapvm.ts` | 3.1–3.3 | Medium — the one sponsor claim resting on tests, though the README says "Wired" not "Done" |
+| **G4** | ~~**SwapVM has never settled a fill**~~ — it has. `fillsByVenue` reads `{swapvm: 2, 1inch: 36, aqua: 5}`, the executor filling through `XorrDelegation.spend()` → `XorrSwapVMBook` → the official router at a better price than the aggregator quoted | `server/src/venues/swapvm.ts` | 3.1–3.3 | **CLOSED** |
 | **G5** | **`indexesThisDeployment()` is false on the fork**, so `/history` has nothing to say where the trades actually are. Both screens now state this instead of claiming "nothing has settled", which is honest but not fixed | `server/src/graph/client.ts` | 4.3 | Medium |
 | **G13** | ~~**Safety offered "Stop all agents" on a wallet with nothing granted**, and pressing it would have revoked a policy that never existed~~ | `src/state/derived.ts`, `app/safety.tsx` | 1.3 | **CLOSED** — found in the demo's closing frame, fixed and deployed |
 | **G14** | ~~**An expired permission read as Live** on the hosted app — green badge, "Agents are live", and a **Stop all agents** button that would have revoked a grant the contract already considers over~~ | `src/state/derived.ts`, `app/safety.tsx`, `app/limits.tsx`, `server/src/routes/index.ts` | 5.x | **CLOSED** — found by reading the hosted executor's own `/limits`, fixed with 11 tests |
-| **G6** | **`run.ts` is 1,058 lines** — grew past its post-split size again as venues were added | `server/src/executor/run.ts` | 5.1 | Low |
-| **G7** | **The double-tap gesture is unproven end to end.** The guard has 7 tests; the browser could not deliver the gesture | `src/ui/pressGuard.ts` | 5.2 | Low |
-| **G8** | **README test counts are stale** — says 432, actual 445 | `README.md` | 5.3 | Low |
-| **G9** | **Developer session names in the fork's audit trail** — `FINAL fill after slippage fix`, `T7 entry FIRE 3` | fork Postgres | 5.4 | Low — append-only by design; the hosted deployment is clean |
+| **G6** | ~~**`run.ts` is 1,058 lines**~~ — 964, with venue selection in `executor/settle.ts` | `server/src/executor/run.ts` | 5.1 | **CLOSED** |
+| **G7** | ~~**The double-tap gesture is unproven end to end**~~ — proven, and it was broken: the guard was per-component-instance, so a press that unmounted its own button lost the lock. Two `/limits` calls 11ms apart on the deployed app | `src/ui/pressGuard.ts` | 5.2 | **CLOSED** |
+| **G8** | ~~**README test counts are stale**~~ — corrected to 460/218/54, and the command `(cd server && npm test)` was broken and now runs | `README.md`, `server/vitest.config.ts` | 5.3 | **CLOSED** |
+| **G9** | ~~**Developer session names in the fork's audit trail**~~ — unreachable from the product: the hosted bundle contains exactly one executor URL, and it is the Sepolia one | fork Postgres | 5.4 | **CLOSED — not reachable** |
 | **G10** | No LLM credential | env | 6.1 | **Blocked** |
 | **G11** | Privy policy on the user's own wallet | platform | 6.2 | **Blocked** |
 | **G12** | Sepolia audit chain forked at entry 2 | history | 6.3 | **Blocked**, permanent by design |
@@ -240,7 +240,7 @@ primitive in `src/ui/States.tsx`, not a placeholder value.
 
 ## 5. Current measured state
 
-Everything below was produced by running it on 2026-09-09, not copied forward.
+Everything below was produced by running it on 2026-09-09, not copied forward. Re-measured after the execution pass.
 
 | Check | Result |
 |---|---|
@@ -252,13 +252,16 @@ Everything below was produced by running it on 2026-09-09, not copied forward.
 | Delegation subgraph | block 46,574,549, no indexing errors, 3 policies indexed |
 | `XorrDelegation` on Base Sepolia | 7,158 bytes |
 | `XorrDelegation` on Base mainnet | `0x` — not deployed |
-| Fork runs | 33 filled, 19 failed, 8 skipped, 2 blocked |
-| Fills by venue | `1inch: 35, aqua: 5` |
-| Client tests | **445** |
-| Server tests | **214** |
+| Fork runs | 36 filled, 20 failed, 8 skipped, 2 blocked |
+| Fills by venue | `swapvm: 2, 1inch: 36, aqua: 5` — the swapvm key exists for the first time |
+| Client tests | **460** |
+| Server tests | **218** — and `(cd server && npm test)` runs at all, which it did not |
 | Contract tests | **54** |
-| Typecheck | clean, both projects |
+| Typecheck | clean, both projects — the server's is stricter and had not been run |
 | Lint | clean |
+| `run.ts` | **960** lines, with venue selection in `executor/settle.ts` (167) |
+| Double-tap on a real button | **one** action per double-click, verified on the deployed app by counting requests |
+| Expired permission on `/safety` | reads **EXPIRED**, offers a new grant — it read green **Live** before |
 | Console errors, full hosted sweep | **none** |
 | Mock/stub/TODO in shipped code | **0** |
 
