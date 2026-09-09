@@ -12,9 +12,11 @@
  * aborting. A recording that ends at beat three because a button moved is worth less than one that
  * misses a beat and keeps going, and the log says exactly which beats landed.
  *
- * Run:
- *   EXPO_PUBLIC_API_URL=https://executor-fork-production.up.railway.app \
+ * Run (records the deployed app):
  *   PRIVY_APP_ID=… PRIVY_APP_SECRET=… node tools/demo.mjs
+ *
+ * Or point it somewhere else:
+ *   APP_URL=http://localhost:8082 PRIVY_APP_ID=… PRIVY_APP_SECRET=… node tools/demo.mjs
  *
  * Then:  ffmpeg -i docs/demo/demo.webm -vf "fps=12,scale=402:-1" docs/demo/demo.gif
  */
@@ -23,7 +25,15 @@ import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const BASE = process.env.APP_URL ?? 'http://localhost:8082';
+/*
+ * The SHIPPED app by default, not a machine only I can reach.
+ *
+ * This defaulted to `localhost:8082`, and that is how the previous recording came to be shot
+ * against a dev server: it ran, it worked, and nothing said the footage was of something nobody
+ * else could open. A demo of the deployed product is the only demo worth having, so the deployed
+ * product is what this records unless told otherwise.
+ */
+const BASE = process.env.APP_URL ?? 'https://web-production-3e214.up.railway.app';
 const OUT = path.resolve(import.meta.dirname, '../docs/demo');
 /** design.md's canvas. A phone layout recorded at desktop width looks like a mistake. */
 const VIEWPORT = { width: 402, height: 874 };

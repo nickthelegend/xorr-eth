@@ -293,6 +293,22 @@ describe('kill switch — screen 20', () => {
    * screen reported it as "Agents are live — 1 agents can place orders inside your limits right
    * now." while not one order could be placed.
    */
+  /*
+   * Found in the closing frame of the demo recording: a wallet with no permission was shown a red
+   * "Stop all agents" directly under "There is nothing to stop yet". `killTitle` already knew about
+   * `granted`; the CTA did not, and its handler would have asked the wallet to revoke a policy that
+   * had never been granted.
+   */
+  it('offers a grant, not a stop, when nothing is granted', () => {
+    expect(d.killTitle(false, false, false)).toBe('No agents can trade');
+    expect(d.killCta(false, false, false)).toBe('Set the limits');
+    // And the states that already worked keep working.
+    expect(d.killCta(false, false, true)).toBe('Stop all agents');
+    expect(d.killCta(true, false, true)).toBe('Resume agents');
+    // `unusable` still wins over both — a broken grant is re-granted, not "set".
+    expect(d.killCta(false, true, false)).toBe('Reconnect agents');
+  });
+
   it('a grant to a key the executor does not hold is not "live"', () => {
     expect(d.delegateUnusable({ delegateIsCurrent: false }, false)).toBe(true);
     expect(d.killTitle(false, true)).toBe('Agents cannot trade');

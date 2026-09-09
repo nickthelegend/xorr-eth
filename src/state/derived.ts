@@ -340,8 +340,21 @@ export function killExplanation(
   }
   return `${liveAgents} ${liveAgents === 1 ? 'agent' : 'agents'} can place orders inside your limits right now.`;
 }
-export function killCta(killed: boolean, unusable = false): string {
+/**
+ * What the big button on Safety should offer.
+ *
+ * `killTitle` has taken `granted` since a wallet with no permission was headed "Agents are live";
+ * this did not, so the same wallet was shown a red **Stop all agents** underneath the words "There
+ * is nothing to stop yet". Caught in the closing frame of the demo recording, which is where a
+ * judge would have seen it too.
+ *
+ * Offering a destructive stop for something that was never started is not only wrong copy — the
+ * handler would have called `revoke()` on a policy that does not exist. The action on an ungranted
+ * wallet is to grant, and the screen's own permission card already routes there.
+ */
+export function killCta(killed: boolean, unusable = false, granted = true): string {
   if (unusable) return 'Reconnect agents';
+  if (!granted) return 'Set the limits';
   return killed ? 'Resume agents' : 'Stop all agents';
 }
 

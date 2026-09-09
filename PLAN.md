@@ -74,11 +74,19 @@ that the video cannot show. A judge who watches it and then opens the link sees 
 
 | # | Task | Status |
 |---|---|---|
-| 1.1 | Point `tools/demo.mjs` at the hosted app. It already reads the target from an env var — `tools/demo.mjs:26`, `const BASE = process.env.APP_URL ?? 'http://localhost:8082'` — so this is either running it as `APP_URL=https://web-production-3e214.up.railway.app node tools/demo.mjs`, or changing that default so the committed script records the shipped product by default. Prefer changing the default: the localhost fallback is what produced a recording nobody noticed was stale | **NOT STARTED** |
-| 1.2 | Add a gas step to the script: a fresh Privy test account now receives 0.002 test ETH automatically on first connect, so the grant is signable inside the recording without manual funding. Confirm the run does not race the drip — wait for the balance to be non-zero before the delegate beat | **NOT STARTED** |
-| 1.3 | Re-record all eight beats. Keep the existing rule from `docs/DEMO-SCRIPT.md`: leave a real FAIL or SKIP visible on `/judge` rather than cutting to a clean board | **NOT STARTED** |
-| 1.4 | Regenerate `docs/demo/demo.gif` at 300px and re-link from the README's **Watch it work** section and the top of `docs/SUBMISSION.md` | **NOT STARTED** |
-| 1.5 | Update `docs/DEMO-SCRIPT.md` for the two beats that changed: the hosted URL is now the opening shot, and `/judge` reads "19/20 · 1 skipped — each says why on its own row" | **NOT STARTED** |
+| 1.1 | Default changed to `https://web-production-3e214.up.railway.app`; `APP_URL` still overrides. The localhost fallback is what produced a recording nobody noticed was stale, so the committed script now records the shipped product unless told otherwise. | **DONE** |
+| 1.2 | **No race exists, and no gas step is needed** — verified by running it. The recorder never signs: it walks screens and records footage to speak over, and the four Privy dialogs a grant raises are not something it drives. The drip still fires on a new wallet's first connect, so a *person* recording live is funded; the automated run does not depend on it. Recorded as a finding rather than a change. | **DONE — not needed** |
+| 1.3 | Re-recorded twice — once to find a defect, once against the fix. **8 of 8 beats landed**, 93.7s, against the hosted app. The `/judge` beat carries a real FAIL on camera (`audit-chain` forks at entry 2, G12, permanent by design), so the rule holds. Frames extracted and read to confirm the footage is current, not assumed. | **DONE** |
+| 1.4 | `demo.gif` (1.35MB) and `demo.mp4` (654KB) regenerated. Both README and `docs/SUBMISSION.md` corrected: they claimed the recording was made "against the running app on the Base mainnet fork", which is no longer true and was the more misleading half — it is the deployed app now, and the copy says so and links it. | **DONE** |
+| 1.5 | Setup section rewritten for the hosted target, plus two things the old script got wrong: it told you to start a dev server, and beat 7 told you to tap a button the recorder does not tap. Beat 7 now carries a table of the three states the closing frame can land in and which to avoid. | **DONE** |
+
+**Phase 1 surfaced a defect the plan did not know about.** The closing frame of the first
+re-recording showed a red **Stop all agents** on a wallet with no permission, directly beneath the
+sentence "There is nothing to stop yet" — and pressing it would have asked the wallet to revoke a
+policy that never existed. `killTitle` had taken a `granted` argument since a similar bug; `killCta`
+had not. Fixed, tested (`src/state/derived.test.ts`), deployed and re-verified on the real screen:
+the kill switch and its "takes effect in under a second" footnote are now absent when there is
+nothing to stop, leaving the one action the permission card already offers. **G13** below.
 
 ## Phase 2 — Close The Graph track
 
@@ -180,6 +188,7 @@ Every gap, tied to the task it blocks, ordered by cost. Verified by running thin
 | **G3** | **`XorrDelegation` is not on Base mainnet** — `eth_getCode` returns `0x`, deployer holds 0 ETH | — | 4.1–4.4 | **High** — gates bars 2 and 6, and the `/history` gap below |
 | **G4** | **SwapVM has never settled a fill.** `fillsByVenue` = `{1inch: 35, aqua: 5}`; no maker has shipped a program | `server/src/venues/swapvm.ts` | 3.1–3.3 | Medium — the one sponsor claim resting on tests, though the README says "Wired" not "Done" |
 | **G5** | **`indexesThisDeployment()` is false on the fork**, so `/history` has nothing to say where the trades actually are. Both screens now state this instead of claiming "nothing has settled", which is honest but not fixed | `server/src/graph/client.ts` | 4.3 | Medium |
+| **G13** | ~~**Safety offered "Stop all agents" on a wallet with nothing granted**, and pressing it would have revoked a policy that never existed~~ | `src/state/derived.ts`, `app/safety.tsx` | 1.3 | **CLOSED** — found in the demo's closing frame, fixed and deployed |
 | **G6** | **`run.ts` is 1,058 lines** — grew past its post-split size again as venues were added | `server/src/executor/run.ts` | 5.1 | Low |
 | **G7** | **The double-tap gesture is unproven end to end.** The guard has 7 tests; the browser could not deliver the gesture | `src/ui/pressGuard.ts` | 5.2 | Low |
 | **G8** | **README test counts are stale** — says 432, actual 445 | `README.md` | 5.3 | Low |

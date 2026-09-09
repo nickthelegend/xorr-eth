@@ -513,22 +513,39 @@ export default function Safety() {
         </Text>
       ) : null}
 
-      <Button
-        label={killCta(killed, unusable)}
-        variant={killed || unusable ? 'primary' : 'destructive'}
-        height={size.buttonLg}
-        loading={busy}
-        disabled={!userSigningWorks}
-        onPress={toggle}
-      />
-      <Text
-        variant="footnote"
-        color={colors.ink28}
-        align="center"
-        style={{ marginTop: space.s12 }}
-      >
-        Takes effect in under a second across every device.
-      </Text>
+      {/*
+        No permission, no kill switch.
+        
+        This rendered a red "Stop all agents" on a wallet with nothing granted, directly under the
+        sentence "There is nothing to stop yet" — and pressing it would have asked the wallet to
+        revoke a policy that never existed. Caught in the closing frame of the demo recording.
+        
+        The first fix relabelled it "Set the limits", which put two buttons with the same words a
+        centimetre apart: the permission card above already offers exactly that. So the whole block
+        goes instead — the button and the "takes effect in under a second" line beneath it, which
+        promises something about a stop that cannot happen either. The screen keeps one action, in
+        the card that explains it.
+      */}
+      {granted ? (
+        <>
+          <Button
+            label={killCta(killed, unusable, granted)}
+            variant={killed || unusable ? 'primary' : 'destructive'}
+            height={size.buttonLg}
+            loading={busy}
+            disabled={!userSigningWorks}
+            onPress={toggle}
+          />
+          <Text
+            variant="footnote"
+            color={colors.ink28}
+            align="center"
+            style={{ marginTop: space.s12 }}
+          >
+            Takes effect in under a second across every device.
+          </Text>
+        </>
+      ) : null}
       {/*
         Stopping and exiting are different needs, and only the first one was offered.
         Deliberately a quiet secondary link rather than a second big red button: two

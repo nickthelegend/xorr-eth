@@ -6,19 +6,31 @@ back, where every number is checkable somewhere we do not control.**
 
 ## Before recording
 
+Record **the deployed app**, not a dev server. `tools/demo.mjs` now defaults to it:
+
 ```bash
-# The fork is where fills actually settle. 1inch cannot settle on Sepolia.
-export EXPO_PUBLIC_API_URL=https://executor-fork-production.up.railway.app
-export EXPO_PUBLIC_XORR_CHAIN=base-fork
-npx expo start --web --port 8082
+set -a && . ./.env && set +a
+E2E_PRIVY_EMAIL=test-9907@privy.io node tools/demo.mjs
 ```
 
+- The default target is `https://web-production-3e214.up.railway.app` — the same build a stranger
+  opens. The previous recording was shot against `localhost:8082`, which is how it came to show a
+  product nobody else could reach; `APP_URL` still overrides if you need to.
 - Viewport **402 × 874** — the design canvas. A desktop-width recording of a phone layout looks
-  like a mistake.
-- Sign out first. The grant is the whole argument and it has to be seen being given.
-- Confirm the fork is warm: `curl $EXPO_PUBLIC_API_URL/verify | jq '.passed, .failed'` should read
-  `18, 0`. A cold price cache makes the first screen show dashes for four seconds.
+  like a mistake. The script sets this itself.
+- **Pick an account whose wallet has a permission.** The kill-switch beat is the closing frame and
+  it needs something to close on: a wallet with nothing granted correctly renders no kill switch at
+  all. `test-9907@privy.io` maps to `0xe609D86d…50d16b`, which has one.
+- Confirm the executor is warm: `curl -s https://executor-production-1659.up.railway.app/verify | jq '.passed, .failed'`
+  should read `14, 0` with no owner. A cold price cache makes the first screen show dashes for a few
+  seconds.
 - Have `sepolia.basescan.org` open in a second tab for the last beat.
+
+**Fills are the one thing this recording cannot show.** 1inch has no liquidity on Sepolia, and the
+app says so on `/network` rather than pretending. If the fill beat matters more than the "anyone can
+open this" beat, record against the fork instead with
+`APP_URL=http://localhost:8082` after starting a fork-pointed dev server — but then the URL on
+screen is one only you can reach, which is the trade the previous recording made by accident.
 
 ## The beats
 
@@ -91,6 +103,19 @@ page.
 > block explorer."
 
 Cut to BaseScan showing `revoked: true`. End there.
+
+**What the automated recording actually produces here.** `tools/demo.mjs` does not tap — it records
+footage to speak over, and the four Privy dialogs a real grant or revoke raises are not something it
+drives. So this beat lands on whatever state the wallet is in, and the CTA is the tell:
+
+| Wallet state | Closing frame |
+|---|---|
+| Permission live | red **Stop all agents** — the tap is yours to narrate or to perform live |
+| Already revoked | **STOPPED · All agents stopped** with **Resume agents** — the kill switch's result rather than the act |
+| Nothing ever granted | no kill switch at all, and correctly so: there is nothing to stop |
+
+The third is the one to avoid. It is honest and it is a weak ending, and it is what the recording
+did before `E2E_PRIVY_EMAIL` was pinned to an account with a permission.
 
 ## Rules
 

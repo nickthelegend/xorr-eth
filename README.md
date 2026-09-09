@@ -21,11 +21,17 @@ Chain: **Base**. ETH Online 2026 · Base Build Camp 2026.
   <img src="docs/demo/demo.gif" width="300" alt="Sign in, the permission, live markets, a recurring buy, the activity trail, /judge, the kill switch" />
 </p>
 
-95 seconds, recorded against the running app on the Base mainnet fork — the deployment where fills
-actually settle. Full quality: [`docs/demo/demo.mp4`](docs/demo/demo.mp4). The path it walks, and
-the words to say over it, are in [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md); it was produced by
+96 seconds, recorded against **the deployed app you can open yourself** —
+[`web-production-3e214.up.railway.app`](https://web-production-3e214.up.railway.app), on Base
+Sepolia. Not a local dev server: every frame is the same build a stranger gets. Full quality:
+[`docs/demo/demo.mp4`](docs/demo/demo.mp4). The path it walks, and the words to say over it, are in
+[`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md); it was produced by
 [`tools/demo.mjs`](tools/demo.mjs), which drives a real signed-in Privy session rather than a
 mockup, so re-recording it after a change is one command.
+
+Fills are the one thing Sepolia cannot show — 1inch has no liquidity there, and the app says so on
+`/network` rather than pretending. Those are real on the Base mainnet fork: 33 filled runs, 35
+through the aggregator and 5 through Aqua.
 
 Note the `/judge` beat leaves a failing check on screen. That is deliberate — a console that goes
 green when something is broken is worth nothing, and the break it shows is a real one this project
