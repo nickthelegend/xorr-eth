@@ -1,14 +1,17 @@
 # xorr — build plan
 
-Planning only. Nothing here was built as part of writing it; every status reflects the repository at
-commit `1332eab`, checked by running things rather than by reading the last plan.
+Planning only. Nothing was built while writing this; every status was checked by running something
+— a curl, a browser, a test suite — rather than by reading the previous plan.
 
 Written for an agent to pick up cold: every task names the file, the symbol, and what done means.
 
-**This is the third plan.** The previous two have been executed — 17 commits since the last one —
-and most of what they contained is finished. That changes the shape of this one: it is short on
-building and long on the two things actually left, which are a **product lie about equities** and a
-**demo that does not exist**.
+**This is the fourth plan.** The third is in git history at `1332eab`; **86 commits** have landed
+since. That changes the shape of this one completely. The third plan was written around two gaps —
+a product lie about equities, and a missing demo — and both were closed. What replaced them is a
+different class of problem entirely: the third plan measured the *code*, and the code was right.
+This one is written after measuring the *deployed product as a stranger uses it*, which is where
+twenty-two real defects were hiding, including a kill switch that worked on-chain while the screen
+said it had not.
 
 ---
 
@@ -20,351 +23,226 @@ The claim the whole project serves, unchanged:
 > without our cooperation — and every number the app shows you can be checked somewhere we do not
 > control.**
 
-**Done** means all five hold at once. Four do.
+**Done** means all six hold at once. Five do.
 
 | # | Bar | State |
 |---|---|---|
-| 1 | The permission is real — deployed contract, user-signed grant, cap/expiry/venue enforced on chain, revoke needs nothing from us | **Holds.** Verified this week end to end: `revoked: true` then `false` read straight off Base Sepolia |
-| 2 | The bot actually trades — all seven ladder tiers plan real intents and settle on chain | **Holds for crypto.** All 7 tiers have fired with transaction hashes. **Does not hold for tokenized equities** |
-| 3 | Nothing on screen is invented | **Holds** — with one exception, see Phase 1 |
-| 4 | A stranger can check it — `/verify` and `/judge` re-run every claim live | **Holds.** Fork 18/0/1, Sepolia 16/1/2 |
-| 5 | Someone can watch it work in two minutes | **Does not hold.** There is no recording |
+| 1 | The permission is real — deployed contract, user-signed grant, cap/expiry/venue enforced on chain, revoke needs nothing from us | **Holds.** Re-verified end to end this run: four signatures through Privy on Base Sepolia, then `/verify` reading `revoked=false, delegate matches` off the contract, then a kill switch giving `revoked=true, $0 left today` |
+| 2 | The bot actually trades — all seven ladder tiers plan real intents and settle on chain | **Holds for crypto.** 33 filled runs on the fork, 35 through the 1inch aggregator and 5 through Aqua. **Does not hold for tokenized equities**, and the app now refuses them rather than offering |
+| 3 | Nothing on screen is invented | **Holds.** Zero mocks, stubs, fakes or TODOs in shipped code — see the sweep in §4 |
+| 4 | A stranger can check it — `/verify` and `/judge` re-run every claim live | **Holds.** Sepolia with an owner: **19 pass / 0 fail / 1 skip** |
+| 5 | Someone can watch it work in two minutes | **Holds, but the recording is stale** — see Phase 1 |
+| 6 | **A stranger can open it and complete the core flow themselves** | **Holds — new.** `https://web-production-3e214.up.railway.app`. This bar did not exist in the third plan, which is why nothing had ever tested it |
 
 **Winning** is a separate bar set by the sponsor tracks:
 
 | Track | Bar | State |
 |---|---|---|
-| 1inch — Aqua App | Official Aqua/SwapVM contracts used, real on-chain transfers | **Met.** Real Aqua fills; SwapVM now wired as a venue rather than an artefact |
-| Privy — B2B Financial Product | Privy core, ≥1 wallet, ≥1 Privy control | **Met.** Policy owned by key quorum `zixx49ik…`, refusal proven live |
-| Privy — Best Financial Flow | ≥1 completed financial flow | **Met.** Swap, Aave deposit, user-signed USDC withdrawal |
-| The Graph — Composable/Standardized | Two or more Graph products, or a standardized schema | **Not met.** One subgraph is ever queried |
+| 1inch — Aqua App | Official Aqua/SwapVM contracts, real on-chain transfers | **Met.** 5 real Aqua fills. SwapVM is wired into the settlement path with 10 contract tests but has **0 real fills** — see Gap G4 |
+| Privy — B2B Financial Product | Privy core, ≥1 wallet, ≥1 Privy control | **Met.** Policy owned by key quorum `zixx49ik…`, refusal proven live: `"RPC request denied due to policy violation"` |
+| Privy — Best Financial Flow | ≥1 completed financial flow | **Met.** Grant, revoke, swap, Aave supply, user-signed withdrawal |
+| The Graph — Composable/Standardized | Two or more Graph products, or a standardized schema | **Not met.** One subgraph is ever queried. Unchanged since the third plan and blocked on the same dashboard click |
 
-Three of four tracks are met. The fourth is blocked on a dashboard click, re-confirmed today.
-
-**The honest summary:** the software is finished. What is missing is a two-minute video and one
-screen telling the truth about which assets this deployment can trade.
+**The honest summary:** the software is finished and now *reachable*. Three of four tracks are met.
+What is left is a stale demo, one dashboard click, and a short list of things that need a credential
+or real money.
 
 ---
 
 ## 2. Phases
 
-Short, because most of the work is done. Ordered by what a judge would notice first.
+Ordered by what a judge would notice first, and by what is actually blocking.
 
-| # | Phase | Why |
+| # | Phase | Why now |
 |---|---|---|
-| 1 | **Stop offering trades that cannot fill** | The app currently offers a Buy button for eight assets it cannot settle |
-| 2 | **Prove the equity path on the chain where it works** | The tokens are live and busy on real Base; only the fork cannot run them |
-| 3 | **The demo** | Every track asks for 2–4 minutes of video. There is none |
-| 4 | **The Graph composability** | The only unmet track |
-| 5 | **Remaining blocked items** | Documented, each with the specific external thing it waits on |
+| 1 | **Re-record the demo against the hosted app** | The existing recording predates 86 commits and points at localhost. It is the single highest-value unblocked task |
+| 2 | **Close The Graph track** | The only unmet track; everything downstream of the slug is already written |
+| 3 | **Make SwapVM a real fill, not a wired path** | The one sponsor claim resting on tests rather than a transaction |
+| 4 | **Base mainnet** | Turns five bars into six and makes every integration real at once. Costs money |
+| 5 | **Residue and hardening** | Real but low-severity: file size, a stale README count, a coverage hole the browser could not reach |
+| 6 | **Blocked on an external thing** | Each names precisely what it waits on. None is a coding gap |
 
 ---
 
-## Phase 1 — Stop offering trades that cannot fill
+## Phase 1 — Re-record the demo against the hosted app
 
-**The gap, measured today.** `GET /market/tradable` on the fork returns all eight equities:
-
-```
-['ETH','WETH','USDC','CBBTC','NVDAc','AAPLc','TSLAc','METAc','MSFTc','AMZNc','GOOGLc','MSTRc']
-```
-
-`isTradable('NVDAc')` is therefore `true`, so `/order/NVDAc` renders a complete ticket — live price,
-unit conversion, an enabled **"Buy $250 of NVDAc"** — and the fill reverts `TF`. The app makes a
-confident offer it cannot honour, which is the exact failure mode the rest of the codebase is built
-to avoid. It is also the one remaining place where something on screen is not true.
-
-The cause is that tradability is decided by the token registry, not by whether the token *works* on
-the running chain. `/verify` already knows the difference: its `equities` check calls
-`totalSupply()` and correctly skips on a fork. `/market/tradable` does not ask.
+**The gap, measured.** `docs/demo/demo.mp4` is dated **Sep 8 07:11**; HEAD is a day and 86 commits
+later. It was recorded by `tools/demo.mjs` driving `localhost`, at a time when no hosted build
+existed. Since then the onboarding copy changed, `/judge`'s summary line changed, `/safety`'s badge
+became chain-derived, the error surfaces across twenty screens changed, and a hosted URL appeared
+that the video cannot show. A judge who watches it and then opens the link sees two different apps.
 
 | # | Task | Status |
 |---|---|---|
-| 1.1 | `equitiesFunctional()` added — probes **four** tokens, not one, and accepts any answer. Running the mainnet proof showed only 4 of 8 answer `totalSupply()` even on real Base, so a single probe would have called mainnet broken on a different registry ordering. Cached for the process lifetime. | **DONE** |
-| 1.2 | Filtered. Verified on the deployed fork: `['ETH','WETH','USDC','CBBTC']`, zero equities offered. | **DONE** |
-| 1.3 | The order ticket and the asset screen ask the executor (`isSettleable`) rather than the static list. Verified in the browser: `/order/NVDAc` shows no Buy button and reads *"NVDAc cannot be settled on Base (local fork)"* — the copy also had to change, because "cannot be settled on Base" is the one claim that is false for these. | **DONE** |
-| 1.4 | Refused at creation. Verified live: `400 not_settleable_here` for NVDAc, while a WETH strategy still creates normally. | **DONE** |
-| 1.5 | The markets screen still lists them with real prices, which was already the behaviour and is correct — a market list is not an order form. The refusal now lives where the offer was made (the order ticket), which is the more honest place for it. The README section carries the explanation. | **DONE** |
-| 1.6 | `equities-tradable` check added. Live on the fork: **PASS** — *"equities do not function on base-fork, and none of the 8 are offered as tradable"*. Fork `/verify` now 19 pass / 0 fail / 1 skip. | **DONE** |
+| 1.1 | Point `tools/demo.mjs` at the hosted app. It already reads the target from an env var — `tools/demo.mjs:26`, `const BASE = process.env.APP_URL ?? 'http://localhost:8082'` — so this is either running it as `APP_URL=https://web-production-3e214.up.railway.app node tools/demo.mjs`, or changing that default so the committed script records the shipped product by default. Prefer changing the default: the localhost fallback is what produced a recording nobody noticed was stale | **NOT STARTED** |
+| 1.2 | Add a gas step to the script: a fresh Privy test account now receives 0.002 test ETH automatically on first connect, so the grant is signable inside the recording without manual funding. Confirm the run does not race the drip — wait for the balance to be non-zero before the delegate beat | **NOT STARTED** |
+| 1.3 | Re-record all eight beats. Keep the existing rule from `docs/DEMO-SCRIPT.md`: leave a real FAIL or SKIP visible on `/judge` rather than cutting to a clean board | **NOT STARTED** |
+| 1.4 | Regenerate `docs/demo/demo.gif` at 300px and re-link from the README's **Watch it work** section and the top of `docs/SUBMISSION.md` | **NOT STARTED** |
+| 1.5 | Update `docs/DEMO-SCRIPT.md` for the two beats that changed: the hosted URL is now the opening shot, and `/judge` reads "19/20 · 1 skipped — each says why on its own row" | **NOT STARTED** |
 
----
+## Phase 2 — Close The Graph track
 
-## Phase 2 — Prove the equity path where it works
-
-The equity tokens are not broken; the fork is. Evidence gathered today:
-
-- `totalSupply()` on real Base returns 1,373,108,020,000 for NVDAc; the same call on an anvil fork of
-  the same block **reverts**. They carry one byte of code, so whatever serves them is below the
-  bytecode and a fork copies the byte and nothing else.
-- **2,907 NVDAc Transfer events in the last 4,000 blocks** on real Base. The token is live and busy.
-
-So "equities do not work" is false; "equities do not work *here*" is true. That distinction is worth
-demonstrating rather than asserting, and it can be done read-only.
+Unchanged from the third plan and re-confirmed: `graph deploy xorr-aqua` uploads to IPFS
+(`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`) and then fails **`Subgraph not found`**. The slug
+must exist before a deploy and creating it is a Studio dashboard action with a wallet signature.
 
 | # | Task | Status |
 |---|---|---|
-| 2.1 | Written and run. Measured on real Base: **4 of 8 answer `totalSupply()`, all 8 saw transfers inside 4,000 blocks**, and 1inch quotes 100 USDC → 0.4297 NVDAc on chain 8453. Running it found two of my own bugs — the single-token probe, and a circular import that only fired on load order. | **DONE** |
-| 2.2 | The skip now carries the measurement and the command to re-check it. | **DONE** |
-| 2.3 | README section added under the two-environment heading. | **DONE** |
-| 2.4 | An actual equity fill on Base **mainnet**. | **BLOCKED — spends real money.** The code path is proven up to settlement; completing it means a real swap with real USDC. Needs an explicit decision, not an assumption. |
+| 2.1 | Create the `xorr-aqua` slug at thegraph.com/studio with the deployer wallet, then `cd subgraph-aqua && npx graph deploy xorr-aqua --deploy-key $GRAPH_DEPLOY_KEY --version-label v0.0.1` | **BLOCKED** — needs a browser and the deployer wallet |
+| 2.2 | Set `AQUA_SUBGRAPH_URL` on both Railway executor services; confirm `/graph/decision` stops reporting "No Aqua book index configured". The consumer is `server/src/graph/aqua.ts`, which already throws `AquaIndexUnavailable` when the var is empty | **BLOCKED** by 2.1 |
+| 2.3 | x402 Gateway queries — mechanism already verified (`402`, `eip155:8453`, 0.01 USDC per query, EIP-3009 via a `Payment-Signature` header). Composes the Studio subgraph with the Gateway: two Graph products, no dashboard needed | **BLOCKED** — spends real mainnet USDC |
+| 2.4 | Surface the composition on `/judge`: show both sources and which one moved the routing decision | **BLOCKED** by 2.1 or 2.3 |
 
----
+## Phase 3 — Make SwapVM a real fill
 
-## Phase 3 — The demo
-
-Every sponsor track asks for a 2–4 minute video. There is none, and no recording exists anywhere in
-the repo. This is now the highest-value remaining work: three of four tracks are already met and
-cannot be judged without it.
-
-| # | Task | Status |
-|---|---|---|
-| 3.1 | `docs/DEMO-SCRIPT.md` — seven beats, 1:50, with the words for each, the setup commands, what not to show, and the rule to leave a FAIL visible on `/judge`. | **DONE** |
-| 3.2 | **Recorded.** `tools/demo.mjs` walks all eight beats against the running app with a real signed-in Privy session and Playwright's video recorder. 95 seconds, 402×874, 8/8 beats landed. `docs/demo/demo.mp4` (672KB). I was wrong to call this blocked — a person is needed to SPEAK over footage, not to produce it. | **DONE** |
-| 3.3 | `docs/demo/demo.gif` — 1.8MB at 300px, small enough for a README to load. | **DONE** |
-| 3.4 | Linked: a **Watch it work** section in the README above "Check it yourself", and at the top of `docs/SUBMISSION.md`. | **DONE** |
-| — | `docs/SUBMISSION.md` — one section per track, each pointing at a hash or a live endpoint. | **DONE** (149 lines) |
-
----
-
-## Phase 4 — The Graph composability
-
-The only unmet track. Re-tested today, not assumed: `graph deploy xorr-aqua` uploads the build to
-IPFS successfully (`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`) and then fails
-**`Subgraph not found`**. The slug must exist before a deploy, and creating it is a Studio dashboard
-action with a wallet signature. `subgraph_create` is not exposed on the deploy API.
+`XorrSwapVMBook` is deployed, covered by 10 fork tests including guards proving the deadline expires
+and the fee costs, and `server/src/venues/swapvm.ts` is in the settlement path ahead of the
+aggregator. `fillsByVenue` on the fork reads `{1inch: 35, aqua: 5}` — **no swapvm key**. Nothing has
+ever settled through it, because discovery requires a maker to have shipped a SwapVM program to Aqua
+and nobody has.
 
 | # | Task | Status |
 |---|---|---|
-| 4.1 | Create the `xorr-aqua` slug at thegraph.com/studio with the deployer wallet, then `cd subgraph-aqua && npx graph deploy xorr-aqua --deploy-key $GRAPH_DEPLOY_KEY --version-label v0.0.1`. The build is already pinned; only the slug is missing. | **BLOCKED — needs a browser and the deployer wallet.** Re-confirmed today |
-| 4.2 | Set `AQUA_SUBGRAPH_URL` on both Railway services; confirm `/graph/decision` stops reporting "No Aqua book index configured". | **BLOCKED** by 4.1 |
-| 4.3 | x402 Gateway queries — mechanism verified (`402`, `eip155:8453`, 0.01 USDC per query, EIP-3009 via a `Payment-Signature` header). Composes our Studio subgraph with the Gateway: two products, no dashboard needed. | **BLOCKED — spends real mainnet USDC.** Roughly an hour once approved |
-| 4.4 | Make the composition visible on `/judge` — show the two sources and which one moved the decision — once 4.1 or 4.3 lands. | **BLOCKED** by 4.1/4.3 |
-| 4.5 | Index the fork's delegation address so `indexesThisDeployment()` is true where trades happen. | **BLOCKED** by 4.1, and awkward regardless: the fork's delegation address changes on every rebuild |
+| 3.1 | Write `server/src/live-swapvm.ts`, modelled on the existing `server/src/live-aqua.ts` (398 lines): fund a maker wallet with inventory on the fork, compile an order with `encodeOrder`, ship it to Aqua with the **SwapVM router** as the `app`, then assert `openPrograms()` discovers it | **NOT STARTED** |
+| 3.2 | Drive one fill end to end through `buildSwapVmFill` and assert the maker's ERC-20 balance moved and the activity row names `swapvm` as the venue | **NOT STARTED** |
+| 3.3 | Once a fill exists, change the README's SwapVM row from **Wired** to **Done** with the transaction hash. Not before — the current wording is accurate | **NOT STARTED** |
 
----
+## Phase 4 — Base mainnet
 
-## Phase 5 — Remaining blocked items
+The only environment where the contract, 1inch fills, the tokenized equities, Aave and The Graph are
+all real simultaneously. Every remaining "does not hold" traces here.
 
-Each names the specific external thing it waits on. None is a coding gap.
+| # | Task | Status |
+|---|---|---|
+| 4.1 | Fund the deployer `0x364d7Bbc139541e0e37450D527ae154B5C292581` — currently **0 ETH** on Base mainnet — then `cd contracts && forge script script/Deploy.s.sol:Deploy --rpc-url $BASE_RPC --broadcast` | **BLOCKED** — mainnet action, spends real money |
+| 4.2 | Point a build at it with `npm run build:base` (`scripts/build-base.mjs` already refuses localhost and verifies the executor reports `chain: base`) | **BLOCKED** by 4.1 |
+| 4.3 | Re-deploy the delegation subgraph against the mainnet contract address so `indexesThisDeployment()` is true where trades happen, closing the permanent `/history` gap | **BLOCKED** by 4.1 |
+| 4.4 | One real equity fill on mainnet, closing bar 2 | **BLOCKED** by 4.1 — spends real money |
+
+## Phase 5 — Residue and hardening
+
+Real, low severity, none blocking a track.
+
+| # | Task | Status |
+|---|---|---|
+| 5.1 | `server/src/executor/run.ts` is **1,058 lines** and grew again as venues were added. Split the venue-selection block (Aqua → SwapVM → aggregator) into `executor/settle.ts`, leaving `run.ts` as gates plus orchestration | **NOT STARTED** |
+| 5.2 | End-to-end double-tap on a primary action could not be reproduced — Chrome's click injection stopped landing mid-run, so six attempts produced zero records. The guard now has 7 tests (`src/ui/pressGuard.test.ts`), but the gesture itself is unproven. Re-run test-plan item G7 in a working browser | **NOT STARTED** |
+| 5.3 | README test counts say 432/214/54; actual is **445/214/54** after the press-guard tests. Re-check the numbers in the Tests section against a real run | **NOT STARTED** |
+| 5.4 | The fork's audit trail carries developer session names — `FINAL fill after slippage fix`, `T7 entry FIRE 3`, `QA — daily WETH`. Append-only by design, so they cannot be removed; decide whether the demo should use a wallet whose trail is clean instead | **NOT STARTED** |
+
+## Phase 6 — Blocked on an external thing
 
 | # | Item | Blocked on |
 |---|---|---|
-| 5.1 | Live equity fill test, equity sell path, tier 7 settlement on `NVDAc` | The tokens are not functional on a fork. Tier 7's logic is covered by 21 unit tests and its entry reaches the venue with a real route and price; only settlement is impossible here |
-| 5.2 | Privy policy attached to the user's embedded wallet | Privy requires the wallet's **owner** to authorise, and for an embedded wallet that is the user, not the app. `/safety` states this |
-| 5.3 | LLM agent voice | `OPENROUTER_API_KEY` exists nowhere in the repo. `/bot/say` reports `{"source":"fallback","reason":"no_key"}` rather than pretending |
-| 5.4 | Audit chain unbroken on Base Sepolia | Permanent by design — append-only by trigger, so it cannot be rewritten to look clean. The fork's chain is unbroken across 154 entries, which is the evidence the fix works |
-| 5.5 | iOS | ~~No Xcode~~ **Wrong — see the third execution pass.** Xcode was installed all along; `xcode-select` pointed at Command Line Tools, which is what made `xcrun` exit 72. The app now builds, installs and runs on an iPhone 17 Pro simulator |
-| 5.6 | A second chain deployment / other hackathons | Deferred by standing direction — ETH Online first. `XorrDelegation` is chain-agnostic and the venue adapter is one file, which is what makes it cheap later |
+| 6.1 | LLM agent voice | `OPENROUTER_API_KEY` exists nowhere in the repo. `/bot/say` reports `{"source":"fallback","reason":"no_key"}`, and the chat says *"no language model is configured in this build"* rather than faking a reply |
+| 6.2 | Privy policy attached to the user's embedded wallet | Privy requires the wallet's **owner** to authorise, and for an embedded wallet that is the user. `/safety` states this: *"Nothing we hold can attach it for you"* |
+| 6.3 | Sepolia audit chain forked at entry 2 | Permanent by design — append-only by trigger, so it cannot be rewritten to look clean |
+| 6.4 | Second chain deployment / other hackathons | Deferred. `XorrDelegation` is chain-agnostic and the venue adapter is one file |
 
 ---
 
-## 3. The gap list
+## 3. What changed since the third plan
 
-Every gap, tied to the task it blocks, ordered by cost.
+Not a task list — context a builder needs, because 86 commits is a lot to re-derive.
 
-| Gap | Where | Blocks | Severity |
-|---|---|---|---|
-| **The app offers a Buy button for eight assets it cannot fill.** `/market/tradable` lists every equity on a fork; `isTradable('NVDAc')` is true; `/order/NVDAc` renders an enabled ticket; the fill reverts `TF` | `routes/market.ts`, `data/tradable.ts` | 1.1–1.6 | **Critical** — the one place left where the screen is not true |
-| **`POST /strategies` accepts an equity on a fork** and fails at run time instead of refusing at creation | `routes/strategies.ts` | 1.4 | **High** — a scheduled strategy that can never fire |
-| **No demo recording** | — | 3.1–3.4 | **High** — three met tracks cannot be judged without one |
-| **Only one subgraph is ever queried** — slug never created | Studio; `graph/aqua.ts` | 4.1–4.5 | **High** — the only unmet track |
-| **Equity mainnet evidence is not in the repo** — the finding lives in a session transcript | — | 2.1–2.3 | Medium — the next reader will conclude the feature is fictional |
-| **`indexesThisDeployment()` is false where trades happen** | `graph/client.ts` | 4.5 | Medium — `/history` is permanently empty on the fork |
-| **`run.ts` is 1,025 lines** — grew past its pre-split size as venues were added | `executor/run.ts` | — | Low — three splits already landed; this is the residue |
-| Privy policy on the user's wallet | platform | 5.2 | **Blocked** |
-| No LLM credential | env | 5.3 | **Blocked** |
-| Sepolia audit chain forked at entry 2 | history | 5.4 | **Blocked**, permanent by design |
-| ~~iOS unverified~~ | ~~no Xcode~~ | 5.5 | **Closed** — builds and runs; three space-in-path bugs fixed |
+**The project became reachable.** `scripts/build-web.mjs` produces a static bundle verified to point
+at the public executor, deployed at `https://web-production-3e214.up.railway.app`. Before this, the
+only way to see the product was to clone it, create a Postgres and supply three API keys.
 
-**Mock/stub/TODO sweep: clean.** One hit across all of `src/`, `app/` and `server/src/` —
-`src/test/react-native-stub.ts`, a Node shim used only by unit tests. No mocked data, no stubbed
-logic, no TODOs in shipped code.
+**Testing the deployed product as a user found what testing the code could not.** Twenty-two
+defects, all fixed. The four that mattered most:
 
----
+1. **The permission was signed by a browser extension, not the Privy embedded wallet.** `useWallets()`
+   on web lists injected wallets alongside the embedded one and both call sites took `wallets[0]`.
+   Worse, `useAuth().address` — the value registered with the executor as the policy owner — was the
+   extension's too. Fixed by `src/auth/embeddedWallet.ts`.
+2. **The kill switch worked on-chain and the safety screen said it had not.** `revoked=true` on the
+   contract, green LIVE badge in the app, under a line promising the stop "takes effect in under a
+   second". The badge read a persisted local boolean instead of the chain.
+3. **Raw HTTP wire format was rendered to users in twenty places**, e.g.
+   `502 : {"status":"failed","runId":"040c4097-…","error":"This netw`.
+4. **A failed positions read became an empty portfolio**, telling a funded wallet it held nothing.
 
-## 4. Suggested order
-
-1. **1.1 → 1.6.** The app should not offer what it cannot do. Half a day, no external dependency,
-   and it closes the last untrue thing on screen.
-2. **3.1 → 3.4.** The demo. Three tracks are already met and none of them can be judged without it.
-3. **2.1 → 2.3.** Cheap, read-only, and it turns "equities are broken" into "equities are live on
-   Base and not reproducible on a fork", which is both true and much better.
-4. **4.1**, the moment someone can open a browser with the deployer wallet. Everything downstream of
-   it is already written.
-
+**A new invariant worth keeping:** several of these were screens disagreeing with the chain. The
+rule the codebase now applies uniformly — and publishes on `/verify` — is *the permission is read
+from the chain, never from our database*. `/limits` and `/safety` were the last two violations.
 
 ---
 
-## Execution record — 2026-09-08
+## 4. The gap list
 
-Phases 1, 2 and 3.1 are done and verified running. Phases 3.2–3.4, 4 and 5 are blocked on things
-outside the code, each named below.
+Every gap, tied to the task it blocks, ordered by cost. Verified by running things on 2026-09-09.
 
-### The gap this plan was written around is closed
+| ID | Gap | Where | Blocks | Severity |
+|---|---|---|---|---|
+| **G1** | **The demo recording predates 86 commits** and was shot against localhost, which no longer resembles what the hosted link shows | `docs/demo/*` | 1.1–1.5 | **High** — it is the first thing a judge watches, and it now misrepresents the product |
+| **G2** | **Only one subgraph is ever queried** — the `xorr-aqua` slug was never created, so `AQUA_SUBGRAPH_URL` is empty and `aqua.ts` throws `AquaIndexUnavailable` | Studio; `server/src/graph/aqua.ts` | 2.1–2.4 | **High** — the only unmet sponsor track |
+| **G3** | **`XorrDelegation` is not on Base mainnet** — `eth_getCode` returns `0x`, deployer holds 0 ETH | — | 4.1–4.4 | **High** — gates bars 2 and 6, and the `/history` gap below |
+| **G4** | **SwapVM has never settled a fill.** `fillsByVenue` = `{1inch: 35, aqua: 5}`; no maker has shipped a program | `server/src/venues/swapvm.ts` | 3.1–3.3 | Medium — the one sponsor claim resting on tests, though the README says "Wired" not "Done" |
+| **G5** | **`indexesThisDeployment()` is false on the fork**, so `/history` has nothing to say where the trades actually are. Both screens now state this instead of claiming "nothing has settled", which is honest but not fixed | `server/src/graph/client.ts` | 4.3 | Medium |
+| **G6** | **`run.ts` is 1,058 lines** — grew past its post-split size again as venues were added | `server/src/executor/run.ts` | 5.1 | Low |
+| **G7** | **The double-tap gesture is unproven end to end.** The guard has 7 tests; the browser could not deliver the gesture | `src/ui/pressGuard.ts` | 5.2 | Low |
+| **G8** | **README test counts are stale** — says 432, actual 445 | `README.md` | 5.3 | Low |
+| **G9** | **Developer session names in the fork's audit trail** — `FINAL fill after slippage fix`, `T7 entry FIRE 3` | fork Postgres | 5.4 | Low — append-only by design; the hosted deployment is clean |
+| **G10** | No LLM credential | env | 6.1 | **Blocked** |
+| **G11** | Privy policy on the user's own wallet | platform | 6.2 | **Blocked** |
+| **G12** | Sepolia audit chain forked at entry 2 | history | 6.3 | **Blocked**, permanent by design |
 
-`/market/tradable` served all eight equities on both deployments; both now serve exactly
-`['ETH','WETH','USDC','CBBTC']`. `/order/NVDAc` offers no Buy button and says *"NVDAc cannot be
-settled on Base (local fork)"*. `POST /strategies` returns `400 not_settleable_here` for an equity
-while WETH still creates. A new `/verify` check pins the invariant: **PASS — "equities do not
-function on base-fork, and none of the 8 are offered as tradable"**.
+### Mock / stub / TODO sweep — clean
 
-### Three of my own bugs, found by running the work rather than shipping it
+Ten keyword hits across `src/`, `app/`, `server/src/` and `contracts/src/`. **Every one is prose in
+a comment explicitly disclaiming a mock**, plus one test-only shim:
 
-1. **The single-token probe.** `equitiesFunctional()` asked whichever equity was first in the
-   registry. Measured on real Base, **only 4 of 8 answer `totalSupply()`** — TSLAc, AMZNc, GOOGLc
-   and MSTRc revert, while all eight show transfer activity: transferable without exposing the full
-   ERC-20 read surface. A different registry ordering and the probe would have declared mainnet
-   broken. It asks four and accepts any answer.
-2. **A circular import that only fires on load ORDER.** `stocks.ts` needed `quote`; `oneinch.ts`
-   builds `TOKENS` from `STOCKS` at module scope. Through the routes `oneinch.ts` always loads
-   first, so it never fired — a script importing `stocks.ts` directly died instantly with
-   `ReferenceError: Cannot access 'STOCKS' before initialization`.
-3. **The refusal blamed the wrong thing.** "NVDAc cannot be settled on Base" is right for SOL, which
-   has no instrument there, and false for NVDAc, which is live on Base and merely absent from a fork
-   of it. One sentence covering two opposite cases; it names `chainLabel` now.
+- `src/test/react-native-stub.ts` — a Node shim aliased **only** in `vitest.config.mts`; never in a
+  shipped bundle
+- `src/data/local.ts` — *"Not a mock: market data is REAL"*
+- `server/src/bot/llm.ts` — *"This is NOT a silent fallback to fake personality"*
+- `server/src/routes/verify.ts` — *"nothing here that our own database could fake"*
+- `server/src/fork-bootstrap.ts` — *"Nothing here is a mock: the USDC is Circle's"*
+- `src/notifications/index.ts`, `src/wallet/allowlist.ts` — both explaining why a fake value was
+  refused
+- `src/bot/tone.ts`, `server/src/bot/tone.ts` — *"Never mock the user"*, persona copy
+- `src/ui/README.md` — *"a fake bold off the regular face"*, typography
 
-And one in the test suite: the live mirror test asserted `TRADABLE` and `/market/tradable` were
-**equal**, which is how the gap survived a live check for a week — equality forced them to agree by
-making the server lie. The honest invariant is one-directional: the executor may serve fewer symbols
-than the client knows, never more.
+**No mocked data, no stubbed logic, no TODOs in shipped code.** `Placeholder` is a loading-skeleton
+primitive in `src/ui/States.tsx`, not a placeholder value.
 
-### Final state
+---
+
+## 5. Current measured state
+
+Everything below was produced by running it on 2026-09-09, not copied forward.
 
 | Check | Result |
 |---|---|
-| Fork `/verify` | **19 pass / 0 fail / 1 skip** (was 18/0/1 — the new check) |
-| Sepolia `/verify` | 17 pass / 1 fail / 2 skip |
-| `/market/tradable`, both deployments | `ETH, WETH, USDC, CBBTC` — no equity offered anywhere |
-| Client tests | 367 |
-| Server tests | 184 |
+| Hosted app | `https://web-production-3e214.up.railway.app` — 200, boots to `/welcome` signed out |
+| Executor (Sepolia) | up, `base-sepolia`, postgres up |
+| Executor (fork) | up, `base-fork`, postgres up |
+| Sepolia `/verify?owner=…` | **19 pass / 0 fail / 1 skip** (skip = equities, correctly) |
+| Fork `/verify` | 14 pass / 0 fail / 6 skip |
+| Delegation subgraph | block 46,574,549, no indexing errors, 3 policies indexed |
+| `XorrDelegation` on Base Sepolia | 7,158 bytes |
+| `XorrDelegation` on Base mainnet | `0x` — not deployed |
+| Fork runs | 33 filled, 19 failed, 8 skipped, 2 blocked |
+| Fills by venue | `1inch: 35, aqua: 5` |
+| Client tests | **445** |
+| Server tests | **214** |
+| Contract tests | **54** |
 | Typecheck | clean, both projects |
-| Mock/stub/TODO sweep | 1 hit — `src/test/react-native-stub.ts`, a Node shim used only by unit tests |
-| Screenshot sweep | **54/54**, no content, console or network failures |
-| `/markets/stocks` after the change | **8 of 8 markets** with live prices — the list still shows them, which is 1.5's requirement. Only the ORDER path refuses |
-
-### What is left, and exactly why
-
-| Item | Why |
-|---|---|
-| **Narration over the demo** | **Needs a person** — and only this part. The footage exists (`docs/demo/demo.mp4`, 95s, all eight beats) and the words are in `DEMO-SCRIPT.md`. Speaking over it is the remaining half-hour |
-| **2.4 — a real equity fill on mainnet** | **Spends real money.** The path is proven to the point of settlement; finishing it is a real swap with real USDC |
-| **4.1–4.5 — The Graph composability** | **A Studio dashboard click.** Re-tested today: `graph deploy xorr-aqua` pins to IPFS and fails `Subgraph not found`. 4.3 (x402) needs real mainnet USDC per query |
-| **5.1 — equity settlement here** | The tokens do not function on a fork. Now stated by the product rather than discovered by a revert |
-| **5.2 — Privy policy on the user's wallet** | Privy requires the wallet's owner to authorise, and that is the user |
-| **5.3 — LLM voice** | `OPENROUTER_API_KEY` exists nowhere |
-| **5.4 — Sepolia audit chain** | Permanent by design — append-only, so it cannot be rewritten to look clean |
-| **5.5 — iOS** | ~~No Xcode~~ — misdiagnosed; closed in the third execution pass |
-| **5.6 — other hackathons** | Deferred by standing direction |
-
+| Lint | clean |
+| Console errors, full hosted sweep | **none** |
+| Mock/stub/TODO in shipped code | **0** |
 
 ---
 
-## Second execution pass — the demo
+## 6. Suggested order
 
-I marked recording BLOCKED on "needs a person" and that was wrong about half of it. A person is
-needed to **speak over** footage, not to produce it. The repo already drives the app with Playwright
-for the screenshot sweep, and Playwright records video natively.
-
-`tools/demo.mjs` walks the eight beats with a real signed-in Privy session — the same
-test-credentials flow the sweep has used all along, so it is the real product with real
-`verifyAuthToken` rather than a mockup. 95 seconds at 402×874, **8 of 8 beats landed**.
-
-Verified by extracting frames rather than trusting the exit code: the markets beat shows live prices
-(BTC $79,324, ETH $2,500, SOL $104.17), and `/judge` shows **19/20 claims verified** with real
-observed values — chain 8453 at block 50,983,271, a $2,810/day cap, 164 audit entries re-hashed. The
-one failure stays on screen deliberately.
-
-| Output | Size | Where |
-|---|---|---|
-| `docs/demo/demo.mp4` | 672KB | Linked from `docs/SUBMISSION.md` |
-| `docs/demo/demo.gif` | 1.8MB | Rendered in the README under **Watch it work** |
-| `docs/demo/demo.webm` | 2MB | The intermediate — gitignored |
-
-The script is tolerant by design: a beat whose control cannot be found is logged and skipped rather
-than aborting. A recording that ends at beat three because a label moved is worth less than one that
-misses a beat and keeps going, and the log names which landed. Re-recording after a change is one
-command.
-
-### Blocks re-tested this pass, not assumed
-
-- **Studio slug (4.1).** `subgraph_create`, `graph_subgraph_create` and `create` all return
-  `Method not found` on the deploy API, and there is no wallet private key anywhere in the
-  environment that could sign a Studio login. Genuinely needs a browser and the account owner's
-  wallet.
-- **`OPENROUTER_API_KEY` (5.3).** Still absent from every env file. `/bot/say` reports
-  `{"source":"fallback","reason":"no_key"}` rather than pretending.
-
----
-
-## Third execution pass — Phases 4 and 5, one task at a time
-
-I had recorded these as blocked without attempting each one individually. This pass runs every task
-and writes down what the attempt actually returned, so the next reader can tell a wall from an
-assumption.
-
-### Phase 4 — The Graph composability
-
-| Attempted | Returned |
-|---|---|
-| `subgraph_create`, `graph_subgraph_create`, `create` on the deploy API | all `Method not found` |
-| A public Aqua subgraph to query instead of publishing our own | none exists |
-| Subgraph MCP endpoints | 404 / connection refused |
-| Token API MCP | wants a `thegraph.market` JWT that does not exist in this environment |
-| Studio in a browser | "DISCONNECTED WALLET"; `window.ethereum` is undefined and the connector list is Coinbase / WalletConnect / Safe, with no injected option |
-
-Unchanged and now evidenced: creating the slug needs a browser holding the account owner's wallet.
-4.2–4.5 are all downstream of it. Nothing in this repository can produce that signature.
-
-### Phase 5
-
-| # | Attempted | Returned |
-|---|---|---|
-| 5.2 | `attachPolicy()` against the user's embedded wallet | `401 Missing 'privy-authorization-signature'`. The wallet's `owner_id` is `xtsg811vra3rkbmb3ijq08xw`; our key quorum is `zixx49ik3ngslu9oay54q4li`. The owner authorises, and for an embedded wallet the owner is the user |
-| 5.3 | `OPENROUTER_API_KEY` | present only in `.env.example` |
-| 5.4 | `audit_log_is_append_only()` | raises on UPDATE OR DELETE — permanent by design, which is the point |
-| 5.5 | iOS | **was never blocked.** See below |
-
-### 5.5 — iOS was misdiagnosed, not blocked
-
-`/Applications/Xcode.app` has been on this machine the whole time. `xcode-select -p` returns
-`/Library/Developer/CommandLineTools`, which is what made `xcrun simctl` exit 72 and what I wrote
-down as "no Xcode". Exporting `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` makes the
-entire toolchain available without touching the machine's configuration.
-
-`npx expo prebuild --platform ios` then `pod-install` (117 pods) then `xcodebuild` failed — and the
-reason was worth having:
-
-> `bash: /Volumes/Extreme: No such file or directory`
-
-This checkout lives at `/Volumes/Extreme SSD/Projects/xorr-eth`. Three separate places pass that
-path through a shell without quoting it:
-
-| Where | Bug | Fix |
-|---|---|---|
-| `expo-constants/ios/EXConstants.podspec` | `bash -l -c "$PODS_TARGET_SRCROOT/…/get-app-config-ios.sh"` — the substitution is re-split by the inner shell | `patches/expo-constants+57.0.17.patch` |
-| `expo-constants/scripts/get-app-config-ios.sh` | `basename $PROJECT_DIR` returns `Extreme`, so the script `exit 0`s and **never generates `app.config`** — a silent runtime break, not just a build one | same patch |
-| `expo/scripts/react-native-xcode.sh` | `grep hermes-engine $PODS_PODFILE_DIR_PATH/Podfile.lock` finds nothing, so Hermes is silently disabled | `patches/expo+57.0.20.patch` |
-| the generated app target's "Bundle React Native code and images" phase | an unquoted backtick command substitution — the actual fatal one | `plugins/with-spaces-in-project-path.js` |
-
-`ios/` is generated and gitignored, so the fourth fix could not live in the project file; it is an
-Expo config plugin that re-applies on every prebuild. The first three are upstream source, so they
-are `patch-package` patches with `postinstall` wired up. All four are committed — a fresh clone into
-a path with a space builds.
-
-Then: `** BUILD SUCCEEDED **`, installed to an iPhone 17 Pro simulator, launched, Metro bundled
-**4,031 modules for iOS**, and `/welcome` renders — `docs/ios/welcome-iphone-17-pro.png`.
-
-**What is verified on iOS and what is not.** Verified: the app compiles, installs, launches, loads
-its bundle and renders. Not verified on iOS specifically: the signed-in flows. Driving them needs
-taps, and this session has no tap channel to the simulator — `xcrun simctl` has no input verb, the
-`simctl openurl` deep link is gated behind an "Open in xorr?" SpringBoard prompt that itself needs a
-tap, and Metro's inspector WebSocket answers `401`. Those flows are verified on web and on Android;
-on iOS they are not, and this says so rather than implying otherwise.
-
-The one thing a person still has to do — it needs a password, so I cannot:
-
-```
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-```
-
-That is only for tooling that reads `xcode-select` instead of `DEVELOPER_DIR`; the build above did
-not need it.
+1. **1.1 → 1.5.** Re-record the demo. Unblocked, half a day, and it is the artefact every track is
+   judged on. The current one actively misrepresents a product that got substantially better.
+2. **2.1**, the moment someone can open a browser with the deployer wallet. Everything downstream is
+   written and waiting on a slug.
+3. **5.3, 5.1.** Cheap. Correct the README numbers, then split `run.ts` while its shape is fresh.
+4. **3.1 → 3.3.** SwapVM. A day's work on the fork, no real money, and it converts the weakest
+   sponsor claim into a transaction hash.
+5. **4.1**, only with an explicit decision to spend. It closes G3, G5 and bar 2 at once, and is the
+   difference between "works on a testnet and a fork" and "works on Base".
