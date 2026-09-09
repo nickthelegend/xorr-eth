@@ -32,14 +32,15 @@ const CHOICE_H = 40;
 
 export function Pill({
   label,
-  selected = false,
+  selected,
   onPress,
   light = false,
   disabled = false,
   style,
   testID,
 }: PillProps) {
-  const bg = selected
+  const isSelected = selected ?? false;
+  const bg = isSelected
     ? light
       ? colors.sheet.ink
       : colors.ink
@@ -47,7 +48,7 @@ export function Pill({
       ? colors.sheet.fill
       : colors.surfaceAlt;
 
-  const fg = selected
+  const fg = isSelected
     ? light
       ? colors.sheet.bg
       : colors.sheet.ink
@@ -62,11 +63,19 @@ export function Pill({
       disabled={disabled || !onPress}
       hitHeight={size.pillH}
       accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected: isSelected }}
       /*
        * See `Segmented.tsx`: React Native Web drops `accessibilityState.selected`, so the line
        * above reaches the DOM as nothing and this control announces no state at all. The web
-       * attribute valid for THIS role is added alongside it; native keeps reading the line above.
+       * attribute valid for a button role is added alongside it; native keeps reading the line
+       * above.
+       *
+       * `selected` deliberately, NOT `isSelected`. A Pill is used two ways: as one option in a
+       * filter row, which has a state worth announcing, and as a plain action — the `$100` / `$500`
+       * / `Max` chips on the order ticket pass no `selected` at all and simply set an amount.
+       * Defaulting to `false` here put `aria-pressed="false"` on those, which tells a screen reader
+       * "toggle button, not pressed" about a button that is not a toggle. Undefined omits the
+       * attribute, so only the callers that mean it get it.
        */
       aria-pressed={selected}
       style={[
