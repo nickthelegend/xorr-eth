@@ -26,6 +26,7 @@ import {
   space,
 } from '@/ui';
 import { useAsync } from '@/data/useAsync';
+import { shortAddress } from '@/format';
 import { system } from '@/data/system';
 
 export default function GraphHealth() {
@@ -76,6 +77,23 @@ export default function GraphHealth() {
                     ? 'Level with the chain head.'
                     : `${behind.toLocaleString('en-US')} blocks behind the head.`}
               </Text>
+              {/*
+                Whether any of the above is about THIS deployment.
+                
+                `graph/client.ts` has always computed `indexesThisDeployment` and says why in as
+                many words: "a perfectly synced index of a different contract is worse than no
+                index, because it answers confidently about somebody else's policy." The executor
+                sends it. This screen was not reading it — so on the fork build, where the index
+                covers the Sepolia contract and the app trades chain 8453, it reported "No indexing
+                errors. Level with the chain head." That is true of the index and says nothing about
+                the wallet in front of you, which is precisely the confident answer about somebody
+                else's contract the module was written to prevent.
+              */}
+              {graph.data.indexesThisDeployment === false ? (
+                <Text variant="secondarySm" color={colors.warn} style={{ marginTop: space.s10 }}>
+                  {`This index covers ${shortAddress(graph.data.indexedDelegation)}, and this build trades through ${shortAddress(graph.data.activeDelegation)}. Everything above is true of the index and none of it describes this deployment — the contract is the authority here, not the index.`}
+                </Text>
+              ) : null}
             </SheetCard>
 
             <Button

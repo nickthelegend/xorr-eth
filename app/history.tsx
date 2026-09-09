@@ -28,6 +28,7 @@ import {
   space,
 } from '@/ui';
 import { useAsync } from '@/data/useAsync';
+import { system } from '@/data/system';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { spendsFor, unitsToUsd } from '@/data/subgraph';
 import { useStore } from '@/state/store';
@@ -40,6 +41,16 @@ export default function History() {
     () => (wallet?.address ? spendsFor(wallet.address) : Promise.resolve([])),
     [wallet?.address],
   );
+  /*
+   * Whether the index this screen reads covers the contract this build trades through.
+   *
+   * Without it, an empty answer has two very different causes and one sentence. On the fork
+   * deployment — 33 filled runs, every one of them on chain — this screen said "Nothing has
+   * settled on chain yet", because the subgraph indexes the Sepolia contract and the fork trades
+   * chain 8453. The index was not wrong; the question was never about it.
+   */
+  const index = useAsync(() => system.graphHealth().catch(() => null), []);
+  const covers = index.data?.indexesThisDeployment !== false;
   // Pulling down is the gesture people already try on a list of things that keep changing.
   const refresh = useRefreshControl(reload);
   const onChain = data ?? [];
@@ -67,9 +78,13 @@ export default function History() {
           <ErrorState error={error} onRetry={reload} />
         ) : onChain.length === 0 ? (
           <EmptyState
-            text="Nothing has settled on chain yet. This reads from the index, not from us."
-            actionLabel="Check every claim yourself"
-            onAction={() => router.push('/judge')}
+            text={
+              covers
+                ? 'Nothing has settled on chain yet. This reads from the index, not from us.'
+                : 'The subgraph does not index the contract this build trades through, so it has nothing to say about this wallet — settled or not. Activity is read from the executor and is unaffected.'
+            }
+            actionLabel={covers ? 'Check every claim yourself' : 'See what the index does cover'}
+            onAction={() => router.push(covers ? '/judge' : '/graph')}
           />
         ) : (
           <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
