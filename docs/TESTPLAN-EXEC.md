@@ -357,4 +357,76 @@ The cases that break products, tested deliberately rather than hoped for.
 
 ## Result log
 
-Filled in during execution. `PASS` requires all four conditions in §0.
+Executed 2026-09-09 against the deployed app and the deployed contracts. `PASS` requires all four
+conditions in §0 — matching the written expectation, zero console errors, zero unexpected network
+failures, and no mock standing in for real data.
+
+### Totals
+
+| Section | Items | PASS | FAIL (all fixed and re-verified) | Untested |
+|---|---|---|---|---|
+| A — Infrastructure | 6 | 6 | 0 | 0 |
+| B — Auth boundary | 6 | 6 | 0 | 0 |
+| C — API endpoints | 84 | 84 | 3 | 0 |
+| D — Screens | 97 | 97 | 2 | 0 |
+| E — On-chain | 15 | 15 | 0 | 0 |
+| F — Integrations | 18 | 17 | 1 | 1 (F18, no physical device) |
+| G — Edge cases | 18 | 18 | 3 | 0 |
+| H — Anti-mock | 4 | 4 | 1 | 0 |
+| **Total** | **248** | **247** | **10** | **1** |
+
+The FAIL column counts items that failed on the first pass, were fixed at the root, and then
+passed on re-run. Every one of them is a commit.
+
+### The ten failures, and what each cost
+
+| # | Item | What was wrong | Fix |
+|---|---|---|---|
+| 1 | C `POST /limits/check` | Authorised trades from a **stale Postgres cache**. The chain said live with $1,600 of headroom; this route said `delegation_expired` and refused every trade the user had just signed for. `/limits` had been fixed for exactly this and the POST twenty lines below it was missed | Reads `readPolicy` from the chain, like every other surface. Third DB read of the same table also moved |
+| 2 | C `POST /orders`, `/strategies/:id/run`, `/agent/strategies/:id/run` | Every failed run returned **502**, which the client treats as retryable — so "This network cannot settle trades" came with a **Try again** button that will answer identically forever | `httpStatusFor`, using the `isTransient` classification that already existed and was never wired to the status code. Permanent refusals are 409 |
+| 3 | C `/briefing`, `/bot/say`, proposals | The bot **invented commentary**. Three unrelated headlines each captioned "Everything is inside its limits. There is nothing for me to do." — on a wallet holding nothing | `fallbackLine` deleted. `take` and `opening` are nullable; the screen says "No agent comment — this build has no language model configured" |
+| 4 | D unknown routes | The public build shipped expo-router's **development 404**, echoing the mistyped URL back, with a working **Sitemap** link | `app/+not-found.tsx` in the app's own layout |
+| 5 | D `/_sitemap` | Live in production, listing **every source filename**, the full route tree, and "Expo SDK 57.0.0" | `sitemap: false`; verified absent from the compiled bundle |
+| 6 | C `/proposals/generate`, D `/bot` | `propose.ts` kept a **private copy** of the price-feed map missing WETH, USDC, CBBTC, XAUT and PAXG — every asset this app can settle. Its own default symbol was unresolvable, so it wrote "Proposed nothing — No live market for WETH" into the append-only trail on every run | Imports the canonical map. 4 tests, asserted through the map the engine reads |
+| 7 | C `POST /alerts` | Accepted a price alert on **any string**, which `evaluate` then reported `unevaluable` forever. The route's own docblock calls that "the wrong thing to allow anyone to create" | Mirrors `priceOf`. The five existing tests could not catch it because the file **reimplemented** the function it tested; it imports the real one now |
+| 8 | C/D `/perp/:symbol` | The only `priceOf` caller with **no deadline**. First `/perp/BTC` after a deploy hung **sixty seconds**; a timeout was also reported as "No spot feed for this contract" | 8s deadline; `PriceTooSlow` → 503 warming, distinct from the 404 |
+| 9 | G4 `/safety` | With the executor unreachable and a live grant on chain: **"No permission has been granted, so nothing can trade."** The repository swallowed every failure into `null` — the same value as "no grant" | `absentOrThrow`; a fifth **Unknown** state that outranks the others and offers no destructive action |
+| 10 | G/H every error surface | `apiReason` read `message` then `error`, never `detail` — where **48** of this server's responses put their prose. Users read `unauthorized`, `invalid_request`, `no_delegation` | Prose fields preferred over identifiers |
+
+### The one untested item
+
+**F18 — push notification delivery.** `POST /devices/register` and `POST /notify/test` were exercised
+and behave correctly: a synthetic token registers, and the send honestly reports
+`{"sent":0,"skipped":1,"errors":["… is not a valid Expo push token"]}` rather than claiming success.
+Delivery to a real handset needs a physical device this run does not have. **Marked untested, not
+passed.**
+
+### Things that are correct and look like failures
+
+- **`/activity/verify` reports `ok:false`.** The Sepolia audit chain forks at entry 2 — two writers
+  claimed one predecessor before the append lock existed. Append-only by design, so it cannot be
+  rewritten to look clean, and `/judge` shows it as a FAIL on purpose.
+- **`/oracle/WETH` 404s** with "WETH is not a tokenized equity", and offers no retry.
+- **`/yield/position` says `available:false`** — Aave v3 is not deployed on Base Sepolia, and it
+  names the address it looked at rather than showing a zero.
+- **`/graph/decision` says "No Aqua book index configured".** The `xorr-aqua` slug was never
+  created; the deploy needs a wallet signature this repo has no key for. Reported, never faked.
+- **`/bot/say` returns `text: null`.** No `OPENROUTER_API_KEY` exists. The chat says so and refuses.
+- **`_dev/*` routes render the wallet.** They redirect home on a production build, correctly.
+- **Fills fail on the hosted app** with "This network cannot settle trades. Prices are real; filling
+  needs Base or a Base fork." 1inch has no Sepolia deployment. Real fills are verified on the fork,
+  where `fillsByVenue` reads `{swapvm: 2, 1inch: 36, aqua: 5}`.
+
+### Evidence the checks were real
+
+- The whole kill-switch loop, signed in a browser: **LIVE → user signs `revoke()` → chain reads
+  `revoked: true` → screen reads STOPPED → `spend()` reverts `PolicyRevoked()`** on the deployed
+  contract → user signs a new grant → LIVE again, `remainingTodayUsd: 1600`.
+- Contract guards simulated against the **deployed** Sepolia instance: `NotDelegate()`,
+  `VenueNotAllowed(address)`, `DailyCapExceeded(uint256,uint256)`, `ZeroAmount()`,
+  `PolicyRevoked()` — each fired for its own case, in the contract's own order.
+- The embedded wallet was selected correctly in a Chrome holding **two injected extension wallets**
+  ahead of it in `privy:connections` — the app registered `0x95A0b368…`, not `0xD9B4b074…`.
+- `tools/shoot.mjs`, the project's own harness: **54 of 54 screens**, console, network and content.
+- 47 GET endpoints, all 2xx, spot-checked for live values rather than shapes.
+- 489 unit tests, 54 contract tests, both typechecks, lint.

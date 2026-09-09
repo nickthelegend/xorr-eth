@@ -339,8 +339,8 @@ XORR_CHAIN=base-fork FORK_RPC=http://127.0.0.1:8545 npx tsx server/src/fork-e2e.
 ## Tests
 
 ```bash
-npm test                                       # 460 — app AND executor units
-(cd server && npm test)                        # 218 executor on its own
+npm test                                       # 489 — app AND executor units
+(cd server && npm test)                        # 234 executor on its own
 npm run test:live                              # 83 against real APIs and a real chain
 (cd server && npm run test:live)               # 59 more, needing the fork environment
 (cd contracts && forge test)                   # 54 contract: 22 unit + 32 fork
