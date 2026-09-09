@@ -30,7 +30,7 @@ import { requireUser } from '../auth/middleware.js';
 import { isAddress, type Address } from 'viem';
 import { addressOfBasename, basenameOf } from '../evm/basename.js';
 import type { Context } from 'hono';
-import { perpMetrics } from '../market/perp.js';
+import { perpMetrics, PriceTooSlow } from '../market/perp.js';
 import { crossCheck } from '../market/crosscheck.js';
 
 export const market = new Hono();
@@ -592,7 +592,20 @@ function keepPricesFresh(): void {
  * with no mark has nothing true to put on it.
  */
 market.get('/perp/:symbol', async (c) => {
-  const m = await perpMetrics(c.req.param('symbol'));
+  let m;
+  try {
+    m = await perpMetrics(c.req.param('symbol'));
+  } catch (e) {
+    /*
+     * "The feed is cold" is a different answer from "this contract has no feed", and only one of
+     * them is worth retrying. Same shape as `/market/ohlc`'s warming reply.
+     */
+    if (e instanceof PriceTooSlow) {
+      c.header('retry-after', '3');
+      return c.json({ error: 'warming', detail: 'The price feed is being fetched; retry shortly.' }, 503);
+    }
+    throw e;
+  }
   if (!m) return c.json({ error: 'no_feed', detail: 'No spot feed for this contract.' }, 404);
   return c.json(m);
 });

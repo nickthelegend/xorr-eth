@@ -39,6 +39,17 @@ export function nextFundingAt(now = Date.now()): number {
   return Math.ceil(now / FUNDING_INTERVAL_MS) * FUNDING_INTERVAL_MS;
 }
 
+/** Long enough for a warm cache and a slow-but-working upstream; short enough to answer. */
+const PRICE_DEADLINE_MS = 8_000;
+
+/** The feed exists and did not answer in time — distinct from "this contract has no feed". */
+export class PriceTooSlow extends Error {
+  constructor(readonly symbol: string) {
+    super(`The price feed for ${symbol} did not answer in time.`);
+    this.name = 'PriceTooSlow';
+  }
+}
+
 export async function perpMetrics(symbol: string): Promise<PerpMetrics | null> {
   const upper = symbol.toUpperCase();
   const at = nextFundingAt();
@@ -53,7 +64,22 @@ export async function perpMetrics(symbol: string): Promise<PerpMetrics | null> {
   if (isStock(symbol)) return null;
   if (!COINGECKO_IDS[upper]) return null;
 
-  const px = await priceOf(upper).catch(() => 0);
+  /*
+   * Bounded, because the alternative is a screen that spins for a minute.
+   *
+   * This called `priceOf(upper)` with no deadline — the only caller that did; the other six pass
+   * 3s to 10s. On a cold cache the underlying request is a fetch to a public, rate-limited price
+   * tier, and the first `/perp/BTC` after a deploy took **sixty seconds and never answered**,
+   * while `/perp/ETH` served from the warmed cache in half a second. The project's own screen
+   * sweep caught it as a failed request.
+   *
+   * A timeout is also not the same answer as "no feed", and returning `null` for both made the
+   * route reply "No spot feed for this contract" about an asset it prices correctly a moment
+   * later. `PriceTooSlow` keeps them apart so the route can say which happened.
+   */
+  const px = await priceOf(upper, PRICE_DEADLINE_MS).catch(() => {
+    throw new PriceTooSlow(upper);
+  });
   if (!(px > 0)) return null;
 
   return {
