@@ -146,3 +146,23 @@ export function isTransient(error: string): boolean {
     e,
   );
 }
+
+/**
+ * The HTTP status a run outcome deserves — which is really the question "should the app offer a
+ * Try again?"
+ *
+ * Every route that runs a strategy answered `failed ? 502 : 200`, and the client reads 5xx as
+ * retryable by design. So a run that failed because *this chain cannot settle at all* came back
+ * 502, and the screen put a **Try again** button under "This network cannot settle trades" — a
+ * button that will answer the same way for as long as the deployment exists. `isRetryable`'s own
+ * docblock names that as the failure it was written to prevent, and `isTransient` right above
+ * already classifies `cannot fill on` as permanent. The two were simply never connected.
+ *
+ * 409 rather than 400: the request was well-formed and the refusal is about the state of the
+ * world, which is the same reason `blocked` and `not_tradable` already use it.
+ */
+export function httpStatusFor(outcome: { status: string; raw?: string }): 200 | 409 | 502 {
+  if (outcome.status === 'blocked') return 409;
+  if (outcome.status !== 'failed') return 200;
+  return isTransient(outcome.raw ?? '') ? 502 : 409;
+}

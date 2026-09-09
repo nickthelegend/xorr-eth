@@ -6,7 +6,7 @@
  * user nothing about whether their money is safe or their limits worked.
  */
 import { describe, expect, it } from 'vitest';
-import { humanFailure, isTransient } from './failure.js';
+import { httpStatusFor, humanFailure, isTransient } from './failure.js';
 
 describe('revert reasons, in plain language', () => {
   it('names the daily cap when the cap is what stopped it', () => {
@@ -125,5 +125,47 @@ describe('a lost run and a refused one are not the same thing', () => {
     // double-buy gets invented.
     expect(isTransient('something went wrong')).toBe(false);
     expect(isTransient('')).toBe(false);
+  });
+});
+
+/*
+ * The status a failed run comes back as decides whether the app offers a **Try again**, because
+ * the client treats 5xx as retryable. Every run route answered `failed ? 502 : 200`, so a run that
+ * failed because this chain cannot settle at all invited the user to press a button that will
+ * answer identically forever — the exact failure `isRetryable` exists to prevent.
+ */
+describe('httpStatusFor', () => {
+  it('offers a retry only when the failure was transient', () => {
+    expect(httpStatusFor({ status: 'failed', raw: 'upstream timed out' })).toBe(502);
+    expect(httpStatusFor({ status: 'failed', raw: 'fetch failed' })).toBe(502);
+  });
+
+  it('refuses permanently when the chain cannot settle at all', () => {
+    expect(
+      httpStatusFor({
+        status: 'failed',
+        raw: 'Cannot fill on base-sepolia: 1inch has no deployment there.',
+      }),
+    ).toBe(409);
+  });
+
+  it('refuses permanently when the contract itself said no', () => {
+    // A policy refusal is an answer, not a failure to get one. Retrying changes nothing.
+    for (const raw of ['PolicyExpired', 'DailyCapExceeded(1,2)', 'VenueNotAllowed(0x0)']) {
+      expect(httpStatusFor({ status: 'failed', raw })).toBe(409);
+    }
+  });
+
+  it('leaves the outcomes that are not failures alone', () => {
+    expect(httpStatusFor({ status: 'filled' })).toBe(200);
+    expect(httpStatusFor({ status: 'skipped' })).toBe(200);
+    expect(httpStatusFor({ status: 'watch' })).toBe(200);
+    // `blocked` is a limit refusing the trade — well-formed request, refused by the world.
+    expect(httpStatusFor({ status: 'blocked' })).toBe(409);
+  });
+
+  it('does not offer a retry when there is no detail to classify', () => {
+    // An unclassifiable failure is not evidence that repeating it will help.
+    expect(httpStatusFor({ status: 'failed' })).toBe(409);
   });
 });

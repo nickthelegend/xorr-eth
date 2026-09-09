@@ -31,6 +31,7 @@
  * `scheduler` that holds both and does nothing else.
  */
 import { Hono } from 'hono';
+import { httpStatusFor } from '../executor/failure.js';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
 import { closeHolding, CloseInput } from './panic.js';
@@ -78,7 +79,7 @@ agentSurface.post('/agent/strategies/:id/run', requireScope('trade:open'), async
   ]);
   if (!row) return c.json({ error: 'not_found' }, 404);
   const outcome = await runStrategy(row);
-  return c.json(outcome, outcome.status === 'failed' ? 502 : 200);
+  return c.json(outcome, httpStatusFor(outcome));
 });
 
 /**

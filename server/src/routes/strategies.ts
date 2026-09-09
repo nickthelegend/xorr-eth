@@ -11,6 +11,7 @@
  * mounts this the same way it already mounts `market`, `alerts` and the rest.
  */
 import { randomUUID } from 'node:crypto';
+import { httpStatusFor } from '../executor/failure.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
@@ -325,10 +326,7 @@ strategyRoutes.post('/orders', async (c) => {
   // holding allowance against the cap for a trade that has already happened.
   await query(`UPDATE strategies SET state='ended' WHERE id=$1`, [row!.id]);
 
-  return c.json(
-    { ...outcome, orderId: row!.id },
-    outcome.status === 'failed' ? 502 : outcome.status === 'blocked' ? 409 : 200,
-  );
+  return c.json({ ...outcome, orderId: row!.id }, httpStatusFor(outcome));
 });
 
 strategyRoutes.post('/strategies/:id/run', async (c) => {
@@ -342,7 +340,7 @@ strategyRoutes.post('/strategies/:id/run', async (c) => {
   if (!row) return c.json({ error: 'not_found' }, 404);
 
   const outcome = await runStrategy(row);
-  return c.json(outcome, outcome.status === 'failed' ? 502 : 200);
+  return c.json(outcome, httpStatusFor(outcome));
 });
 
 strategyRoutes.post('/strategies', async (c) => {
