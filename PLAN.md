@@ -76,9 +76,16 @@ that the video cannot show. A judge who watches it and then opens the link sees 
 |---|---|---|
 | 1.1 | Default changed to `https://web-production-3e214.up.railway.app`; `APP_URL` still overrides. The localhost fallback is what produced a recording nobody noticed was stale, so the committed script now records the shipped product unless told otherwise. | **DONE** |
 | 1.2 | **No race exists, and no gas step is needed** — verified by running it. The recorder never signs: it walks screens and records footage to speak over, and the four Privy dialogs a grant raises are not something it drives. The drip still fires on a new wallet's first connect, so a *person* recording live is funded; the automated run does not depend on it. Recorded as a finding rather than a change. | **DONE — not needed** |
-| 1.3 | Re-recorded twice — once to find a defect, once against the fix. **8 of 8 beats landed**, 93.7s, against the hosted app. The `/judge` beat carries a real FAIL on camera (`audit-chain` forks at entry 2, G12, permanent by design), so the rule holds. Frames extracted and read to confirm the footage is current, not assumed. | **DONE** |
+| 1.3 | Re-recorded three times — twice in the planning pass, once more in execution after the safety screen changed under it. **8 of 8 beats landed**, 91s, against the hosted app. The `/judge` beat carries a real FAIL on camera (`audit-chain` forks at entry 2, G12, permanent by design), so the rule holds. Frames extracted and read to confirm the footage is current, not assumed. | **DONE** |
 | 1.4 | `demo.gif` (1.35MB) and `demo.mp4` (654KB) regenerated. Both README and `docs/SUBMISSION.md` corrected: they claimed the recording was made "against the running app on the Base mainnet fork", which is no longer true and was the more misleading half — it is the deployed app now, and the copy says so and links it. | **DONE** |
 | 1.5 | Setup section rewritten for the hosted target, plus two things the old script got wrong: it told you to start a dev server, and beat 7 told you to tap a button the recorder does not tap. Beat 7 now carries a table of the three states the closing frame can land in and which to avoid. | **DONE** |
+
+**Phase 1 had to be redone in execution, and doing so surfaced two more things.** The recording made
+during planning closed on a green **Live** badge over a permission that had expired eighteen hours
+earlier — it had recorded G14 without anyone noticing. And `tools/demo.mjs` read `PRIVY_APP_ID` from
+an environment nothing populated, so a run without exported variables skipped the sign-in beat and
+produced a video of the signed-out app: the empty state of every screen the demo exists to show
+working, reported as one missed beat and otherwise indistinguishable from a good take.
 
 **Phase 1 surfaced a defect the plan did not know about.** The closing frame of the first
 re-recording showed a red **Stop all agents** on a wallet with no permission, directly beneath the
