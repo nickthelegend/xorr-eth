@@ -21,13 +21,20 @@ Chain: **Base**. ETH Online 2026 · Base Build Camp 2026.
   <img src="docs/demo/demo.gif" width="300" alt="Sign in, the permission, live markets, a recurring buy, the activity trail, /judge, the kill switch" />
 </p>
 
-96 seconds, recorded against **the deployed app you can open yourself** —
+91 seconds, recorded against **the deployed app you can open yourself** —
 [`web-production-3e214.up.railway.app`](https://web-production-3e214.up.railway.app), on Base
 Sepolia. Not a local dev server: every frame is the same build a stranger gets. Full quality:
 [`docs/demo/demo.mp4`](docs/demo/demo.mp4). The path it walks, and the words to say over it, are in
 [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md); it was produced by
 [`tools/demo.mjs`](tools/demo.mjs), which drives a real signed-in Privy session rather than a
 mockup, so re-recording it after a change is one command.
+
+It closes on `/safety` reading **EXPIRED**, because the demo wallet's 24-hour permission had
+lapsed. That is the screen behaving correctly, and it is the honest ending available without a
+person present: renewing takes four Privy dialogs the wallet's owner must sign, and nothing on the
+server can sign for them — which is the same claim `/safety` makes about the Privy policy. The
+previous recording showed a green **Live** badge on the same expired permission, which was a
+defect, not a better take.
 
 Fills are the one thing Sepolia cannot show — 1inch has no liquidity there, and the app says so on
 `/network` rather than pretending. Those are real on the Base mainnet fork: 33 filled runs, 35

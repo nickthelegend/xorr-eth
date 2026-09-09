@@ -26,6 +26,25 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 /*
+ * The credentials, loaded the way every other entry point in this repo loads them.
+ *
+ * `signIn` needs `PRIVY_APP_ID` and `PRIVY_APP_SECRET`, and a plain node script gets neither —
+ * nothing here reads `.env`. So a run with no exported variables recorded seven of eight beats and
+ * skipped the one that signs in, which is the beat every later beat depends on: the footage is of
+ * a SIGNED-OUT app, showing the empty state of screens the demo is meant to show working. It is
+ * tolerant by design, so it reported the miss and carried on producing a video that looks fine
+ * until you watch it.
+ *
+ * `loadEnvFile` does not override what the shell already set, so `APP_URL=… node tools/demo.mjs`
+ * still behaves exactly as before.
+ */
+try {
+  process.loadEnvFile(path.resolve(import.meta.dirname, '../.env'));
+} catch {
+  // No `.env` is legitimate; `signIn` already says which variable it needed.
+}
+
+/*
  * The SHIPPED app by default, not a machine only I can reach.
  *
  * This defaulted to `localhost:8082`, and that is how the previous recording came to be shot

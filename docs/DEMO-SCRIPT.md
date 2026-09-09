@@ -112,10 +112,21 @@ drives. So this beat lands on whatever state the wallet is in, and the CTA is th
 |---|---|
 | Permission live | red **Stop all agents** — the tap is yours to narrate or to perform live |
 | Already revoked | **STOPPED · All agents stopped** with **Resume agents** — the kill switch's result rather than the act |
+| **Expired** | **EXPIRED · Your permission has ended** with **Grant a new permission** |
 | Nothing ever granted | no kill switch at all, and correctly so: there is nothing to stop |
 
-The third is the one to avoid. It is honest and it is a weak ending, and it is what the recording
-did before `E2E_PRIVY_EMAIL` was pinned to an account with a permission.
+The last two are the ones to avoid. Both are honest and both are weak endings.
+
+**The current recording lands on EXPIRED, and that is worth understanding rather than working
+around.** A grant runs for 24 hours; the demo account's lapsed at 13:35 on 8 September. Until this
+was fixed the screen did not say so — it showed a green **Live** badge over "Agents are live", so
+the recording made at 07:17 that morning was of a permission that had been dead for eighteen hours,
+under a badge claiming the opposite. The fourth row exists because of that.
+
+**To get the strongest ending, grant before recording.** It is one tap on `/safety` and four Privy
+dialogs, and it must be done by the wallet's owner in a real browser — `tools/demo.mjs` does not
+sign, and nothing on the server can sign for the user by design (see `/safety`: *"Nothing we hold
+can attach it for you"*). Then record within the 24 hours.
 
 ## Rules
 
