@@ -768,21 +768,41 @@ routes.get('/limits', async (c) => {
   });
 });
 
+/**
+ * Can this trade go through? Answered from the CHAIN, for the same reason `/limits` above is.
+ *
+ * The docblock twenty lines up describes this exact bug being fixed — and it was fixed on the GET
+ * and missed here, on the POST. Which is the worse half: `/limits` only *reports* the cap, while
+ * this route is the pre-trade authorisation check. It asked Postgres, and Postgres holds a CACHE
+ * of the permission that is only as fresh as the last time a grant was recorded through us.
+ *
+ * Caught by granting a fresh permission in the browser and then asking this route about it: the
+ * chain said live with $1,600 of headroom, `/limits` agreed, and this route answered
+ * `{"allowed":false,"reason":"delegation_expired"}` — refusing every trade the user had just
+ * signed for. A stale cache cannot be allowed to veto a live permission any more than it can be
+ * allowed to authorise a revoked one.
+ *
+ * `evaluate` still applies the executor's own daily tally on top, because the footer on the limits
+ * screen promises both are enforced and the stricter one binds.
+ */
 routes.post('/limits/check', async (c) => {
   const body = z.object({ usd: z.number() }).parse(await c.req.json());
   const w = await requireWallet(c);
-  const del = await one<{ daily_cap_usd: string; expires_at: Date; revoked: boolean }>(
-    `SELECT daily_cap_usd, expires_at, revoked FROM delegations WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
-    [w.id],
-  );
-  if (!del) return c.json({ allowed: false, reason: 'no_delegation', detail: 'No permission granted.' });
+  const policy = await readPolicy(w.address as Address).catch(() => null);
+  if (!policy) {
+    return c.json({
+      allowed: false,
+      reason: 'no_delegation',
+      detail: 'No active trading permission on-chain. Grant one before placing an order.',
+    });
+  }
   return c.json(
     await evaluate({
       walletId: w.id,
       usd: body.usd,
-      dailyCapUsd: Number(del.daily_cap_usd),
-      delegationExpiresAt: new Date(del.expires_at),
-      delegationRevoked: del.revoked,
+      dailyCapUsd: policy.dailyCapUsd,
+      delegationExpiresAt: new Date(policy.expiresAt),
+      delegationRevoked: policy.revoked,
     }),
   );
 });

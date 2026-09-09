@@ -14,6 +14,9 @@ import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
 import { quote, canonicalSymbol } from '../venues/oneinch.js';
 import { requireUser } from '../auth/middleware.js';
+import { currentWallet } from './wallet-context.js';
+import { readPolicy } from '../evm/delegation.js';
+import type { Address } from 'viem';
 import { decide } from '../graph/decide.js';
 import { health as graphHealth, dailySpendFor, indexDescription, spendsFor } from '../graph/client.js';
 
@@ -81,17 +84,15 @@ extra.get('/agents/:id/backtest', async (c) => {
     );
   }
 
-  const wallet = await walletId(c);
-  const cap = wallet
-    ? Number(
-        (
-          await one<{ daily_cap_usd: string }>(
-            `SELECT daily_cap_usd FROM delegations WHERE wallet_id=$1 ORDER BY created_at DESC LIMIT 1`,
-            [wallet],
-          )
-        )?.daily_cap_usd ?? 1600,
-      )
-    : 1600;
+  /*
+   * The cap this backtest sizes against comes from the chain, like every other statement the
+   * product makes about a user's limits. The database copy is a cache of the last grant recorded
+   * through us, and a backtest scaled to a cap the user no longer has is a chart of a strategy
+   * they could not run. Falls back to the default only when there is no policy to read.
+   */
+  const w = await currentWallet(c).catch(() => null);
+  const policy = w ? await readPolicy(w.address as Address).catch(() => null) : null;
+  const cap = policy?.dailyCapUsd ?? 1600;
 
   /*
    * WETH, not SOL.
