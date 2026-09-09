@@ -38,8 +38,27 @@ export class ApiError extends Error {
  */
 export function apiReason(e: unknown): string | undefined {
   if (!(e instanceof ApiError)) return undefined;
-  const body = e.body as { message?: unknown; error?: unknown } | undefined;
-  const reason = typeof body?.message === 'string' ? body.message : body?.error;
+  const body = e.body as
+    | { message?: unknown; detail?: unknown; error?: unknown; reason?: unknown }
+    | undefined;
+
+  /*
+   * The prose fields first, and `detail` is one of them.
+   *
+   * This read `message` then `error`, and never `detail` — where forty-eight of this server's
+   * responses put the sentence. So `{"error":"unauthorized","detail":"Missing bearer token."}`
+   * reached the user as the single word **unauthorized**, and a rejected order as
+   * **invalid_request**, with the written explanation sitting unread in the next field.
+   *
+   * `error` and `reason` are identifiers — `no_route`, `not_tradable`, `duplicate_alert` — kept as
+   * the last resort for exactly the purpose the note below describes: a screen showing one is a
+   * screen that still needs a sentence written for it, and that should stay visible rather than be
+   * hidden behind a generic fallback.
+   */
+  const prose = [body?.message, body?.detail].find(
+    (v): v is string => typeof v === 'string' && v.trim().length > 0,
+  );
+  const reason = prose ?? body?.error ?? body?.reason;
   if (typeof reason !== 'string' || !reason.trim()) return undefined;
   // `no_route` and `insufficient_liquidity` are identifiers, not prose. Left alone deliberately:
   // a screen that shows one is a screen we should give a sentence to, and hiding it here would

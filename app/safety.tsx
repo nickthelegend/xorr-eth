@@ -324,7 +324,7 @@ export default function Safety() {
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s8 }}>
         {unreadable
-          ? 'This screen could not reach the executor, so it cannot tell you what the bot is allowed to do. Whatever is granted on chain is still in force — this is a gap in what we can show you, not a change to your permission.'
+          ? 'This screen could not read your permission, so it cannot tell you what the bot is allowed to do. Whatever is granted on chain is still in force — this is a gap in what we can show you, not a change to your permission.'
           : killExplanation(killed, hiredCount, unusable, granted, expired)}
       </Text>
 
