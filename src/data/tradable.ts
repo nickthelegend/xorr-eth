@@ -104,3 +104,64 @@ export async function isSettleable(symbol: string): Promise<boolean> {
   const settled = (SETTLES_AS[upper] ?? upper).toUpperCase();
   return (await settleableSymbols()).has(settled);
 }
+
+/**
+ * The symbols something can put a PRICE on, which is a third question again.
+ *
+ * `TRADABLE` answers "do we know how to route this" and `settleableSymbols` answers "can this
+ * deployment fill it". Neither answers "can anything price it", and that is the question a price
+ * alert asks: BTC is priceable and not tradable on Base, so an alert on it is perfectly reasonable
+ * and `isTradable` would refuse it.
+ *
+ * Mirrors the executor's `priceOf`: a tokenized equity is priced by the venue that would fill it,
+ * and everything else needs an entry in the crypto feed table. `/market/symbols` publishes that
+ * table and `/market/stocks` publishes the equities, so the client asks rather than keeping a
+ * fourth copy of a list — the mistake `propose.ts` made with its own private feed map.
+ *
+ * Undefined on failure, never empty: an empty set would refuse every alert on one failed request,
+ * and the server checks this again anyway. Unknown means "let it through and let the server
+ * answer", which is the same posture `settleableSymbols` takes.
+ */
+let priceable: Set<string> | undefined;
+let priceableInFlight: Promise<Set<string> | undefined> | undefined;
+
+export async function priceableSymbols(): Promise<Set<string> | undefined> {
+  if (priceable) return priceable;
+  priceableInFlight ??= (async () => {
+    try {
+      const { api } = await import('./api');
+      const [crypto, stocks] = await Promise.all([
+        api.get<string[]>('/market/symbols'),
+        api.get<{ symbol: string }[]>('/market/stocks'),
+      ]);
+      priceable = new Set([...crypto, ...stocks.map((s) => s.symbol)]);
+      return priceable;
+    } catch {
+      priceableInFlight = undefined;
+      return undefined;
+    }
+  })();
+  return priceableInFlight;
+}
+
+/**
+ * The set's own spelling of a symbol the user typed, or `undefined` if nothing prices it.
+ *
+ * Case-insensitive, and it returns the CANONICAL spelling rather than an uppercased one — the
+ * tokenized equities carry a lowercase suffix (`NVDAc`), and uppercasing them is the boundary
+ * mistake `venues/oneinch.ts` documents three production bugs from. A user typing `nvdac` gets
+ * `NVDAc` back, not `NVDAC`.
+ */
+export function resolvePriceable(symbol: string, known: Set<string> | undefined): string | undefined {
+  const typed = symbol.trim();
+  if (!typed) return undefined;
+  if (!known) return typed;                        // cannot say; let the server answer
+  for (const s of known) if (s.toLowerCase() === typed.toLowerCase()) return s;
+  return undefined;
+}
+
+/** Testing only. */
+export function resetPriceable(): void {
+  priceable = undefined;
+  priceableInFlight = undefined;
+}

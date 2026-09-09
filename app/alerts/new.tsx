@@ -5,7 +5,7 @@
  * `goBack()`, so it looked like it worked and remembered nothing. An alert that is not
  * persisted is an alert that will not fire.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
@@ -23,7 +23,7 @@ import {
   typeScale,
 } from '@/ui';
 import { repos } from '@/data';
-import { DEFAULT_BUY } from '@/data/tradable';
+import { DEFAULT_BUY, priceableSymbols, resolvePriceable } from '@/data/tradable';
 import { usePrice } from '@/data/usePrices';
 import { errorText } from '@/data/apiError';
 
@@ -33,7 +33,37 @@ const FIELD_H = 48;
 export default function NewAlert() {
   const goBack = useGoBack();
   const [symbol, setSymbol] = useState<string>(DEFAULT_BUY);
-  const sym = symbol.trim().toUpperCase();
+
+  /*
+   * The symbols something can put a price on, so an alert that can never fire is refused HERE —
+   * while the user is still looking at the field they typed it into.
+   *
+   * The server refuses it too, and says so well: "nothing prices NOTATOKEN, so this alert could
+   * never fire". But that costs a round trip to learn something the client can know instantly, and
+   * the whole point of the rule is to tell someone while there is still someone to tell.
+   *
+   * `undefined` means the list has not arrived or could not be fetched — the field stays permissive
+   * and the server has the final word, which is the same posture `settleableSymbols` takes.
+   */
+  const [known, setKnown] = useState<Set<string> | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void priceableSymbols().then((s) => {
+      if (alive) setKnown(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /*
+   * NOT `.toUpperCase()`. Rule 3 in `venues/oneinch.ts`: no boundary may uppercase a caller's
+   * symbol, because the tokenized equities carry a lowercase suffix and `NVDAc` becoming `NVDAC`
+   * is how three separate production bugs started. `resolvePriceable` returns the canonical
+   * spelling from the list, so typing `nvdac` produces `NVDAc`.
+   */
+  const sym = resolvePriceable(symbol, known) ?? symbol.trim();
+  const unpriceable = known !== undefined && symbol.trim().length > 0 && !resolvePriceable(symbol, known);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -58,7 +88,7 @@ export default function NewAlert() {
   }
 
   const value = parseFloat(level);
-  const valid = sym.length > 0 && Number.isFinite(value) && value > 0;
+  const valid = sym.length > 0 && !unpriceable && Number.isFinite(value) && value > 0;
 
   async function create() {
     if (!valid) return;
@@ -122,7 +152,13 @@ export default function NewAlert() {
       </Fill>
 
       <Button
-        label={valid ? `Alert me when ${sym} is above $${level}` : 'Enter a symbol and a price'}
+        label={
+          valid
+            ? `Alert me when ${sym} is above $${level}`
+            : unpriceable
+              ? `Nothing prices ${symbol.trim()}`
+              : 'Enter a symbol and a price'
+        }
         disabled={!valid}
         loading={busy}
         onPress={() => void create()}
