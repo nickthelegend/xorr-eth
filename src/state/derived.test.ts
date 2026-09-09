@@ -278,6 +278,64 @@ describe('kill switch — screen 20', () => {
   });
 
   /*
+   * The fourth state: a permission that ran out on schedule.
+   *
+   * The expiry BANNER on the safety screen has read this since it was added; the badge above it
+   * did not. So a policy that lapsed at 13:35 on 8 September showed a green **Live** dot headed
+   * "Agents are live" thirteen hours later, with "Your permission has expired, so nothing can be
+   * placed" a scroll below it. Observed on the hosted deployment, not imagined.
+   */
+  describe('an expired permission', () => {
+    const HOUR = 3_600_000;
+    const now = 1_788_912_000_000;
+    const lapsed = { expiresAt: now - 13 * HOUR };
+    const valid = { expiresAt: now + 13 * HOUR };
+
+    it('is expired when the clock has passed, and not before', () => {
+      expect(d.delegationExpired(lapsed, false, now)).toBe(true);
+      expect(d.delegationExpired(valid, false, now)).toBe(false);
+    });
+
+    it('is not claimed of a server that cannot answer', () => {
+      // Absent is not expired — the same rule `delegateIsCurrent` already documents.
+      expect(d.delegationExpired({}, false, now)).toBe(false);
+      expect(d.delegationExpired(null, false, now)).toBe(false);
+      expect(d.delegationExpired(undefined, false, now)).toBe(false);
+    });
+
+    it('does not fight the kill switch for the same screen', () => {
+      // A user who stopped their agents is told they stopped them, not that time ran out.
+      expect(d.delegationExpired(lapsed, true, now)).toBe(false);
+    });
+
+    it('never reads as live', () => {
+      expect(d.killTitle(false, false, true, true)).toBe('Your permission has ended');
+      expect(d.killTitle(false, false, true, true)).not.toContain('live');
+      const why = d.killExplanation(false, 3, false, true, true);
+      expect(why).toContain('end date you set');
+      expect(why).not.toContain('can place orders');
+    });
+
+    /*
+     * And the button must not offer a stop. `revoke()` on a policy the contract already considers
+     * over is a wallet prompt and a gas fee that change nothing — the same mistake the ungranted
+     * wallet was fixed for, one state along.
+     */
+    it('offers a new grant, not a stop', () => {
+      expect(d.killCta(false, false, true, true)).toBe('Grant a new permission');
+      expect(d.killCta(false, false, true, false)).toBe('Stop all agents');
+    });
+
+    it('leaves the other states alone', () => {
+      // Disconnected outranks expired: a key that moved is the more specific fault.
+      expect(d.killCta(false, true, true, true)).toBe('Reconnect agents');
+      expect(d.killTitle(false, true, true, true)).toBe('Agents cannot trade');
+      // And an ungranted wallet has no clock to run out.
+      expect(d.killCta(false, false, false, true)).toBe('Set the limits');
+    });
+  });
+
+  /*
    * Zero is not "the bot is stopped" — that is what `killed` means, and it has its own sentence.
    * Under a green LIVE badge, "0 agents can place orders" read as a kill switch already pulled.
    */

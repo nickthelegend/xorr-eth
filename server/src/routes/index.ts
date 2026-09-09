@@ -755,6 +755,16 @@ routes.get('/limits', async (c) => {
     spentTodayUsd: policy.spentTodayUsd,
     remainingUsd: Math.max(0, Math.min(policy.remainingTodayUsd, policy.dailyCapUsd - ourSpend)),
     revoked: false,
+    /*
+     * The expiry, so a zero here can say WHY it is zero.
+     *
+     * An expired policy is not revoked, so this route answered `{dailyCapUsd: 1600, spentTodayUsd:
+     * 0, remainingUsd: 0, revoked: false}` — a $1,600 limit with nothing spent and nothing left,
+     * which is not a state the screen could explain because the number that explains it was not
+     * sent. Observed on the hosted deployment against a grant that had lapsed thirteen hours
+     * earlier, while `/safety` showed the same permission as Live.
+     */
+    expiresAt: policy.expiresAt,
   });
 });
 

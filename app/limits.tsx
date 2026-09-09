@@ -27,6 +27,7 @@ import {
 import { money } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system } from '@/data/system';
+import { expiryState } from '@/state/derived';
 
 /** The spend bar. Tall enough to read as a quantity, short enough not to read as a control. */
 const BAR_H = 8;
@@ -41,6 +42,9 @@ export default function Limits() {
    */
   const fraction =
     data && data.dailyCapUsd > 0 ? Math.min(1, data.spentTodayUsd / data.dailyCapUsd) : 0;
+
+  /** Not revoked and still unable to spend: the permission reached the end date the user set. */
+  const expired = expiryState(data?.expiresAt) === 'expired';
 
   return (
     <Screen>
@@ -60,12 +64,25 @@ export default function Limits() {
               <Text variant="footnote" color={colors.ink40}>
                 REMAINING TODAY
               </Text>
+              {/*
+                A zero has to say which zero it is.
+
+                "Nothing — permission is off" covers a revoked grant. An EXPIRED one is not
+                revoked, so it fell through to `money(0)` and rendered a flat **$0** under a
+                $1,600 daily cap with nothing spent — a contradiction the screen gave no way to
+                resolve. Expiry is read through `expiryState`, the same helper the safety screen's
+                banner uses, so the two cannot drift apart.
+              */}
               <Text
                 variant="screenTitle"
-                color={data.revoked ? colors.ink40 : colors.ink}
+                color={data.revoked || expired ? colors.ink40 : colors.ink}
                 style={{ marginTop: space.s6 }}
               >
-                {data.revoked ? 'Nothing — permission is off' : money(Math.max(0, data.remainingUsd))}
+                {data.revoked
+                  ? 'Nothing — permission is off'
+                  : expired
+                    ? 'Nothing — permission has ended'
+                    : money(Math.max(0, data.remainingUsd))}
               </Text>
 
               {/*

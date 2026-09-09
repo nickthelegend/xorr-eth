@@ -293,10 +293,45 @@ export function delegateUnusable(
   return !killed && delegation?.delegateIsCurrent === false;
 }
 
-export function killTitle(killed: boolean, unusable = false, granted = true): string {
+/**
+ * A permission whose clock has run out.
+ *
+ * The docblock above says a policy can be "unrevoked, unexpired, cap intact" — expiry was known to
+ * matter and nothing here checked it. So an expired grant reached this screen as a green **Live**
+ * dot headed "Agents are live", and every trade under it reverts `PolicyExpired`. Observed on the
+ * hosted deployment: a policy that lapsed at 13:35 on 8 September still reading Live thirteen hours
+ * later, with `/limits` reporting `$0 left today` and no reason for the zero.
+ *
+ * It is a sibling of `delegateUnusable` rather than a variant of `killed`: the user did not stop
+ * anything, and the remedy is to grant again rather than to resume. Kept separate from `unusable`
+ * because the two say different things to the person reading them — one is a bot key that moved,
+ * the other is a permission that ended on schedule, exactly as the user chose when they set it.
+ *
+ * An absent `expiresAt` is not an expired one. A server that predates the field cannot answer the
+ * question, and asserting a fault we have not observed is the mistake `delegateIsCurrent` already
+ * documents.
+ */
+export function delegationExpired(
+  delegation: { expiresAt?: number } | null | undefined,
+  killed: boolean,
+  now: number = Date.now(),
+): boolean {
+  // Built on `expiryState` rather than beside it: the banner further down the screen already reads
+  // expiry from there, and two answers to "has this ended" is how the badge and the banner came to
+  // disagree in the first place.
+  return !killed && expiryState(delegation?.expiresAt, now) === 'expired';
+}
+
+export function killTitle(
+  killed: boolean,
+  unusable = false,
+  granted = true,
+  expired = false,
+): string {
   if (unusable) return 'Agents cannot trade';
   // "Agents are live" over an ungranted wallet is the same false claim as the explanation below.
   if (!granted) return 'No agents can trade';
+  if (expired) return 'Your permission has ended';
   return killed ? 'All agents stopped' : 'Agents are live';
 }
 /**
@@ -316,6 +351,7 @@ export function killExplanation(
   liveAgents: number,
   unusable = false,
   granted = true,
+  expired = false,
 ): string {
   if (unusable) {
     return 'Your permission names a different bot key than the one running, so nothing can be placed. Grant again to reconnect. Your funds are untouched.';
@@ -331,6 +367,9 @@ export function killExplanation(
    */
   if (!granted) {
     return 'No permission has been granted, so nothing can trade. There is nothing to stop yet.';
+  }
+  if (expired) {
+    return 'This permission reached the end date you set, so nothing can be placed. Grant a new one to carry on. Your funds are untouched.';
   }
   if (killed) return 'Nothing will be placed until you resume. Open positions are untouched.';
   if (liveAgents === 0) {
@@ -352,9 +391,15 @@ export function killExplanation(
  * handler would have called `revoke()` on a policy that does not exist. The action on an ungranted
  * wallet is to grant, and the screen's own permission card already routes there.
  */
-export function killCta(killed: boolean, unusable = false, granted = true): string {
+export function killCta(
+  killed: boolean,
+  unusable = false,
+  granted = true,
+  expired = false,
+): string {
   if (unusable) return 'Reconnect agents';
   if (!granted) return 'Set the limits';
+  if (expired) return 'Grant a new permission';
   return killed ? 'Resume agents' : 'Stop all agents';
 }
 

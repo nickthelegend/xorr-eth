@@ -85,6 +85,8 @@ export type Limits = {
   spentTodayUsd: number;
   remainingUsd: number;
   revoked: boolean;
+  /** Optional: an executor that predates the field cannot answer, and absent is not expired. */
+  expiresAt?: number;
 };
 
 export type DelegationParams = {

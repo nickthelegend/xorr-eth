@@ -32,7 +32,15 @@ import {
   size,
   space,
 } from '@/ui';
-import { delegateUnusable, expiryNote, expiryState, killCta, killExplanation, killTitle } from '@/state/derived';
+import {
+  delegateUnusable,
+  delegationExpired,
+  expiryNote,
+  expiryState,
+  killCta,
+  killExplanation,
+  killTitle,
+} from '@/state/derived';
 import { userSigningNote, userSigningWorks } from '@/chain';
 import { useStore } from '@/state/store';
 import { useAllowlist } from '@/wallet/allowlist';
@@ -111,6 +119,20 @@ export default function Safety() {
    */
   const granted = delegation !== null && delegation !== undefined;
 
+  /*
+   * A permission that ran out.
+   *
+   * The banner near the bottom of this screen has read expiry since it was added, and the badge at
+   * the top did not: an expired policy showed a green dot reading **Live** over "Agents are live",
+   * with the words "Your permission has expired, so nothing can be placed" a scroll below. Two
+   * contradictory sentences in one screen, which is the exact failure `killExplanation` already
+   * carries a docblock about.
+   *
+   * Seen on the hosted deployment — a grant that lapsed at 13:35 on 8 September still reading Live
+   * thirteen hours later, while `/limits` reported `$0 left today` and gave no reason for the zero.
+   */
+  const expired = delegationExpired(delegation, killed);
+
 
   // "2 addresses" was typed in. The allowlist is real and persisted; read it.
   const { addresses } = useAllowlist();
@@ -173,9 +195,11 @@ export default function Safety() {
         const res = await LocalAuthentication.authenticateAsync({
           promptMessage: unusable
             ? 'Reconnect your agents'
-            : killed
-              ? 'Resume your agents'
-              : 'Stop all agents',
+            : expired
+              ? 'Grant a new permission'
+              : killed
+                ? 'Resume your agents'
+                : 'Stop all agents',
         });
         if (!res.success) {
           setLocalError('Not confirmed — nothing changed.');
@@ -189,10 +213,17 @@ export default function Safety() {
        * what "not killed, so the button stops things" used to do — would take the user from a
        * permission that does not work to no permission at all, and call that progress.
        */
-      if (killed || unusable) await signGrant(cap, 86_400_000);
+      /*
+       * An EXPIRED permission is re-granted too, for the same reason a disconnected one is.
+       * Without this branch the button read "Stop all agents" over a policy that had already
+       * stopped itself, and pressing it would have sent `revoke()` for a grant the contract
+       * considers over — a transaction, a wallet prompt and a gas fee to change nothing. The same
+       * mistake the ungranted-wallet case was fixed for.
+       */
+      if (killed || unusable || expired) await signGrant(cap, 86_400_000);
       else await signRevoke();
       setDelegation(await repos.wallet.delegation());
-      setKilled(unusable ? false : !killed);
+      setKilled(unusable || expired ? false : !killed);
     } catch (e) {
       setLocalError(errorText(e));
     }
@@ -229,7 +260,7 @@ export default function Safety() {
             height: DOT,
             borderRadius: radius.full,
             backgroundColor:
-              unusable ? colors.down : killed || !granted ? colors.ink30 : colors.up,
+              unusable || expired ? colors.down : killed || !granted ? colors.ink30 : colors.up,
           }}
         />
         {/*
@@ -238,17 +269,25 @@ export default function Safety() {
         */}
         <Text
           variant="tagSm"
-          color={unusable ? colors.down : killed || !granted ? colors.ink55 : colors.up}
+          color={unusable || expired ? colors.down : killed || !granted ? colors.ink55 : colors.up}
         >
-          {unusable ? 'Disconnected' : !granted ? 'Not granted' : killed ? 'Stopped' : 'Live'}
+          {unusable
+            ? 'Disconnected'
+            : !granted
+              ? 'Not granted'
+              : expired
+                ? 'Expired'
+                : killed
+                  ? 'Stopped'
+                  : 'Live'}
         </Text>
       </View>
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s16 }}>
-        {killTitle(killed, unusable, granted)}
+        {killTitle(killed, unusable, granted, expired)}
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s8 }}>
-        {killExplanation(killed, hiredCount, unusable, granted)}
+        {killExplanation(killed, hiredCount, unusable, granted, expired)}
       </Text>
 
       {/*
@@ -529,8 +568,8 @@ export default function Safety() {
       {granted ? (
         <>
           <Button
-            label={killCta(killed, unusable, granted)}
-            variant={killed || unusable ? 'primary' : 'destructive'}
+            label={killCta(killed, unusable, granted, expired)}
+            variant={killed || unusable || expired ? 'primary' : 'destructive'}
             height={size.buttonLg}
             loading={busy}
             disabled={!userSigningWorks}
@@ -542,7 +581,15 @@ export default function Safety() {
             align="center"
             style={{ marginTop: space.s12 }}
           >
-            Takes effect in under a second across every device.
+            {/*
+              The promise is about a STOP, and it is not true of the other things this button does.
+              Granting a fresh permission is a signature and a transaction, not a sub-second flag,
+              and saying otherwise under a button that is about to open a wallet is a small lie on
+              the screen least able to afford one.
+            */}
+            {killed || unusable || expired
+              ? 'You will be asked to sign. Nothing changes until you do.'
+              : 'Takes effect in under a second across every device.'}
           </Text>
         </>
       ) : null}
