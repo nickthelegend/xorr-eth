@@ -24,6 +24,7 @@
 import React from 'react';
 import { ActivityIndicator, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Press } from './Press';
+import { DOUBLE_TAP_MS, createPressGuard } from './pressGuard';
 import { Text } from './Text';
 import { border, colors, radius, size, space } from './tokens';
 
@@ -92,26 +93,26 @@ export interface ButtonProps {
  * cannot have an in-flight state to protect.
  */
 /** Long enough to absorb a double tap, short enough that a real second press still lands. */
-const DOUBLE_TAP_MS = 800;
+
 
 function useGuardedPress(
   onPress: (() => void | Promise<unknown>) | undefined,
   loading: boolean,
 ) {
-  const inFlight = React.useRef(false);
+  // The lock itself lives in `pressGuard.ts`, where it can be tested; see the note there.
+  const guard = React.useRef(createPressGuard());
   React.useEffect(() => {
     // A screen that finished its own work and cleared `loading` releases the guard with it, so a
     // handler that never returns a promise still cannot wedge the button shut.
-    if (!loading) inFlight.current = false;
+    if (!loading) guard.current.release();
   }, [loading]);
 
   return React.useCallback(() => {
-    if (!onPress || inFlight.current) return;
-    inFlight.current = true;
+    if (!onPress || !guard.current.take()) return;
     const result = onPress();
     if (result && typeof (result as Promise<unknown>).finally === 'function') {
       void (result as Promise<unknown>).finally(() => {
-        inFlight.current = false;
+        guard.current.release();
       });
       return;
     }
@@ -129,7 +130,7 @@ function useGuardedPress(
      * and are untouched; this is only the one primary action a screen has.
      */
     setTimeout(() => {
-      inFlight.current = false;
+      guard.current.release();
     }, DOUBLE_TAP_MS);
   }, [onPress]);
 }
