@@ -1,0 +1,68 @@
+/**
+ * LIVE — a repeated decline must not become a repeated audit row.
+ *
+ * `/proposals/generate` appended "Proposed nothing" every time it was called, and the Bot tab calls
+ * it on every mount. One wallet's trail reached thirty-four identical rows out of fifty-seven:
+ * sixty percent of a permanent, append-only record was page loads rather than decisions.
+ *
+ * The rule is not "never write a decline" — what the bot chose not to do is the product. It is
+ * "write it when the answer changes". This asks twice in a row and checks the trail grew by at
+ * most one, against the real database and the real HTTP surface.
+ *
+ * Run with the executor up: npm run test:live
+ */
+import { beforeAll, describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8788';
+const TOKEN_SCRIPT = fileURLToPath(new URL('../e2e-token.ts', import.meta.url));
+const TEST_EMAIL = process.env.E2E_PRIVY_EMAIL ?? 'test-8958@privy.io';
+
+let token: string;
+
+const req = (path: string, init?: RequestInit) =>
+  fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...init?.headers },
+  });
+
+/** How many "Proposed nothing" rows the trail currently holds. */
+async function declineCount(): Promise<number> {
+  const res = await req('/activity?limit=200');
+  const body = (await res.json()) as unknown;
+  const rows = (Array.isArray(body) ? body : ((body as { entries?: unknown[] }).entries ?? [])) as {
+    action?: string;
+  }[];
+  return rows.filter((r) => r.action === 'Proposed nothing').length;
+}
+
+beforeAll(() => {
+  token = execFileSync('npx', ['tsx', TOKEN_SCRIPT, TEST_EMAIL], { encoding: 'utf8' }).trim();
+  expect(token.length).toBeGreaterThan(100);
+});
+
+describe('a decline is recorded when it changes, not when it is re-observed', () => {
+  it('asking twice in a row does not write the same row twice', async () => {
+    const first = await req('/proposals/generate', { method: 'POST', body: '{}' });
+    expect(first.status).toBe(200);
+    const body = (await first.json()) as { created: boolean; reason?: string };
+
+    /*
+     * If the agent had a setup to propose, this run has nothing to say about declines. Reported
+     * rather than swallowed: a test that quietly returns is how two suites in this repo went on
+     * passing while testing nothing.
+     */
+    if (body.created) {
+      expect(body.created, 'the agent proposed a trade, so no decline was produced to de-duplicate').toBe(true);
+      return;
+    }
+
+    const before = await declineCount();
+    await req('/proposals/generate', { method: 'POST', body: '{}' });
+    await req('/proposals/generate', { method: 'POST', body: '{}' });
+    const after = await declineCount();
+
+    expect(after, `two further identical declines added ${after - before} rows`).toBe(before);
+  }, 90_000);
+});

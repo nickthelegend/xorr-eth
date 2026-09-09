@@ -161,16 +161,38 @@ extra.post('/proposals/generate', async (c) => {
   const tone = ((await c.req.json().catch(() => ({}))) as { tone?: ToneId }).tone ?? 'dry';
   const result = await propose(id, tone);
   if (!result.created) {
-    // A decline is a first-class event: screen 15 shows what the bot chose NOT to do.
+    /*
+     * A decline is a first-class event — screen 15 exists to show what the bot chose NOT to do —
+     * but the SAME decline is one decision observed again, not a new one.
+     *
+     * This appended unconditionally, and the Bot tab calls it on every mount. Thirty-four of one
+     * wallet's fifty-seven audit rows were "Proposed nothing", all identical: sixty percent of a
+     * permanent, append-only trail was a record of page loads rather than of decisions, and the
+     * catch-up panel showed the same sentence twice above "add 18 more". A log that fills with
+     * its own noise is one nobody reads, which costs exactly the property it exists to have.
+     *
+     * So it is written when the answer CHANGES. If the bot's last word on a proposal was already
+     * this decline, re-observing it adds nothing; if it proposed something in between, or the
+     * reason is different, that is new and it is recorded.
+     */
     if (result.reason === 'no_setup' || result.reason === 'no_market_data') {
-      await append({
-        walletId: id,
-        agent: 'Momentum Scout',
-        action: `Proposed nothing`,
-        detail: result.detail,
-        kind: 'block',
-        payload: { reason: result.reason },
-      });
+      const last = await one<{ action: string; detail: string | null }>(
+        `SELECT action, detail FROM audit_log
+          WHERE wallet_id = $1 AND (action LIKE 'Proposed%' OR action LIKE 'Skipped%')
+          ORDER BY seq DESC LIMIT 1`,
+        [id],
+      );
+      const repeat = last?.action === 'Proposed nothing' && last.detail === result.detail;
+      if (!repeat) {
+        await append({
+          walletId: id,
+          agent: 'Momentum Scout',
+          action: `Proposed nothing`,
+          detail: result.detail,
+          kind: 'block',
+          payload: { reason: result.reason },
+        });
+      }
     }
     return c.json(result);
   }

@@ -38,6 +38,36 @@ import { currentWallet, requireWallet } from './wallet-context.js';
 
 export const strategyRoutes = new Hono();
 
+/**
+ * A moment written the way a record should write one: in UTC, and saying so.
+ *
+ * This was `toDateString()`, which formats in the SERVER's timezone. The server runs in UTC and
+ * the reader does not: a strategy created from IST whose first run is 2026-09-16T22:03Z went into
+ * the trail as "First run Wed Sep 16 2026" while the form that created it, formatting locally, had
+ * just said "Thu, Sep 17". The same instant, two different days, in two places in one app — and
+ * the one that is wrong for the reader is the one written permanently into an append-only log.
+ *
+ * The row cannot know the reader's timezone, and guessing one would only move the error. Naming
+ * the zone removes it: the cap already resets "at midnight UTC" on `/limits`, and every run is
+ * computed in UTC, so this is the unit the rest of the system already speaks.
+ */
+function utcStamp(at: Date): string {
+  const date = at.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  const time = at.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  });
+  return `${date}, ${time} UTC`;
+}
+
+
 
 const StrategyInput = z.object({
   /**
@@ -551,7 +581,7 @@ strategyRoutes.post('/strategies', async (c) => {
     walletId: w.id,
     agent: agentName,
     action: `Created ${body.label}`,
-    detail: nextRunAt ? `First run ${nextRunAt.toDateString()}.` : 'Ready to run.',
+    detail: nextRunAt ? `First run ${utcStamp(nextRunAt)}.` : 'Ready to run.',
     kind: 'risk',
     payload: { strategyId: row!.id },
   });
