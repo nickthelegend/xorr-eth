@@ -196,6 +196,10 @@ export default function Judge() {
 }
 
 function Tally({ d }: { d: Report }) {
+  /* A skip that happened for want of a wallet identifies itself; see the note below. */
+  const walletGatedSkips = d.checks.filter(
+    (c) => c.status === 'skip' && c.observed.startsWith('No wallet on this request'),
+  ).length;
   const allGood = d.failed === 0;
   return (
     <SheetCard
@@ -213,8 +217,23 @@ function Tally({ d }: { d: Report }) {
       </View>
       {d.skipped > 0 ? (
         <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s6 }}>
-          {d.skipped} skipped — those need a wallet address, and none was given. Skipped is not
-          passed.
+          {/*
+            Do not invent a reason for the skip.
+            
+            This said "those need a wallet address, and none was given" for every skip, whatever
+            caused it. Signed in with a real wallet, the summary read "19/20 · 1 skipped — those
+            need a wallet address, and none was given" while the only skipped row was the tokenized
+            equities check, which skips because the tokens do not function on Sepolia and says so at
+            length on its own line. Nineteen of the checks had used the wallet to get their answer.
+            
+            A screen whose entire purpose is that its claims can be trusted cannot afford a
+            confidently wrong sentence in its own header. Wallet-gated skips are detectable — those
+            checks report "No wallet on this request." — so say that when it is true, and otherwise
+            point at the rows, which each carry their own reason.
+          */}
+          {walletGatedSkips === d.skipped
+            ? `${d.skipped} skipped — those need a wallet address, and none was given. Skipped is not passed.`
+            : `${d.skipped} skipped — each says why on its own row. Skipped is not passed.`}
         </Text>
       ) : null}
     </SheetCard>

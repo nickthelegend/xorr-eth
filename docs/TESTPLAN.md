@@ -1,143 +1,109 @@
-# xorr — ETH Online test plan and results
+# Test plan
 
-Every item states the SPECIFIC expected result. A pass means the observed result matched it, with
-a clean console and no failed network requests. "The button did something" is a fail.
+Written before execution. Every item states the SPECIFIC expected result. A pass means the real
+result matches this text, with no console error and no failed request on that screen.
 
-Executed 2026-09-06. Surfaces: app on `:8082` (Expo web, real Chrome), executor on `:8788`,
-XorrDelegation at `0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e` on public Base Sepolia, Aqua at
-`0x1111113CCf1426A8E30e2bfF5E005d929bF6a90a` on a Base **mainnet** fork, subgraph on Studio.
+Target: the deployed app, `https://web-production-3e214.up.railway.app` (Base Sepolia), against the
+public executor `executor-production-1659.up.railway.app`. Where an item can only be true on the
+mainnet fork, that is stated and the fork deployment is used instead.
 
-**Result: 61 PASS · 1 PARTIAL · 2 FAIL (both known, both stated below).**
-
-Automated: 143 app · 42 server · 36 contract · 33 live-API — 254 green.
+Signed in as a real Privy account with a real embedded wallet.
 
 ---
 
-## The two environments, and why there are two
+## A · Infrastructure and chain (7)
 
-Aqua, 1inch and the tokenized equities exist only on Base **mainnet**. XorrDelegation is deployed
-to public Base **Sepolia**, where a user can grant and revoke for real without spending money.
+| # | Item | Correct means |
+|---|---|---|
+| A1 | Hosted app reachable | `GET /` returns 200 and the app boots to `/welcome` when signed out |
+| A2 | Executor (Sepolia) healthy | `/health` → `status: up`, `chain: base-sepolia`, postgres dependency `up` |
+| A3 | Executor (fork) healthy | `/health` → `status: up`, `chain: base-fork`, postgres `up` |
+| A4 | `XorrDelegation` deployed on Base Sepolia | `eth_getCode` returns >7000 bytes at `0xb14CF3D0…0a4e` |
+| A5 | Postgres persisted, not in-memory | Audit chain re-verifies N of N rows; a row written in one session is present after an executor restart |
+| A6 | Delegation subgraph synced | `_meta.hasIndexingErrors` false, block within ~10 of the Sepolia head, ≥1 policy indexed |
+| A7 | Dev screens sealed in production | `/_dev/ui`, `/_dev/ui-edge`, `/_dev/fidelity`, `/_dev/boom` each redirect to `/` — no gallery, no throw button |
 
-- **Sepolia** proves the permission layer: a real embedded wallet signs a real `grant`, the cap is
-  enforced on-chain, revoke stops the bot, and the subgraph indexes all of it. It cannot fill a
-  trade, and the executor now says so instead of trying.
-- **Base mainnet fork** proves settlement: real router, real USDC, real Aave, real equity tokens,
-  real fills. Everything is genuine except that the chain is a local copy.
+## B · Core user flow, end to end (8)
 
-Nothing is claimed to work in an environment where it was not run.
+| # | Item | Correct means |
+|---|---|---|
+| B1 | Sign in with email OTP | Privy accepts the code; all four onboarding steps turn green (Signed in / Wallet created / Network ready / Ready to fund) |
+| B2 | Embedded wallet is the one used | The address shown on `/profile` is the Privy **embedded** wallet, not an injected browser extension |
+| B3 | New wallet receives gas | A wallet the executor has never seen is sent 0.002 test ETH, and the trail records it |
+| B4 | Grant the permission | Four Privy dialogs (3 approvals + `grant`), each confirming on Base Sepolia; no browser-extension dialog appears |
+| B5 | Permission verified on chain | `/verify?owner=…` → `policy` PASS with the chosen cap, `revoked=false`, `delegate matches`; `venues` PASS "1 of 1 granted; a control address is correctly denied" |
+| B6 | App reflects the grant | `/safety` shows LIVE, `/delegation` shows the cap and the embedded wallet as Owner, `/limits` shows that cap as remaining — all three agreeing |
+| B7 | Kill switch revokes on chain | Pressing "Stop all agents" signs a `revoke`; `/verify` then reports `revoked=true` and `$0 left today` |
+| B8 | App reflects the revoke | `/safety` shows STOPPED with the CTA changed to "Resume agents"; `/limits` shows `$0.00 cap` — both matching the chain |
 
----
+## C · Strategy lifecycle (5)
 
-## S — Sponsor qualification
+| # | Item | Correct means |
+|---|---|---|
+| C1 | Create a recurring buy | Strategy persists; `/strategies` count increments; `/schedule` lists it with the correct next-run date |
+| C2 | Creation attributed correctly | Activity row reads "Created …" attributed to `xorr`, NOT to a persona that did not run it |
+| C3 | Run now, on a chain that cannot fill | A readable sentence — "This network cannot settle trades. Prices are real; filling needs Base or a Base fork." No status code, no JSON, no truncation |
+| C4 | Idempotence | Running the same strategy again in the same period returns "Already ran this period." and creates no second run |
+| C5 | Real fills exist somewhere | The fork deployment reports ≥1 filled run through 1inch with a transaction hash |
 
-| # | Item | Result | Evidence |
-|---|---|---|---|
-| S1 | 1inch: official Aqua contract | **PASS** | `XorrAquaBook` extends `AquaApp`; 22 fork tests run against `0x1111113CCf…`, asserting `code.length > 0` there first |
-| S2 | 1inch: on-chain token transfers | **PASS** | `test_TakerSwapMovesRealTokens`, `test_UserBuysAShare`: maker +USDC, taker +token, asserted before/after |
-| S3 | 1inch: SwapVM used | **FAIL** | Not built. Aqua is used; SwapVM is not. Scored higher by the sponsor — the one deliberate gap |
-| S4 | 1inch: real git history | **PASS** | 15 commits, distinct messages, no squash |
-| S5 | Graph: live data from a Graph provider | **PASS** | Studio subgraph, `hasIndexingErrors: false`, block 46,440,292 |
-| S6 | Graph: load-bearing | **PASS** | `/agent/decision` returns `act:false, reason:"revoked"` seconds after an on-chain revoke — a fact Postgres cannot know |
-| S7 | Graph: not "simply querying one Subgraph" | **PARTIAL** | Two subgraphs, joined: `xorr` (permission) + `xorr-aqua` (Aqua venue depth). The join picks the route. The second is built and pinned (`QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ`) but **not deployed** — Studio needs the slug created in the dashboard, which is a click I cannot make. Until then the route resolves to `1inch` and says why |
-| S8 | Privy: auth is real | **PASS** | No token → 401; forged JWT → 401 "signature verification failed"; real token → 200 |
-| S9 | Privy: embedded wallet is the on-chain owner | **PASS** | `0x95A0b368588713011a15f4b1041423f31B08e615` signed `grant` in `0x596f4c08…`; `policyOf` returns that wallet's policy |
+## D · Money-moving guards (6)
 
-## A — App screens (real browser, console + network checked on every one)
+| # | Item | Correct means |
+|---|---|---|
+| D1 | Swap over balance | Amount above the held balance disables "Review swap" and states the real holding |
+| D2 | Swap balance while unknown | A failed positions read shows an em dash and "tap to retry", never a confident `0.0000` |
+| D3 | Order over settled cash | "That is more than the $0.00 you have settled." and the button does not submit |
+| D4 | Send with empty allowlist | Blocked, with "Add a destination to your allowlist first." |
+| D5 | Flatten with nothing held | "Sell everything" disabled, "Nothing to sell." stated |
+| D6 | Unsettleable instrument | `/order/NVDAc` states the instrument cannot be settled on this chain and offers no order |
 
-| # | Screen | Result | Observed |
-|---|---|---|---|
-| A1 | `/welcome` | PASS | Wordmark, tagline, 3 pills, orbs, CTA. Console clean |
-| A2 | `/goals` | PASS | Chips toggle, risk segmented, caption follows the pick |
-| A3 | `/wallet` | PASS | 4 status rows; real Privy login completed; embedded wallet created |
-| A4 | `/fund` | PASS | 3 methods, fee and availability change with the pick |
-| A5 | `/delegate` | PASS | 4 consequence cards, cap stepper, real signature flow |
-| A6 | `/proposal` | PASS | 55/30/15, totals 100, editing clears approval |
-| A7 | `/` Home | PASS | Redirects to `/welcome` with no wallet; with one, real balance, agents, WETH at $2,474.70, Aave 3.93% |
-| A8 | `/markets` | PASS | 5 classes; crypto and stocks live, commodities/indices/pre-IPO tagged SIMULATED |
-| A9 | `/bot` | PASS | Agent header, proposal or decline, never blank |
-| A10 | `/strategies` | PASS | Shows "Buy NVDA weekly · $50 · Live" from the database |
-| A11 | `/holdings` | PASS | Portfolio value, allocation, real wallet address |
-| A12 | `/activity` | PASS | Filters, rows from the audit log |
-| A13 | `/history` | PASS | Reads The Graph; empty state is honest |
-| A14 | `/safety` | PASS | LIVE chip; **kill switch executed on-chain** (see C-extra) |
-| A15 | `/swap` | PASS | 0.1 WETH ≈ $248.95, real 1inch route |
-| A16 | `/order/:sym` | PASS | `$250 → 1.0781 NVDAc` and `0.1004 WETH`, both from live prices |
-| A17 | `/briefing` | PASS | Real RSS headlines |
-| A18 | `/settings` | PASS | Wallet `0x95…e615`, network, **`$1,600/day` read from the chain** |
-| A19 | `/search` | PASS | Filters across classes; loading and empty states distinct |
-| A20 | Unknown route | PASS | "Unmatched Route", no crash |
-| — | 20 further routes | PASS | alerts, allowlist, recovery, send, inbox, chart, asset, perp, position, auto-close, watchlist, dca, roster, leaderboard, intro, settings, backtest, legal, `_dev/*` — all clean |
+## E · Data honesty (6)
 
-**Console:** a fresh load of every route produces **zero errors from this codebase**. Two remain
-from Privy's own SDK and are not ours to fix: `isActive` leaking to the DOM from its
-`TransactionDetails` component, and a `balanceOf` on a token absent from Sepolia in its
-`getErc20Balance` module.
+| # | Item | Correct means |
+|---|---|---|
+| E1 | Prices are real | Crypto prices come from CoinGecko and move between loads; equity prices come from a live 1inch route |
+| E2 | Simulated markets labelled | Every instrument with `feed: simulated` carries a SIMULATED tag on BOTH `/markets/:class` and `/movers` |
+| E3 | Aave rate real, and gated | The APY is read from the pool; on a chain without Aave the sweep is disabled and says why |
+| E4 | Cross-check | `/crosscheck/WETH` shows two independent sources and their spread |
+| E5 | Index coverage stated | When the subgraph indexes a different contract than the build trades, `/history` and `/graph` say so instead of "nothing has settled" |
+| E6 | Chain named correctly | `/fund` and `/tokens` name the chain this build actually settles on, with its addresses |
 
-## E — Executor API
+## F · Proof surfaces (5)
 
-| # | Endpoint | Result | Observed |
-|---|---|---|---|
-| E1 | `GET /health` no auth | PASS | 200 with db, chain, contract |
-| E2 | Any route, no token | PASS | 401 `{"error":"unauthorized","detail":"Missing bearer token."}` |
-| E3 | Forged JWT | PASS | 401 "signature verification failed" |
-| E4 | `GET /agent/decision` | PASS | `act:true, sizeUsd:100, observedRemainingUsd:1600` + route + rationale |
-| E5 | `GET /graph/health` | PASS | `{block: 46440068, healthy: true}` |
-| E6 | `GET /swap/quote` | PASS | 250 USDC → 0.10044 WETH via Elfomofi + Hanji, with minimumOut |
-| E7 | `POST /strategies` over cap | PASS *(was FAIL)* | 400 `over_cap`; cumulative $50 + $1,600 also refused |
-| E8 | Malformed body | PASS *(was FAIL)* | 400 `invalid_json` / `invalid_request`, never a 500 |
-| E9 | Untradable symbol | PASS | 400 naming the symbols this chain can settle |
+| # | Item | Correct means |
+|---|---|---|
+| F1 | `/verify` public | Answers with no account; ≥13 checks pass, 0 fail |
+| F2 | `/judge` in-app | Renders the same checks live with counts, and shows a skip as a skip rather than a pass |
+| F3 | Audit hash chain | `/audit/chain` reports "Unbroken" and N of N rows re-hash |
+| F4 | Export | Produces a file with a stated row count from a real `200` on `/activity/export` |
+| F5 | Approvals read from chain | `/approvals` lists real per-token allowances and flags an unlimited one |
 
-## C — Contracts
+## G · Edge cases and interruptions (8)
 
-| # | Item | Result | Observed |
-|---|---|---|---|
-| C1 | Deployed | PASS | 14,317 bytes at the Sepolia address |
-| C2 | Grant | PASS | delegate `0xe992…E403`, cap 1,600e6, expiry, `revoked:false` |
-| C3 | Delegated spend | PASS | Fork: −250 USDC, +0.1003 WETH to the **user**, cap 1000 → 750 |
-| C4 | Over-cap spend | PASS | Reverts; 14 unit tests + fork assertion |
-| C5 | Unlisted venue | PASS | `VenueNotAllowed`; on-chain `isVenueAllowed` false for a random address, true for the router |
-| C6 | Non-delegate caller | PASS | `NotDelegate` |
-| C7 | Aqua ship moves no tokens | PASS | Maker, app and Aqua balances all unchanged; virtual balances set |
-| C8 | Aqua taker swap | PASS | Real ERC-20 movement both legs |
-| C9 | Aqua price band | PASS | Quote and swap both revert outside the band |
-| C10 | Aqua dock without the bot | PASS | Maker exits alone, even after revoking |
-| C11 | **Aqua path enforces the cap** | PASS *(was a real hole)* | `fillForDelegation` is delegation-only; the bot routes through `spend()` |
-| C12 | **Stocks through Aqua** | PASS | 7/7: the bot buys 1.0686 bNVDA for $250 under policy; cap, revoke and venue allowlist all bite |
-| C13 | **Kill switch** | PASS | Revoke signed in-app → `policyOf.revoked: true` → executor stands down → new strategies refused → subgraph indexed `0xd32d3085…` |
+| # | Item | Correct means |
+|---|---|---|
+| G1 | Unknown market class | Names the classes that exist; no blank screen |
+| G2 | Unknown legal document | Says the document does not exist; does NOT serve a different one |
+| G3 | Unknown agent | Says the agent is not on the roster; no "Get Started" for a nonexistent agent |
+| G4 | Invalid ids | `/position/999`, `/runs/999`, `/audit/999`, `/agent/999`, `/strategy/999`, `/auto-close/999` each give a specific not-found sentence |
+| G5 | Permanent API refusal | `/oracle/WETH` shows the server's sentence with NO retry button and no JSON |
+| G6 | Refresh mid-load | Interrupting a loading screen three times recovers with correct data and no console error |
+| G7 | Double submit | Submitting twice rapidly creates exactly one record |
+| G8 | Small screen | 375px wide: no horizontal overflow, guards and CTAs still legible |
 
-## G — Subgraph
+## H · Whole-surface sweep (2)
 
-| # | Item | Result | Observed |
-|---|---|---|---|
-| G1 | Synced | PASS | `hasIndexingErrors: false`, block 46,440,292 |
-| G2 | Policy indexed | PASS | Matches `policyOf` field for field |
-| G3 | Spend indexed | PASS | Real tx hashes, verifiable on Basescan |
-| G4 | Daily rollup | PASS | Per-UTC-day entity; empty for a wallet that has not spent, which is correct |
-| G5 | Unknown address | PASS | `null`, never an invented policy |
+| # | Item | Correct means |
+|---|---|---|
+| H1 | All 93 product routes render | Every non-`_dev` route renders its real content or an honest empty state — no crash, no error boundary |
+| H2 | Zero console/network errors | No console error on any screen; every executor request 2xx/204 |
 
----
+## I · Untestable here — stated, not marked pass
 
-## The two things that are not done
-
-1. **S3 — SwapVM is not built.** Aqua is used properly and deeply; SwapVM is not used at all. This
-   is a missing feature, not a broken one.
-2. **S7 — the second subgraph is built but not deployed.** Creating a subgraph slug in Subgraph
-   Studio is a dashboard action. The manifest, schema, mappings and WASM are complete and pinned to
-   IPFS; once the `xorr-aqua` slug exists, `graph deploy` and `AQUA_SUBGRAPH_URL` finish it.
-
-## What running this found
-
-Fourteen defects, every one from executing the flow rather than reading the code. The five that
-mattered:
-
-- **The Aqua path did not enforce the daily cap.** `swapAsDelegate` re-read the policy fields and
-  then pulled the user's tokens itself, never calling `spend()`. The cap and the venue allowlist
-  did nothing on that path.
-- **`POST /strategies` skipped the cap check entirely** when a database row was missing, so a
-  wallet with a $1,600 on-chain cap accepted a $999,999/day strategy. The guard's failure mode was
-  to allow.
-- **The web client could never authenticate.** CORS omitted `authorization`, so every request with
-  a token died in the preflight and the whole app read as logged out.
-- **Swap output went to the delegation contract, not the user** — 1inch defaults the receiver to
-  `from`, which would have made a non-custodial product custodial.
-- **The asset screen drew Solana's chart** under any symbol with no real candles.
+| # | Item | Why |
+|---|---|---|
+| I1 | Base mainnet settlement | Contract not deployed on mainnet; deploying spends real money |
+| I2 | 1inch fills on the hosted app | 1inch has no Sepolia liquidity — real fills verified on the fork instead (C5) |
+| I3 | AI chat replies from a model | No LLM key exists in the repo |
+| I4 | Aqua venue subgraph | Built and pinned, but `graph deploy` needs a Studio slug that does not exist |
+| I5 | SwapVM real fill | No maker has shipped a SwapVM program; contract covered by 10 fork tests |
