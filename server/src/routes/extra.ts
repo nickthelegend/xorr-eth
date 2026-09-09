@@ -7,7 +7,7 @@ import { append } from '../audit/log.js';
 import { backtestDca, backtestGrid, backtestMomentum, type Lookback } from '../backtest/engine.js';
 import { leaderboard } from '../agents/leaderboard.js';
 import { PERSONAS } from '../bot/personas.js';
-import { speak, fallbackLine } from '../bot/llm.js';
+import { speak } from '../bot/llm.js';
 import { TONE_INSTRUCTIONS, type ToneId } from '../bot/tone.js';
 import { briefing } from '../news/feed.js';
 import { propose } from '../bot/propose.js';
@@ -308,10 +308,21 @@ extra.post('/bot/say', async (c) => {
   });
 
   if (out.ok) return c.json({ text: out.text, model: out.model, source: 'model' });
-  // The facts half of a message is always rendered by the client from real records, so a rejected
-  // voice segment costs a quip and nothing else.
+  /*
+   * No model, no text. `null`, not a written-in-advance line.
+   *
+   * This returned the persona's own bible line, and the chat client had to learn to ignore it —
+   * its docblock records asking "why did the CBBTC buy fail?" and getting back "Nothing worth
+   * chasing today. Ranges are thin and the tape is quiet." The client was fixed; the API kept
+   * emitting the line, so every other caller still received a confident market remark that nothing
+   * measured. `/briefing` was one of them, and it captioned three unrelated headlines with the
+   * same sentence.
+   *
+   * The facts half of every message is rendered by the client from real records regardless, so an
+   * absent voice segment costs a quip and never information.
+   */
   return c.json({
-    text: fallbackLine(body.persona),
+    text: null,
     source: 'fallback',
     reason: out.reason,
     detail: out.detail,

@@ -236,7 +236,7 @@ export const LocalRepositories: Repositories = {
     },
     async ask({ agentId, question, tone }) {
       const res = await api
-        .post<{ text: string; source: 'model' | 'fallback' }>('/bot/say', {
+        .post<{ text: string | null; source: 'model' | 'fallback' }>('/bot/say', {
           persona: agentId,
           situation: `The user asks: "${question}". Answer in one or two sentences, without naming any figure.`,
           tone,

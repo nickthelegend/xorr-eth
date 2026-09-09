@@ -107,12 +107,22 @@ export default function Briefing() {
                       width: DOT,
                       height: DOT,
                       borderRadius: radius.full,
-                      backgroundColor: colors.up,
+                      backgroundColor: n.take ? colors.up : colors.ink30,
                       marginTop: space.s4,
                     }}
                   />
-                  <Text variant="secondarySm" color={colors.ink45} style={{ flex: 1 }}>
-                    {n.take}
+                  {/*
+                    A take, or an admission that there is none — never a written-in-advance line
+                    dressed as one. With no model configured this rendered the same sentence under
+                    three unrelated headlines, and on an empty wallet that sentence
+                    ("Everything is inside its limits") described positions that did not exist.
+                  */}
+                  <Text
+                    variant="secondarySm"
+                    color={n.take ? colors.ink45 : colors.ink28}
+                    style={{ flex: 1 }}
+                  >
+                    {n.take ?? 'No agent comment — this build has no language model configured.'}
                   </Text>
                 </View>
               </SheetCard>

@@ -11,7 +11,7 @@
  * else: the model writes the sentence, the app renders any number.
  */
 import { query } from '../db/index.js';
-import { speak, fallbackLine } from '../bot/llm.js';
+import { speak } from '../bot/llm.js';
 import { TONE_INSTRUCTIONS, type ToneId } from '../bot/tone.js';
 import type { PersonaId } from '../bot/personas.js';
 
@@ -125,7 +125,17 @@ export type BriefingCard = {
   tag: string;
   t: string;
   headline: string;
-  take: string;
+  /**
+   * The agent's comment on this headline, or `null` when there is no model to produce one.
+   *
+   * Nullable rather than filled in. It used to fall back to the persona's written line, and the
+   * result was three unrelated headlines each captioned "Everything is inside its limits. There is
+   * nothing for me to do." — the same sentence three times, and on a wallet holding nothing it was
+   * also a statement about positions that do not exist. `source` was already reported honestly and
+   * the screen rendered `take` regardless, which is the shape of every fallback that reaches a
+   * user: the metadata told the truth and the copy did not.
+   */
+  take: string | null;
   tagBg: string;
   tagFg: string;
   source: 'model' | 'fallback';
@@ -154,7 +164,7 @@ export async function briefing(walletId: string, tone: ToneId = 'dry'): Promise<
       tag: h.tag,
       t: relativeTime(h.at),
       headline: h.title,
-      take: said.ok ? said.text : fallbackLine(persona),
+      take: said.ok ? said.text : null,
       tagBg: style.bg,
       tagFg: style.fg,
       source: said.ok ? 'model' : 'fallback',

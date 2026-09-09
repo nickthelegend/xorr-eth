@@ -70,7 +70,8 @@ export interface BotRepository {
     agentId: string;
     question: string;
     tone: 'dry' | 'sharp' | 'flat';
-  }): Promise<{ text: string; source: 'model' | 'fallback' }>;
+    /** `text` is `null` when no model answered — the caller must say so, never invent one. */
+  }): Promise<{ text: string | null; source: 'model' | 'fallback' }>;
 }
 
 export interface StrategyRepository {

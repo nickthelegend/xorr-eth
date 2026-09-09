@@ -162,16 +162,3 @@ export async function speak(params: {
   }
 }
 
-/**
- * What the user sees when the model is unavailable or off-contract.
- *
- * This is NOT a silent fallback to fake personality. Two things make it honest:
- *   - The FACTS half of every message is rendered by code from real records regardless, so a
- *     rejected voice segment costs the user a quip, never information.
- *   - The line returned here is the persona's own written line from the bible. It states no
- *     number and claims nothing about the market.
- * The alternative — rendering unvalidated model output — is the thing we refuse outright.
- */
-export function fallbackLine(persona: PersonaId): string {
-  return PERSONAS[persona].says[2] ?? PERSONAS[persona].says[0]!;
-}

@@ -7,7 +7,7 @@
  * Run: LIVE=1 npx vitest run src/bot/llm.live.test.ts
  */
 import { describe, expect, it } from 'vitest';
-import { MODEL, fallbackLine, speak, validateVoice } from './llm.js';
+import { MODEL, speak, validateVoice } from './llm.js';
 import { PERSONAS, systemPrompt } from './personas.js';
 import { TONE_INSTRUCTIONS } from './tone.js';
 
@@ -114,11 +114,18 @@ describe('11.9 personality regression — real model, real output', () => {
     600_000,
   );
 
-  it('the fallback line is the persona’s own, and it satisfies the contract', () => {
+  /*
+   * There is no fallback line any more, and that is the contract now.
+   *
+   * A written-in-advance sentence returned in place of a model's answer reads as the agent's take
+   * on the thing being asked about, and it is not one. The bible lines survive as few-shot
+   * examples inside the system prompt — which is what they were written for — and every caller
+   * that used to receive one now receives `null` and says so.
+   */
+  it('the persona bible is prompt material, never user-facing copy', () => {
     for (const id of PERSONA_IDS) {
-      const line = fallbackLine(id);
-      expect(validateVoice(line)).toEqual({ ok: true });
-      expect(PERSONAS[id].says).toContain(line);
+      // Still in character, so they remain usable as examples for the model.
+      for (const line of PERSONAS[id].says) expect(validateVoice(line)).toEqual({ ok: true });
     }
   });
 });

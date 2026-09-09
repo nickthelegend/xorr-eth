@@ -147,7 +147,17 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
 
     if (data.proposal) {
       setProposal(data.proposal);
-      append(botProse(data.proposal.agent, [voice(data.proposal.opening)]));
+      /*
+       * The opening line is spoken only when a model wrote one.
+       *
+       * It used to fall back to the persona's pre-written sentence, which reads as the agent's
+       * take on THIS setup and is not. The proposal card below carries the size, the entry, the
+       * stop, the target and the cap it fits inside — all computed from real prices — so the
+       * absence costs the user a sentence, never a fact.
+       */
+      if (data.proposal.opening) {
+        append(botProse(data.proposal.agent, [voice(data.proposal.opening)]));
+      }
       append(proposalMessage(data.proposal.id));
       return;
     }
@@ -218,7 +228,7 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
         append(
           botProse(agentName, [
             voice(
-              reply.source === 'fallback'
+              reply.source === 'fallback' || !reply.text
                 ? 'I cannot answer that here — no language model is configured in this build, and I will not read you a stock line as though it were an answer.'
                 : reply.text,
             ),

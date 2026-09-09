@@ -17,7 +17,7 @@ import { one, query } from '../db/index.js';
 import { priceOf } from '../market/prices.js';
 import { getJson } from '../http/get.js';
 import { evaluate } from '../rules/engine.js';
-import { speak, fallbackLine } from './llm.js';
+import { speak } from './llm.js';
 import { TONE_INSTRUCTIONS, type ToneId } from './tone.js';
 import { readPolicy } from '../evm/delegation.js';
 import { SETTLEMENT_SYMBOL } from '../venues/oneinch.js';
@@ -40,7 +40,8 @@ const IDS: Record<string, string> = {
 export type ProposalPayload = {
   symbol: string;
   status: string;
-  opening: string;
+  /** The agent's read of this setup, or `null` when no model produced one. */
+  opening: string | null;
   action: string;
   notional: string;
   entry: string;
@@ -173,7 +174,13 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
   const payload: ProposalPayload = {
     symbol,
     status: `Watching ${Object.keys(IDS).length} markets`,
-    opening: said.ok ? said.text : fallbackLine('momentum-scout'),
+    /*
+     * No model, no opening line. The rest of this proposal — the size, the entry, the stop, the
+     * target, the cap it fits inside — is computed from real prices and the user's real policy,
+     * and it stands on its own. A written-in-advance sentence dressed as the agent's read of THIS
+     * setup is the one part that would not be true.
+     */
+    opening: said.ok ? said.text : null,
     action: `Buy ${units.toFixed(4)} ${symbol}`,
     notional: money(notional),
     entry: money(price),

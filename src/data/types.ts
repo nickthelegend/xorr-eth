@@ -118,7 +118,8 @@ export type NewsItem = {
   tag: string;
   t: string;
   headline: string;
-  take: string;
+  /** `null` when no language model was available — the card shows the headline alone. */
+  take: string | null;
   tagBg: string;
   tagFg: string;
 };
@@ -176,7 +177,8 @@ export type Proposal = {
   id: string;
   agent: string;
   status: string;
-  opening: string;
+  /** `null` when no language model was available. The numbers below stand on their own. */
+  opening: string | null;
   action: string;
   notional: string;
   entry: string;
