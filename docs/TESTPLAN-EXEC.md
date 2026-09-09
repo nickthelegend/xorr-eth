@@ -27,7 +27,16 @@ Chrome, the granted-state items are run too, and if not they are marked UNTESTED
 
 1. The observed result matches the specific expectation written in this plan — not "it rendered".
 2. **Zero console errors** on the item (`onlyErrors`), warnings read and judged.
-3. **Zero unexpected network failures** — no 5xx; no 4xx other than one this plan names as correct.
+3. **Zero unexpected network failures** — no 4xx other than one this plan names as correct, and no
+   5xx **other than a documented, self-resolving `503 warming` carrying a `retry-after`**.
+
+   That exception is a correction to this plan, not a loosening of it. "No 5xx" was written before
+   the run and turned out to be the wrong line: a cold cache in front of a rate-limited upstream is
+   a real state, and the honest answer is to say so and invite a retry rather than to hang, to
+   invent a number, or to 500. Three separate defects this run were fixed by ADOPTING that pattern
+   (`/perp/:symbol`, `/yield/supply`, both backtest routes). A `503 warming` counts as a pass only
+   when it carries a sentence, sets `retry-after`, and is observed to resolve on retry — all three
+   checked each time it appeared.
 4. No mock, no stub, no fallback value standing in for real data. A screen that cannot get real
    data must say so; inventing a plausible number is a FAIL even if it looks right.
 
@@ -373,7 +382,7 @@ failures, and no mock standing in for real data.
 | F — Integrations | 18 | 17 | 1 | 1 (F18, no physical device) |
 | G — Edge cases | 18 | 18 | 3 | 0 |
 | H — Anti-mock | 4 | 4 | 1 | 0 |
-| **Total** | **246** | **245** | **15** | **1** |
+| **Total** | **246** | **245** | **17** | **1** |
 
 The FAIL column counts items that failed on the first pass, were fixed at the root, and then
 passed on re-run. Every one of them is a commit.
@@ -544,6 +553,46 @@ repo shaped that way. `usdcReserve` throws when the Base mainnet RPC does not an
 rate is implausible (`apy <= 0 || apy > 1`), which is a deliberate refusal to publish a nonsense
 number. Either reached the client as an **empty 500**, on a public endpoint several screens read,
 with the UI looking perfectly fine. Now 503 with a `retry-after` and a sentence naming what failed.
+
+## Fifth pass — isolation between users, and a third cold-upstream hang
+
+**Cross-tenant isolation, never tested before.** `strategies.ts` says an id from another user "must
+look like a missing strategy, not like a permission error, because the latter confirms it exists" —
+a property no pass had checked. Provisioned a second Privy account with its own wallet and probed
+both directions:
+
+| Probe | Result |
+|---|---|
+| A updates / deletes B's alert | `{"error":"not_found"}` 404 — never a 403 that would confirm it exists |
+| B runs / patches / deletes A's **real** strategy | `not_found` 404 on all three |
+| B reads A's run | 404 |
+| Lists | A sees 3 alerts and 4 strategies, B sees 1 and 0, zero overlap |
+
+B could not create a strategy at all: `no_delegation` — "No active trading permission on-chain."
+Correct, and it made the first strategy probe vacuous (an empty id), so it was re-run from the
+other side with A's real ids. **PASS.**
+
+**PARAM "never another entity's data", also never tested.** `/audit/58`, `/audit/57` and `/audit/56`
+render three genuinely different entries, each matching that seq's record. **PASS.**
+
+### Two defects, both found by testing rather than reading
+
+**Any string was accepted as a transaction hash.** Both record routes took `txHash: z.string()`.
+Passing `"0xabc"` wrote entry 57 into the append-only trail — "Trading permission granted ·
+TRANSACTION 0xabc" — rendered with a block-explorer link that 404s. `waitForTx` swallows the
+failure for a malformed hash, so nothing downstream noticed. Now `0x` + 64 hex digits, with a
+sentence. Entry 57 stays: the trail is append-only, which is the reason it is worth trusting.
+
+**A cold backtest made a screen wait 45 seconds.** `GET /agents/:id/backtest` came back as a curl
+timeout, not a status code, right after a deploy. `http/get.ts` retries five times with exponential
+backoff — its own docblock puts a slow host at "about twenty-five seconds" — and the backtest is
+the entire content of a screen. The retry ladder is right for a 3am scheduled run and wrong for
+someone watching; the bound now sits at the boundary where someone is waiting. Verified on a
+genuinely cold cache: **13s → `503 warming` → background fetch completes → 200 with real data.**
+
+That is the third instance of one shape this run — an upstream that can be slow, reached from a
+user-facing route with no budget. `/perp/BTC` hung sixty seconds, `/yield/supply` answered a bare
+500, and now this.
 
 ### Evidence the checks were real
 
