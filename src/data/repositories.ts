@@ -28,9 +28,15 @@ import type {
 export interface MarketRepository {
   listClasses(): Promise<AssetClass[]>;
   getInstrument(symbol: string): Promise<Instrument | null>;
-  /** Live quotes for the given symbols. Falls back to the fixture price with feed:'simulated'. */
   /**
-   * Spot price per symbol. `change24h` is optional on purpose: the tokenized equities are priced
+   * Spot price per symbol.
+   *
+   * This carried a second line above it reading "Falls back to the fixture price with
+   * feed:'simulated'", which stopped being true when that fallback was deliberately removed: it
+   * put BTC on screen at the handoff's $66,560 while the real price was $79,880, correctly tagged
+   * SIMULATED and twenty percent wrong. A symbol that HAS a feed and did not answer now shows a
+   * dash. Only instruments with no feed at all keep an indicative price, and those say so.
+   * `change24h` is optional on purpose: the tokenized equities are priced
    * from a single swap quote, which has no 24h window behind it. Reporting 0 there would read as a
    * measured "unchanged today".
    */

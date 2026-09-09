@@ -515,8 +515,28 @@ export const LocalRepositories: Repositories = {
     async connect(address) {
       return api.post<Wallet>('/wallet/connect', { address });
     },
+    /**
+     * The permission itself. A failure THROWS; only "there is no grant" returns null.
+     *
+     * This swallowed every error into `null`, which made "the executor did not answer" and "this
+     * wallet has granted nothing" the same value — and `/safety` reads exactly this to decide
+     * between them. With the executor unreachable and a live $1,600/day grant on chain, the
+     * screen announced **NOT GRANTED · "No permission has been granted, so nothing can trade."**
+     *
+     * The screen was given a fifth state for this, and it could never reach it: the error had
+     * already been destroyed one layer down. So the distinction is restored where it is made.
+     *
+     * `NotSignedIn` still returns null, because a signed-out visitor genuinely has no permission —
+     * an answer rather than a failure to get one — and the route itself returns null before a
+     * grant exists, which is the other legitimate null.
+     */
     async delegation(): Promise<Delegation | null> {
-      return (await api.get<Delegation | null>('/delegation').catch(() => undefined)) ?? null;
+      try {
+        return (await api.get<Delegation | null>('/delegation')) ?? null;
+      } catch (e) {
+        if (e instanceof NotSignedIn) return null;
+        throw e;
+      }
     },
     async privyPolicy(): Promise<PrivyPolicyView | null> {
       // Null on failure rather than throwing: this is a second opinion about safety, and a screen
