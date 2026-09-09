@@ -373,7 +373,7 @@ failures, and no mock standing in for real data.
 | F — Integrations | 18 | 17 | 1 | 1 (F18, no physical device) |
 | G — Edge cases | 18 | 18 | 3 | 0 |
 | H — Anti-mock | 4 | 4 | 1 | 0 |
-| **Total** | **246** | **245** | **13** | **1** |
+| **Total** | **246** | **245** | **15** | **1** |
 
 The FAIL column counts items that failed on the first pass, were fixed at the root, and then
 passed on re-run. Every one of them is a commit.
@@ -507,6 +507,43 @@ reasonable and that helper would have refused it.
 
 Verified live, with the network instrumented: `NOTATOKEN` → disabled, "Nothing prices NOTATOKEN",
 **zero writes fired**; `nvdac` → "Alert me when **NVDAc** is above $100"; `BTC` → allowed.
+
+## Fourth pass — do the numbers on screen equal the numbers in the source?
+
+The DATA class says "real values from `Reads` on screen". Three passes had verified that screens
+*render* and don't error, which is not the same claim. So: read each screen's own endpoint, read
+what the screen displays, compare.
+
+| Screen | Source | Result |
+|---|---|---|
+| `/limits` | `/limits` | cap, spent and remaining all match to the cent |
+| `/balance` | `/wallet/balance` | total and cash match |
+| `/network` | `/health` | chain matches, block is live |
+| `/rates` | `/yield/supply` | `0.04074312…` renders as **4.07%** — correct to 2dp, and labelled "Base mainnet's published rate" because Aave is not on Sepolia |
+| `/graph` | `/graph/health` | block **46,584,382** exact, "Level with the chain head" |
+| `/delegation` | `/delegation` | cap, delegate, expiry match |
+| `/approvals` | `/approvals` | both tokens present |
+| `/metrics` | `/metrics` | runs and strategies match, and it scopes itself: "across every wallet on it — not only yours" |
+| `/system` | `/health` | chain, status, uptime, dependency timings match |
+| **`/verify`** | `/verify` | **MISMATCH** |
+
+**`/verify` reported "14 Passed · 0 Failed · 6 Not asked"** while the same endpoint, asked about
+that wallet, answers **18 / 1 / 1**. The screen called `verifyReport()` with no argument while
+signed in, so the six wallet checks were never run — including the one that fails, the audit chain
+forking at entry 2.
+
+Reassurance produced by not having asked, on the screen whose entire job is "is any of this real".
+`/judge` had passed `wallet?.address` since it was written; this screen never did. Fixed, and a
+signed-out reader still gets the anonymous report the docblock describes. Verified live: **18 / 1 /
+1**, with the audit-chain failure now shown.
+
+### And a 500 the sweep caught on the way past
+
+`GET /yield/supply` was `c.json(await usdcSupplyYield())` with no catch — the only handler in the
+repo shaped that way. `usdcReserve` throws when the Base mainnet RPC does not answer, and when the
+rate is implausible (`apy <= 0 || apy > 1`), which is a deliberate refusal to publish a nonsense
+number. Either reached the client as an **empty 500**, on a public endpoint several screens read,
+with the UI looking perfectly fine. Now 503 with a `retry-after` and a sentence naming what failed.
 
 ### Evidence the checks were real
 
