@@ -104,14 +104,17 @@ extra.get('/agents/:id/backtest', async (c) => {
   const symbol = c.req.query('symbol') ?? 'WETH';
   try {
     return c.json(
-      await backtestMomentum({
-        symbol,
-        lookback,
-        usdPerEntry: Number(c.req.query('perRun') ?? 500),
-        dailyCapUsd: cap,
-      }),
+      await within(
+        backtestMomentum({
+          symbol,
+          lookback,
+          usdPerEntry: Number(c.req.query('perRun') ?? 500),
+          dailyCapUsd: cap,
+        }),
+      ),
     );
   } catch (e) {
+    if (e instanceof BacktestTooSlow) return warming(c);
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
 });
@@ -456,6 +459,49 @@ extra.get('/graph/activity', async (c) => {
  * description raises — the range holding is an assumption, and how often it held over the last
  * ninety days is a fact.
  */
+/**
+ * A backtest a person is waiting for, bounded — or an honest "not yet".
+ *
+ * `history()` fetches from CoinGecko through `http/get.ts`, which retries five times with
+ * exponential backoff. That module's own docblock puts a slow host at "about twenty-five seconds",
+ * and with a 15s timeout per attempt plus the outbound queue a COLD cache took over
+ * **forty-five seconds** — measured right after a deploy, on `GET /agents/:id/backtest`, which is
+ * the whole content of a screen.
+ *
+ * The retry ladder is right and stays: a scheduled run at 3am should wait patiently for a busy
+ * upstream. A screen should not. So the bound is here, at the boundary where someone is watching,
+ * and the answer when it is hit is the same "warming" 503 that `/market/ohlc` and `/perp/:symbol`
+ * give — retryable, with a sentence, rather than a spinner that never resolves.
+ */
+const BACKTEST_BUDGET_MS = 12_000;
+
+class BacktestTooSlow extends Error {}
+
+async function within<T>(work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new BacktestTooSlow()), BACKTEST_BUDGET_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    // The fetch keeps going in the background, so the next caller finds a warm cache.
+    void work.catch(() => undefined);
+  }
+}
+
+/** The 503 both backtest routes give when the history is still being fetched. */
+function warming(c: Context) {
+  c.header('retry-after', '5');
+  return c.json(
+    { error: 'warming', detail: 'The price history is still being fetched; try again in a moment.' },
+    503,
+  );
+}
+
 extra.post('/strategies/backtest', async (c) => {
   requireUser(c);
   const body = z
@@ -478,19 +524,24 @@ extra.post('/strategies/backtest', async (c) => {
         return c.json({ error: 'invalid_range', message: 'A range needs a bottom below its top, at least one rung, and a size.' }, 400);
       }
       return c.json(
-        await backtestGrid({ symbol: body.symbol, lookback: body.lookback as Lookback, lower, upper, steps, usdPerStep }),
+        await within(
+          backtestGrid({ symbol: body.symbol, lookback: body.lookback as Lookback, lower, upper, steps, usdPerStep }),
+        ),
       );
     }
     return c.json(
-      await backtestDca({
-        symbol: body.symbol,
-        lookback: body.lookback as Lookback,
-        perRunUsd: Number(p.usd ?? 50),
-        dailyCapUsd: Number(p.dailyCapUsd ?? Number.MAX_SAFE_INTEGER),
-        everyNDays: Number(p.everyNDays ?? 7),
-      }),
+      await within(
+        backtestDca({
+          symbol: body.symbol,
+          lookback: body.lookback as Lookback,
+          perRunUsd: Number(p.usd ?? 50),
+          dailyCapUsd: Number(p.dailyCapUsd ?? Number.MAX_SAFE_INTEGER),
+          everyNDays: Number(p.everyNDays ?? 7),
+        }),
+      ),
     );
   } catch (e) {
+    if (e instanceof BacktestTooSlow) return warming(c);
     // No history means no backtest. Inventing one would be the worst possible failure here.
     return c.json({ error: 'no_history', message: e instanceof Error ? e.message : String(e) }, 502);
   }
