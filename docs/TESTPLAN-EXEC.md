@@ -714,3 +714,55 @@ Worth naming separately, because a green suite is what let the defect above surv
   deployed contract, the deployed subgraph and live 1inch/Aave/CoinGecko calls. Four were failing
   when this pass began; two of the four had been green while testing nothing.
 - Both typechecks clean, including `--noUnusedLocals` for every file this pass touched.
+
+### Found by driving the UI rather than loading it
+
+The sweep loads screens. These needed someone to press the button.
+
+**Sixty percent of the audit trail was one sentence.** Reading a real wallet's trail rather than a
+screen: **34 of 57 rows were "Proposed nothing"**, all identical. `/proposals/generate` appended
+one every time it was called and the Bot tab calls it on every mount, so the permanent,
+append-only record — the artifact the whole product is built to be trusted on — was mostly a log
+of page loads. The catch-up panel showed the same sentence twice above "add 18 more".
+
+The rule is not "never write a decline"; what the bot chose not to do is the product. It is write
+it when the answer *changes*. Verified on the deployed executor: **37 rows → 37** after three more
+`generate` calls, with the decline still returned to the screen. The 34 stay, because the trail is
+append-only and that is the point of it.
+
+**A date in the permanent record was a day off.** `First run ${nextRunAt.toDateString()}` formats
+in the *server's* timezone. A weekly buy created from IST wrote **"First run Wed Sep 16 2026"**
+while the form that created it, formatting locally, had just said **"Thu, Sep 17"** — the same
+instant, two different days, in two places in one app, and the wrong one written permanently. The
+row cannot know the reader's timezone and guessing only moves the error, so it names the zone.
+Live: **"First run Wed, 16 Sept 2026, 22:03 UTC."**
+
+**The flows themselves, pressed by hand on the deployed build:**
+
+- Recurring buy, end to end: `/strategy/dca` → "Buy $50 of WETH, weekly" → home shows **"Created
+  $50 of WETH, weekly · First run …"** in the catch-up. This is the exact flow the wallet-
+  resolution defect was refusing with `no_delegation`.
+- Strategy lifecycle: **create → Live (1 running) → Pause → Paused (0 running) → Resume → Live (1
+  running) → Pause**, with the header count tracking every transition.
+- `/limits` after the wallet fix: **REMAINING TODAY $1,600.00 · $0.00 spent · $1,600.00 cap**,
+  where it had read $0 and "revoked" while the chain held a live grant.
+
+### One more harness bug, and the app was right again
+
+`55-verify` failed the whole run on `/\d+ Passed/`. The endpoint answers in **~1 second** and the
+screen renders correctly; the tally is two elements — the number, then the label — so `innerText`
+yields `"18\nPassed"` and the pattern wanted a literal space. Element boundaries are not content.
+
+Expectations are now matched against the text as rendered **and** with whitespace collapsed: a
+`must` passes if either form matches, a `never` fails if either does. Both readings, because two
+`never` patterns anchor with `/m` (`/^0 shown/m`) and on a single collapsed line `^` only matches
+at position zero — flattening alone would have quietly weakened them.
+
+That is the second time this pass that a red harness meant a wrong expectation rather than a wrong
+app, and both were the same mistake: asserting on the shape of the DOM instead of on what a reader
+sees.
+
+### Sweep result
+
+**100 screens: 99 PASS, 1 FAIL** — the one being the `/verify` regex above, since fixed. Console,
+network and content asserted on every screen, against the deployed build and the deployed executor.

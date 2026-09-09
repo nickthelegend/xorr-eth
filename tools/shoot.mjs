@@ -346,9 +346,27 @@ const EXPECT = {
 function contentFailures(stem, text) {
   const e = EXPECT[stem];
   if (!e) return [`no expectation defined for ${stem} — every route needs one`];
+  /*
+   * Matched against the text as rendered AND with whitespace collapsed, because element
+   * boundaries are not content.
+   *
+   * `/verify` renders its tally as two elements — the number, then the label — so `innerText`
+   * gives "18\nPassed", and `/\d+ Passed/` failed against a screen that was correct and had been
+   * for the whole run. Nothing a reader sees distinguishes that newline from a space.
+   *
+   * Both forms, not just the flattened one: two `never` patterns anchor with `/m` (`/^0 shown/m`),
+   * and on a single collapsed line `^` only matches at position zero — flattening alone would
+   * quietly weaken them. So a `must` passes if EITHER form matches, and a `never` fails if either
+   * does. Each assertion gets the reading that makes it strictest.
+   */
+  const flat = text.replace(/\s+/g, ' ');
   const out = [];
-  for (const re of e.must ?? []) if (!re.test(text)) out.push(`missing ${re}`);
-  for (const re of e.never ?? []) if (re.test(text)) out.push(`must not contain ${re}`);
+  for (const re of e.must ?? []) {
+    if (!re.test(text) && !re.test(flat)) out.push(`missing ${re}`);
+  }
+  for (const re of e.never ?? []) {
+    if (re.test(text) || re.test(flat)) out.push(`must not contain ${re}`);
+  }
   return out;
 }
 
