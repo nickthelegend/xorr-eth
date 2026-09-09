@@ -12,6 +12,16 @@
  * `skip` is rendered as its own state, deliberately. Most checks need a wallet on the request, so
  * an anonymous report skips a third of them — painting those red would put a wall of failure in
  * front of someone whose setup is fine.
+ *
+ * And the wallet IS passed when there is one, which this screen did not do.
+ *
+ * It called `verifyReport()` with no argument while signed in, so six checks it could have run
+ * stayed "Not asked" and the header read **14 Passed · 0 Failed · 6 Not asked**. The same endpoint
+ * asked about that wallet answers 18 / 1 / 1 — the audit chain forks at entry 2 for it, which is a
+ * real, permanent failure the screen was reporting as zero.
+ *
+ * Reassurance that comes from not having asked is the one thing a verification console must never
+ * produce. `/judge` had this right from the start.
  */
 import React from 'react';
 import { ScrollView, View } from 'react-native';
@@ -31,6 +41,7 @@ import {
   space,
 } from '@/ui';
 import { useAsync } from '@/data/useAsync';
+import { useStore } from '@/state/store';
 import { system, type VerifyCheck } from '@/data/system';
 
 const DOT = 8;
@@ -44,7 +55,15 @@ function toneFor(status: VerifyCheck['status']): string {
 
 export default function Verify() {
   const goBack = useGoBack();
-  const { data, loading, error, reload } = useAsync(() => system.verifyReport(), []);
+  /*
+   * `owner` is undefined for a signed-out reader, which keeps the anonymous behaviour the note
+   * above describes — the wallet checks skip rather than fail.
+   */
+  const owner = useStore((s) => s.wallet?.address);
+  const { data, loading, error, reload } = useAsync(
+    () => system.verifyReport(owner),
+    [owner],
+  );
 
   return (
     <Screen gutter="none">
