@@ -367,13 +367,13 @@ failures, and no mock standing in for real data.
 |---|---|---|---|---|
 | A — Infrastructure | 6 | 6 | 0 | 0 |
 | B — Auth boundary | 6 | 6 | 0 | 0 |
-| C — API endpoints | 84 | 84 | 3 | 0 |
+| C — API endpoints | 82 (two were regex artifacts) | 82 | 4 | 0 |
 | D — Screens | 97 | 97 | 2 | 0 |
 | E — On-chain | 15 | 15 | 0 | 0 |
 | F — Integrations | 18 | 17 | 1 | 1 (F18, no physical device) |
 | G — Edge cases | 18 | 18 | 3 | 0 |
 | H — Anti-mock | 4 | 4 | 1 | 0 |
-| **Total** | **248** | **247** | **10** | **1** |
+| **Total** | **246** | **245** | **13** | **1** |
 
 The FAIL column counts items that failed on the first pass, were fixed at the root, and then
 passed on re-run. Every one of them is a commit.
@@ -458,6 +458,55 @@ defaulted `selected` to `false`, so the `$100` / `$500` / `Max` action chips beg
 `aria-pressed="false"` — "toggle button, not pressed" about a button that is not a toggle. The
 default is now undefined, so only callers that mean it get the attribute. Verified live: the action
 chips omit it, the activity filters carry exactly one `true`.
+
+## Third pass — the plan's own inventory was wrong
+
+Auditing the C section against what I had actually issued a request to:
+
+- **Two of the 84 "handlers" do not exist.** `GET /x` and `POST /x` came from a regex matching a
+  comment in `coverage.live.test.ts` that reads ``api.get('/x')``. The real count is **82**.
+- **Seven real handlers were never called**, and the section was reported 84/84 anyway:
+  `GET /positions/:id`, `POST /positions/close`, `POST /proposals/:id/decide`,
+  `POST /delegation/record`, `POST /delegation/revoke`, `POST /wallet/create`,
+  `POST /agent/positions/close`.
+
+All seven now exercised, all correct:
+
+| Handler | Result |
+|---|---|
+| `POST /wallet/create` | Returns the existing wallet — idempotent, no second row |
+| `GET /positions/:id` (bogus id) | `null`, and `/position/:id` renders "This position is no longer open" |
+| `POST /positions/close` | `409 not_held` — "No WETH to sell." Non-retryable, correctly |
+| `POST /delegation/revoke` | `400 still_active` — "The policy is still active on-chain. Sign the revoke first." It is a RECORDER and refuses to record a revoke that has not happened |
+| `POST /delegation/record` | Records, then re-reads the chain to answer |
+| `POST /proposals/:id/decide` | "Skipped. I will not re-propose WETH today." |
+| `POST /agent/positions/close` | `409 not_held`, reached with a `trade:close` scoped key |
+
+### The FORM class, which had only ever been tested at the API
+
+§0 defines it as "invalid input refused with a reason **before any request**; submit disabled until
+valid; a rejected submit shows the server's reason and leaves input intact". Only the last of those
+had been checked. Testing all three in the browser:
+
+- **Submit disabled until valid** — PASS. `/send` disables Send and says why ("Nothing on your
+  allowlist yet"); `/alerts/new` reads "Enter a symbol and a price" and is disabled when either
+  field is empty or the level is zero or negative.
+- **Rejected submit** — PASS. "That did not save: nothing prices NOTATOKEN, so this alert could
+  never fire", with `NOTATOKEN` and `100` still in the fields.
+- **Refused before any request** — **FAIL.** The form happily submitted a symbol nothing can price
+  and waited for the server to say so.
+
+Fixed, and the fix turned up a second thing: the form did `symbol.trim().toUpperCase()` — rule 3 in
+`venues/oneinch.ts`, "no boundary may uppercase a caller's symbol", which three production bugs
+came from breaking. `NVDAc` was becoming `NVDAC`.
+
+`priceableSymbols()` asks `/market/symbols` and `/market/stocks` rather than keeping a fourth copy
+of a list — the mistake `propose.ts` made. `isTradable` would have been the wrong check and is
+worth naming: **BTC is priceable and not tradable on Base**, so a price alert on it is perfectly
+reasonable and that helper would have refused it.
+
+Verified live, with the network instrumented: `NOTATOKEN` → disabled, "Nothing prices NOTATOKEN",
+**zero writes fired**; `nvdac` → "Alert me when **NVDAc** is above $100"; `BTC` → allowed.
 
 ### Evidence the checks were real
 
