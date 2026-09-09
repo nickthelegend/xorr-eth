@@ -191,6 +191,7 @@ async function revertReason(call: { from: Address; to: Address; data: Hex }): Pr
   if (!deepest.length) return 'the trace shows no reverting frame';
 
   const worst = deepest.sort((a, b) => b.depth - a.depth)[0];
+  if (!worst) return 'the trace shows no reverting frame';
   const { frame } = worst;
   const named = frame.revertReason ?? decodeKnownError(frame as { output?: Hex });
   return `${named ?? frame.error} in ${frame.to} (depth ${worst.depth})`;
@@ -227,7 +228,8 @@ const ERRORS_BY_SELECTOR = (() => {
   for (const f of files) {
     const src = fs.readFileSync(f, 'utf8');
     for (const m of src.matchAll(/error\s+([A-Za-z0-9_]+)\(([^)]*)\)/g)) {
-      const params = m[2].trim() === '' ? [] : m[2].split(',').map((x) => x.trim().split(/\s+/)[0]);
+      const params =
+        m[2]!.trim() === '' ? [] : m[2]!.split(',').map((x) => x.trim().split(/\s+/)[0] ?? '');
       const sig = `${m[1]}(${params.join(',')})`;
       try {
         map.set(toFunctionSelector(`function ${sig}`), sig);

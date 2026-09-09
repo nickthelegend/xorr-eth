@@ -33,6 +33,7 @@ import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { priceOf } from '../market/prices.js';
 import { send } from '../notifications/push.js';
 import { PLANNERS, observationFor, type TradeIntent } from './kinds/index.js';
+import { chooseSettlement, type SettlementVenue } from './settle.js';
 import { canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 
 /**
@@ -590,115 +591,20 @@ async function runStrategyInner(
      * and worse, a used-up spending cap would silence a stop-loss. `closePosition()` is separately
      * authorised by the same policy and does not touch the cap, because de-risking is not spending.
      */
-    const payToken = VENUE_TOKENS[intent.inSymbol];
-    if (!payToken) throw new Error(`No token registry entry for ${intent.inSymbol}`);
-
     /*
-     * Aqua first, when a book can actually serve the size.
+     * Where this leg fills — Aqua, a maker's SwapVM program, or the aggregator.
      *
-     * The taker side is the side an operator can legitimately act on: the MAKER self-custodies
-     * through Aqua (they signed their own ship), and WE trade inside a cap the taker signed and can
-     * revoke. `delegatedFillArgs` returns exactly what `spend()` takes, so the fill goes through
-     * the same permission as every other trade — cap, expiry and venue allowlist all enforced by
-     * the contract rather than by us.
-     *
-     * `undefined` when no book can fill it, and that is not a failure: a maker quotes what they
-     * hold. The aggregator takes it from there, which is the whole point of having both.
-     *
-     * Tried when the index recommended it AND, on a deployment with no index, whenever a book
-     * exists — the chain is the authority here as everywhere else. Never on a close: an exit has
-     * to be certain, and a book deep enough to buy into may not be deep enough to sell out of.
+     * The ordering rules and the reasons for them live in `settle.ts`. They were 109 lines in the
+     * middle of this function, between the gate checks and the transaction bookkeeping, and they
+     * are the part that grows every time a venue is added.
      */
-    const aqua =
-      intent.direct || isCloseIntent(intent) || preferred === '1inch'
-        ? undefined
-        : await buildAquaFill({
-            owner,
-            tokenIn: payToken.address,
-            tokenOut: (VENUE_TOKENS[intent.outSymbol]?.address ?? payToken.address) as Address,
-            amountIn:
-              intent.amountInRaw ??
-              BigInt(Math.round(intent.amountIn * 10 ** payToken.decimals)),
-            slippage: SLIPPAGE.scheduled / 100,
-          }).catch(() => undefined);
-
-    /*
-     * Ask what this trade costs the pool before deciding what tolerance it needs.
-     *
-     * One extra quote on the settlement path, and it buys the only number that can tell a thin
-     * pair from a deep one. Failure is not fatal: with no quote the slippage falls back to the
-     * urgency constant, which is exactly the behaviour that existed before.
-     */
-    const quoted = aqua
-      ? null
-      : await quote({
-          inSymbol: intent.inSymbol,
-          outSymbol: intent.outSymbol,
-          amount: intent.amountIn,
-        }).catch(() => null);
-
-    /*
-     * A maker's SwapVM program, when one is shipped and Aqua could not serve the size.
-     *
-     * `XorrSwapVMBook` was deployed and tested and never called, which made it an artefact rather
-     * than a venue. The difference from Aqua is what enforces the terms: an Aqua book quotes from a
-     * curve the book contract evaluates, while a SwapVM maker ships compiled bytecode that the
-     * router executes — the deadline, the floor and the fee live inside the VM instead of being
-     * trusted to whoever submits the fill.
-     *
-     * Needs the quote first, because `delegatedFillArgs` takes a minimum-out and the only honest
-     * source for that is what something else said this trade is worth. Same exclusions as Aqua: not
-     * on a direct leg, and never on a close, where an exit has to be certain.
-     */
-    const swapVm =
-      aqua || intent.direct || isCloseIntent(intent) || preferred === '1inch' || !quoted
-        ? undefined
-        : await buildSwapVmFill({
-            owner,
-            tokenIn: payToken.address,
-            tokenOut: (VENUE_TOKENS[intent.outSymbol]?.address ?? payToken.address) as Address,
-            amountIn:
-              intent.amountInRaw ?? BigInt(Math.round(intent.amountIn * 10 ** payToken.decimals)),
-            slippage: SLIPPAGE.scheduled / 100,
-            quotedOut: BigInt(
-              Math.round(
-                quoted.outAmount * 10 ** (VENUE_TOKENS[intent.outSymbol]?.decimals ?? 18),
-              ),
-            ),
-          }).catch(() => undefined);
-
-    const swap = aqua
-      ? { to: aqua.venue, data: aqua.data }
-      : swapVm
-      ? { to: swapVm.venue, data: swapVm.data }
-      : intent.direct
-      ? { to: intent.direct.venue, data: intent.direct.data }
-      : await buildSwap({
-          inSymbol: intent.inSymbol,
-          outSymbol: intent.outSymbol,
-          // In the INPUT token's units. Passing dollars here scaled a position into wei and the
-          // router refused a trade orders of magnitude too large.
-          amount: intent.amountIn,
-          // On a whole-position close the planner has the chain's own figure; the delegation and
-          // the router have to be handed the same one or the router reverts for the difference.
-          amountRaw: intent.amountInRaw,
-          from: DELEGATION_FROM,
-          receiver: owner,
-          /*
-           * Urgency sets the floor; the pool sets the rest.
-           *
-           * A risk-reducing close gets more room than a scheduled buy — see `SLIPPAGE` — but those
-           * constants know nothing about the pair being traded. On a thin pool a $60 order can move
-           * the price further than the ceiling allows, and the router then refuses at a price its
-           * own quote had already predicted. `slippageFor` widens the ceiling by the impact the
-           * quote reports, with a cap: a quote predicting several percent is saying the size is
-           * wrong for the pool, and accepting that is paying for your own market impact.
-           */
-          slippagePct: slippageFor(
-            isCloseIntent(intent) ? SLIPPAGE.stop : SLIPPAGE.scheduled,
-            quoted?.priceImpactPct ?? null,
-          ),
-        });
+    const { payToken, swap, venue } = await chooseSettlement({
+      intent,
+      owner,
+      preferred,
+      isClose: isCloseIntent(intent),
+      delegationFrom: DELEGATION_FROM,
+    });
 
     // A direct leg is never a close: it puts capital to work rather than taking it off the table,
     // so it spends against the cap like any other outflow.
@@ -823,7 +729,7 @@ async function runStrategyInner(
         {
           walletId,
           agent: agentForKind(strategy.kind),
-          action: describeLeg(intent, filledUnits, aqua ? 'aqua' : swapVm ? 'swapvm' : '1inch'),
+          action: describeLeg(intent, filledUnits, venue),
           detail: intent.direct
             ? `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} moved. ${intent.because}`
             : `$${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} at $${price.toLocaleString('en-US', { maximumFractionDigits: 2 })}. ${intent.because}`,
@@ -955,11 +861,7 @@ function isCloseIntent(intent: TradeIntent): boolean {
  * The action line in the activity log is the only place some people ever read what the bot did, so
  * it names the thing that happened, not the token that moved.
  */
-function describeLeg(
-  intent: TradeIntent,
-  units: number,
-  venue?: 'aqua' | 'swapvm' | '1inch',
-): string {
+function describeLeg(intent: TradeIntent, units: number, venue?: SettlementVenue): string {
   if (intent.direct) {
     return `Supplied $${intent.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${intent.inSymbol} to Aave`;
   }

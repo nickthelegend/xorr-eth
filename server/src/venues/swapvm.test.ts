@@ -21,7 +21,7 @@ const getLogs = vi.fn();
 const readContract = vi.fn();
 const getBlockNumber = vi.fn(async () => 1_000_000n);
 /** The dry run of `spend()` that decides whether a discovered program can actually fill. */
-const simulateContract = vi.fn(async () => ({ request: {} }));
+const simulateContract = vi.fn(async (..._a: unknown[]) => ({ request: {} }));
 
 vi.mock('../evm/client.js', () => ({
   publicClient: {
@@ -221,7 +221,7 @@ describe('building the fill', () => {
     readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
 
     await buildSwapVmFill(params);
-    const sim = simulateContract.mock.calls[0]![0] as {
+    const sim = simulateContract.mock.calls[0]?.[0] as {
       functionName: string;
       account: { address: string };
       args: unknown[];
