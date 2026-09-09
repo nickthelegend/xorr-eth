@@ -766,3 +766,61 @@ sees.
 
 **100 screens: 99 PASS, 1 FAIL** — the one being the `/verify` regex above, since fixed. Console,
 network and content asserted on every screen, against the deployed build and the deployed executor.
+
+### A fourth instance of the shape this codebase keeps producing
+
+The sweep reported two screens failing with **CORS errors**, which is not what went wrong. Measured
+against the deployed executor:
+
+| route | cold | warm |
+|---|---|---|
+| `POST /proposals/generate` | **22.8s** | 0.46s |
+| `GET /market/stocks` | **8.2s** | 0.39s |
+
+`/proposals/generate` is the entire content of the Bot tab. At twenty-two seconds the browser gave
+up before the response arrived, and a response that never arrives has no CORS headers — so the
+console blamed CORS for a latency problem. The server log for the same window shows the request
+completing normally: `GET /market/stocks 200 7761ms`.
+
+This is the **fourth** route in this codebase with one shape: a slow upstream reached from a
+user-facing path with no budget. `/perp/:symbol` hung sixty seconds, `/yield/supply` answered a
+bare 500, a cold backtest made a screen wait forty-five. The helper written for those was
+backtest-shaped; it is now general — `within(work, budgetMs)` and `warming(c, detail)` — and the
+proposal route is bounded at ten seconds.
+
+The work is never cancelled. That is the point of the `finally`: it keeps running, fills the cache
+it was filling, and the retry answers in under a second.
+
+The client had to learn the same distinction. `generateProposal` caught everything and reported
+*"I could not reach the market just now"*, which for a warming 503 is false — the market was
+reached and the answer was seconds away. It now waits the 503 out the way `marketData.ts` already
+waits out its own.
+
+### Verified by hand on the deployed build
+
+- **Alerts.** Created "WETH above $2572" through the form; it persisted `enabled=true, armed=true`.
+  The unpriceable-symbol guard was then exercised with a junk ticker: the button became **"Nothing
+  prices ZQXW"** and pressing it did nothing — no navigation, no write.
+- **Swap.** A real 1inch quote for 0.1 WETH → **$244.61 USDC, best of 3 venues, 0.144% price
+  impact, at least 243.8766 USDC after slippage** — and an honest block beneath it: *"You hold no
+  WETH. There is nothing to swap."*
+- **Chat.** A question reached the agent and came back with a refusal rather than a stock line —
+  see below.
+
+### UNTESTED — the language model, because the credential does not exist
+
+`server/src/bot/llm.ts` reads `OPENROUTER_API_KEY`. It is **not set in `.env` and not set on the
+executor's Railway service**, so no model has ever been reachable in this build. Marked UNTESTED,
+not FAIL and certainly not PASS.
+
+What *is* verified is that every surface degrades honestly rather than inventing prose:
+
+- Chat: *"I cannot answer that here — no language model is configured in this build, and I will
+  not read you a stock line as though it were an answer."*
+- `/briefing`: three real headlines from a live feed, each labelled *"No agent comment — this build
+  has no language model configured."* — three different labels for three different stories, where
+  the pre-`fallbackLine`-deletion build captioned all three with one canned sentence.
+- `/bot/say` returns `text: null`.
+
+Worth flagging plainly: the key that was to be supplied was a **Groq** key, and the code is wired
+to **OpenRouter**. Either the key or the client needs to change; nothing in the repo bridges them.
