@@ -210,12 +210,34 @@ export const LocalRepositories: Repositories = {
       return (await api.get<Proposal | null>('/proposals/current').catch(() => null)) ?? null;
     },
     async generateProposal() {
-      const res = await api
-        .post<
-          | ({ created: true; id: string; agent: string; expiresAt: number } & Record<string, string>)
-          | { created: false; reason: string; detail: string }
-        >('/proposals/generate', {})
-        .catch(() => null);
+      /*
+       * A `warming` 503 is a WAIT, not a failure.
+       *
+       * The agent prices every tradable asset to reach a decision, and on a cold cache the
+       * executor now bounds that at ten seconds and answers 503 with a Retry-After rather than
+       * letting the browser abandon the request — which it did, at twenty-two seconds, reporting
+       * it as a CORS error. Treating that 503 like any other error put "I could not reach the
+       * market just now" on the Bot tab, which is false: the market was reached, and the answer
+       * was seconds away.
+       *
+       * Waited out the same way `marketData.ts` waits out its own warming 503s, and for the same
+       * reason: the work continues server-side, so the retry is the one that reads a warm cache.
+       */
+      type Generated =
+        | ({ created: true; id: string; agent: string; expiresAt: number } & Record<string, string>)
+        | { created: false; reason: string; detail: string };
+
+      let res: Generated | null = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          res = await api.post<Generated>('/proposals/generate', {});
+          break;
+        } catch (e) {
+          const warming = e instanceof ApiError && e.status === 503;
+          if (!warming || attempt === 3) break;
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
       if (!res) return { proposal: null, declined: 'I could not reach the market just now.' };
       if (!res.created) return { proposal: null, declined: res.detail };
       const { created, ...rest } = res;

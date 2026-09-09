@@ -120,7 +120,7 @@ extra.get('/agents/:id/backtest', async (c) => {
       ),
     );
   } catch (e) {
-    if (e instanceof BacktestTooSlow) return warming(c);
+    if (e instanceof TooSlow) return warming(c);
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
 });
@@ -159,7 +159,23 @@ extra.post('/proposals/generate', async (c) => {
   const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   const tone = ((await c.req.json().catch(() => ({}))) as { tone?: ToneId }).tone ?? 'dry';
-  const result = await propose(id, tone);
+  /*
+   * Bounded, because this is the entire content of the Bot tab.
+   *
+   * `propose` prices every tradable asset, and on a cold cache that measured 22.8 seconds against
+   * the deployed executor — long enough that the browser abandoned the request and reported a CORS
+   * failure, which is not what went wrong. The work continues in the background, so the retry a
+   * few seconds later reads a warm cache and answers in under a second.
+   */
+  let result: Awaited<ReturnType<typeof propose>>;
+  try {
+    result = await within(propose(id, tone), PROPOSAL_BUDGET_MS);
+  } catch (e) {
+    if (e instanceof TooSlow) {
+      return warming(c, 'The agent is still pricing the market; ask again in a moment.');
+    }
+    throw e;
+  }
   if (!result.created) {
     /*
      * A decline is a first-class event — screen 15 exists to show what the bot chose NOT to do —
@@ -503,15 +519,35 @@ extra.get('/graph/activity', async (c) => {
  */
 const BACKTEST_BUDGET_MS = 12_000;
 
-class BacktestTooSlow extends Error {}
+/**
+ * How long the Bot tab may wait for the agent to reach a decision.
+ *
+ * Measured cold on the deployed executor: **22.8 seconds**, against 0.46s warm. That is the whole
+ * content of a screen, and it is long enough that the browser gave up before the response arrived
+ * and reported the result as a CORS failure — an error that says nothing true about the cause.
+ *
+ * This is the fourth route in this codebase with the same shape: a slow upstream reached from a
+ * user-facing path with no budget. `/perp/:symbol` hung sixty seconds, `/yield/supply` answered a
+ * bare 500, and the backtest made a screen wait forty-five.
+ */
+const PROPOSAL_BUDGET_MS = 10_000;
 
-async function within<T>(work: Promise<T>): Promise<T> {
+class TooSlow extends Error {}
+
+/**
+ * Answer within `budgetMs`, or hand back a `warming` 503 — and let the work finish regardless.
+ *
+ * The point is the `finally`: the promise is not abandoned, so the cache it was filling still gets
+ * filled and the retry a few seconds later is fast. A budget that cancelled the work would make
+ * every attempt equally slow.
+ */
+async function within<T>(work: Promise<T>, budgetMs = BACKTEST_BUDGET_MS): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
       work,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new BacktestTooSlow()), BACKTEST_BUDGET_MS);
+        timer = setTimeout(() => reject(new TooSlow()), budgetMs);
       }),
     ]);
   } finally {
@@ -521,13 +557,13 @@ async function within<T>(work: Promise<T>): Promise<T> {
   }
 }
 
-/** The 503 both backtest routes give when the history is still being fetched. */
-function warming(c: Context) {
+/** The 503 a route gives when the thing it needs is still being fetched. */
+function warming(
+  c: Context,
+  detail = 'The price history is still being fetched; try again in a moment.',
+) {
   c.header('retry-after', '5');
-  return c.json(
-    { error: 'warming', detail: 'The price history is still being fetched; try again in a moment.' },
-    503,
-  );
+  return c.json({ error: 'warming', detail }, 503);
 }
 
 extra.post('/strategies/backtest', async (c) => {
@@ -569,7 +605,7 @@ extra.post('/strategies/backtest', async (c) => {
       ),
     );
   } catch (e) {
-    if (e instanceof BacktestTooSlow) return warming(c);
+    if (e instanceof TooSlow) return warming(c);
     // No history means no backtest. Inventing one would be the worst possible failure here.
     return c.json({ error: 'no_history', message: e instanceof Error ? e.message : String(e) }, 502);
   }

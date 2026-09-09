@@ -42,9 +42,25 @@ beforeAll(() => {
   expect(token.length).toBeGreaterThan(100);
 });
 
+/**
+ * Ask, waiting out a `warming` 503.
+ *
+ * The route is bounded at ten seconds and answers 503 while the agent is still pricing the market,
+ * with the work continuing server-side. A test that treats that as a failure is testing the cold
+ * cache, not the behaviour.
+ */
+async function generate(): Promise<Response> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const res = await req('/proposals/generate', { method: 'POST', body: '{}' });
+    if (res.status !== 503) return res;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  throw new Error('the proposal engine stayed warming for six attempts');
+}
+
 describe('a decline is recorded when it changes, not when it is re-observed', () => {
   it('asking twice in a row does not write the same row twice', async () => {
-    const first = await req('/proposals/generate', { method: 'POST', body: '{}' });
+    const first = await generate();
     expect(first.status).toBe(200);
     const body = (await first.json()) as { created: boolean; reason?: string };
 
@@ -59,10 +75,10 @@ describe('a decline is recorded when it changes, not when it is re-observed', ()
     }
 
     const before = await declineCount();
-    await req('/proposals/generate', { method: 'POST', body: '{}' });
-    await req('/proposals/generate', { method: 'POST', body: '{}' });
+    await generate();
+    await generate();
     const after = await declineCount();
 
     expect(after, `two further identical declines added ${after - before} rows`).toBe(before);
-  }, 90_000);
+  }, 180_000);
 });
