@@ -12,6 +12,7 @@
  * 1.15e77 and every screen comparing it would be comparing a lie.
  */
 import { api } from './api';
+import type { AnchorReport } from './types';
 
 /* ─────────────────────────────────────────────────────────── trust and proof */
 
@@ -355,6 +356,13 @@ export const system = {
   verifyReport: (owner?: string) =>
     api.get<VerifyReport>(`/verify${owner ? `?owner=${encodeURIComponent(owner)}` : ''}`),
   auditChain: () => api.get<ChainVerification>('/activity/verify'),
+  /* What Base holds about this trail, and whether we still agree with it. */
+  auditAnchor: () => api.get<AnchorReport>('/audit/anchor'),
+  anchorNow: () =>
+    api.post<
+      | { anchored: true; txHash: string; head: string; entryCount: number }
+      | { anchored: false; reason: string; detail: string }
+    >('/audit/anchor', {}),
   approvals: () => api.get<Approvals>('/approvals'),
   /*
    * There is deliberately no `agentKeys()` here.

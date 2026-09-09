@@ -8,6 +8,13 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
+import {
+  ANCHOR_ADDRESS,
+  agreement,
+  anchorHistory,
+  anchorWallet,
+  anchoringConfigured,
+} from '../audit/anchor.js';
 import { evaluate, spentToday } from '../rules/engine.js';
 import {
   runStrategy,
@@ -19,6 +26,7 @@ import {
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { ADDRESSES, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
+import { delegateAccount } from '../evm/client.js';
 import { basenameOf } from '../evm/basename.js';
 import { dripGasIfNeeded } from '../evm/gasDrip.js';
 import {
@@ -733,6 +741,47 @@ routes.get('/activity/export', async (c) => {
 routes.get('/activity/verify', async (c) => {
   const w = await requireWallet(c);
   return c.json(await verify(w.id));
+});
+
+/**
+ * What Base has been told about this wallet's trail, and whether we still agree with it.
+ *
+ * Read-only and cheap: two `eth_call`s and one indexed row. The screen behind it exists to let
+ * someone check the strongest claim this product makes without taking our word for any part of it
+ * — the contract address, the anchoring key and the block are all here, so the same read can be
+ * repeated from anywhere.
+ */
+routes.get('/audit/anchor', async (c) => {
+  const w = await requireWallet(c);
+  const owner = w.address as Address;
+  const [state, history] = await Promise.all([
+    agreement(w.id, owner),
+    anchorHistory(owner),
+  ]);
+  return c.json({
+    configured: anchoringConfigured(),
+    contract: ANCHOR_ADDRESS,
+    anchoredBy: delegateAccount.address,
+    chain: CHAIN_KEY,
+    state: state.state,
+    entryCount: state.entryCount,
+    latest: state.state === 'none' ? null : state.anchor,
+    history,
+  });
+});
+
+/**
+ * Anchor now, rather than waiting for the hourly sweep.
+ *
+ * Exists because "publish the current head" is exactly the thing a sceptic wants to do themselves:
+ * make a trade, press this, and read the new commitment out of Base. It is bounded by the same
+ * unchanged-head check the sweep uses, so pressing it twice costs one `eth_call` and no gas.
+ */
+routes.post('/audit/anchor', async (c) => {
+  const w = await requireWallet(c);
+  const out = await anchorWallet(w.id, w.address as Address);
+  if (!out.anchored && out.reason === 'not_configured') return c.json(out, 501);
+  return c.json(out);
 });
 
 // ── Limits ───────────────────────────────────────────────────────────────────

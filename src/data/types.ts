@@ -318,3 +318,35 @@ export type PrivyPolicyView = {
   ownedByQuorum: string | null;
   ownerId: string | null;
 };
+
+/**
+ * What Base has been told about this wallet's audit trail.
+ *
+ * `state` is the whole point and its three values are not degrees of one thing:
+ *
+ * - `match`    — the head on-chain is the head we hold; everything up to it is committed.
+ * - `ahead`    — more rows have been written since the last anchor. The ordinary state between
+ *                anchors, and a pass only because the server re-hashes the row AT the anchored
+ *                length before saying it.
+ * - `diverged` — the trail changed underneath a commitment Base already holds. The alarm.
+ * - `none`     — nothing has been anchored for this wallet yet.
+ */
+export type AuditAnchor = {
+  head: string;
+  entryCount: number;
+  /** Unix seconds, from the block. */
+  at: number;
+  blockNo: number;
+};
+
+export type AnchorReport = {
+  configured: boolean;
+  contract: string;
+  /** The key that signed the anchors — the same address the app names as the bot's key. */
+  anchoredBy: string;
+  chain: string;
+  state: 'match' | 'ahead' | 'diverged' | 'none';
+  entryCount: number;
+  latest: AuditAnchor | null;
+  history: AuditAnchor[];
+};

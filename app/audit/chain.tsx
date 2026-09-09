@@ -108,6 +108,26 @@ export default function AuditChain() {
               </Text>
             </SheetCard>
 
+            {/*
+              The half of the integrity claim that does not depend on trusting us.
+              Everything above is our code re-hashing our rows and reporting the result, which a
+              sceptic has no reason to accept. The anchor screen shows the head hash sitting in a
+              Base contract at a named block, readable without our cooperation.
+            */}
+            <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+              <Text variant="secondary" color={colors.ink65}>
+                Everything above is our own code re-checking our own rows. The head of this chain is
+                also published to Base, so the same claim can be read from somewhere we do not
+                control.
+              </Text>
+              <Button
+                label="What Base holds"
+                variant="ghost"
+                onPress={() => router.push('/audit/anchor')}
+                style={{ marginTop: space.s12 }}
+              />
+            </SheetCard>
+
             <Button
               label="The full trail"
               variant="ghost"

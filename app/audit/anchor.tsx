@@ -1,0 +1,203 @@
+/**
+ * What Base has been told about this trail — the claim, and the block that holds it.
+ *
+ * `/audit/chain` answers "has this log been edited?" by re-hashing our own rows with our own code
+ * and reporting the result. That is a real check with one honest limit: every part of it is ours.
+ * A reader who does not trust the operator has no reason to trust the operator's report that the
+ * operator's log is intact.
+ *
+ * This screen is the part that does not need trusting. The head hash was published to a contract
+ * on Base at a named block by a named key, and everything needed to repeat the read without us —
+ * contract, key, block — is on screen. Rewriting history stays possible; producing a rewrite that
+ * hashes to a value Base has been holding since before the rewrite does not.
+ *
+ * The four states are deliberately not four shades of green:
+ *
+ *   MATCH     the head on-chain is the head we hold.
+ *   AHEAD     rows written since the last anchor. Ordinary, and checked rather than assumed —
+ *             the server re-hashes the row at the anchored position before it says this.
+ *   DIVERGED  the trail changed underneath a commitment. The alarm, and the reason to build this.
+ *   NONE      nothing committed yet, which is a claim of nothing rather than a claim of safety.
+ */
+import React from 'react';
+import { ScrollView, View } from 'react-native';
+import { useGoBack } from '@/nav/useGoBack';
+import {
+  Button,
+  ErrorState,
+  Fill,
+  HeaderBar,
+  Placeholder,
+  Screen,
+  SheetCard,
+  Text,
+  colors,
+  radius,
+  space,
+} from '@/ui';
+import { useAsync } from '@/data/useAsync';
+import { system } from '@/data/system';
+import type { AnchorReport, AuditAnchor } from '@/data/types';
+
+/** The head is 32 bytes; a reader compares the ends, so show the ends. */
+const shortHash = (h: string) => `${h.slice(0, 10)}…${h.slice(-8)}`;
+const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+
+const STATE: Record<
+  AnchorReport['state'],
+  { label: string; tone: string; line: (r: AnchorReport) => string }
+> = {
+  match: {
+    label: 'COMMITTED',
+    tone: colors.up,
+    line: (r) =>
+      `All ${r.entryCount.toLocaleString('en-US')} entries are covered by the hash Base is holding.`,
+  },
+  ahead: {
+    label: 'COMMITTED · NEWER ENTRIES',
+    tone: colors.up,
+    line: (r) =>
+      `${(r.entryCount - (r.latest?.entryCount ?? 0)).toLocaleString('en-US')} entries have been ` +
+      'written since the last anchor. The entry that was anchored still hashes to what Base holds.',
+  },
+  diverged: {
+    label: 'DIVERGED',
+    tone: colors.down,
+    line: () =>
+      'The trail no longer hashes to the value published on Base. Something changed underneath a ' +
+      'commitment that was already made.',
+  },
+  none: {
+    label: 'NOT YET ANCHORED',
+    tone: colors.ink40,
+    line: () =>
+      'Nothing has been published for this wallet yet, so nothing here is committed to the chain.',
+  },
+};
+
+export default function AuditAnchorScreen() {
+  const goBack = useGoBack();
+  const { data, loading, error, reload } = useAsync(() => system.auditAnchor(), []);
+  const [busy, setBusy] = React.useState(false);
+  const [note, setNote] = React.useState<string>();
+
+  async function anchorNow() {
+    setBusy(true);
+    setNote(undefined);
+    try {
+      const out = await system.anchorNow();
+      setNote(
+        out.anchored
+          ? `Published entry ${out.entryCount} to Base.`
+          : /*
+             * "Already anchored" is a success, not a failure, and saying so plainly matters:
+             * pressing this twice should read as "there was nothing new to say", never as an error.
+             */
+            out.detail,
+      );
+      reload();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'Could not anchor just now.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Screen>
+      <HeaderBar onBack={goBack} title={<Text variant="screenTitle">On-chain anchor</Text>} />
+
+      <Fill style={{ marginTop: space.s20 }}>
+        {error ? (
+          <ErrorState error={error} onRetry={reload} />
+        ) : loading && !data ? (
+          <Placeholder height={200} />
+        ) : !data ? null : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: space.s30, gap: space.s12 }}
+          >
+            <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
+              <Text variant="footnote" color={colors.ink40}>
+                STATE
+              </Text>
+              <Text variant="screenTitle" color={STATE[data.state].tone} style={{ marginTop: space.s6 }}>
+                {STATE[data.state].label}
+              </Text>
+              <Text variant="secondarySm" color={colors.ink65} style={{ marginTop: space.s8 }}>
+                {STATE[data.state].line(data)}
+              </Text>
+            </SheetCard>
+
+            {data.latest ? (
+              <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
+                <Text variant="footnote" color={colors.ink40}>
+                  WHAT BASE HOLDS
+                </Text>
+                <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
+                  {shortHash(data.latest.head)}
+                </Text>
+                <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s6 }}>
+                  {`entry ${data.latest.entryCount.toLocaleString('en-US')} · block ${data.latest.blockNo.toLocaleString('en-US')}`}
+                </Text>
+                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
+                  {`since ${new Date(data.latest.at * 1000).toUTCString().replace(' GMT', ' UTC')}`}
+                </Text>
+              </SheetCard>
+            ) : null}
+
+            {/*
+              The address of the contract and the key that signed, because the point of this screen
+              is that the reader does not have to take any of it from us. These two values plus a
+              public RPC reproduce everything above.
+            */}
+            <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
+              <Text variant="footnote" color={colors.ink40}>
+                CHECK IT YOURSELF
+              </Text>
+              <Text variant="secondarySm" color={colors.ink65} style={{ marginTop: space.s6 }}>
+                {`Read latest(${shortAddr(data.anchoredBy)}, your address) on ${shortAddr(data.contract)}, on ${data.chain}. The signing key is the bot's key, the same one on the safety screen.`}
+              </Text>
+              <View style={{ marginTop: space.s10, gap: space.s4 }}>
+                <Text variant="footnote" color={colors.ink40}>
+                  {`contract  ${data.contract}`}
+                </Text>
+                <Text variant="footnote" color={colors.ink40}>
+                  {`anchored by  ${data.anchoredBy}`}
+                </Text>
+              </View>
+            </SheetCard>
+
+            {data.history.length > 1 ? (
+              <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
+                <Text variant="footnote" color={colors.ink40}>
+                  {`EVERY COMMITMENT (${data.history.length})`}
+                </Text>
+                {[...data.history].reverse().map((a: AuditAnchor) => (
+                  <View key={`${a.blockNo}-${a.head}`} style={{ marginTop: space.s10 }}>
+                    <Text variant="secondarySm">{shortHash(a.head)}</Text>
+                    <Text variant="footnote" color={colors.ink40}>
+                      {`entry ${a.entryCount.toLocaleString('en-US')} · block ${a.blockNo.toLocaleString('en-US')}`}
+                    </Text>
+                  </View>
+                ))}
+              </SheetCard>
+            ) : null}
+
+            {note ? (
+              <Text variant="footnote" color={colors.ink40}>
+                {note}
+              </Text>
+            ) : null}
+
+            <Button
+              label={data.state === 'ahead' || data.state === 'none' ? 'Anchor now' : 'Anchor again'}
+              loading={busy}
+              onPress={anchorNow}
+            />
+          </ScrollView>
+        )}
+      </Fill>
+    </Screen>
+  );
+}

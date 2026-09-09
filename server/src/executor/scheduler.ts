@@ -12,6 +12,7 @@ import { query } from '../db/index.js';
 import { log } from '../http/request-id.js';
 import { runStrategy, type StrategyRow } from './run.js';
 import { evaluateAlerts } from '../alerts/evaluate.js';
+import { anchorSweep } from '../audit/anchor-sweep.js';
 
 const TICK_MS = Number(process.env.SCHEDULER_TICK_MS ?? 30_000);
 
@@ -47,6 +48,21 @@ export async function tick(now: Date = new Date()): Promise<number> {
     for (const o of broken) log.warn(`[alerts] cannot evaluate "${o.name}": ${o.detail}`);
   } catch (e) {
     log.error('[alerts] sweep failed:', e instanceof Error ? e.message : e);
+  }
+
+  /*
+   * Then the anchor sweep, last, and on its own cadence.
+   *
+   * Last because it publishes a commitment to the trail, and a commitment made before this tick's
+   * rows were written would be stale the moment it landed. Non-fatal for the same reason the alert
+   * sweep is: anchoring is a claim ABOUT the log, never a precondition for writing to it, and a
+   * chain that is unreachable must not stop the product from trading.
+   */
+  try {
+    const swept = await anchorSweep();
+    if (swept?.anchored) console.log(`[anchor] ${swept.anchored} wallet(s) anchored`);
+  } catch (e) {
+    log.error('[anchor] sweep failed:', e instanceof Error ? e.message : e);
   }
 
   return ran;

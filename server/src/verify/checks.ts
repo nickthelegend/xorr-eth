@@ -20,6 +20,7 @@ import { publicClient } from '../evm/client.js';
 import { ADDRESSES, CHAIN_KEY, chain, rpcUrl, SETTLEMENT_VENUES } from '../evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey, readPolicy } from '../evm/delegation.js';
 import { query } from '../db/index.js';
+import { agreement, anchoringConfigured } from '../audit/anchor.js';
 import { verify as verifyAudit } from '../audit/log.js';
 import { usdcReserve } from '../market/yield.js';
 import { priceOf } from '../market/prices.js';
@@ -319,6 +320,52 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
          * because the claim under test is that something is impossible.
          */
         throw new Error('the policy let a transaction through to an address it does not name');
+      },
+    },
+    {
+      id: 'audit-anchor',
+      claim: 'The trail\u2019s integrity is not our word: its head hash is published on Base.',
+      how: 'latest(botKey, owner) on XorrAuditAnchor, compared to the head we hold',
+      run: async () => {
+        if (!owner) skip('No wallet on this request.');
+        if (!anchoringConfigured()) skip('No anchor contract on this deployment.');
+        const rows = await query<{ id: string }>(
+          `SELECT id FROM wallets WHERE lower(address)=lower($1)`,
+          [owner],
+        );
+        const walletId = rows[0]?.id;
+        if (!walletId) skip('This address has no wallet row yet.');
+
+        const a = await agreement(walletId, owner as Address);
+        const explorer = (n: number) => `block ${n.toLocaleString('en-US')}`;
+        /*
+         * The three answers are not degrees of the same thing.
+         *
+         * `diverged` is the alarm this check exists to raise: the trail changed underneath a
+         * commitment already on Base. `ahead` is the ordinary state between anchors and is a pass
+         * \u2014 rows are written continuously and anchored on a cadence \u2014 but only because
+         * `agreement` re-hashes the row AT the anchored length before saying so, rather than
+         * comparing lengths and waving a rewrite through.
+         */
+        if (a.state === 'diverged') {
+          throw new Error(
+            `the trail no longer matches what was published at ${explorer(a.anchor.blockNo)}. ` +
+              `Base holds ${a.anchor.head.slice(0, 18)}\u2026 for entry ${a.anchor.entryCount}; ` +
+              'ours does not hash to it.',
+          );
+        }
+        if (a.state === 'none') {
+          throw new Error('nothing has been anchored for this wallet yet, so nothing is committed.');
+        }
+        const since = new Date(a.anchor.at * 1000).toISOString().replace('T', ' ').slice(0, 16);
+        const extra =
+          a.state === 'ahead'
+            ? `, plus ${a.entryCount - a.anchor.entryCount} written since`
+            : '';
+        return (
+          `${a.anchor.head.slice(0, 18)}\u2026 for ${a.anchor.entryCount} entries, held by Base ` +
+          `since ${explorer(a.anchor.blockNo)} (${since} UTC)${extra}`
+        );
       },
     },
     {
