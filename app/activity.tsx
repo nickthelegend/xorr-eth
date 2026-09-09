@@ -44,6 +44,7 @@ import { useAsync } from '@/data/useAsync';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 import { useGoBack } from '@/nav/useGoBack';
+import { errorText } from '@/data/apiError';
 
 const DOT = 8;
 
@@ -107,7 +108,7 @@ export default function Activity() {
       const csv = await repos.activity.exportDisposals();
       await Share.share({ message: csv, title: 'xorr disposals' });
     } catch (e) {
-      setExportError(e instanceof Error ? e.message : String(e));
+      setExportError(errorText(e));
     } finally {
       setExportingTax(false);
     }
@@ -122,7 +123,7 @@ export default function Activity() {
     } catch (e) {
       // On the screen, not in a console nobody reads. An export that silently fails is
       // worse than none: the user walks away believing they have the record.
-      setExportError(e instanceof Error ? e.message : String(e));
+      setExportError(errorText(e));
     } finally {
       setExporting(false);
     }

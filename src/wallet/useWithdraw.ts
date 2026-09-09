@@ -19,6 +19,7 @@ import { useCallback, useState } from 'react';
 import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { isUsable, type AllowlistEntry } from './allowlist';
+import { humanWalletError } from './walletError';
 
 const ERC20_TRANSFER = [
   {
@@ -90,8 +91,13 @@ export function useWithdraw() {
         setTxHash(hash);
         return hash;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setError(msg);
+        /*
+         * The wallet's own failure, translated. `e.message` from viem is a multi-line dump with
+         * the useful sentence buried in a `Details:` line — and on a cancelled signature it reads
+         * as an error when nothing went wrong at all. `humanWalletError` is what the grant path
+         * already uses; a withdrawal is no place for a rawer message than that.
+         */
+        setError(humanWalletError(e));
         throw e;
       } finally {
         setBusy(false);

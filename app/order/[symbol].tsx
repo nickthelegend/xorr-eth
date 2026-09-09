@@ -40,6 +40,7 @@ import { useDebounced } from '@/data/useDebounced';
 import { useStore } from '@/state/store';
 import { DEFAULT_BUY } from '@/data/tradable';
 import { useSettleable } from '@/data/useSettleable';
+import { errorText } from '@/data/apiError';
 
 type Side = 'buy' | 'sell';
 
@@ -191,7 +192,7 @@ export default function OrderTicket() {
         setRefusal(res.detail ?? res.reason ?? res.error ?? `The order came back "${res.status}".`);
       }
     } catch (e) {
-      setRefusal(e instanceof Error ? e.message : String(e));
+      setRefusal(errorText(e));
     } finally {
       setPlacing(false);
     }

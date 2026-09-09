@@ -30,6 +30,7 @@ import {
   typeScale,
 } from '@/ui';
 import { system } from '@/data/system';
+import { errorText } from '@/data/apiError';
 
 const FIELD_H = 48;
 
@@ -63,7 +64,7 @@ export default function Basename() {
         setResult({ kind: 'name', query: q, address: r.address });
       }
     } catch (e) {
-      setResult({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+      setResult({ kind: 'error', message: errorText(e) });
     } finally {
       setBusy(false);
     }

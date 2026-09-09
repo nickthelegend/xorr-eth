@@ -18,6 +18,7 @@ import { encodeFunctionData, erc20Abi, type Address, type Hex } from 'viem';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
+import { errorText } from '@/data/apiError';
 
 export type TokenApproval = {
   symbol: string;
@@ -72,7 +73,7 @@ export function useApprovals() {
         await reload();
         return hash;
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(errorText(e));
         return undefined;
       } finally {
         setRevoking(undefined);

@@ -28,6 +28,7 @@ import { useAllowlist } from '@/wallet/allowlist';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { TONES, useTone } from '@/bot/tone';
+import { errorText } from '@/data/apiError';
 
 const SETTING_ROW = 54;
 const TONE_OPTIONS = TONES.map((t) => ({ value: t.id, label: t.label }));
@@ -85,7 +86,7 @@ export default function Settings() {
       router.replace('/welcome');
     } catch (e) {
       setConfirmingSignOut(false);
-      setSignOutError(e instanceof Error ? e.message : String(e));
+      setSignOutError(errorText(e));
     }
   }
 

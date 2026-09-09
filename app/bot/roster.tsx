@@ -32,6 +32,7 @@ import {
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useRefreshControl } from '@/ui/useRefreshControl';
+import { errorText } from '@/data/apiError';
 
 /** screens.md gives this one: 40pt, radius 20. Taller than a filter pill — it is a decision. */
 const HIRE_H = 40;
@@ -58,7 +59,7 @@ export default function Roster() {
       else await repos.bot.hire(agent.personaId ?? agent.id);
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(undefined);
     }

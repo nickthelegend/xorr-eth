@@ -36,6 +36,7 @@ import { api } from '@/data/api';
 
 import { nextRuns } from '@/strategies/schedule';
 import type { Cadence } from '@/data/types';
+import { errorText } from '@/data/apiError';
 
 type GridBacktest = {
   inRangePct: number;
@@ -141,7 +142,7 @@ export default function GridSetup() {
       });
       goBack();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

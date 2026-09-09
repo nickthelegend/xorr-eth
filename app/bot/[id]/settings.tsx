@@ -54,6 +54,7 @@ import {
 } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
+import { errorText } from '@/data/apiError';
 
 const RAIL_H = 6;
 const MARKER_W = 3;
@@ -94,7 +95,7 @@ export default function TradeSettings() {
       setDelegation(d);
       goBack();
     } catch (e) {
-      setLocalError(e instanceof Error ? e.message : String(e));
+      setLocalError(errorText(e));
     }
   }
 

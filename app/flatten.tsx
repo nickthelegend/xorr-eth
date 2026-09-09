@@ -37,6 +37,7 @@ import {
 } from '@/ui';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
+import { errorText } from '@/data/apiError';
 
 type Leg = { symbol: string; units: number; usd: number };
 type Preview = {
@@ -63,7 +64,7 @@ export default function Flatten() {
     try {
       setResult(await api.post<Result>('/panic/flatten', {}));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

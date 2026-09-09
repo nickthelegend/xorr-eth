@@ -36,6 +36,7 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { nextRuns } from '@/strategies/schedule';
 import type { Cadence } from '@/data/types';
+import { errorText } from '@/data/apiError';
 
 const CADENCES = [
   { value: 'daily', label: 'Daily' },
@@ -110,7 +111,7 @@ export default function YieldSetup() {
       });
       goBack();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

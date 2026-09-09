@@ -52,6 +52,7 @@ import { useStore } from '@/state/store';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useLogo } from '@/data/useLogos';
+import { errorText } from '@/data/apiError';
 
 /** The close bar. 6pt — a readout, not a control; the pills below it do the setting. */
 const BAR_H = 6;
@@ -98,7 +99,7 @@ export default function PositionScreen() {
         setCloseError(res.detail ?? res.error ?? `The close came back "${res.status}".`);
       }
     } catch (e) {
-      setCloseError(e instanceof Error ? e.message : String(e));
+      setCloseError(errorText(e));
     } finally {
       setClosing(false);
     }

@@ -32,6 +32,7 @@ import {
 import { quantity } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { errorText } from '@/data/apiError';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { STRATEGY_LADDER } from '@/strategies/ladder';
 import type { Strategy } from '@/data/types';
@@ -198,7 +199,19 @@ function StrategyRow({ s, onChanged }: { s: Strategy; onChanged: () => void }) {
       }
       onChanged();
     } catch (e) {
-      setNote(e instanceof Error ? e.message.slice(0, 90) : String(e));
+      /*
+       * The server's sentence, not the wire.
+       *
+       * This was `e.message.slice(0, 90)`, and `ApiError.message` is the raw response — so
+       * pressing Run now on a chain 1inch cannot fill printed this under the row:
+       *
+       *   502 : {"status":"failed","runId":"040c4097-84a3-41bc-a203-3dd30a20d523","error":"This netw
+       *
+       * A status code, a JSON brace, an internal run id, and the one useful part cut off
+       * mid-word by the slice. The executor had written a perfectly good sentence; `errorText`
+       * is what gets it out, the same accessor `ErrorState` uses everywhere else.
+       */
+      setNote(errorText(e));
     } finally {
       setBusy(undefined);
     }

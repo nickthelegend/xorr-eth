@@ -25,6 +25,7 @@ import {
 import { repos } from '@/data';
 import { DEFAULT_BUY } from '@/data/tradable';
 import { usePrice } from '@/data/usePrices';
+import { errorText } from '@/data/apiError';
 
 
 const FIELD_H = 48;
@@ -73,7 +74,7 @@ export default function NewAlert() {
       });
       goBack();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

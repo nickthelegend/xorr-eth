@@ -38,6 +38,7 @@ import { sleeveFixtures } from '@/data/fixtures/sleeves';
 import { onboarding } from '@/data/fixtures/onboarding';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
+import { errorText } from '@/data/apiError';
 
 const BAR_H = 8;
 
@@ -75,7 +76,7 @@ export default function Proposal() {
       });
       setApproved(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }

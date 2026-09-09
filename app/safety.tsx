@@ -40,6 +40,7 @@ import { useApprovals } from '@/wallet/useApprovals';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { errorText } from '@/data/apiError';
 
 /** The state chip's dot. 7pt — screens.md gives this one exactly. */
 const DOT = 7;
@@ -171,7 +172,7 @@ export default function Safety() {
       setDelegation(await repos.wallet.delegation());
       setKilled(unusable ? false : !killed);
     } catch (e) {
-      setLocalError(e instanceof Error ? e.message : String(e));
+      setLocalError(errorText(e));
     }
   }
 

@@ -36,6 +36,7 @@ import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { CAP_MAX, CAP_MIN, RUN_FOR, capLabel, runForMs } from '@/state/derived';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
+import { errorText } from '@/data/apiError';
 
 
 export default function GrantDelegation() {
@@ -83,7 +84,7 @@ export default function GrantDelegation() {
       setDelegation(d);
       router.replace('/proposal');
     } catch (e) {
-      setLocalError(e instanceof Error ? e.message : String(e));
+      setLocalError(errorText(e));
     }
   }
 

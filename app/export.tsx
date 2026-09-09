@@ -30,6 +30,7 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { deliverFile } from '@/export/deliver';
+import { errorText } from '@/data/apiError';
 
 type Job = 'trail-csv' | 'trail-json' | 'disposals' | null;
 
@@ -60,7 +61,7 @@ export default function Export() {
       if (out.ok) setDone(`${rows} rows · ${filename}`);
       else setProblem(out.reason);
     } catch (e) {
-      setProblem(e instanceof Error ? e.message : String(e));
+      setProblem(errorText(e));
     } finally {
       setBusy(null);
     }

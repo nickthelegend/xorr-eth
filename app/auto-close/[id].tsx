@@ -55,6 +55,7 @@ import {
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
+import { errorText } from '@/data/apiError';
 
 /** screens.md: the chart region never goes below this, and takes every spare point above it. */
 const CHART_MIN = 230;
@@ -201,7 +202,7 @@ export default function AutoClose() {
       });
       goBack();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : String(e));
+      setSaveError(errorText(e));
     } finally {
       setSaving(false);
     }
