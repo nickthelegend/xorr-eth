@@ -65,7 +65,7 @@ export default function Safety() {
     (roster.data ?? []).filter((a) => a.hired).length +
     (strategies.data ?? []).filter((s) => s.state === 'live').length;
 
-  const killed = useStore((s) => s.killed);
+  const storedKilled = useStore((s) => s.killed);
   const setKilled = useStore((s) => s.setKilled);
   const setDelegation = useStore((s) => s.setDelegation);
   // Read it as well as write it: the two parties are rendered below, and a screen that
@@ -74,6 +74,27 @@ export default function Safety() {
   const cap = useStore((s) => s.cap);
   const recoveryBackedUp = useStore((s) => s.recoveryBackedUp);
   const [localError, setLocalError] = useState<string>();
+
+  /*
+   * Stopped, according to the chain — not according to a flag we kept.
+   *
+   * `killed` was a persisted store boolean, set when the user pressed the button in THIS browser.
+   * The chain already carries the answer as `revoked`, and the two drift the moment anything
+   * happens outside the session: a revoke from another device, a reload after site data is
+   * cleared, or simply the store not being written.
+   *
+   * Measured on the deployed build, which is what makes this worth the change rather than an
+   * opinion: the kill switch was pressed, the transaction confirmed, and /verify read
+   * `revoked=true, $0 left today` off the contract — while this screen still showed a green LIVE
+   * badge and "2 agents can place orders inside your limits right now", on a screen that promises
+   * the stop "takes effect in under a second across every device". The bot was genuinely stopped
+   * and the safety screen said it was not, which is the most expensive direction for this
+   * particular lie to run.
+   *
+   * The chain governs whenever there is a permission to read. The stored flag survives only as
+   * the answer before the first fetch lands, and for the case where there is no permission at all.
+   */
+  const killed = delegation ? delegation.revoked : storedKilled;
 
   /*
    * A granted permission the bot cannot actually use.
@@ -89,6 +110,7 @@ export default function Safety() {
    * badge, title and explanation all have to say so rather than describing one that is not there.
    */
   const granted = delegation !== null && delegation !== undefined;
+
 
   // "2 addresses" was typed in. The allowlist is real and persisted; read it.
   const { addresses } = useAllowlist();
