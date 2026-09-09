@@ -1,4 +1,24 @@
 import { defineConfig } from 'vitest/config';
+import path from 'node:path';
+
+/*
+ * The repo-root `.env`, loaded before the suite collects.
+ *
+ * `venues/oneinch.ts` throws at import when `ONEINCH_API_KEY` is missing — deliberately, because
+ * swap routing has no offline fallback — and there is no `server/.env`. So `(cd server && npm
+ * test)`, a command the README tells people to run, failed to COLLECT `news/feed.test.ts` while
+ * the same file passed from the repo root, where the root config already loads this file. One
+ * suite passing and the other failing on the same code is the kind of thing that gets blamed on
+ * the test.
+ *
+ * `loadEnvFile` does not override what the shell already set, so CI keeps its own values.
+ */
+try {
+  process.loadEnvFile(path.resolve(import.meta.dirname, '../.env'));
+} catch {
+  // No `.env` is legitimate: the unit tests need nothing from it, and anything that does says
+  // plainly which variable was missing.
+}
 
 /**
  * The server's own suite, run from `server/`.
@@ -13,7 +33,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    exclude: ['**/node_modules/**', '**/*.chain.test.ts'],
+    exclude: ['**/node_modules/**'],
     fileParallelism: !process.env.LIVE ? undefined : false,
     globalSetup: ['../tools/wait-for-warm.ts'],
   },

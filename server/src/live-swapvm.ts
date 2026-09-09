@@ -273,6 +273,23 @@ function check(ok: boolean, label: string, detail: string) {
 const bal = (t: Address, who: Address) =>
   pub.readContract({ address: t, abi: erc20Abi, functionName: 'balanceOf', args: [who] });
 
+/*
+ * The chain is pinned BEFORE any executor module loads, and it is not a formality.
+ *
+ * `evm/chains.ts` imports `dotenv/config` and reads `process.env.XORR_CHAIN ?? 'localnet'` at
+ * module scope, and the repo's `.env` says `base-sepolia`. So the first run of this script shipped
+ * a program to Aqua on the fork and then asked a client pointed at Base Sepolia whether it could
+ * see it. Aqua has no code on Sepolia, `eth_getLogs` against an address with no code is a
+ * successful empty response, and `openPrograms()` returned `0 open program(s)` — the exact shape of
+ * the honest answer "no maker has shipped one". An hour went into the discovery code before the
+ * wrong chain surfaced.
+ *
+ * Every executor import in this file is therefore DYNAMIC and happens after these two lines. A
+ * static one would be evaluated before the first statement of the module body and defeat this.
+ */
+process.env.AQUA_ADDRESS = AQUA;
+process.env.XORR_CHAIN = 'base-fork';
+
 async function main() {
   console.log(`fork ${RPC}\nbook ${BOOK}\ndelegation ${DELEGATION}\n`);
 
@@ -288,9 +305,24 @@ async function main() {
   const maker = makerAccount.address;
   const makerWallet = createWalletClient({ account: makerAccount, chain, transport: http(RPC) });
 
-  await anvil('anvil_setBalance', [maker, '0x8AC7230489E80000']);
+  // 100 ETH, because the maker wraps most of its inventory and still pays for its own gas.
+  await anvil('anvil_setBalance', [maker, '0x56BC75E2D63100000']);
 
-  const wantUsdc = parseUnits('20000', 6);
+  /*
+   * The book is seeded DEEP, and the depth is the point rather than decoration.
+   *
+   * A constant-product curve moves with every fill, so a shallow book stops being the best price
+   * the moment it trades. Seeded at 5,000 USDC, this script's own 150 USDC fill walked the price
+   * ~3% — past the 2% edge the maker was quoting — and the executor's next $50 order correctly
+   * routed to the aggregator instead. The venue counter stayed empty for a reason that had nothing
+   * to do with routing: the book had already been taken.
+   *
+   * At 50,000 the same fill moves it ~0.3%, so the maker stays competitive across the several
+   * orders a real session places. That is what depth is FOR, and it is why a market maker quotes
+   * size rather than a single good price.
+   */
+  const seedUsdc = parseUnits('50000', 6);
+  const wantUsdc = seedUsdc + parseUnits('10000', 6);
   if ((await bal(USDC, maker)) < wantUsdc) {
     await anvil('anvil_impersonateAccount', [WHALE]);
     await anvil('anvil_setBalance', [WHALE, '0xDE0B6B3A7640000']);
@@ -303,13 +335,37 @@ async function main() {
   }
   check((await bal(USDC, maker)) >= wantUsdc, 'the maker holds real Base USDC', `${formatUnits(await bal(USDC, maker), 6)} USDC`);
 
-  const seedWeth = parseUnits('2', 18);
+  /*
+   * The maker's inventory is sized against the AGGREGATOR's live price, not a round number.
+   *
+   * A book that quotes worse than the market is a book nobody fills, and the executor is right to
+   * skip it — that is the entire job of `buildSwapVmFill`'s dry run. The first version of this
+   * script seeded 5000 USDC against a flat 2 WETH, which implied $2,500/ETH; the fork's real price
+   * was $2,502, so after the 30bp fee the program paid 0.019744 WETH on a $50 order against a
+   * 0.019920 floor derived from the aggregator's own quote. The executor declined it and routed to
+   * 1inch, correctly, and the venue counter stayed empty for a reason that looked like a bug and
+   * was actually a maker quoting a bad price.
+   *
+   * So the reserves are derived: enough WETH that the curve pays `EDGE` better than the aggregator
+   * over this size. That is what a maker who wants flow actually does — quote inside the spread —
+   * and it makes the fill a test of routing rather than of luck.
+   */
+  const EDGE = 0.02;
+  const { quote } = await import('./venues/oneinch.js');
+  const reference = await quote({ inSymbol: 'USDC', outSymbol: 'WETH', amount: 50 });
+  const wethPerUsdc = reference.outAmount / 50;
+  const seedWeth = parseUnits(((Number(formatUnits(seedUsdc, 6)) * wethPerUsdc) * (1 + EDGE)).toFixed(18), 18);
+  console.log(
+    `maker quotes ${(EDGE * 100).toFixed(0)}% inside the aggregator: ` +
+      `${formatUnits(seedUsdc, 6)} USDC against ${formatUnits(seedWeth, 18)} WETH\n`,
+  );
+
   if ((await bal(WETH, maker)) < seedWeth) {
     const h = await makerWallet.writeContract({
       address: WETH,
       abi: [{ type: 'function', name: 'deposit', inputs: [], outputs: [], stateMutability: 'payable' }] as const,
       functionName: 'deposit',
-      value: parseUnits('3', 18),
+      value: seedWeth + parseUnits('1', 18),
     });
     await pub.waitForTransactionReceipt({ hash: h });
   }
@@ -336,7 +392,6 @@ async function main() {
     address: BOOK, abi: BOOK_ABI, functionName: 'orderFor', args: [maker, program],
   });
 
-  const seedUsdc = parseUnits('5000', 6);
   const [app, encoded, tokens, amounts] = await pub.readContract({
     address: BOOK, abi: BOOK_ABI, functionName: 'shipArgs',
     args: [order, WETH, USDC, seedWeth, seedUsdc],
@@ -362,22 +417,6 @@ async function main() {
   );
 
   // ── Discovery: the executor's own code has to find it ────────────────────────────────────
-  /*
-   * `XORR_CHAIN` is set here, and it is not a formality.
-   *
-   * `evm/chains.ts` imports `dotenv/config` and reads `process.env.XORR_CHAIN ?? 'localnet'` at
-   * module scope, and the repo's `.env` says `base-sepolia`. So the FIRST run of this script
-   * shipped a program to Aqua on the fork and then asked a client pointed at Base Sepolia whether
-   * it could see it. Aqua has no code on Sepolia, `eth_getLogs` against an address with no code is
-   * a successful empty response, and `openPrograms()` returned `0 open program(s)` — the exact
-   * shape of the honest answer "no maker has shipped one". An hour went into the discovery code
-   * before the wrong chain surfaced.
-   *
-   * Both assignments must happen BEFORE the dynamic import below, because that import is what
-   * evaluates `chains.ts`. Static imports would already have run.
-   */
-  process.env.AQUA_ADDRESS = AQUA;
-  process.env.XORR_CHAIN = 'base-fork';
   const { openPrograms, buildSwapVmFill } = await import('./venues/swapvm.js');
   const { publicClient } = await import('./evm/client.js');
   const { DELEGATION_ABI, delegatePublicKey } = await import('./evm/delegation.js');

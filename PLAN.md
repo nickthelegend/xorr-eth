@@ -103,17 +103,27 @@ must exist before a deploy and creating it is a Studio dashboard action with a w
 
 ## Phase 3 — Make SwapVM a real fill
 
-`XorrSwapVMBook` is deployed, covered by 10 fork tests including guards proving the deadline expires
-and the fee costs, and `server/src/venues/swapvm.ts` is in the settlement path ahead of the
-aggregator. `fillsByVenue` on the fork reads `{1inch: 35, aqua: 5}` — **no swapvm key**. Nothing has
-ever settled through it, because discovery requires a maker to have shipped a SwapVM program to Aqua
-and nobody has.
+**CLOSED.** `fillsByVenue` on the fork now reads `{swapvm: 1, 1inch: 36, aqua: 5}`. The deployed
+executor filled a $50 WETH order through `XorrDelegation.spend()` → `XorrSwapVMBook` → the official
+SwapVM router, tx `0xc57787db011c861186dc3d66ef61b488ff793152a727b0ab09c0f6602715b89c`, with the
+1inch aggregation router never touched — and the user received 0.020165 WETH where the aggregator
+quoted 0.019971, because the maker's book priced inside it.
+
+Three defects stood between the deployed contract and a fill, not one:
+
+1. `ORDER_TUPLE` described four fields; `ISwapVM.Order` has three. Every decode produced garbage, so
+   the fill could never have worked even with a maker present.
+2. `buildSwapVmFill` returned the first program it could ENCODE. `delegatedFillArgs` is a pure view
+   that encodes anything, so a superseded maker — still `Shipped` in Aqua's logs forever — was
+   preferred over the aggregator and lost the trade outright. Each candidate is now dry-run through
+   the real `spend()` and skipped if it cannot clear.
+3. Nobody had ever shipped a program. `server/src/live-swapvm.ts` is the maker that was missing.
 
 | # | Task | Status |
 |---|---|---|
-| 3.1 | Write `server/src/live-swapvm.ts`, modelled on the existing `server/src/live-aqua.ts` (398 lines): fund a maker wallet with inventory on the fork, compile an order with `encodeOrder`, ship it to Aqua with the **SwapVM router** as the `app`, then assert `openPrograms()` discovers it | **NOT STARTED** |
-| 3.2 | Drive one fill end to end through `buildSwapVmFill` and assert the maker's ERC-20 balance moved and the activity row names `swapvm` as the venue | **NOT STARTED** |
-| 3.3 | Once a fill exists, change the README's SwapVM row from **Wired** to **Done** with the transaction hash. Not before — the current wording is accurate | **NOT STARTED** |
+| 3.1 | `server/src/live-swapvm.ts`: funds a maker, compiles the program with the book's own `xycProgram`, ships to the OFFICIAL Aqua under the SwapVM router as the `app`, and proves `openPrograms()` finds it. Reserves are sized against the live aggregator quote — a book that quotes worse than the market is one the executor is right to skip, and a shallow one stops being best the moment it trades | **DONE** — 18/18 |
+| 3.2 | Fill driven through `buildSwapVmFill` — the executor's own entry point, not the contract behind it. The maker's WETH moved to the taker, and `/metrics` counts a `swapvm` fill, which is derived from the activity row's own wording. Two negative controls: the executor refuses to plan a fill that cannot clear, and the ROUTER refuses one submitted anyway (`TakerTraitsInsufficientMinOutputAmount`, three frames deep) | **DONE** |
+| 3.3 | README's SwapVM row is now **Done**, with the transaction hash, the venue counts and the price the user actually got | **DONE** |
 
 ## Phase 4 — Base mainnet
 
