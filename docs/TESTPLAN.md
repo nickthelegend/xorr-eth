@@ -107,3 +107,56 @@ Signed in as a real Privy account with a real embedded wallet.
 | I3 | AI chat replies from a model | No LLM key exists in the repo |
 | I4 | Aqua venue subgraph | Built and pinned, but `graph deploy` needs a Studio slug that does not exist |
 | I5 | SwapVM real fill | No maker has shipped a SwapVM program; contract covered by 10 fork tests |
+
+---
+
+# Results
+
+Executed against the deployed app on 2026-09-09. Two items failed, were fixed at the root, and
+re-verified from the start; the whole plan was then re-run.
+
+| Section | Result |
+|---|---|
+| A · Infrastructure and chain | **7/7 PASS** |
+| B · Core user flow | **8/8 PASS** |
+| C · Strategy lifecycle | **5/5 PASS** (C2 failed first — see below) |
+| D · Money-moving guards | **6/6 PASS** |
+| E · Data honesty | **6/6 PASS** |
+| F · Proof surfaces | **5/5 PASS** (F2 failed first — see below) |
+| G · Edge cases | **7/8 PASS**, G7 not reproducible — see below |
+| H · Whole-surface sweep | **2/2 PASS** |
+
+## The two failures, and what fixed them
+
+**C2 — strategy creation attributed to a persona that did not run it.** The activity row read
+"Created $50 of WETH, monthly · Yield Keeper". The code fix (`agentName` defaulting to `xorr`
+instead of `'Yield Keeper'`) was already committed, but the executor deployment carrying it had
+been stuck "Building" for 34 minutes, so the running service still had the old code. Redeployed;
+a freshly created strategy now reads "Created $50 of CBBTC, weekly · xorr". The older row keeps
+its original attribution, which is correct — the trail is append-only.
+
+**F2 — /judge invented a reason for a skipped check.** The header said "1 skipped — those need a
+wallet address, and none was given" while signed in with a wallet that nineteen of the twenty
+checks had just used. The single skip was the tokenized-equities check, which skips because those
+tokens do not function on Sepolia and says so on its own row. Wallet-gated skips identify
+themselves (`No wallet on this request.`), so that sentence is now used only when it is true of
+every skip; otherwise the summary points at the rows. Now reads "1 skipped — each says why on its
+own row. Skipped is not passed."
+
+## G7 — double submit: guard verified, gesture not reproducible
+
+Chrome's click injection stopped landing partway through this run — single coordinate clicks,
+`ref` clicks, `.click()` and synthetic pointer sequences all produced no effect, on two tabs, on a
+button that had accepted clicks earlier in the same session. Six attempts created zero records,
+which measures the tooling and not the guard.
+
+The guard itself was untested, so it is now: `createPressGuard` was extracted from
+`useGuardedPress` — behaviour unchanged, including the 800ms hold — with 7 tests covering the case
+that matters, two `take()` calls in the same tick where the second must be refused. Marked
+**not verified end-to-end** rather than PASS, because the browser gesture is what the item asked for.
+
+## Untestable here (I1–I5) — stated, not marked pass
+
+Unchanged from the plan: Base mainnet settlement (mainnet deploy spends real money), 1inch fills on
+Sepolia (no liquidity — verified on the fork instead), the AI chat's model (no LLM key exists), the
+Aqua venue subgraph (needs a Studio slug), and a SwapVM fill (no maker has shipped a program).
