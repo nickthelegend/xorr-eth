@@ -395,7 +395,35 @@ const SETTLEMENT_ADDRESS: Record<string, string> = {
  * Public: it is a published on-chain rate, identical for every visitor, and the home screen shows
  * it before a user has a wallet.
  */
-market.get('/yield/supply', async (c) => c.json(await usdcSupplyYield()));
+/**
+ * The Aave supply rate, or a reason there isn't one — never a bare 500.
+ *
+ * This was `c.json(await usdcSupplyYield())` with no catch, and `usdcReserve` throws for two real
+ * reasons: the Base mainnet RPC did not answer, and the rate it returned was implausible
+ * (`apy <= 0 || apy > 1`), which is a deliberate refusal to publish a nonsense number. Either one
+ * reached the client as an empty 500 — caught by the screen sweep, which recorded
+ * `500 /yield/supply` and a console error on a screen whose UI looked fine.
+ *
+ * 503 with `retry-after`, matching `/market/ohlc` and `/perp/:symbol`: the rate does come back, so
+ * this is worth retrying, and `isRetryable` treats 5xx as retryable. The sentence matters more than
+ * the code — an endpoint this public should never answer with nothing at all.
+ */
+market.get('/yield/supply', async (c) => {
+  try {
+    return c.json(await usdcSupplyYield());
+  } catch (e) {
+    c.header('retry-after', '5');
+    return c.json(
+      {
+        error: 'rate_unavailable',
+        detail: `The Aave v3 supply rate could not be read just now: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      },
+      503,
+    );
+  }
+});
 
 /**
  * GET /market/stocks — the tokenized equities, priced off the venue that would fill the trade.
