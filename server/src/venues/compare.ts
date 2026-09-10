@@ -18,7 +18,7 @@
 import type { Address } from 'viem';
 import { quote, TOKENS as VENUE_TOKENS, SLIPPAGE } from './oneinch.js';
 import { buildAquaFill } from './aqua.js';
-import { buildSwapVmFill } from './swapvm.js';
+import { buildSwapVmFill, openPrograms } from './swapvm.js';
 
 export type VenueQuote =
   | {
@@ -79,6 +79,13 @@ export async function compareVenues(params: {
    */
   const agg = await settled(quote({ inSymbol, outSymbol, amount }));
 
+  /*
+   * How many programs exist at all, so a refusal can name its own cause. Counted separately from
+   * the fill attempt because `buildSwapVmFill` collapses "none shipped" and "none fillable" into
+   * the same `undefined`.
+   */
+  const shippedCount = await settled(openPrograms()).then((p) => p?.length ?? 0);
+
   const [aqua, swapVm] = await Promise.all([
     settled(
       buildAquaFill({
@@ -132,9 +139,20 @@ export async function compareVenues(params: {
       : {
           venue: 'swapvm',
           served: false,
-          reason: agg
-            ? 'No maker has shipped a program for this pair.'
-            : 'Needs a reference price, and the aggregator did not answer.',
+          /*
+           * WHY it cannot serve, distinguished rather than assumed.
+           *
+           * This said "no maker has shipped a program" for every refusal, which was measurably
+           * false on the fork: sixteen programs were open and discoverable, and the fill was
+           * refused by the dry run for this owner's permission. A comparison whose reasons are
+           * guesses is worth less than one that admits the difference — "nobody is quoting" and
+           * "somebody is quoting and you cannot take it" are opposite facts about the venue.
+           */
+          reason: !agg
+            ? 'Needs a reference price, and the aggregator did not answer.'
+            : shippedCount === 0
+              ? 'No maker has shipped a program for this pair.'
+              : `${shippedCount} program${shippedCount === 1 ? ' is' : 's are'} shipped, but none can fill this size under your permission right now.`,
         },
     agg
       ? {
