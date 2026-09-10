@@ -267,3 +267,37 @@ the mid-range verdict inside that, and the live price it is compared against has
 `"source":"fallback"` after the fallback line had been deleted — true of nothing, in a project
 whose central claim is that it contains none — and `stocks.live.test.ts` reported eight real
 deployed tokens as missing whenever the free Base RPC throttled.
+
+## Zero mocks, zero stubs — the evidence, not the assertion
+
+Grepping the shipped code (`src/`, `app/`, `server/src/`, excluding tests) for
+`mock|stub|fixture|faker|dummy|hardcoded` returns three lines, none of them data:
+
+```
+src/bot/tone.ts:27         '…Never mock the user.'          ← a tone instruction
+server/src/bot/tone.ts:5   '…Never mock the user.'          ← the same string, server side
+app/watchlist.tsx:113      '…fixture sets to "—" for every row…'  ← a comment about a bug that was fixed
+```
+
+That is a negative result and worth stating as such. The positive evidence is that every number
+this run checked was traced to its source in the same breath as reading it:
+
+- `/limits` was compared against `policyOf()` read from the chain **in the same run**, not against
+  a recorded expectation — 1600 == 1600.
+- The anchor's block number was fetched with `getBlock` to confirm the chain has it.
+- `jesse.base.eth` was resolved from Base's L2 resolver directly before asking the app, so the
+  app's answer was checked against ground truth rather than against itself.
+- The SwapVM fill's `to` address was read off the receipt and is `XorrDelegation` — the fill went
+  through the permission, which is the claim, not around it.
+- Where a value could not be obtained, the surface says so by name: `/perp` returns `markPx` and
+  lists `openInterestUsd`, `dayVolumeUsd`, `fundingRate` in an `unavailable` array rather than
+  zeroing them; `/verify` marks `equities` SKIP with the measurement that justifies it; `/briefing`
+  labels each headline's missing comment separately.
+
+## What could not be tested, and why
+
+| Item | Reason |
+|---|---|
+| D14 — the LLM voice | `OPENROUTER_API_KEY` is set in neither `.env` nor the executor's Railway environment. There is no credential to use, so no model call can be made. Marked UNTESTABLE. What *was* verified is the behaviour without one: every surface refuses in words rather than printing a canned line. |
+| C6 on **Base Sepolia** | The full revoke→STOPPED→revert loop needs the wallet owner to sign a Privy dialog, and the Sepolia grant is the live demo. Run end to end on the Base mainnet fork instead, where the owner can be impersonated — a real chain, real transactions, the product's own `readPolicy` and the same contract. Marked PASS on that basis and named here so the substitution is not hidden. |
+| Privy policy on the **user's** embedded wallet | Privy requires the wallet's owner to authorise it. `/safety` says exactly that on screen: *"Privy makes the wallet's owner authorise this, and that owner is you. Nothing we hold can attach it for you."* Platform constraint, stated rather than worked around. |
