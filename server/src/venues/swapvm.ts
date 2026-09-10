@@ -27,6 +27,7 @@
 import { decodeAbiParameters, encodeAbiParameters, parseAbiParameters, type Address, type Hex } from 'viem';
 import { log } from '../http/request-id.js';
 import { publicClient, delegateAccount } from '../evm/client.js';
+import { getLogsPaged } from '../evm/logs.js';
 import { AQUA_EVENTS, aquaAddress } from './aqua.js';
 import { DELEGATION_ABI, DELEGATION_ADDRESS } from '../evm/delegation.js';
 
@@ -125,10 +126,12 @@ export async function openPrograms(): Promise<{ order: SwapVmOrder; hash: Hex }[
   const fromBlock = head > LOOKBACK_BLOCKS ? head - LOOKBACK_BLOCKS : 0n;
   const aqua = aquaAddress();
 
-  const [shipped, docked] = await Promise.all([
-    publicClient.getLogs({ address: aqua, event: AQUA_EVENTS[0], fromBlock, toBlock: head }),
-    publicClient.getLogs({ address: aqua, event: AQUA_EVENTS[1], fromBlock, toBlock: head }),
-  ]);
+  /*
+   * Sequential, not `Promise.all`. These endpoints rate-limit as well as range-limit, and firing
+   * both paged scans at once trades one refusal for the other.
+   */
+  const shipped = await getLogsPaged({ address: aqua, event: AQUA_EVENTS[0], fromBlock, toBlock: head });
+  const docked = await getLogsPaged({ address: aqua, event: AQUA_EVENTS[1], fromBlock, toBlock: head });
 
   // Aqua is shared liquidity: these logs carry every app's books. Ours are the ones whose app is
   // the SwapVM router — that is what distinguishes a program from an ordinary Aqua curve.

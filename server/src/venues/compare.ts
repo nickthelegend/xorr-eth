@@ -140,7 +140,15 @@ export async function compareVenues(params: {
       ? {
           venue: '1inch',
           outAmount: agg.outAmount,
-          detail: agg.route ? `via ${agg.route}` : 'aggregation v6',
+          /*
+           * The pools by name, not "Best of 2 venues".
+           *
+           * `routeLabel` summarises for the order ticket, which has one line. Here the whole point
+           * is that each venue's answer can be compared, and "Best of 2 venues" is a count where
+           * the other two rows give a reason — so it names what it routed through, the same way the
+           * activity trail does.
+           */
+          detail: agg.venues.length ? `via ${agg.venues.join(', ')}` : 'direct, no pool hop',
           served: true,
         }
       : { venue: '1inch', served: false, reason: 'The aggregator returned no route for this pair.' },

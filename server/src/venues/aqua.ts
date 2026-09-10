@@ -35,6 +35,7 @@ import {
   type Hex,
 } from 'viem';
 import { publicClient } from '../evm/client.js';
+import { getLogsPaged } from '../evm/logs.js';
 import { log } from '../http/request-id.js';
 
 /** The book's own terms. Hashed to produce the Aqua strategy id, so they are immutable. */
@@ -218,10 +219,12 @@ export async function openBooks(params: {
   const fromBlock = head > LOOKBACK_BLOCKS ? head - LOOKBACK_BLOCKS : 0n;
   const aqua = aquaAddress();
 
-  const [shipped, docked] = await Promise.all([
-    publicClient.getLogs({ address: aqua, event: AQUA_EVENTS[0], fromBlock, toBlock: head }),
-    publicClient.getLogs({ address: aqua, event: AQUA_EVENTS[1], fromBlock, toBlock: head }),
-  ]);
+  /*
+   * Sequential, not `Promise.all`. These endpoints rate-limit as well as range-limit, and firing
+   * both paged scans at once trades one refusal for the other.
+   */
+  const shipped = await getLogsPaged({ address: aqua, event: AQUA_EVENTS[0], fromBlock, toBlock: head });
+  const docked = await getLogsPaged({ address: aqua, event: AQUA_EVENTS[1], fromBlock, toBlock: head });
 
   /*
    * A book can be shipped, docked and shipped again, so the LAST event for a hash decides.

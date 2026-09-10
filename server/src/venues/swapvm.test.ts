@@ -61,6 +61,20 @@ const evt = (app: string, hash: string, strategy: string, block: bigint, logInde
   logIndex,
 });
 
+/**
+ * Answer by EVENT, not by call order.
+ *
+ * `mockResolvedValueOnce` twice assumed discovery makes exactly two `eth_getLogs` calls, which is
+ * an implementation detail — and it stopped being true the moment the scan started paging the
+ * range into windows the provider will serve. Dispatching on the event says what the test means
+ * ("these books were shipped, those were docked") and survives however many requests that takes.
+ */
+function byEvent(shipped: unknown[], docked: unknown[]) {
+  getLogs.mockImplementation(async (args: { event?: { name?: string } }) =>
+    args?.event?.name === 'Docked' ? docked : shipped,
+  );
+}
+
 beforeEach(() => {
   getLogs.mockReset();
   readContract.mockReset();
@@ -105,7 +119,7 @@ describe('the order round-trips through the wire format', () => {
 describe('discovery filters on the SwapVM app, not ours', () => {
   it('finds a shipped program', async () => {
     const enc = encodeOrder(order());
-    getLogs.mockResolvedValueOnce([evt(SWAP_VM, '0xaa', enc, 10n, 0)]).mockResolvedValueOnce([]);
+    byEvent([evt(SWAP_VM, '0xaa', enc, 10n, 0)], []);
     const found = await openPrograms();
     expect(found).toHaveLength(1);
     expect(found[0]!.hash).toBe('0xaa');
@@ -114,29 +128,25 @@ describe('discovery filters on the SwapVM app, not ours', () => {
 
   it('ignores books shipped under another app — Aqua is shared liquidity', async () => {
     const enc = encodeOrder(order());
-    getLogs.mockResolvedValueOnce([evt(OTHER_APP, '0xbb', enc, 10n, 0)]).mockResolvedValueOnce([]);
+    byEvent([evt(OTHER_APP, '0xbb', enc, 10n, 0)], []);
     expect(await openPrograms()).toHaveLength(0);
   });
 
   it('the LAST event for a hash decides, so a docked book is closed', async () => {
     const enc = encodeOrder(order());
-    getLogs
-      .mockResolvedValueOnce([evt(SWAP_VM, '0xcc', enc, 10n, 0)])
-      .mockResolvedValueOnce([evt(SWAP_VM, '0xcc', enc, 20n, 0)]);
+    byEvent([evt(SWAP_VM, '0xcc', enc, 10n, 0)], [evt(SWAP_VM, '0xcc', enc, 20n, 0)]);
     expect(await openPrograms()).toHaveLength(0);
   });
 
   it('a re-shipped book is open again', async () => {
     const enc = encodeOrder(order());
-    getLogs
-      .mockResolvedValueOnce([evt(SWAP_VM, '0xdd', enc, 10n, 0), evt(SWAP_VM, '0xdd', enc, 30n, 0)])
-      .mockResolvedValueOnce([evt(SWAP_VM, '0xdd', enc, 20n, 0)]);
+    byEvent([evt(SWAP_VM, '0xdd', enc, 10n, 0), evt(SWAP_VM, '0xdd', enc, 30n, 0)], [evt(SWAP_VM, '0xdd', enc, 20n, 0)]);
     expect(await openPrograms()).toHaveLength(1);
   });
 
   it('an undecodable payload is skipped, not thrown', async () => {
     // Another version, or another app's encoding. Not an error.
-    getLogs.mockResolvedValueOnce([evt(SWAP_VM, '0xee', '0x1234', 10n, 0)]).mockResolvedValueOnce([]);
+    byEvent([evt(SWAP_VM, '0xee', '0x1234', 10n, 0)], []);
     expect(await openPrograms()).toHaveLength(0);
   });
 });
@@ -152,7 +162,7 @@ describe('building the fill', () => {
   };
 
   it('asks the BOOK to compute the call, and applies the minimum out', async () => {
-    getLogs.mockResolvedValueOnce([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)]).mockResolvedValueOnce([]);
+    byEvent([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)], []);
     readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
 
     const fill = await buildSwapVmFill(params);
@@ -166,7 +176,7 @@ describe('building the fill', () => {
   });
 
   it('returns undefined when nothing is shipped — the ordinary case, not an error', async () => {
-    getLogs.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    byEvent([], []);
     expect(await buildSwapVmFill(params)).toBeUndefined();
   });
 
@@ -186,12 +196,13 @@ describe('building the fill', () => {
    * dead program over the aggregator and lose the trade outright.
    */
   it('skips a program whose fill would revert, and takes the next one', async () => {
-    getLogs
-      .mockResolvedValueOnce([
+    byEvent(
+      [
         evt(SWAP_VM, '0xaa', encodeOrder(order('0xdead')), 10n, 0),
         evt(SWAP_VM, '0xbb', encodeOrder(order('0xbeef')), 11n, 0),
-      ])
-      .mockResolvedValueOnce([]);
+      ],
+      [],
+    );
     readContract
       .mockResolvedValueOnce([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xstale'])
       .mockResolvedValueOnce([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xlive']);
@@ -205,9 +216,7 @@ describe('building the fill', () => {
   });
 
   it('returns undefined when no discovered program can fill, so the caller routes to 1inch', async () => {
-    getLogs
-      .mockResolvedValueOnce([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)])
-      .mockResolvedValueOnce([]);
+    byEvent([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)], []);
     readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
     simulateContract.mockRejectedValue(new Error('TakerTraitsInsufficientMinOutputAmount'));
 
@@ -215,9 +224,7 @@ describe('building the fill', () => {
   });
 
   it('simulates as the delegate that will send it, against the real spend()', async () => {
-    getLogs
-      .mockResolvedValueOnce([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)])
-      .mockResolvedValueOnce([]);
+    byEvent([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)], []);
     readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
 
     await buildSwapVmFill(params);
@@ -233,7 +240,7 @@ describe('building the fill', () => {
   });
 
   it('refuses a zero minimum rather than filling at any price', async () => {
-    getLogs.mockResolvedValueOnce([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)]).mockResolvedValueOnce([]);
+    byEvent([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)], []);
     expect(await buildSwapVmFill({ ...params, quotedOut: 0n })).toBeUndefined();
   });
 });
