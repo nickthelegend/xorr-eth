@@ -11,7 +11,7 @@ Two things to know before the per-sponsor sections, because they change how ever
 |---|---|---|
 | 1inch Aggregation fills | **170 real fills** | 1inch cannot settle here |
 | 1inch Aqua | 6 fills — on an anvil that no longer exists | Aqua is a Base **mainnet** deployment |
-| 1inch SwapVM | **0, ever** | 0 |
+| 1inch SwapVM | **2 real fills** (2026-09-10) | SwapVM is a Base mainnet deployment |
 | The Graph index | **inert** — indexes another contract | **load-bearing** — blocks trades |
 | Privy policy engine | enforced | enforced |
 | Base: Aave, Basenames, cbBTC, equities | real mainnet state | partial |
@@ -21,21 +21,39 @@ affect anything. A judge who opens Sepolia sees the Graph deciding trades that c
 **No single deployment demonstrates the sponsor stack**, and that is the highest-leverage thing to
 fix before judging — it is a deployment problem, not a code problem.
 
-## Finding 2 — `SUBMISSION.md` overstates SwapVM
+## Finding 2 — SwapVM has settled now. **Closed 2026-09-10.**
 
-It says, under the 1inch track: *"Both are used, and both settle real trades."*
+This finding used to read: *"`XorrSwapVMBook` has settled **zero** trades, on any deployment,
+ever"*, against `SUBMISSION.md`'s claim that "both are used, and both settle real trades". That was
+true when it was written and it is no longer.
 
-`XorrSwapVMBook` has settled **zero** trades, on any deployment, ever. Measured:
+`fillsByVenue` on the fork, read from the executor's own `/metrics`:
 
 ```
-select count(*) from audit_log where action ilike '%SwapVM program%'   →  0
-select count(*) from audit_log where action ilike '%on an Aqua book%'  →  6
-select count(*) from audit_log where action ~ '^(Bought|Sold) '
-                                  and action !~ 'Aqua|SwapVM'          →  170
+{"swapvm": 2, "1inch": 36, "aqua": 5}
 ```
 
-Across 1,262 audit entries. That sentence needs correcting before submission — a judge who checks
-the trail will find the claim and its own refutation in the same table.
+The first fill, end to end and on chain:
+
+| | |
+|---|---|
+| program shipped to **official** Aqua | `0x4c432065609116ab028313cbd2f942c23d20c46d2832959609302f518751ace0` |
+| app it was shipped under | `0x111111338c5091E8440b67B168bAe16a668AC0De` — the 1inch SwapVM router |
+| `openPrograms()` discovery | 16 open programs, from Aqua's own logs |
+| the fill | `0x2a20ebbddbd9db138b0d265ec0995b2d4ef239a70e3f39cb872254181bebc218` |
+| `to` on that transaction | `XorrDelegation` — so it ran through the permission, not around it |
+| taker received | +0.061246900891976021 WETH |
+| out of the maker's own wallet | −0.061246900891976021 WETH |
+| against the executor's floor | quoted 0.0612513, got 0.0612469 — above it |
+
+What had been blocking it was not the contract. Discovery scans Aqua's logs, and the endpoint
+anvil forks from had tightened `eth_getLogs` to a 2,000-block range while the scan asked for
+9,000 — so the query threw, the caller's `.catch` turned it into `undefined`, and the venue was
+silently never available. `evm/logs.ts` pages the request now, which is what made the maker
+findable.
+
+An impossible floor is still refused by the VM itself (`0xf44f8993` from the router, at depth 2),
+not by us — which is the property that makes the venue worth having.
 
 ---
 

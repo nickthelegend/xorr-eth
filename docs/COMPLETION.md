@@ -333,16 +333,16 @@ So tier 7 is counted as built — its logic verified by 21 tests, its calendar b
 entry by reaching the venue — and the equity fill is counted as its own open item rather than folded
 into it.
 
-## The six that remain
+## The six that remained — five now
 
 | # | Item | Why |
 |---|---|---|
 | 1 | **Equity fills** | Quote and price are real; the fill reverts `TF` on the fork for every strategy, not just tier 7. Environmental, and newly measured rather than newly broken. |
 | 2 | Privy policy on the user's embedded wallet | Platform constraint — Privy requires the wallet's owner to authorise, and that is the user. |
-| 3 | 1inch SwapVM wired into the product | Contract, deployed, 10 fork tests; the executor never calls it. README says "Contract only". |
+| 3 | ~~1inch SwapVM wired into the product~~ | **CLOSED 2026-09-10.** Two real fills. A maker's program shipped to official Aqua under the SwapVM router, discovered by `openPrograms()`, filled through `XorrDelegation.spend()` — `0x2a20ebbd…`. What blocked it was log-range paging, not the contract; see SPONSOR-AUDIT Finding 2. |
 | 4 | The Graph — second subgraph queried | Blocked on a Studio dashboard action; `subgraph_create` is not in the deploy API. |
 | 5 | Audit chain unbroken on Base Sepolia | Permanent by design — append-only, so it cannot be rewritten to look clean. |
-| 6 | LLM agent voice | `OPENROUTER_API_KEY` exists nowhere. `/bot/say` reports `{"source":"fallback","reason":"no_key"}`. |
+| 6 | LLM agent voice | `OPENROUTER_API_KEY` exists nowhere. `/bot/say` reports `{"source":"none","reason":"no_key"}` and every surface refuses honestly rather than printing a canned line. Still UNTESTABLE, not failed. |
 
 ## Re-measured whole
 
