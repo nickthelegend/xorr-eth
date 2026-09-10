@@ -259,16 +259,23 @@ export const LocalRepositories: Repositories = {
     },
     async ask({ agentId, question, tone }) {
       const res = await api
-        .post<{ text: string | null; source: 'model' | 'fallback' }>('/bot/say', {
+        .post<{ text: string | null; source: 'model' | 'none' }>('/bot/say', {
           persona: agentId,
           situation: `The user asks: "${question}". Answer in one or two sentences, without naming any figure.`,
           tone,
         })
         .catch(() => undefined);
+      /*
+       * An unreachable server is not a model that declined, so it does not claim to be one.
+       *
+       * `source: 'none'` says the same thing the server says when no model wrote a line, and the
+       * text names the actual condition — the request failed — rather than putting words in an
+       * agent's mouth about a market it never looked at.
+       */
       return (
         res ?? {
           text: 'I cannot reach my own reasoning right now, so I will not guess.',
-          source: 'fallback' as const,
+          source: 'none' as const,
         }
       );
     },

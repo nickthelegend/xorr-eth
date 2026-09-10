@@ -370,8 +370,10 @@ extra.post('/bot/say', async (c) => {
    * absent voice segment costs a quip and never information.
    */
   return c.json({
+    // `'none'`, not `'fallback'`: there is no fallback copy any more, and `text` is null. See the
+    // note on `BriefingCard.source`.
     text: null,
-    source: 'fallback',
+    source: 'none',
     reason: out.reason,
     detail: out.detail,
   });

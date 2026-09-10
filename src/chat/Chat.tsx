@@ -217,7 +217,7 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
        * A fallback line is not an answer, and must not be dressed as one.
        *
        * `ask` returns `{ text, source }` and this used only `text`. With no language model
-       * configured the server answers `source: 'fallback'` with a stock market remark, so asking
+       * configured the server answers `source: 'none'` with no text at all, so asking
        * "why did the CBBTC buy fail?" got back "Nothing worth chasing today. Ranges are thin and
        * the tape is quiet." — a confident non-sequitur in the agent's own voice, which is exactly
        * the canned-content-as-real-output this project refuses everywhere else.
@@ -228,7 +228,7 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
         append(
           botProse(agentName, [
             voice(
-              reply.source === 'fallback' || !reply.text
+              reply.source === 'none' || !reply.text
                 ? 'I cannot answer that here — no language model is configured in this build, and I will not read you a stock line as though it were an answer.'
                 : reply.text,
             ),

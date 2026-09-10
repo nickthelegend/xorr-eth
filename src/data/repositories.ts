@@ -77,7 +77,7 @@ export interface BotRepository {
     question: string;
     tone: 'dry' | 'sharp' | 'flat';
     /** `text` is `null` when no model answered — the caller must say so, never invent one. */
-  }): Promise<{ text: string | null; source: 'model' | 'fallback' }>;
+  }): Promise<{ text: string | null; source: 'model' | 'none' }>;
 }
 
 export interface StrategyRepository {

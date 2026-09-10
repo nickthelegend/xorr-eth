@@ -138,7 +138,16 @@ export type BriefingCard = {
   take: string | null;
   tagBg: string;
   tagFg: string;
-  source: 'model' | 'fallback';
+  /**
+   * Whether a model wrote `take`, or nothing did.
+   *
+   * Named `'fallback'` until the fallback line was deleted, at which point the value stopped
+   * describing anything that exists: there is no fallback copy any more, and `take` is simply
+   * `null`. Keeping the old word meant an API response in a project whose central claim is "no
+   * fallback data" literally answered `"source":"fallback"` — true of nothing, and the first thing
+   * a sceptic greps for.
+   */
+  source: 'model' | 'none';
   link: string;
 };
 
@@ -167,7 +176,7 @@ export async function briefing(walletId: string, tone: ToneId = 'dry'): Promise<
       take: said.ok ? said.text : null,
       tagBg: style.bg,
       tagFg: style.fg,
-      source: said.ok ? 'model' : 'fallback',
+      source: said.ok ? 'model' : 'none',
       link: h.link,
     });
   }
