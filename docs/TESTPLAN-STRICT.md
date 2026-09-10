@@ -148,6 +148,33 @@ reported as a failure rather than replaced with a plausible number.
 Recorded as each item was observed. A FAIL is written down with the root cause and the fix, and
 the item is re-run from the start afterwards.
 
+## Section A — screens
+
+`tools/shoot.mjs`, against the deployed build, in a real Chromium session signed in with a real
+Privy account. Every screen asserts its content patterns plus G1 (console) and G2 (network).
+
+| Run | Result |
+|---|---|
+| Baseline, before this run's fixes | **99 PASS · 1 FAIL** — `/bot/:id/backtest`, missing its disclaimer |
+| Final, after every fix | **100 PASS · 0 FAIL** |
+
+The single failure was real and is described below. The baseline also served as the regression
+check for the signed-out fixes, which touched `positions()` and `absentOrThrow` — both on
+signed-in paths — and broke nothing: 99 of 99 other screens passed before the backtest fix landed.
+
+Spot-verified independently in Claude in Chrome:
+
+| ID | Status | Observed |
+|---|---|---|
+| A-spot-1 | PASS | `/limits` — REMAINING TODAY $1,600.00 · $0.00 spent · $1,600.00 cap, matching `policyOf()`. |
+| A-spot-2 | PASS | `/safety` — LIVE, four permission facts, both keys, the Privy constraint stated. |
+| A-spot-3 | PASS | `/verify` — 21 checks, each with its call and result; the one failure shown as a failure. |
+| A-spot-4 | PASS | `/audit/anchor` — COMMITTED, head `0x7d6ec1d8…`, block 46,613,782, contract and signing key on screen. |
+| A-spot-5 | PASS | `/route/WETH` — live quote plus all three venues priced or refused with a reason. |
+| A-spot-6 | PASS | `/bot` — today's decline under a Today divider, in ~12s. |
+| A-spot-7 | PASS | `/strategies` — every strategy with its state; counter tracks pause and resume. |
+| A-spot-8 | PASS | `/audit/chain` — "Forked · damage, not an edit", "69 of 69 rows still hash to their own contents", and the link to what Base holds. |
+
 ## Section C — contracts and on-chain
 
 | ID | Status | Observed |
