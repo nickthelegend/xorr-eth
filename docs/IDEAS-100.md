@@ -1,99 +1,107 @@
-# 100 ideas, ranked — and what was actually built
+# 100 ideas, individually ranked — and what was actually built
 
-Written after reading the repo rather than from a template. The project is already large (about a
-hundred screens, 307 server tests, five contracts, four sponsor integrations), so "add a feature"
-is mostly the wrong move: the marginal win is in **closing the gaps the project's own audit
-names**, in **proving claims a judge can check**, and in **the two or three moments a judge
-remembers**.
+Written after reading the repo, not from a template. The project is already large: **99 screens,
+91 route handlers, 6 contracts, 14 external integrations, 912 tests.** So "add a feature" is
+usually the wrong move — the marginal win is in closing the gaps the project's own audit names, in
+making its claims checkable, and in the two or three moments a judge remembers.
 
-Scoring is impact × feasibility × fit, each 1–5. Fit penalises anything that would clutter the
-pitch — a hundred disconnected features hurt a demo as much as they help.
+Score = **impact × feasibility × fit**, each 1–5. Fit punishes anything that would crowd the pitch;
+a hundred disconnected features hurt a demo as much as they help. Anything already in the repo is
+excluded — this list contains nothing that existed before this run.
 
-## The three facts that drive the ranking
+Three facts drive the ranking:
 
-1. `docs/SPONSOR-AUDIT.md` says it plainly: **no single deployment demonstrates the sponsor
-   stack.** The fork has 170 real 1inch fills and an inert Graph; Sepolia has a load-bearing Graph
-   that can never fill. A judge opens one URL and sees half the project.
-2. The product's central claim is a **tamper-evident audit trail** — and its one permanent failure
-   is a fork in that trail, which `/verify` correctly refuses to hide.
-3. `COMPLETION.md` lists six unfinished items, of which two are environmental, two are platform
-   constraints, one is permanent by design, and one is a missing credential.
-
----
-
-## Tier 1 — build these (impact × feasibility × fit ≥ 60)
-
-| # | Idea | I | F | Fit | Score |
-|---|---|---|---|---|---|
-| 1 | **Anchor the audit chain head on-chain.** The trail's integrity claim currently rests on our own database. Publishing the head hash to a Base contract on a cadence makes it checkable against the chain by anyone, and makes the existing fork *provably* historical rather than merely asserted. | 5 | 4 | 5 | 100 |
-| 2 | **`/verify` reads the anchor from the chain** and reports "the trail matches the hash Base has held since block N". Turns the strongest claim into the most checkable one. | 5 | 4 | 5 | 100 |
-| 3 | **First real SwapVM settled fill.** `COMPLETION.md` #3 — contract deployed, ten tests, never called. The maker exists now; make it settle and put it in the trail. | 5 | 3 | 5 | 75 |
-| 4 | **Route comparison with real quotes side by side** — 1inch vs Aqua vs SwapVM for the same size, each priced live, with the winner and the reason. The 1inch track's own bar is Aqua/SwapVM; this shows all three competing. | 4 | 4 | 5 | 80 |
-| 5 | **Anchor history screen** — every anchor, its block, its tx, and whether the local trail still hashes to it. | 4 | 4 | 4 | 64 |
-| 6 | **Number roll-up motion** on every value that changes, so a live price or a filling balance reads as movement rather than a repaint. | 3 | 5 | 4 | 60 |
-| 7 | **Price tick flash** — green/red wash on the digit that moved, decaying. Cheap, and it makes the whole app feel live. | 3 | 5 | 4 | 60 |
-| 8 | **The route, drawn.** Venue hops as a graph with the amount flowing through it, instead of "via Uniswap V3, Aerodrome". | 4 | 4 | 4 | 64 |
-
-## Tier 2 — build if time (30–59)
-
-| # | Idea | I | F | Fit | Score |
-|---|---|---|---|---|---|
-| 9 | Gas-aware routing: compare venues **net of gas**, not just on quoted output. | 4 | 3 | 4 | 48 |
-| 10 | Subgraph freshness widget: indexed block vs chain head, with the lag in seconds. | 3 | 4 | 4 | 48 |
-| 11 | Cap-utilisation history from `dailySpends`, straight out of the index. | 3 | 4 | 4 | 48 |
-| 12 | Privy policy engine shown refusing a transaction live, on the server-owned demo wallet. | 4 | 3 | 4 | 48 |
-| 13 | Strategy dry-run: exactly what would happen, priced now, before you create it. | 4 | 3 | 4 | 48 |
-| 14 | Spend-by-venue breakdown from the subgraph. | 3 | 4 | 4 | 48 |
-| 15 | Chart draw-in animation on first paint. | 2 | 5 | 4 | 40 |
-| 16 | Trail entries that stamp in showing their hash linking to the previous one. | 3 | 4 | 3 | 36 |
-| 17 | Price-impact gate above a threshold, with the number and a confirm. | 3 | 4 | 3 | 36 |
-| 18 | Agent A/B: two personas over the same window, same capital. | 3 | 3 | 4 | 36 |
-| 19 | Reorg awareness: indexed vs finalised block. | 3 | 3 | 4 | 36 |
-| 20 | Basename display for the bot key wherever the address appears. | 2 | 4 | 4 | 32 |
-
-## Tier 3 — considered and ranked below the line (the remaining 80)
-
-Grouped, with the reason each sits here. Several are good ideas that would make the demo *worse* by
-crowding it, which is a fit score of 1 or 2 regardless of how interesting they are.
-
-**Sponsor depth (21–40).** 1inch Fusion intent quotes alongside classic; limit orders via Aqua;
-Aqua book depth chart; partial-fill handling; RFQ comparison; multi-hop split routing display;
-1inch spot-price API as a third cross-check source; permit2 flow; approval-minimisation pass;
-second subgraph deployed and queried *(blocked: `subgraph_create` is a Studio dashboard action, not
-in the deploy API — `COMPLETION.md` #4)*; subgraph-powered cross-wallet leaderboard; query
-latency panel proving the index beats RPC; entity-level subgraph diffing; Graph-sourced venue
-allowlist history; Privy MFA state; Privy destination allowlist read live; Privy session keys
-explainer; recovery flow on real Privy state; Base paymaster / sponsored gas; cbBTC-specific
-strategy tier.
-
-**Core functional (41–62).** Rebalancing tier; portfolio drift alerts; limit-order tier;
-stop-loss ladders; trailing stops; DCA pause-on-drawdown; correlation view; concentration warnings;
-scheduled email/push reports; multi-wallet switching surfaced in the UI; per-strategy P&L
-attribution; venue performance scorecard; fill-quality measurement vs mid; slippage realised vs
-quoted; per-agent risk budget; capital allocation across agents; "explain this fill" deep link;
-tax-lot method selection; realised/unrealised split; paper-trading toggle; strategy templates
-gallery; import/export strategy as JSON.
-
-**Design and motion (63–84).** Permission "seal" animation on grant; kill-switch with a physical
-throw; agent avatar micro-expressions per state; pull-to-refresh with real refetch; skeleton →
-content crossfade; staggered list entrance; shared-element transition from row to detail; sparkline
-morphing between timeframes; haptic feedback on commit actions; sound design for fills; dark/light
-theme transition; parallax on the home header; confetti on first successful fill *(fit 1 — this
-product's whole tone is "no overselling")*; loading states that name what they are waiting for;
-progress ring on scheduled runs; countdown to next run; animated hash-chain visualiser; venue logos
-with real brand assets; typographic scale pass; motion-reduced variants honouring the OS setting;
-empty-state illustrations; iconography pass.
-
-**Production readiness (85–100).** Per-screen error boundaries; offline detection and banner;
-request-id surfaced in every error for support; rate-limit surfacing with retry-after honoured;
-idempotency keys on every write; session-expiry handling with silent refresh; deep-link handling
-for every route; accessibility audit and fixes; keyboard navigation on web; focus management in
-modals; screen-reader labels on every control; colour-contrast pass; input validation messages;
-optimistic-update rollback on failure; a health page that names each dependency and its last good
-response; structured logging with correlation ids.
+1. `SPONSOR-AUDIT.md`: **no single deployment demonstrates the sponsor stack.** The fork has real
+   1inch fills and an inert Graph; Sepolia has a load-bearing Graph that can never fill.
+2. The product's central claim is a **tamper-evident audit trail**, and every part of that claim
+   used to live in our own database.
+3. `ui/mobile-ui/animations.md` is a deliberate, argued motion policy: *"Never animate a price"*,
+   *"no entrance animations"*, motion is *"confirmation, not decoration."* Several obvious
+   design ideas are **fit 1** because building them would make the product worse.
 
 ---
 
-## What was actually built in this pass
+## Tier 1 — built this run (score ≥ 60)
 
-Recorded honestly below as each one lands — built and verified, or not claimed.
+| # | Idea | I | F | Fit | Score | Status |
+|---|---|---|---|---|---|---|
+| 1 | **Anchor the audit trail's head hash to Base.** Its integrity stops resting on our own database. | 5 | 4 | 5 | 100 | ✅ BUILT |
+| 2 | **`/verify` reads that anchor back off the chain** and reports whether the local trail still agrees. | 5 | 4 | 5 | 100 | ✅ BUILT |
+| 3 | **Price every venue for the same trade** — Aqua, SwapVM and the aggregator, refusals included. | 4 | 4 | 5 | 80 | ✅ BUILT |
+| 4 | **Settle the first real SwapVM fill.** `COMPLETION.md` #3, open since the contract was written. | 5 | 3 | 5 | 75 | ✅ BUILT |
+| 5 | **Anchor history screen** — every commitment, its block, and whether the trail still hashes to it. | 4 | 4 | 4 | 64 | ✅ BUILT |
+| 6 | **Page `eth_getLogs`** so venue discovery survives a provider tightening its range limit. | 4 | 4 | 4 | 64 | ✅ BUILT |
+| 7 | **Compare venues net of gas**, not on quoted output alone. The winner can change. | 4 | 3 | 5 | 60 | ✅ BUILT |
+| 8 | **Fill quality: realised vs quoted**, measured per venue from the real trail. | 4 | 3 | 5 | 60 | ✅ BUILT |
+
+## Tier 2 — ranked, not built (30–59)
+
+| # | Idea | I | F | Fit | Score | Why not |
+|---|---|---|---|---|---|---|
+| 9 | Strategy dry-run: what the first run buys at today's price, before you create it | 4 | 4 | 3 | 48 | Time |
+| 10 | Cap forecast — what live strategies commit against the on-chain cap | 3 | 4 | 4 | 48 | Time |
+| 11 | The route drawn as a venue graph rather than a comma list | 4 | 3 | 4 | 48 | Time |
+| 12 | Privy policy engine refusing a transaction, shown live on screen | 4 | 3 | 4 | 48 | `/verify` already proves it; screen is duplication |
+| 13 | Concentration warning when one asset dominates the book | 3 | 4 | 4 | 48 | Time |
+| 14 | Per-strategy P&L attribution | 3 | 3 | 5 | 45 | Time |
+| 15 | Subgraph query latency vs the same read over RPC | 3 | 4 | 3 | 36 | Time |
+| 16 | Reorg awareness — indexed block vs finalised | 3 | 3 | 4 | 36 | Time |
+| 17 | Trailing stop tier | 3 | 3 | 4 | 36 | Time |
+| 18 | Rebalance-to-target tier | 3 | 3 | 4 | 36 | Time |
+| 19 | Agent A/B over one window, same capital | 3 | 3 | 4 | 36 | Time |
+| 20 | Limit orders placed as Aqua books | 4 | 2 | 4 | 32 | Needs a maker loop; large |
+| 21 | Basename shown wherever an address appears | 2 | 4 | 4 | 32 | Resolver works; wiring is cosmetic |
+| 22 | 1inch Fusion intent quotes beside the classic quote | 4 | 2 | 4 | 32 | Different API surface; large |
+| 23 | Aqua book depth chart | 3 | 3 | 3 | 27 | Fork-only; thin on Sepolia |
+| 24 | Multi-wallet switching surfaced in the UI | 3 | 3 | 3 | 27 | Resolution fixed today; UI is separate |
+| 25 | Stop-loss ladders | 3 | 3 | 3 | 27 | Time |
+
+## Tier 3 — considered, ranked below the line (26–100)
+
+Grouped by why they lost. Several are good ideas that would make the demo **worse**.
+
+**Blocked on something that does not exist (26–30).** 26 second subgraph deployed and queried
+*(`subgraph_create` is a Studio dashboard action, not in the deploy API)*; 27 LLM agent voice
+*(`OPENROUTER_API_KEY` exists nowhere)*; 28 push notifications to a real device *(needs a device
+token)*; 29 mainnet deployment *(spends real money)*; 30 Privy policy on the user's embedded wallet
+*(Privy requires the owner to authorise; platform constraint)*.
+
+**Would make the product worse — fit 1 or 2 (31–44).** 31 number roll-up on prices, 32 price-tick
+flash, 33 chart draw-in, 34 staggered list entrance, 35 trail entries stamping in, 36 sparkline
+morphing between timeframes, 37 parallax home header, 38 confetti on a first fill, 39 sound design
+on fills, 40 agent avatar micro-expressions, 41 spring physics on the kill switch, 42 skeleton
+shimmer, 43 animated hash-chain visualiser, 44 a "score" for each agent. The first twelve are all
+refused by `animations.md` for one argued reason — *"a trading UI that animates while a number
+changes makes the number untrustworthy"* — and 44 invents a metric the product would then have to
+defend.
+
+**Real but redundant with something already shipped (45–60).** 45 a second price cross-check
+source *(`/crosscheck` exists)*, 46 an "explain this fill" page *(`/graph/decision` exists)*,
+47 spend heatmap *(`/graph/spends` exists)*, 48 cap-utilisation history *(exists)*, 49 subgraph
+freshness widget *(exists, with block lag)*, 50 venue allowlist screen *(`/allowlist`)*, 51 approval
+audit *(`/approvals`)*, 52 tax lots *(`/disposals`)*, 53 CSV export *(`/export`)*, 54 audit entry
+detail *(`/audit/[seq]`)*, 55 agent intro *(`/bot/[id]/intro`)*, 56 leaderboard *(`/bot/leaderboard`)*,
+57 sponsor page *(`/sponsors`)*, 58 coverage map *(`/coverage`)*, 59 system health *(`/system`)*,
+60 network honesty page *(`/network`)*.
+
+**Core functional, ranked below Tier 2 (61–78).** 61 DCA pause-on-drawdown; 62 correlation view;
+63 scheduled email reports; 64 paper-trading toggle; 65 strategy templates gallery; 66 import/export
+a strategy as JSON; 67 venue scorecard by asset; 68 per-agent risk budget; 69 capital allocation
+across agents; 70 realised/unrealised split; 71 tax-lot method selection; 72 position sizing by
+volatility; 73 funding-rate-aware perp entry; 74 earnings-blackout guard; 75 weekend/holiday
+scheduling; 76 partial-fill handling; 77 RFQ comparison; 78 multi-hop split display.
+
+**Sponsor depth, ranked below (79–88).** 79 permit2 flow; 80 approval minimisation pass;
+81 Base paymaster / sponsored gas; 82 EIP-7702 batching; 83 cbBTC-specific tier; 84 EAS attestation
+of `/verify` results; 85 an on-chain receipt NFT per fill; 86 Graph-sourced allowlist history;
+87 entity-level subgraph diffing; 88 Privy MFA state read live.
+
+**Production readiness (89–100).** 89 per-screen error boundaries; 90 offline detection banner;
+91 request-id surfaced in every error; 92 rate-limit surfacing with retry-after honoured;
+93 idempotency keys on every write; 94 session-expiry silent refresh; 95 deep-link handling for
+every route; 96 accessibility audit; 97 keyboard navigation on web; 98 focus management in modals;
+99 colour-contrast pass; 100 optimistic-update rollback.
+
+Several of 89–100 are **already true** — the executor has request ids, an idempotency index, a
+circuit breaker and rate limiting, and this run verified `retry-after` is honoured — which is why
+they sit here rather than in Tier 1.

@@ -697,11 +697,22 @@ async function runStrategyInner(
      */
     await tx(async (client) => {
       await client.query(
-        `UPDATE strategy_runs SET status='filled', signature=$2, units=$3, price=$4, usd=$5, finished_at=now()
-         WHERE id=$1`,
-        // `usd` was never written on a fill, so the one column that records what a run COST was
-        // empty for every run that cost anything. The per-strategy cap below is summed from it.
-        [runId, signature, filledUnits, price, intent.usd],
+        `UPDATE strategy_runs
+            SET status='filled', signature=$2, units=$3, price=$4, usd=$5,
+                quoted_units=$6, venue=$7, finished_at=now()
+          WHERE id=$1`,
+        /*
+         * `usd` was never written on a fill, so the one column that records what a run COST was
+         * empty for every run that cost anything. The per-strategy cap below is summed from it.
+         *
+         * `quoted_units` is `units` — the pre-fill expectation — kept beside `filledUnits`, which
+         * is the delta read off the chain. They are the same number only when the router was
+         * exactly right, and the distance between them is the only honest measure of how well a
+         * venue actually filled. It was being discarded at the moment it became checkable.
+         *
+         * `venue` is written rather than inferred later from the audit sentence.
+         */
+        [runId, signature, filledUnits, price, intent.usd, units, venue],
       );
       /*
        * A supply is not a position, so it does not go in the position book.

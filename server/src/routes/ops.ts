@@ -12,6 +12,7 @@
  */
 import { Hono } from 'hono';
 import { query } from '../db/index.js';
+import { fillQuality } from '../executor/fill-quality.js';
 import { publicClient } from '../evm/client.js';
 import { CHAIN_KEY } from '../evm/chains.js';
 import { DELEGATION_ADDRESS } from '../evm/delegation.js';
@@ -182,6 +183,14 @@ ops.get('/metrics', async (c) => {
     failuresByCause,
     /** Where trades actually settled — the claim the 1inch track rests on, counted. */
     fillsByVenue: Object.fromEntries(venues.map((r) => [r.venue, Number(r.n)])),
+    /**
+     * How close each venue came to the quote it was chosen on.
+     *
+     * `fillsByVenue` above counts WHERE trades settled. This says how WELL — the distance between
+     * what the router promised and what the chain delivered, per venue, in basis points. A count
+     * is a label; this is the claim.
+     */
+    fillQuality: await fillQuality().catch(() => null),
     strategies: Object.fromEntries(strategies.map((r) => [r.state, Number(r.n)])),
     alertsEnabled: Number(alerts[0]?.n ?? 0),
     alertsFiredTotal: Number(alerts[0]?.fired ?? 0),
