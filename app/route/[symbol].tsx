@@ -198,12 +198,30 @@ function VenueComparison({
           <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
             {q.served ? q.detail : q.reason}
           </Text>
+          {/*
+            What it costs to send, and what is left after paying it.
+            The venue with the largest output is not always the one that leaves you better off: an
+            aggregator hop through three pools is a more expensive transaction than a single book
+            fill, and on a small trade that gap can be larger than the price it bought. Absent
+            rather than zero when the cost could not be estimated — free is a claim.
+          */}
+          {q.served && q.gasUsd !== undefined ? (
+            <Text variant="footnote" color={colors.ink28}>
+              {`gas ${money(q.gasUsd, { fractionDigits: 4 })}${q.netUsd !== undefined ? ` · net ${money(q.netUsd)}` : ''}`}
+            </Text>
+          ) : null}
         </View>
       ))}
       {/*
         The margin, only when there was something to beat. `edgeBps` is deliberately absent when a
         single venue answered, because "0 bps better" reads as a tie rather than as no competition.
       */}
+      {/* Said only when it differs — otherwise it is the same sentence twice. */}
+      {data.bestNet && data.best && data.bestNet !== data.best ? (
+        <Text variant="footnote" color={colors.up} style={{ marginTop: space.s10 }}>
+          {`${VENUE_LABEL[data.bestNet] ?? data.bestNet} wins after gas, even though ${VENUE_LABEL[data.best] ?? data.best} quotes more.`}
+        </Text>
+      ) : null}
       <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s12 }}>
         {data.edgeBps !== undefined
           ? `${VENUE_LABEL[data.best ?? ''] ?? data.best} wins by ${data.edgeBps} bps.`

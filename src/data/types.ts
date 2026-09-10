@@ -359,7 +359,16 @@ export type AnchorReport = {
  * "1inch is the only venue" — a different and false claim.
  */
 export type VenueQuote =
-  | { venue: 'aqua' | 'swapvm' | '1inch'; served: true; outAmount: number; detail: string }
+  | {
+      venue: 'aqua' | 'swapvm' | '1inch';
+      served: true;
+      outAmount: number;
+      detail: string;
+      /** What the transaction costs to send, and what is left after paying it. Never zero for
+       *  "unknown" — a cost we could not measure is absent, not free. */
+      gasUsd?: number;
+      netUsd?: number;
+    }
   | { venue: 'aqua' | 'swapvm' | '1inch'; served: false; reason: string };
 
 export type RouteComparison = {
@@ -368,6 +377,8 @@ export type RouteComparison = {
   amount: number;
   quotes: VenueQuote[];
   best?: 'aqua' | 'swapvm' | '1inch';
+  /** The winner AFTER gas. Undefined unless every served venue could be costed. */
+  bestNet?: 'aqua' | 'swapvm' | '1inch';
   /** Undefined when only one venue served — "better than nothing" is not a margin. */
   edgeBps?: number;
 };

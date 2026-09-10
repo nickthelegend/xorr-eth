@@ -112,6 +112,8 @@ export type SwapQuote = {
    * the one a user can check against what actually arrives.
    */
   route: string;
+  /** The router's gas estimate for this route, when it gave one. Undefined is not zero. */
+  estimatedGas?: number;
 };
 
 /** Screen 19: "Max slippage 0.30%". */
@@ -180,6 +182,8 @@ export function slippageFor(base: number, priceImpactPct: number | null): number
 type QuoteResponse = {
   dstAmount: string;
   protocols?: { name: string }[][][];
+  /** Present only when the request asked for it with `includeGas=true`. */
+  gas?: number;
 };
 
 function scale(amount: number, decimals: number): bigint {
@@ -272,11 +276,22 @@ export async function quote(params: {
    */
   const res = await authed(
     `${BASE}/${ONEINCH_CHAIN_ID}/quote?src=${from.address}&dst=${to.address}&amount=${raw}` +
-      `&includeProtocols=true${AMM_ONLY}`,
+      // `includeGas` so a route can be compared NET of what it costs to send. An aggregator hop
+      // through three pools is a materially more expensive transaction than a single book fill,
+      // and on a small trade that difference can exceed the price difference it bought.
+      `&includeProtocols=true&includeGas=true${AMM_ONLY}`,
   );
 
   const outAmount = unscale(res.dstAmount, to.decimals);
   const venues = venuesFrom(res.protocols);
+  /*
+   * The router's own gas estimate for this route, when it gave one.
+   *
+   * Undefined rather than a default: a route whose cost we did not get is a route we cannot
+   * compare net of gas, and a stand-in number would decide that comparison silently.
+   */
+  const estimatedGas =
+    typeof res.gas === 'number' && Number.isFinite(res.gas) && res.gas > 0 ? res.gas : undefined;
 
   return {
     priceImpactPct: params.skipPriceImpact
@@ -291,6 +306,7 @@ export async function quote(params: {
     minimumOut: outAmount * (1 - slippagePct / 100),
     slippagePct,
     venues,
+    estimatedGas,
     route: routeLabel(venues),
   };
 }
