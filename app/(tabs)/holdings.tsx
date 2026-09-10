@@ -27,7 +27,7 @@ import {
   radius,
   size,
   space,
-} from '@/ui';
+  ErrorState,} from '@/ui';
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -140,6 +140,16 @@ export default function Assets() {
         </Text>
         {positions.loading ? (
           <LoadingRows count={2} height={size.rowLg} />
+        ) : positions.error ? (
+          /*
+           * "Nothing held yet" is a claim about a wallet, and an unanswered read is not one.
+           *
+           * PORTFOLIO VALUE above already refuses to print a number it does not have, and this
+           * said "Nothing held yet" beside it — so a signed-out visitor, or one whose read failed,
+           * was told their holdings were empty in the same breath as being told the total was
+           * unknown.
+           */
+          <ErrorState error={positions.error} onRetry={positions.reload} />
         ) : holdings.length === 0 ? (
           <EmptyState
             text="Nothing held yet. A recurring buy is the simplest way to start."

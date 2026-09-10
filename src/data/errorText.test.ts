@@ -85,12 +85,17 @@ describe('absentOrThrow', () => {
     await expect(absentOrThrow(async () => undefined)).resolves.toBeNull();
   });
 
-  it('treats being signed out as an absence, because it is one', async () => {
+  /*
+   * The case this got wrong. Folding "signed out" into "absent" made `/safety` tell a signed-out
+   * visitor that no permission had been granted — about a wallet it had never asked about, and to
+   * someone who may hold a live grant on chain.
+   */
+  it('does not call being signed out an absence — it is not having asked', async () => {
     await expect(
       absentOrThrow(async () => {
         throw new NotSignedIn('/delegation');
       }),
-    ).resolves.toBeNull();
+    ).rejects.toBeInstanceOf(NotSignedIn);
   });
 
   it('rethrows a transport failure instead of calling it an absence', async () => {

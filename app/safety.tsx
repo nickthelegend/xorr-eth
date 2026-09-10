@@ -174,6 +174,8 @@ export default function Safety() {
    * could not complete has to say so.
    */
   const [delegationError, setDelegationError] = useState<unknown>(undefined);
+  /** No session, so the chain was never asked. Distinct from asked-and-absent. */
+  const [signedOut, setSignedOut] = useState(false);
   useEffect(() => {
     let alive = true;
     void repos.wallet
@@ -184,8 +186,19 @@ export default function Safety() {
         setDelegationError(undefined);
       })
       .catch((e: unknown) => {
-        // A signed-out visitor has no permission, which is an answer rather than a failed read.
-        if (alive && !(e instanceof NotSignedIn)) setDelegationError(e);
+        /*
+         * Signed out is its own state — not "no permission", and not a failed read.
+         *
+         * This treated `NotSignedIn` as the answer "you have granted nothing", and the screen then
+         * said **NOT GRANTED · No permission has been granted, so nothing can trade**. A returning
+         * user with a live $1,600/day grant on chain reads that as their money being untouchable.
+         * It is the same false reassurance the docblock above `permissionUnreadable` calls "the one
+         * claim this screen must never make" — arriving by a different door, because a session we
+         * never opened is not an answer we received.
+         */
+        if (!alive) return;
+        if (e instanceof NotSignedIn) setSignedOut(true);
+        else setDelegationError(e);
       });
     return () => {
       alive = false;
@@ -305,27 +318,35 @@ export default function Safety() {
             "Unknown" outranks everything. Saying "Not granted" because the request failed is the
             one claim this screen must never make — see `permissionUnreadable`.
           */}
-          {unreadable
-            ? 'Unknown'
-            : unusable
-              ? 'Disconnected'
-              : !granted
-                ? 'Not granted'
-                : expired
-                  ? 'Expired'
-                  : killed
-                    ? 'Stopped'
-                    : 'Live'}
+          {signedOut
+            ? 'Not signed in'
+            : unreadable
+              ? 'Unknown'
+              : unusable
+                ? 'Disconnected'
+                : !granted
+                  ? 'Not granted'
+                  : expired
+                    ? 'Expired'
+                    : killed
+                      ? 'Stopped'
+                      : 'Live'}
         </Text>
       </View>
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s16 }}>
-        {unreadable ? 'Could not read your permission' : killTitle(killed, unusable, granted, expired)}
+        {signedOut
+          ? 'Sign in to see what can trade'
+          : unreadable
+            ? 'Could not read your permission'
+            : killTitle(killed, unusable, granted, expired)}
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s8 }}>
-        {unreadable
-          ? 'This screen could not read your permission, so it cannot tell you what the bot is allowed to do. Whatever is granted on chain is still in force — this is a gap in what we can show you, not a change to your permission.'
-          : killExplanation(killed, hiredCount, unusable, granted, expired)}
+        {signedOut
+          ? 'Nobody is signed in, so this screen has not asked the chain about any wallet. If you have granted a permission, it is still in force — signing in is what lets us read it.'
+          : unreadable
+            ? 'This screen could not read your permission, so it cannot tell you what the bot is allowed to do. Whatever is granted on chain is still in force — this is a gap in what we can show you, not a change to your permission.'
+            : killExplanation(killed, hiredCount, unusable, granted, expired)}
       </Text>
 
       {/*

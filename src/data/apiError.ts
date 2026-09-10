@@ -159,18 +159,19 @@ export class TimedOut extends Error {
  * `useHydrateDelegation` already had a catch for this case, commented "A failed read is not 'no
  * permission'", which could never fire against a function that never threw.
  *
- * `NotSignedIn` is the one error that IS an absence: no session means no permission, which is an
- * answer rather than a failure to get one. Everything else propagates so the caller can say it
- * could not find out.
+ * `NotSignedIn` was ALSO folded into the absence, on the reasoning that no session means no
+ * permission. That is wrong for the same reason the paragraph above is right, and the consequence
+ * is identical: a returning user with a live $1,600/day grant on chain, not signed in, was shown
+ * "NOT GRANTED · No permission has been granted, so nothing can trade" — the one claim `/safety`
+ * must never make. Not being signed in is not an answer about a wallet; it is not having asked.
+ *
+ * So the only absence left is the route genuinely answering "nothing here". Every error, signed
+ * out included, reaches the caller so the screen can say which of the three it is: granted,
+ * absent, or unasked.
  *
  * Extracted here for the same reason `errorText` and `pressGuard` were: the part worth testing was
  * the part a test could not reach, because `local.ts` pulls in the whole Expo runtime.
  */
 export async function absentOrThrow<T>(read: () => Promise<T | null | undefined>): Promise<T | null> {
-  try {
-    return (await read()) ?? null;
-  } catch (e) {
-    if (e instanceof NotSignedIn) return null;
-    throw e;
-  }
+  return (await read()) ?? null;
 }

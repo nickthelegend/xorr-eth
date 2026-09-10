@@ -228,17 +228,36 @@ export const LocalRepositories: Repositories = {
         | { created: false; reason: string; detail: string };
 
       let res: Generated | null = null;
+      let notSignedIn = false;
       for (let attempt = 0; attempt < 4; attempt += 1) {
         try {
           res = await api.post<Generated>('/proposals/generate', {});
           break;
         } catch (e) {
+          if (e instanceof NotSignedIn) {
+            notSignedIn = true;
+            break;
+          }
           const warming = e instanceof ApiError && e.status === 503;
           if (!warming || attempt === 3) break;
           await new Promise((r) => setTimeout(r, 3000));
         }
       }
-      if (!res) return { proposal: null, declined: 'I could not reach the market just now.' };
+      /*
+       * Say which failure it was.
+       *
+       * "I could not reach the market just now" is false for a signed-out visitor: the market was
+       * fine, and nobody had asked on their behalf. Same shape as the `NotSignedIn`-as-absence bug
+       * on `/safety` — a screen answering a question it never got to put.
+       */
+      if (!res) {
+        return {
+          proposal: null,
+          declined: notSignedIn
+            ? 'Sign in and I will tell you what I am seeing.'
+            : 'I could not reach the market just now.',
+        };
+      }
       if (!res.created) return { proposal: null, declined: res.detail };
       const { created, ...rest } = res;
       return { proposal: rest as unknown as Proposal };
@@ -291,14 +310,18 @@ export const LocalRepositories: Repositories = {
         {},
       );
     },
-    /** Same distinction as `portfolio.positions` — "none running" is not "could not ask". */
+    /**
+     * "None running" is not "could not ask" — and a signed-out visitor is the second one.
+     *
+     * The comment above this said exactly that while the code below it returned `[]` for
+     * `NotSignedIn`, so `/strategies` told a signed-out visitor **"0 running · Nothing running
+     * yet"** about a wallet it had never asked about. The screen was already built for the
+     * distinction: it renders `—` rather than a count when it has no answer, and it has an error
+     * state that says "Not signed in, so /strategies was not requested" — the same sentence
+     * `/limits` and `/activity` already show. It just never got the chance to.
+     */
     async list(): Promise<Strategy[]> {
-      try {
-        return await api.get<Strategy[]>('/strategies');
-      } catch (e) {
-        if (e instanceof NotSignedIn) return [];
-        throw e;
-      }
+      return api.get<Strategy[]>('/strategies');
     },
     async create(s) {
       /*
@@ -370,12 +393,9 @@ export const LocalRepositories: Repositories = {
      * everything else now reaches the screen.
      */
     async positions(): Promise<Position[]> {
-      try {
-        return await api.get<Position[]>('/positions');
-      } catch (e) {
-        if (e instanceof NotSignedIn) return [];
-        throw e;
-      }
+      // Signed out is not an empty book — see the note on `absentOrThrow`. The screens that read
+      // this render "could not ask" from the error rather than printing a holding count.
+      return api.get<Position[]>('/positions');
     },
     async position(id) {
       return (await api.get<Position | null>(`/positions/${id}`).catch(() => undefined)) ?? null;
