@@ -105,3 +105,57 @@ every route; 96 accessibility audit; 97 keyboard navigation on web; 98 focus man
 Several of 89–100 are **already true** — the executor has request ids, an idempotency index, a
 circuit breaker and rate limiting, and this run verified `retry-after` is honoured — which is why
 they sit here rather than in Tier 1.
+
+
+---
+
+# What was actually built, and verified
+
+Eight of the hundred. Each one was run against a real deployment and confirmed with a real value
+before the next was started; the evidence is quoted rather than asserted.
+
+| # | Feature | Evidence it works |
+|---|---|---|
+| 1 | Anchor the audit head to Base | `XorrAuditAnchor` at `0xB58cB717…`, 1,523 bytes on Base Sepolia. Two anchors published: entry 64 @ block 46,613,782 and entry 65 @ 46,621,210 — the first unchanged, so append-only holds on chain. |
+| 2 | `/verify` reads the anchor back | Live: *"0x7d6ec1d88d039614… for 64 entries, held by Base since block 46,613,782 (2026-09-09 23:17 UTC)"*. `/verify` went 20 checks → 21. |
+| 3 | Price every venue for the same trade | On the fork, all three answered: `swapvm 0.040074`, `1inch 0.040194`, `aqua` refused with a reason. |
+| 4 | First real SwapVM fill | `0x2a20ebbd…`, `to` = `XorrDelegation`, +0.061246900891976021 WETH out of the maker's own wallet. `fillsByVenue` now `{"swapvm": 3, "1inch": 36, "aqua": 5}` — it read `swapvm: 0` before. |
+| 5 | Anchor history screen | `/audit/anchor` renders COMMITTED, the head, the block, and the contract and signing key so the read can be repeated without us. Linked from `/audit/chain`. |
+| 6 | Page `eth_getLogs` | The provider had tightened to a 2,000-block range against a 9,000-block scan; discovery was silently returning nothing. Paging is what made #4 possible — `openPrograms()` found 16. |
+| 7 | Compare venues net of gas | Live: `1inch 0.040194 · gas $0.5681 · net $99.02` beside `swapvm 0.040074 · gas $0.8075 · net $98.48`. SwapVM costs more gas because it routes through our book contract — measured, not assumed. |
+| 8 | Measure how well each venue filled | `swapvm · 1 fill · +71.1 bps`, `measured 1, unmeasurable 36`, `basis "forked"`. Produced by a real strategy run: tx `0x042ee2dc…`, 0.010163 WETH at $2,477.40. |
+
+## Two of these are worth a sentence each
+
+**#4 closed a gap the project's own audit had open.** `SPONSOR-AUDIT.md` Finding 2 read
+*"`XorrSwapVMBook` has settled **zero** trades, on any deployment, ever"*, against a `SUBMISSION.md`
+claim that both venues settle real trades. A judge checking the trail would have found the claim
+and its refutation in the same table. It is now three fills, and the finding is rewritten with the
+transaction hashes.
+
+**#8's headline number is not what it looks like, and says so.** `+71 bps` is not SwapVM being 71
+basis points better than the aggregator. The reference quote prices live Base mainnet while the
+fill executed against a pinned fork block, so the figure carries however far the fork has drifted.
+That is reported in a `basis` field and printed on the screen, because the drift is not separable
+without a second price source for the fork's own block — and deriving one would put an invented
+number where a measured one belongs.
+
+## Skipped, with the reason
+
+- **Blocked by something that does not exist (5):** the second subgraph needs a Studio dashboard
+  action that is not in the deploy API; the LLM voice needs `OPENROUTER_API_KEY`, which is set
+  nowhere; push needs a real device token; mainnet spends real money; Privy policy on the user's
+  own wallet needs the user's authorisation, by Privy's design.
+- **Would make the product worse (14):** every price-animation idea. `animations.md` argues the
+  case better than I could — *"a trading UI that animates while a number changes makes the number
+  untrustworthy"* — and building them would trade the product's most distinctive quality for
+  motion a judge has seen twenty times that day.
+- **Already shipped (16):** ranked and then found in the repo. Listed so the list is honest about
+  its own overlap rather than quietly dropping them.
+- **Ranked below the line (57):** real ideas that lost to the eight above on impact × feasibility ×
+  fit, and would have crowded the pitch more than they strengthened it.
+
+## No regressions
+
+Every suite after the last feature landed: **344 server · 532 client · 62 contract**, and the
+100-screen sweep re-run against the deployed build.
