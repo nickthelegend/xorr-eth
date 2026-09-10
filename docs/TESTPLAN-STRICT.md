@@ -140,3 +140,130 @@ reported as a failure rather than replaced with a plausible number.
 `PASS` — observed result matched the sentence above, with G1–G6 clean.
 `FAIL` — anything else. Root cause fixed, then re-run from the start.
 `UNTESTED` — a real dependency does not exist. Stated, never counted as a pass.
+
+---
+
+# Results
+
+Recorded as each item was observed. A FAIL is written down with the root cause and the fix, and
+the item is re-run from the start afterwards.
+
+## Section C — contracts and on-chain
+
+| ID | Status | Observed |
+|---|---|---|
+| C1 | PASS | `XorrDelegation` at `0xb14CF3D0…` — 7,158 bytes on Base Sepolia. |
+| C2 | PASS | `/verify` policy: $1,600/day cap, $1,600 left, expires 2026-09-10, revoked=false, delegate matches. |
+| C3 | PASS | Simulated against the deployed contract: a stranger calling `spend()` reverts `NotDelegate`. |
+| C4 | PASS | An unlisted venue reverts `VenueNotAllowed`; `/verify` also denies a control address. |
+| C5 | PASS | $999,999 reverts `DailyCapExceeded`. |
+| C6 | PASS | Owner signed `revoke()` on the fork → `readPolicy` reads `revoked=true` → `spend()` reverts `PolicyRevoked()`. |
+| C7 | PASS | `XorrAuditAnchor` at `0xB58cB717…` — 1,523 bytes; `latest()` returns the published head. |
+| C8 | PASS | Two anchors: entry 64 @ block 46,613,782 and entry 65 @ 46,621,210. The first is unchanged — appended, not replaced. |
+| C9 | PASS | SwapVM fill `0x2a20ebbd…`, status 1, `to` = `XorrDelegation`. Maker's own tokens moved. |
+| C10 | PASS | 5 Aqua fills in `fillsByVenue`. |
+| C11 | PASS | `forge test` — 62 passed, 0 failed, across 5 suites. |
+
+## Section B — endpoints
+
+| ID | Status | Observed |
+|---|---|---|
+| B1 | PASS | `/limits` 1600 == `policyOf()` 1600, read from chain in the same run. |
+| B2 | PASS | "That would take today past your $1,600 cap. $1,600.00 is left." |
+| B3 | PASS | 21 checks, `passed + failed + skipped == 21`, every `observed` non-empty. |
+| B4 | PASS | `state=match`, block 46,621,210 exists on chain. |
+| B5 | PASS | Second call answered `unchanged` without a transaction. |
+| B6 | PASS | 65 rows re-hashed; reports `kind=link`, `intact=65` — content and link breaks distinguished. |
+| B7 | PASS | All three venues named; each an amount or a reason ≥10 chars. |
+| B8 | PASS | 100 USDC → 0.0403 WETH, route named. |
+| B9 | PASS | `markPx=78325`, `feed=live`, and 3 fields it could not get listed in `unavailable` rather than zeroed. |
+| B10 | PASS | Aave APY 3.78%, inside the plausible band, never a zeroed struct. |
+| B11 | PASS | Real decline in 0.7s. (Was 10.5s + `503 warming`; see the cache FAIL below.) |
+| B12 | PASS | A foreign agent id → 400 `unknown_agent`. |
+| B13 | PASS | "Permission is live on-chain and today has room…" |
+| B14 | PASS | Indexed block 46,621,274, `healthy=true`. |
+| B15 | PASS | Runs and failure causes from the database. |
+| B16 | PASS | 409 + "This network cannot settle trades. Prices are real; filling needs Base or a Base fork." No fabricated hash. |
+| B17 | PASS | Array of positions, read from chain. |
+| B18 | PASS | Privy's own policy state, including `enforced:false` on the user wallet — the documented platform constraint, stated rather than hidden. |
+| B19 | PASS | `/panic/preview` answers with legs. |
+| B20 | PASS | No token → 401; a user token on `/agent/whoami` → 401. Neither surface accepts the other's credential. |
+| B-cov | PASS | `coverage.live.test.ts` — 33 client-called paths, none a bare 404. |
+
+## Section D — external integrations
+
+| ID | Status | Observed |
+|---|---|---|
+| D1 | PASS | 1inch v6: 100 USDC → 0.040301 WETH via Tesseraswap, Aerodrome V3. |
+| D2 | PASS | Aqua books discovered from Aqua's own logs; 5 fills. |
+| D3 | PASS | SwapVM programs discovered (16 open); 2 fills. |
+| D4 | PASS | Subgraph synced to block 46,621,162, no indexing errors. |
+| D5 | PASS | Real Privy token, verified by the same path production uses. |
+| D6 | PASS | Privy refused a transaction to an address its policy does not name: *"RPC request denied due to policy violation"*. |
+| D7 | PASS | Aave `getReserveData` — 3.78%/yr, aToken named. |
+| D8 | PASS | CoinGecko — BTC $78,340. |
+| D9 | PASS | EDGAR — 8 filings, last 2026-08-26, next projected from a 91-day median. |
+| D10 | PASS | Basenames: `0x2211d1D0…` → `jesse.base.eth`, against ground truth established independently from the L2 resolver. Sepolia correctly returns null — Basenames are a Base mainnet deployment. |
+| D11 | PASS | Base Sepolia — chain 84532 at block 46,621,162. |
+| D12 | PASS | Base mainnet — 8 equity tokens read; the throttle is retried on its own words, not absorbed. |
+| D13 | PASS | Real headlines with real links. |
+| D14 | **UNTESTABLE** | `OPENROUTER_API_KEY` exists in neither `.env` nor the Railway environment. Correct behaviour verified instead: chat refuses in words, `/briefing` labels each headline separately, `/bot/say` returns `text: null`. Never a canned sentence. |
+
+## Section E — flows and edge cases
+
+Driven by hand in Claude in Chrome against the deployed build, except where a clean browser
+context was required (E12, E14) or where the demo grant was too valuable to spend (E11).
+
+| ID | Status | Observed |
+|---|---|---|
+| E1 | PASS | Signed in as `test-8958@privy.io` → `0x95A0b368…`, and `/wallet` on the server resolves the SAME address. |
+| E2 | PASS | `/safety` LIVE, "2 agents can place orders inside your limits right now", four permission facts, both keys, and the honest note that Privy requires the owner's own authorisation. |
+| E3 | PASS | Recurring buy created; appears in `/strategies`; trail reads "Created $5 of WETH, weekly · First run Thu, 17 Sept 2026, 03:44 UTC". |
+| E4 | PASS | Live → Paused → Resume; header count 1 running → 0 running and back. |
+| E5 | PASS | "WETH above $2572" persisted with `enabled=true, armed=true`. |
+| E6 | PASS | A junk ticker turns the button into "Nothing prices ZQXW"; pressing it does nothing and writes nothing. |
+| E7 | PASS | Real quote — 0.1 WETH → $247.11, best of 2 venues, 0.218% impact — with "You hold no WETH. There is nothing to swap." |
+| E8 | PASS | A question reached the agent; with no model configured it refused in words rather than reading a stock line. |
+| E9 | PASS | Today's decline under a Today divider, in ~12s. (Was ~39s; see the cache FAIL below.) |
+| E10 | PASS | "Anchor now" published entry 65 and the screen read `match` immediately — no "not yet anchored" flicker. |
+| E11 | PASS | Full loop on the fork: owner signs `revoke()` → `readPolicy` `revoked=true` → `/limits` `{dailyCapUsd:0, revoked:true}` → `spend()` reverts `PolicyRevoked()`. Grant restored afterwards. |
+| E12 | PASS | A second real Privy account (`test-0356@privy.io` → `0xB85A831a…`) sees 0 of the first account's strategies and 0 of its trail rows. |
+| E13 | PASS | The app's own 404: "There is nothing here · No screen is registered at /no-such-screen-exists." |
+| E14 | PASS | *(after four fixes)* Six screens in a clean context all state that nothing has been asked; zero console errors. |
+| E15 | PASS | Navigating away mid-request leaves no unhandled rejection — verified across the sweep, which fails a screen on any console error. |
+| E16 | PASS | *(after a fix)* `0xabc`, `not-a-hash`, `0x` refused by schema; a well-formed but non-existent hash refused with `tx_not_found`. |
+| E17 | PASS | "That would commit $9,000 a day against a $1,600 cap. Raise the cap or lower this strategy." — visible above the button. |
+| E18 | PASS | Three rapid clicks on create produced exactly one strategy (8 → 9). |
+
+## The FAILs, and what each one actually was
+
+Six items failed against the plan. Every one was a real defect in the product, fixed at the root
+and re-run from the start.
+
+**1. A transaction hash the chain had never seen went into the append-only trail.** `E16`.
+`/delegation/record` validated the *shape* of `txHash` and swallowed the receipt lookup, so any
+well-formed 32-byte string was written as "Trading permission granted" with an explorer link to
+nothing. Demonstrated with `0x1234…1234`: the app answered 200 and `cast tx` answers "tx not
+found". Both record and revoke now require the hash to resolve; `waitForTx` distinguishes
+mined-succeeded, mined-reverted and never-heard-of-it, and the last is answered in 1.7s instead of
+a 30s timeout. **The bad entry stays in the trail — it is append-only, which is the property it
+exists to have.**
+
+**2–5. Four screens answered a question they never got to ask.** `E14`. `/safety` told a
+signed-out visitor "NOT GRANTED · No permission has been granted, so nothing can trade" — the
+sentence its own docblock calls "the one claim this screen must never make", because a returning
+user with a live grant reads it as their money being untouchable. `/strategies` said "0 running ·
+Nothing running yet", `/holdings` said "Nothing held yet" beside a portfolio total it had correctly
+refused to print, and `/bot` said "I could not reach the market just now" when the market was fine.
+Three helpers had folded "no session" into "no permission", each with a comment arguing for it.
+
+**6. The headline screen took forty seconds.** `B11`/`E9`. Thirty *daily* candles were cached for
+ten minutes; on expiry the next visitor paid a **61-second** CoinGecko fetch, bounded to a `503
+warming` and retried three times by the client. Six hours now — a 30-day high/low cannot change
+the mid-range verdict inside that, and the live price it is compared against has its own short TTL.
+0.5s warm.
+
+**Two more, found while walking the plan and fixed in passing:** the API answered
+`"source":"fallback"` after the fallback line had been deleted — true of nothing, in a project
+whose central claim is that it contains none — and `stocks.live.test.ts` reported eight real
+deployed tokens as missing whenever the free Base RPC throttled.
