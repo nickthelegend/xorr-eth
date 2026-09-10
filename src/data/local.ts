@@ -22,6 +22,7 @@ import {
   type StockQuote,
 } from './marketData';
 import { ApiError, NotSignedIn, api, apiReason } from './api';
+import { waitOutWarming } from './warming';
 import { absentOrThrow } from './apiError';
 import type {
   ActivityEvent,
@@ -229,19 +230,10 @@ export const LocalRepositories: Repositories = {
 
       let res: Generated | null = null;
       let notSignedIn = false;
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        try {
-          res = await api.post<Generated>('/proposals/generate', {});
-          break;
-        } catch (e) {
-          if (e instanceof NotSignedIn) {
-            notSignedIn = true;
-            break;
-          }
-          const warming = e instanceof ApiError && e.status === 503;
-          if (!warming || attempt === 3) break;
-          await new Promise((r) => setTimeout(r, 3000));
-        }
+      try {
+        res = await waitOutWarming(() => api.post<Generated>('/proposals/generate', {}));
+      } catch (e) {
+        notSignedIn = e instanceof NotSignedIn;
       }
       /*
        * Say which failure it was.
@@ -268,9 +260,19 @@ export const LocalRepositories: Repositories = {
       return api.post<{ message: string }>(`/proposals/${id}/decide`, { decision });
     },
     async backtest(agentId, lookback): Promise<BacktestResult> {
-      // No fallback: a backtest is a performance claim. Showing a designer's numbers when the
-      // engine is unreachable would be exactly the overselling copy.md forbids.
-      return api.get<BacktestResult>(`/agents/${agentId}/backtest?lookback=${lookback}`);
+      /*
+       * No fallback: a backtest is a performance claim. Showing a designer's numbers when the
+       * engine is unreachable would be exactly the overselling copy.md forbids.
+       *
+       * But a cold backtest replays ninety days of real history, and the executor bounds that at
+       * twelve seconds and answers `503 warming` rather than hanging. Read as a plain error, that
+       * put the screen into its ErrorState — which deliberately hides "run against real history at
+       * your current limits. Nothing here is a promise.", so the disclaimer disappeared while the
+       * engine was merely still computing.
+       */
+      return waitOutWarming(() =>
+        api.get<BacktestResult>(`/agents/${agentId}/backtest?lookback=${lookback}`),
+      );
     },
     async leaderboard(): Promise<Agent[]> {
       // Same reasoning as backtest: a leaderboard is a performance claim.
