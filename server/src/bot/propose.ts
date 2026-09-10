@@ -72,13 +72,30 @@ export type ProposalPayload = {
 const money = (n: number) =>
   `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/**
+ * How long the 30-day range is worth keeping.
+ *
+ * It was ten minutes, for thirty DAILY candles — a series whose newest bar changes once a day and
+ * whose high and low over a month move slower still. So the entry expired constantly, and every
+ * expiry made the next visitor pay for a refetch that was **measured at 61 seconds** against
+ * CoinGecko's free tier. The Bot tab is the whole content of that screen: bounded at ten seconds
+ * it answered `503 warming`, the client retried three times, and the agent's answer took about
+ * forty seconds to appear on the headline screen of the product.
+ *
+ * Six hours cannot change the verdict this number feeds. `evaluate` asks whether the LIVE price is
+ * breaking out of that range or sitting mid-range, and the live price is fetched separately with
+ * its own short TTL — so the fast half stays fast and the slow-moving reference stops being
+ * re-bought every ten minutes.
+ */
+const RANGE_TTL_MS = 6 * 60 * 60_000;
+
 /** Recent daily range for the symbol — the reference a breakout is measured against. */
 async function range(symbol: string): Promise<{ high: number; low: number } | null> {
   const id = IDS[symbol];
   if (!id) return null;
   const rows = await getJson<[number, number, number, number, number][]>(
     `${COINGECKO}/coins/${id}/ohlc?vs_currency=usd&days=30`,
-    10 * 60_000,
+    RANGE_TTL_MS,
   ).catch(() => null);
   if (!rows || rows.length < 5) return null;
   return {
