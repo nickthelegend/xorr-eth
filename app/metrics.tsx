@@ -193,11 +193,25 @@ export default function Metrics() {
               what the router promised and what the chain delivered — the only thing that makes
               "Aqua filled this" a claim about routing rather than a note about it.
             */}
-            {data.fillQuality && data.fillQuality.venues.length > 0 ? (
+            {data.fillQuality ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
                 <Text variant="footnote" color={colors.ink40}>
                   HOW CLOSE TO THE QUOTE
                 </Text>
+                {/*
+                  An empty section that explains itself beats an invisible one.
+
+                  On Base Sepolia there are no fills to measure at all — 1inch has no deployment
+                  there, which `/network` already says — so this would otherwise vanish and leave a
+                  reader to guess whether the measurement is missing or the fills are.
+                */}
+                {data.fillQuality.venues.length === 0 ? (
+                  <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                    {data.fillQuality.unmeasurable > 0
+                      ? `Nothing to compare yet: ${data.fillQuality.unmeasurable} fills were recorded before the quote was kept alongside them, and a quote cannot be recovered after the fact.`
+                      : 'No fills on this network to measure. 1inch has no deployment on Base Sepolia, so trades cannot settle here — the network screen says the same.'}
+                  </Text>
+                ) : null}
                 {data.fillQuality.venues.map((v) => (
                   <View key={v.venue} style={{ marginTop: space.s10 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -217,9 +231,11 @@ export default function Metrics() {
                   </View>
                 ))}
                 <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
-                  {data.fillQuality.basis === 'forked'
-                    ? `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote. On a fork the reference quote prices live mainnet while the fill runs against a pinned block, so this carries drift as well as venue quality.`
-                    : `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote.`}
+                  {data.fillQuality.venues.length === 0
+                    ? ''
+                    : data.fillQuality.basis === 'forked'
+                      ? `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote. On a fork the reference quote prices live mainnet while the fill runs against a pinned block, so this carries drift as well as venue quality.`
+                      : `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote.`}
                 </Text>
               </SheetCard>
             ) : null}
