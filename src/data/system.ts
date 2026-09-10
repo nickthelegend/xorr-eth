@@ -289,6 +289,22 @@ export type Metrics = {
   /** Last seven days, bucketed by cause. */
   failuresByCause: Record<string, number>;
   fillsByVenue: Record<string, number>;
+  /**
+   * How close each venue came to the quote it was chosen on.
+   *
+   * `fillsByVenue` counts WHERE trades settled. This says how WELL — a count is a label, and the
+   * distance between what the router promised and what the chain delivered is the claim.
+   *
+   * `basis` matters as much as the numbers: on a fork the reference quote prices live mainnet
+   * while the fill executes against a pinned block, so the figure carries drift as well as venue
+   * quality. Null when the executor could not compute it at all.
+   */
+  fillQuality: {
+    venues: { venue: string; fills: number; meanBps: number; worstBps: number; bestBps: number }[];
+    measured: number;
+    unmeasurable: number;
+    basis: 'same-chain' | 'forked';
+  } | null;
   strategies: Record<string, number>;
   alertsEnabled: number;
   alertsFiredTotal: number;

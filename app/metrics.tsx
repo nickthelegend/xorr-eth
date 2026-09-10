@@ -187,6 +187,43 @@ export default function Metrics() {
               </SheetCard>
             ) : null}
 
+            {/*
+              How WELL each venue filled, not just where.
+              The card above counts settlements, which is a label. This is the distance between
+              what the router promised and what the chain delivered — the only thing that makes
+              "Aqua filled this" a claim about routing rather than a note about it.
+            */}
+            {data.fillQuality && data.fillQuality.venues.length > 0 ? (
+              <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+                <Text variant="footnote" color={colors.ink40}>
+                  HOW CLOSE TO THE QUOTE
+                </Text>
+                {data.fillQuality.venues.map((v) => (
+                  <View key={v.venue} style={{ marginTop: space.s10 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text variant="secondarySm" color={colors.ink65}>
+                        {`${v.venue} · ${v.fills} fill${v.fills === 1 ? '' : 's'}`}
+                      </Text>
+                      {/* Positive beat the quote. The sign is the fact, so it is always shown. */}
+                      <Text variant="secondarySm" color={v.meanBps >= 0 ? colors.up : colors.down}>
+                        {`${v.meanBps >= 0 ? '+' : ''}${v.meanBps} bps`}
+                      </Text>
+                    </View>
+                    {v.fills > 1 ? (
+                      <Text variant="footnote" color={colors.ink28}>
+                        {`worst ${v.worstBps} · best ${v.bestBps >= 0 ? '+' : ''}${v.bestBps}`}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
+                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
+                  {data.fillQuality.basis === 'forked'
+                    ? `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote. On a fork the reference quote prices live mainnet while the fill runs against a pinned block, so this carries drift as well as venue quality.`
+                    : `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote.`}
+                </Text>
+              </SheetCard>
+            ) : null}
+
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
               <Text variant="footnote" color={colors.ink40}>
                 ALERTS
