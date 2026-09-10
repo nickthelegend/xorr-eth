@@ -291,12 +291,30 @@ export const delegatePublicKey = delegateAccount.address;
  * not hold a request open forever — the caller treats a timeout as "not confirmed", which is the
  * honest answer.
  */
-export async function waitForTx(hash: Hex, timeoutMs = 30_000): Promise<boolean> {
-  const receipt = await publicClient.waitForTransactionReceipt({
-    hash,
-    timeout: timeoutMs,
-    confirmations: 1,
-  });
+/**
+ * Wait for a transaction, and say plainly when there is nothing to wait for.
+ *
+ * Three answers, because they are three different facts:
+ *   `true`      mined and succeeded
+ *   `false`     mined and reverted
+ *   `undefined` the chain has never heard of it
+ *
+ * The last one used to arrive as a thrown timeout after the full thirty seconds, which is the
+ * right wait for a transaction that is genuinely in the mempool and the wrong one for a string
+ * somebody typed. So the mempool is asked first: a hash the node cannot find AT ALL is not
+ * pending, it is absent, and thirty seconds will not make it appear.
+ *
+ * Deliberately not a shortcut around the check — a transaction that IS pending still gets the full
+ * wait, because that is the case the wait exists for.
+ */
+export async function waitForTx(hash: Hex, timeoutMs = 30_000): Promise<boolean | undefined> {
+  const known = await publicClient.getTransaction({ hash }).catch(() => undefined);
+  if (!known) return undefined;
+
+  const receipt = await publicClient
+    .waitForTransactionReceipt({ hash, timeout: timeoutMs, confirmations: 1 })
+    .catch(() => undefined);
+  if (!receipt) return undefined;
   return receipt.status === 'success';
 }
 

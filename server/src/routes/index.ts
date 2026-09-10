@@ -473,8 +473,35 @@ routes.post('/delegation/record', async (c) => {
    * away raced the block: the grant was genuinely on its way, the read came back empty, and the
    * record was refused with "not granted on-chain" — for a grant that landed a second later. The
    * trust model is unchanged; we still believe only what the chain says, we just let it say it.
+   *
+   * THE HASH HAS TO EXIST. This was `.catch(() => undefined)`, so a transaction that was never
+   * mined — or never sent — was swallowed, and the policy read that followed passed on the
+   * strength of some EARLIER real grant. The result: any well-formed 32-byte string was written
+   * into the append-only trail as "Trading permission granted", carrying a block-explorer link to
+   * a transaction the chain has never heard of. Proven with
+   * `0x1234…1234`, which the app accepted and `cast tx` reports as "tx not found".
+   *
+   * A trail whose entries cannot be checked is the one thing this trail may not be, and it cannot
+   * be repaired afterwards — so the check belongs before the write, not after it.
    */
-  await waitForTx(body.txHash as Hex).catch(() => undefined);
+  const mined = await waitForTx(body.txHash as Hex).catch(() => undefined);
+  if (mined === undefined) {
+    return c.json(
+      {
+        error: 'tx_not_found',
+        message:
+          'That transaction is not on this chain. Nothing was recorded — the trail only carries ' +
+          'hashes that can be looked up.',
+      },
+      400,
+    );
+  }
+  if (mined === false) {
+    return c.json(
+      { error: 'tx_reverted', message: 'That transaction failed on-chain, so it granted nothing.' },
+      400,
+    );
+  }
 
   const policy = await readPolicy(w.address as Address);
   if (!policy || policy.revoked) {
@@ -521,6 +548,29 @@ routes.post('/delegation/revoke', async (c) => {
       { error: 'still_active', message: 'The policy is still active on-chain. Sign the revoke first.' },
       400,
     );
+  }
+
+  /*
+   * If a hash is offered, it has to be real — the same rule as `/delegation/record`.
+   *
+   * The chain check above is what authorises the revoke, so an unverified hash could not fake one.
+   * But the hash is written into the append-only trail as this entry's signature, and an entry
+   * carrying an explorer link to a transaction that does not exist is exactly as unusable as one
+   * that faked the event. The hash is optional; a hash that cannot be looked up is not.
+   */
+  if (body.txHash) {
+    const mined = await waitForTx(body.txHash as Hex).catch(() => undefined);
+    if (mined === undefined) {
+      return c.json(
+        {
+          error: 'tx_not_found',
+          message:
+            'That transaction is not on this chain. Nothing was recorded — the trail only carries ' +
+            'hashes that can be looked up.',
+        },
+        400,
+      );
+    }
   }
 
   await tx(async (client) => {
