@@ -51,7 +51,7 @@ Then check it yourself:
 curl -s "localhost:8788/verify?owner=<your address>" | jq '.passed, .failed'
 ```
 
-Or open `/judge` in the app — the same fifteen claims, re-run in front of you.
+Or open `/judge` in the app — the same 21 claims, re-run in front of you.
 
 `fork-e2e` asserts the things that matter rather than that it did not throw: the bought token
 lands in the **user's** wallet, neither contract keeps a balance, the on-chain cap decrements, and

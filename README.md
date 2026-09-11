@@ -29,16 +29,16 @@ Sepolia. Not a local dev server: every frame is the same build a stranger gets. 
 [`tools/demo.mjs`](tools/demo.mjs), which drives a real signed-in Privy session rather than a
 mockup, so re-recording it after a change is one command.
 
-It closes on `/safety` reading **EXPIRED**, because the demo wallet's 24-hour permission had
-lapsed. That is the screen behaving correctly, and it is the honest ending available without a
-person present: renewing takes four Privy dialogs the wallet's owner must sign, and nothing on the
-server can sign for them — which is the same claim `/safety` makes about the Privy policy. The
-previous recording showed a green **Live** badge on the same expired permission, which was a
-defect, not a better take.
+It closes on `/safety` reading **EXPIRED**, because the demo wallet's permission had lapsed when it
+was recorded. That was the screen behaving correctly — the previous recording showed a green
+**Live** badge on the same expired permission, which was a defect, not a better take. The live app
+has since been renewed through its own grant flow, three Privy signatures by the wallet's owner, and
+reads **LIVE** until 2026-10-11.
 
 Fills are the one thing Sepolia cannot show — 1inch has no liquidity there, and the app says so on
-`/network` rather than pretending. Those are real on the Base mainnet fork: 33 filled runs, 35
-through the aggregator and 5 through Aqua.
+`/network` rather than pretending. Those are real on the Base mainnet fork, counted by the executor
+that made them: **36 through the aggregator, 6 through Aqua and 3 through SwapVM**
+(`curl -s https://executor-fork-production.up.railway.app/metrics | jq .fillsByVenue`).
 
 Note the `/judge` beat leaves a failing check on screen. That is deliberate — a console that goes
 green when something is broken is worth nothing, and the break it shows is a real one this project
@@ -47,14 +47,34 @@ cannot repair without rewriting an append-only log.
 ## Check it yourself
 
 Everything below is a claim. `/judge` in the app — and `GET /verify` behind it, which needs no
-account — re-runs fifteen of them live: the contract read from the chain, the subgraph queried, the
-venue allowlist tested against a control address, the audit chain re-hashed, the price feeds
-cross-checked. Each row shows what was observed and the call that produced it, so it can be
-repeated somewhere this code cannot reach.
+account — re-runs **21** of them live: the contract read from the chain, the subgraph queried, the
+venue allowlist tested against a control address, the Privy policy made to refuse a transaction, the
+audit chain re-hashed and compared against the copy Base holds, the price feeds cross-checked. Each
+row shows what was observed and the call that produced it, so it can be repeated somewhere this code
+cannot reach.
 
 ```bash
-curl -s "localhost:8788/verify?owner=0xYourAddress" | jq '.passed, .failed'
+curl -s "https://executor-production-1659.up.railway.app/verify?owner=0x95A0b368588713011a15f4b1041423f31B08e615" \
+  | jq '{passed, failed, skipped}'      # 19 · 1 · 1 — the failure is explained below, on purpose
 ```
+
+## The trail you do not have to trust us about
+
+Every action the bot takes, and every one it chose not to take, is a row that commits to the hash of
+the row before it — so editing history breaks the chain and `/verify` says where. That property has
+one honest limit: all of it lives in our database, and a reader who does not trust us has no reason
+to trust our report that our own log is intact.
+
+So the head of the chain is published to Base. [`XorrAuditAnchor`](https://sepolia.basescan.org/address/0xB58cB717867988582DcCB7f3155DeD3fC7A76caf)
+holds it, signed by the same key `/safety` names as the bot's, and the executor publishes on an
+hourly sweep with nobody pressing anything. Rewriting history stays possible; producing a rewrite
+that hashes to a value Base has been holding since before the rewrite does not. `/audit/anchor`
+shows the commitment, the block, and the two addresses needed to repeat the read without us.
+
+The one check that fails is here too, and stays failing. Two writers raced before the append lock
+existed and forked the Sepolia trail at entry 2. It is append-only, so it cannot be straightened
+without destroying what it proves — and `/verify` reports *"Exactly one, at entry 2, and none since —
+the lock holds. All rows are individually unaltered."*
 
 <p align="center">
   <img src="docs/screens/32f-judge.png" width="240" alt="The verification console" />
@@ -101,8 +121,8 @@ Handing a bot your money is a trust problem, not a trading problem. So the permi
 product: `XorrDelegation` is a contract you grant, that caps what the bot can spend per day,
 restricts it to venues you allowlisted, expires on its own, and **cannot move funds to an address
 of the bot's choosing**. Revoking needs one signature from you and nothing from us. Everything the
-bot does is then readable back off the chain through The Graph, so the history you check is not a
-history we hold.
+bot does is then readable back off the chain through The Graph, and the audit trail's head is
+published to Base, so the history you check is not a history we hold.
 
 ## Live deployment
 
@@ -110,6 +130,7 @@ history we hold.
 |---|---|
 | **The app** | **[`web-production-3e214.up.railway.app`](https://web-production-3e214.up.railway.app)** — open it, sign in, it is the real thing against the Sepolia executor below |
 | `XorrDelegation` | [`0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e`](https://sepolia.basescan.org/address/0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e) on Base Sepolia |
+| `XorrAuditAnchor` | [`0xB58cB717867988582DcCB7f3155DeD3fC7A76caf`](https://sepolia.basescan.org/address/0xB58cB717867988582DcCB7f3155DeD3fC7A76caf) on Base Sepolia — holds the audit trail's head, published hourly |
 | Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.2`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2) — synced, no indexing errors |
 | Aqua venue subgraph | built + pinned `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ` |
 | Bot delegate key | `0xC38f38f45463f77bD823FebE16b15714Eb98c8A5` — the key the deployed executor signs with, funded for its own gas |
@@ -125,8 +146,8 @@ and history read from The Graph. Fills are the half that is not, because 1inch h
 there — the network screen says so rather than pretending, and the fork below is where they settle.
 
 A real grant signed by a real Privy embedded wallet is queryable right now:
-[`0x596f4c08…`](https://sepolia.basescan.org/tx/0x596f4c08eca02e0d4dd0928e7499c4cccad31461c35e5b98e2f5bf211595ee6d)
-— $1,600/day cap, 1inch router allowlisted, everything else denied.
+[`0xf7181211…`](https://sepolia.basescan.org/tx/0xf718121116ef61452ee398fe744cbe9cca3a6607a5460b68a4feade02a335c88)
+— $1,600/day cap for 30 days, sent from the user's own wallet to `XorrDelegation`.
 
 ## Two environments, and why there are two
 
@@ -165,9 +186,9 @@ Nothing in this repo is claimed to work in an environment where it was not run.
 |---|---|---|
 | **Privy — auth + wallets** | The identity and the wallet that signs are one object, so there is no second account system — and the wallet Privy creates is the `owner` in the on-chain policy. | **Done.** Real login → real embedded wallet → real signed grant, revoke and approval |
 | **Privy — policies + key quorums** | The second lock, one layer above the contract. A Privy **policy** limits where the wallet may send at all — the delegation contract, the tokens it may pull, the lending pool, nothing else — and Privy enforces it before a signature exists. The policy is owned by a Privy **key quorum**, so widening it needs a signature this server can produce and its app secret cannot. | **Done, and checkable.** `/verify` runs both live — see below |
-| **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. **The executor settles through it**: books are discovered from Aqua's own logs, quoted, and filled via `delegatedFillArgs` through the same delegation as every other trade. | **Done.** 15 fork tests, plus `live-aqua.ts` — 12 checks against a real book, tx `0x3bb021d6…`, real ERC-20 out of the maker's own wallet |
+| **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. **The executor settles through it**: books are discovered from Aqua's own logs, quoted, and filled via `delegatedFillArgs` through the same delegation as every other trade. | **Done.** 15 fork tests, plus `live-aqua.ts` — 12 of 12 checks against the deployed executor on 2026-09-11, tx `0x64de680f…`: filled against the book not the router, 0.0556 WETH out of the maker's own wallet for 150 USDC |
 | **1inch — Aggregator** | Swap routing and execution. The Route row names the protocols actually routed through. | **Done.** Real fills on a Base mainnet fork |
-| **1inch — SwapVM** | `XorrSwapVMBook` compiles the terms of a trade into SwapVM program bytecode — a deadline, a slippage floor, a fee, a salt — so the *rules* of the fill are enforced inside the VM rather than trusted to whoever submits it. | **Done.** A real settlement on the fork, tx `0xc57787db011c861186dc3d66ef61b488ff793152a727b0ab09c0f6602715b89c` (no explorer — the fork is a private node) — the deployed executor filled a $50 WETH order through `XorrDelegation.spend()` → `XorrSwapVMBook` → the official SwapVM router `0x111111338c…`, with the 1inch aggregation router never touched. The user got **0.020165 WETH** where the aggregator quoted 0.019971, because the maker's book priced inside it. `/metrics` now reads `fillsByVenue: {swapvm: 1, 1inch: 36, aqua: 5}`. The maker that makes this possible is `server/src/live-swapvm.ts` — 18 checks, including two proving the floor is refused by the ROUTER (`TakerTraitsInsufficientMinOutputAmount`, three frames deep) rather than by us |
+| **1inch — SwapVM** | `XorrSwapVMBook` compiles the terms of a trade into SwapVM program bytecode — a deadline, a slippage floor, a fee, a salt — so the *rules* of the fill are enforced inside the VM rather than trusted to whoever submits it. | **Done.** 3 fills through `XorrDelegation.spend()` → `XorrSwapVMBook` → the official SwapVM router `0x111111338c…`, including the executor's own strategy run `0x042ee2dc…` (no explorer — the fork is a private node). An impossible floor is refused by the router itself, at call depth 2, not by us. `server/src/live-swapvm.ts` is the maker that makes it possible |
 | **The Graph** | Two independent subgraphs, joined. One indexes our delegation contract (what you permitted); one indexes 1inch Aqua on Base mainnet (what liquidity exists). The **join picks the venue** — neither index can see the other's half. | Delegation index **deployed + synced** and read before every spend; Aqua index **built and pinned**, awaiting a Studio slug — see [The one thing that is not done](#the-one-thing-that-is-not-done) |
 | **Aave v3** | Tier 4's venue. Idle USDC is supplied through the same delegation, under the same daily cap and the same venue allowlist — and the aToken goes straight to the user, because `supply()` names the recipient. | **Done.** 18 fork assertions, including that the bot *cannot* withdraw |
 | **Base** | Everything settles here. Tokenized equities, cbBTC, Aave, 1inch — all Base-native. | **Done** |
@@ -192,10 +213,10 @@ contract.
 |---|---|
 | Prices | CoinGecko for crypto; a live 1inch route for the tokenized equities, because what you pay is what routes — not the NYSE print |
 | Yield | `currentLiquidityRate` read from the Aave v3 Pool on Base |
-| Fills | 1inch Aggregation Router v6, and `XorrAquaBook` on official Aqua |
+| Fills | 1inch Aggregation Router v6, `XorrAquaBook` on official Aqua, and `XorrSwapVMBook` through the official SwapVM router |
 | History | The Graph, indexed from the contract's own events |
 | Permission | On-chain, signed by the user's embedded wallet |
-| Markets | 17 of 44 instruments have a real feed. **The other 27 are tagged SIMULATED on screen.** |
+| Markets | 17 of 44 instruments have a real feed. **The other 27 — commodities, indices, pre-IPO — are listed with no price**, because nothing prices them. They used to show the design prototype's numbers under a SIMULATED tag, including prices for private companies; those were removed from the data, and a test keeps them out. |
 
 **The rule that settles arguments:** every price on screen is real, or it is labelled. A confident
 wrong number is the worst outcome available — that rule has caught eight bugs in this repo, most
@@ -240,9 +261,9 @@ the executor has actually run it.
 
 ## Every screen
 
-54 screens, captured at the design canvas (402×874) against a signed-in session. The same sweep
-checks the console and the network on every route and currently reports **zero errors and zero
-failed requests** across all 54. Regenerate with `node tools/shoot.mjs`.
+A curated set below, from the 101 routes the sweep captures at the design canvas (402×874) against a
+signed-in session. The same sweep checks content, the console and the network on every one of them,
+and fails a screen on any console error or failed request. Regenerate with `node tools/shoot.mjs`.
 
 ### Onboarding
 | | | | |
@@ -339,14 +360,13 @@ XORR_CHAIN=base-fork FORK_RPC=http://127.0.0.1:8545 npx tsx server/src/fork-e2e.
 ## Tests
 
 ```bash
-npm test                                       # 489 — app AND executor units
-(cd server && npm test)                        # 234 executor on its own
-npm run test:live                              # 83 against real APIs and a real chain
-(cd server && npm run test:live)               # 59 more, needing the fork environment
-(cd contracts && forge test)                   # 54 contract: 22 unit + 32 fork
+npm test                                       # 532 — app and executor units
+(cd server && npm test)                        # 267 executor on its own
+(cd server && npm run test:live)               # 77 against real APIs, a real chain and the running executor
+(cd contracts && forge test)                   # 62 contract: 30 unit (22 delegation, 8 anchor) + 32 fork
 (cd contracts && forge test --match-contract Fork \
    --fork-url $BASE_RPC)                       # 32 fork: 15 Aqua, 10 SwapVM, 7 equities
-node tools/shoot.mjs                           # 54 screens, console + network + content
+node tools/shoot.mjs                           # 101 screens, content + console + network
 ```
 
 Two scripts drive the DEPLOYED executor rather than a local one, because "it works on my machine"
@@ -364,10 +384,10 @@ npx tsx server/src/live-ladder.ts    # every ladder tier marked available, actua
 ## Repo map
 
 ```
-app/           41 expo-router screens
+app/           99 expo-router screens
 src/           design system, charts, data layer, state
 server/        Hono executor — auth, scheduler, venues, Graph clients
-contracts/     XorrDelegation, XorrAquaBook (Foundry)
+contracts/     XorrDelegation, XorrAuditAnchor, XorrAquaBook, XorrSwapVMBook (Foundry)
 subgraph/      delegation index      → deployed
 subgraph-aqua/ Aqua venue index      → built
 docs/          TESTPLAN, SECURITY, RUNBOOK, screens

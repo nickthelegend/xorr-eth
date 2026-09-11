@@ -11,7 +11,7 @@ Two things to know before the per-sponsor sections, because they change how ever
 |---|---|---|
 | 1inch Aggregation fills | **170 real fills** | 1inch cannot settle here |
 | 1inch Aqua | 6 fills — on an anvil that no longer exists | Aqua is a Base **mainnet** deployment |
-| 1inch SwapVM | **2 real fills** (2026-09-10) | SwapVM is a Base mainnet deployment |
+| 1inch SwapVM | **3 real fills** (2026-09-11) | SwapVM is a Base mainnet deployment |
 | The Graph index | **inert** — indexes another contract | **load-bearing** — blocks trades |
 | Privy policy engine | enforced | enforced |
 | Base: Aave, Basenames, cbBTC, equities | real mainnet state | partial |
@@ -123,7 +123,8 @@ needs a shipped maker program before the claim can be made at all.
 - **`verifyAuthToken` server-side** — `server/src/auth/privy.ts:52`. Every authenticated route is
   behind it; there is no second session mechanism.
 - **The server-side policy engine, enforced and proven.** `/verify` reports
-  `13 rules over 13 destinations, owned by key quorum zixx49ik3ngslu9oay54q4li`, and then does
+  `13 rules over 13 destinations, owned by key quorum zixx49ik3ngslu9oay54q4li` at the time (4 rules over
+  4 destinations as of 2026-09-11), and then does
   something better than describe it: `privy-refusal` sends a **real** `eth_sendTransaction` to
   `0x…dEaD`, an address the policy does not name, and asserts it comes back
   `"RPC request denied due to policy violation"`. The check **fails if the transaction succeeds** —
