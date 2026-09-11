@@ -1,11 +1,12 @@
 # Submission — ETHOnline 2026
 
-**Live app:** [`web-production-3e214.up.railway.app`](https://web-production-3e214.up.railway.app)
+**Live app:** [`xorr-eth.vercel.app`](https://xorr-eth.vercel.app)
 — open it and sign in. A new wallet is sent testnet gas automatically so the permission is signable,
-and the demo wallet's own permission is live until **2026-10-11**.
+and the demo wallet's own permission is live until **2026-10-11**. The frontend is on Vercel; the
+executors, the fork and Postgres are on Railway.
 
-**Demo:** [`docs/demo/demo.mp4`](demo/demo.mp4) — 91 seconds against that same deployed app, not a
-local dev server. Script in [`DEMO-SCRIPT.md`](DEMO-SCRIPT.md); regenerate with
+**Demo:** [`docs/demo/demo.mp4`](demo/demo.mp4) — 91 seconds against the hosted app and its public
+executor, not a local dev server. Script in [`DEMO-SCRIPT.md`](DEMO-SCRIPT.md); regenerate with
 `node tools/demo.mjs`.
 
 **Repo:** https://github.com/nickthelegend/xorr-eth
@@ -61,8 +62,12 @@ by the executor that made them, on the Base mainnet fork:
 
 ```bash
 curl -s https://executor-fork-production.up.railway.app/metrics | jq .fillsByVenue
-{ "swapvm": 3, "1inch": 36, "aqua": 6 }
+{ "swapvm": 4, "1inch": 36, "aqua": 7 }
 ```
+
+The fork was rebuilt on 2026-09-11 — its chain state has no disk, and the service restarted. The
+counts live in Postgres and survived; the receipts from before did not. **Every fork hash on this
+page is from the rebuilt fork**, re-run and re-read the same day.
 
 ### Aqua
 
@@ -77,11 +82,11 @@ passed**, most recently on 2026-09-11:
 | Check | Observed |
 |---|---|
 | The fill executed against the **Aqua book**, not the aggregation router | book logs `true` · router logs `false` |
-| The token came **straight out of the maker's own wallet** — Aqua's whole claim | maker paid 0.055644958745337339 WETH for 150 USDC |
+| The token came **straight out of the maker's own wallet** — Aqua's whole claim | maker paid 0.056536047164408186 WETH for 150 USDC |
 | The bought token went to the taker, not to a contract | taker `0x95A0b368…` |
 | The book contract kept nothing | zero WETH, zero USDC |
 
-Fill: `0x64de680f48315cc00675f3762f6572e2e6e9eb3b65b86245dbf0d49247eaf355` — status success, `to` is
+Fill: `0xe4875211da8068037dd9e9987dda572bc6e6abeb32870e2a23ead90c971824a9` — status success, `to` is
 `XorrDelegation`. (The fork is a private node, so there is no explorer; `eth_getTransactionReceipt`
 against `base-fork-production.up.railway.app` returns it.)
 
@@ -95,8 +100,8 @@ delegation.
 
 | | |
 |---|---|
-| The executor's own strategy run, routed to SwapVM | `0x042ee2dc0055bbb6c9840657256b88ded8328a503214752d40251465a785898f` |
-| The maker-and-taker proof, `live-swapvm.ts` | `0x2a20ebbddbd9db138b0d265ec0995b2d4ef239a70e3f39cb872254181bebc218` |
+| The executor's own strategy run, routed to SwapVM | `0x72ef86131e9088a4b0c5ba473bb291f984217e2438aef98b9ec28d4854f7ceb0` |
+| The maker-and-taker proof, `live-swapvm.ts` — 18 checks, 18 passed | `0x12a02f40f41237918c587dd78192f3b3c9eb45787f081c6ccaba69a224aa1409` |
 | An impossible floor, refused **by the VM itself** | router error `0xf44f8993` at call depth 2 — inside the router, not a guard of ours |
 
 This was not true at the start of the week. `SPONSOR-AUDIT.md` recorded *"zero trades, on any
@@ -113,23 +118,28 @@ from a table. On the fork, 100 USDC into WETH:
 
 | Venue | Out | Gas | Net |
 |---|---|---|---|
-| 1inch Aggregation | 0.040194 WETH | $0.5681 | **$99.02** |
-| 1inch SwapVM | 0.040074 WETH | $0.8075 | $98.48 |
-| 1inch Aqua | cannot serve — *no maker book is deep enough for this size* | | |
+| 1inch Aggregation (via Uniswap V3) | 0.038840 WETH | $1.0228 | **$98.58** |
+| 1inch SwapVM | 0.038724 WETH | $0.8379 | $98.47 |
+| 1inch Aqua | cannot serve — *no maker book is deep enough for this size right now* | | |
 
-SwapVM costs more gas because it routes through our book contract into the VM — measured, not
-assumed. When the net winner differs from the gross winner, the screen says so.
+Gas is estimated per route rather than assumed per venue, and it changes the picture from one
+measurement to the next: on the previous fork SwapVM cost more gas than the aggregator; on this run
+the aggregator's Uniswap V3 path cost more, and still came out ahead — 30 bps more WETH, and $0.11
+more after gas. When the net winner differs from the gross winner, the screen says so.
 
 ### How well each venue actually filled
 
 `/metrics` records, for every fill, how far it landed from the market price at the moment the run
 decided to trade — implementation shortfall against the arrival price, the same reference for every
-venue. The first two measurements:
+venue. Every measurement so far:
 
-| Venue | Fills | vs arrival price |
-|---|---|---|
-| SwapVM | 1 | **+71.1 bps** |
-| Aqua | 1 | **−307.8 bps** |
+| Venue | Fills | Mean vs arrival price | Range |
+|---|---|---|---|
+| SwapVM | 2 | **+73.2 bps** | +71.1 to +75.2 |
+| Aqua | 2 | **−309.8 bps** | −311.8 to −307.8 |
+
+A supply to Aave is deliberately absent: it converts 1:1, so there is no execution in it to grade.
+It was briefly counted as a perfect aggregator fill, which `013-supply-is-not-a-fill.sql` corrected.
 
 These are **not a ranking**, and the screen says so. The fork is pinned at a block while the price is
 live, and the Aqua figure carries the pricing of the proof maker that shipped that book. It is
@@ -174,8 +184,8 @@ wallet's owner to authorise that, and the owner is the user. `/safety` says so o
 | Flow | Evidence |
 |---|---|
 | **Granting the bot permission** — token approvals, then `grant()`, each signed by the user's Privy embedded wallet in Privy's own dialogs | `0xf718121116ef61452ee398fe744cbe9cca3a6607a5460b68a4feade02a335c88` on **Base Sepolia**, from the user's wallet to `XorrDelegation` — [explorer](https://sepolia.basescan.org/tx/0xf718121116ef61452ee398fe744cbe9cca3a6607a5460b68a4feade02a335c88). $1,600/day, 30 days. |
-| **A swap through that permission** — USDC into WETH, filled by a maker's Aqua book | `0x64de680f…`, above |
-| **An Earn deposit** — 100 USDC supplied to Aave v3, aToken straight to the user | `0x8c78a44240d1ca6b3cb1f85ac278c8de3d4deb187aab88baa5b835b7c57f09f8` |
+| **A swap through that permission** — USDC into WETH, filled by a maker's Aqua book | `0xe4875211…`, above |
+| **An Earn deposit** — 100 USDC supplied to Aave v3 on the Base mainnet fork, aToken straight to the user (its aUSDC went 0 → 99.999999) | `0x7b2a9e9f29f818f104228ce971bd4df6efd403be7ab2344d3fccb9bdea34f542` |
 | **Stopping everything** — "Stop all agents" sends a `revoke()` the user signs | The contract half, run end to end on the Base mainnet fork on 2026-09-10 with the owner's key impersonated: the chain read `revoked: true`, `/limits` read `$0`, and `spend()` reverted `PolicyRevoked()`. The signing half is the same Privy dialog as the grant above. |
 
 A withdrawal flow is built too — USDC to an allowlisted address, signed by the embedded wallet, with a

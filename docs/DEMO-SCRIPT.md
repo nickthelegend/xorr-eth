@@ -13,7 +13,7 @@ set -a && . ./.env && set +a
 E2E_PRIVY_EMAIL=test-9907@privy.io node tools/demo.mjs
 ```
 
-- The default target is `https://web-production-3e214.up.railway.app` — the same build a stranger
+- The default target is `https://xorr-eth.vercel.app` — the same build a stranger
   opens. The previous recording was shot against `localhost:8082`, which is how it came to show a
   product nobody else could reach; `APP_URL` still overrides if you need to.
 - Viewport **402 × 874** — the design canvas. A desktop-width recording of a phone layout looks

@@ -95,6 +95,11 @@ have diverged. **The chain is right.** Reconcile our records to it, never the ot
 - Do not edit `audit_log`. The trigger will refuse, and working around it destroys the artifact
   the trail exists to be.
 - Do not raise a user's cap to unblock them. The block is the feature.
+- Do not delete the Railway project to take the frontend down. The frontend is on Vercel; the
+  Railway project is the backend, and its variables are the only copy of the delegate key, the
+  Privy authorization key and the operator token. A project scheduled for deletion stops every
+  deployment at once and locks those variables, and deleting it for good loses them. Remove a single
+  service instead. (It happened on 2026-09-11 — see section 9.)
 
 ## 8. The Base mainnet fork ages, and has to be re-forked
 
@@ -155,12 +160,21 @@ set -a && . ../.env && set +a
 export FORK_RPC=https://base-fork-production.up.railway.app XORR_CHAIN=base-fork
 npx tsx src/fork-bootstrap.ts 0xYourWallet      # writes server/.env.fork
 
+# 2b. The bootstrap funds the delegate key on THIS machine. The deployed executor signs with its
+#     own key, which only Railway holds — read its address from `/delegation/params` (signed in)
+#     and fund that one too, or every run dies at signing for want of gas.
+DELEGATE=0xC38f38f45463f77bD823FebE16b15714Eb98c8A5
+curl -s -XPOST -H 'content-type: application/json' "$FORK_RPC" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"anvil_setBalance\",\"params\":[\"$DELEGATE\",\"0x8AC7230489E80000\"]}"
+
 # 3. Point the executor at the new addresses — Railway vars on `executor-fork`:
 #    DELEGATION_ADDRESS, AQUA_BOOK_ADDRESS, SWAPVM_BOOK_ADDRESS. Setting them redeploys it.
 
 # 4. Grant. Privy cannot sign for a fork of Base — chain 8453 is indistinguishable from real Base
-#    to its RPC — so this impersonates the owner instead.
-npx tsx src/fork-grant.ts 0xYourWallet 2810
+#    to its RPC — so this impersonates the owner instead. Name the DEPLOYED delegate: without
+#    XORR_DELEGATE_ADDRESS the grant goes to this machine's key and the executor reverts NotDelegate.
+set -a && . ./.env.fork && set +a
+XORR_DELEGATE_ADDRESS=$DELEGATE npx tsx src/fork-grant.ts 0xYourWallet 2810
 
 # 5. Confirm.
 curl -s "$FORK_API/verify?owner=0xYourWallet" | jq '.passed, .failed'
@@ -169,3 +183,31 @@ curl -s "$FORK_API/verify?owner=0xYourWallet" | jq '.passed, .failed'
 The database is untouched by all of this: the audit trail, strategies and positions live in
 Postgres and survive. What is lost is on-chain state — the old contract addresses stop existing,
 so anything holding a balance on the previous fork is gone with it.
+
+## 9. Where it runs
+
+| Piece | Host | Name |
+|---|---|---|
+| The app (static web export) | Vercel | project `xorr-eth` → `https://xorr-eth.vercel.app` |
+| Executor, Base Sepolia | Railway | `executor` → `https://executor-production-1659.up.railway.app` (Postgres: `Postgres-gWN2`) |
+| Executor, Base mainnet fork | Railway | `executor-fork` → `https://executor-fork-production.up.railway.app` (Postgres: `Postgres-WPy4`) |
+| The fork itself (anvil) | Railway | `base-fork` → `https://base-fork-production.up.railway.app` — no volume, so a restart re-forks |
+
+Redeploy the frontend with one command. It refuses to build against an executor that is down or
+unreachable, reads the executor URL back out of the bundle, and deploys `dist-web` with a
+`vercel.json` that serves the hashed bundles as immutable and falls back to `index.html` for every
+client-side route:
+
+```bash
+npm run deploy:web          # XORR_WEB_API overrides the executor it points at
+```
+
+The executor's CORS is `ALLOWED_ORIGINS` on each Railway service — `*` today. If it is ever narrowed,
+the Vercel origin has to be in the list or the app loads and every request fails.
+
+**Recovering a project scheduled for deletion.** On 2026-09-11, during the move of the frontend to
+Vercel, the whole Railway project was scheduled for deletion. Every
+deployment stopped and the variables locked, but volumes and variables survive the 48-hour window.
+Cancelling brought everything back — the services redeployed on their own, both databases intact —
+except the fork, whose chain state has no volume; it was rebuilt with section 8. The call is the
+dashboard's restore, or the API's `projectScheduleDeleteCancel(id)`.

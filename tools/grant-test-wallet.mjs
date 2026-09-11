@@ -32,7 +32,7 @@ try {
   // No `.env` is legitimate; the checks below say what is missing.
 }
 
-const APP = process.env.APP_URL ?? 'https://web-production-3e214.up.railway.app';
+const APP = process.env.APP_URL ?? 'https://xorr-eth.vercel.app';
 const API = process.env.EXPO_PUBLIC_API_URL ?? 'https://executor-production-1659.up.railway.app';
 const EMAIL = process.env.E2E_PRIVY_EMAIL ?? 'test-8958@privy.io';
 const WANT = `${process.argv[2] ?? '30'} Day${process.argv[2] === '1' ? '' : 's'}`;

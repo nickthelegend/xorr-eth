@@ -21,9 +21,9 @@ Chain: **Base**. ETH Online 2026 · Base Build Camp 2026.
   <img src="docs/demo/demo.gif" width="300" alt="Sign in, the permission, live markets, a recurring buy, the activity trail, /judge, the kill switch" />
 </p>
 
-91 seconds, recorded against **the deployed app you can open yourself** —
-[`web-production-3e214.up.railway.app`](https://web-production-3e214.up.railway.app), on Base
-Sepolia. Not a local dev server: every frame is the same build a stranger gets. Full quality:
+91 seconds, recorded against **the hosted app, not a local dev server** — on Base Sepolia, against
+the same public executor a stranger's session talks to. The frontend has since moved to Vercel, where
+you can open it yourself: [`xorr-eth.vercel.app`](https://xorr-eth.vercel.app). Full quality:
 [`docs/demo/demo.mp4`](docs/demo/demo.mp4). The path it walks, and the words to say over it, are in
 [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md); it was produced by
 [`tools/demo.mjs`](tools/demo.mjs), which drives a real signed-in Privy session rather than a
@@ -37,8 +37,10 @@ reads **LIVE** until 2026-10-11.
 
 Fills are the one thing Sepolia cannot show — 1inch has no liquidity there, and the app says so on
 `/network` rather than pretending. Those are real on the Base mainnet fork, counted by the executor
-that made them: **36 through the aggregator, 6 through Aqua and 3 through SwapVM**
-(`curl -s https://executor-fork-production.up.railway.app/metrics | jq .fillsByVenue`).
+that made them: **36 through the aggregator, 7 through Aqua and 4 through SwapVM**
+(`curl -s https://executor-fork-production.up.railway.app/metrics | jq .fillsByVenue`). The fork
+itself was rebuilt on 2026-09-11: the counts live in Postgres and survived it, the older receipts
+did not, so every fork hash quoted in this repo's submission is from the rebuilt fork.
 
 Note the `/judge` beat leaves a failing check on screen. That is deliberate — a console that goes
 green when something is broken is worth nothing, and the break it shows is a real one this project
@@ -133,7 +135,7 @@ published to Base, so the history you check is not a history we hold.
 
 | | |
 |---|---|
-| **The app** | **[`web-production-3e214.up.railway.app`](https://web-production-3e214.up.railway.app)** — open it, sign in, it is the real thing against the Sepolia executor below |
+| **The app** | **[`xorr-eth.vercel.app`](https://xorr-eth.vercel.app)** — open it, sign in, it is the real thing against the Sepolia executor below. Frontend on Vercel; executors, fork and Postgres on Railway |
 | `XorrDelegation` | [`0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e`](https://sepolia.basescan.org/address/0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e) on Base Sepolia |
 | `XorrAuditAnchor` | [`0xB58cB717867988582DcCB7f3155DeD3fC7A76caf`](https://sepolia.basescan.org/address/0xB58cB717867988582DcCB7f3155DeD3fC7A76caf) on Base Sepolia — holds the audit trail's head, published hourly |
 | Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.2`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2) — synced, no indexing errors |
@@ -191,9 +193,9 @@ Nothing in this repo is claimed to work in an environment where it was not run.
 |---|---|---|
 | **Privy — auth + wallets** | The identity and the wallet that signs are one object, so there is no second account system — and the wallet Privy creates is the `owner` in the on-chain policy. | **Done.** Real login → real embedded wallet → real signed grant, revoke and approval |
 | **Privy — policies + key quorums** | The second lock, one layer above the contract. A Privy **policy** limits where the wallet may send at all — the delegation contract, the tokens it may pull, the lending pool, nothing else — and Privy enforces it before a signature exists. The policy is owned by a Privy **key quorum**, so widening it needs a signature this server can produce and its app secret cannot. | **Done, and checkable.** `/verify` runs both live — see below |
-| **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. **The executor settles through it**: books are discovered from Aqua's own logs, quoted, and filled via `delegatedFillArgs` through the same delegation as every other trade. | **Done.** 15 fork tests, plus `live-aqua.ts` — 12 of 12 checks against the deployed executor on 2026-09-11, tx `0x64de680f…`: filled against the book not the router, 0.0556 WETH out of the maker's own wallet for 150 USDC |
+| **1inch — Aqua** | `XorrAquaBook` is an Aqua app on the official deployment. A market maker keeps shares and USDC in their own wallet and quotes anyway — which is what makes an illiquid tokenized equity tradable at all. **The executor settles through it**: books are discovered from Aqua's own logs, quoted, and filled via `delegatedFillArgs` through the same delegation as every other trade. | **Done.** 15 fork tests, plus `live-aqua.ts` — 12 of 12 checks against the deployed executor on 2026-09-11, tx `0xe4875211…`: filled against the book not the router, 0.0565 WETH out of the maker's own wallet for 150 USDC |
 | **1inch — Aggregator** | Swap routing and execution. The Route row names the protocols actually routed through. | **Done.** Real fills on a Base mainnet fork |
-| **1inch — SwapVM** | `XorrSwapVMBook` compiles the terms of a trade into SwapVM program bytecode — a deadline, a slippage floor, a fee, a salt — so the *rules* of the fill are enforced inside the VM rather than trusted to whoever submits it. | **Done.** 3 fills through `XorrDelegation.spend()` → `XorrSwapVMBook` → the official SwapVM router `0x111111338c…`, including the executor's own strategy run `0x042ee2dc…` (no explorer — the fork is a private node). An impossible floor is refused by the router itself, at call depth 2, not by us. `server/src/live-swapvm.ts` is the maker that makes it possible |
+| **1inch — SwapVM** | `XorrSwapVMBook` compiles the terms of a trade into SwapVM program bytecode — a deadline, a slippage floor, a fee, a salt — so the *rules* of the fill are enforced inside the VM rather than trusted to whoever submits it. | **Done.** 4 fills through `XorrDelegation.spend()` → `XorrSwapVMBook` → the official SwapVM router `0x111111338c…`, including the executor's own strategy run `0x72ef8613…` (no explorer — the fork is a private node). An impossible floor is refused by the router itself, at call depth 2, not by us. `server/src/live-swapvm.ts` is the maker that makes it possible |
 | **The Graph** | Two independent subgraphs, joined. One indexes our delegation contract (what you permitted); one indexes 1inch Aqua on Base mainnet (what liquidity exists). The **join picks the venue** — neither index can see the other's half. | Delegation index **deployed + synced** and read before every spend; Aqua index **built and pinned**, awaiting a Studio slug — see [The one thing that is not done](#the-one-thing-that-is-not-done) |
 | **Aave v3** | Tier 4's venue. Idle USDC is supplied through the same delegation, under the same daily cap and the same venue allowlist — and the aToken goes straight to the user, because `supply()` names the recipient. | **Done.** 18 fork assertions, including that the bot *cannot* withdraw |
 | **Base** | Everything settles here. Tokenized equities, cbBTC, Aave, 1inch — all Base-native. | **Done** |
@@ -365,8 +367,8 @@ XORR_CHAIN=base-fork FORK_RPC=http://127.0.0.1:8545 npx tsx server/src/fork-e2e.
 ## Tests
 
 ```bash
-npm test                                       # 532 — app and executor units
-(cd server && npm test)                        # 267 executor on its own
+npm test                                       # 537 — app and executor units
+(cd server && npm test)                        # 268 executor on its own
 (cd server && npm run test:live)               # 77 against real APIs, a real chain and the running executor
 (cd contracts && forge test)                   # 62 contract: 30 unit (22 delegation, 8 anchor) + 32 fork
 (cd contracts && forge test --match-contract Fork \

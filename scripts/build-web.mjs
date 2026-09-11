@@ -103,53 +103,39 @@ if (problems.length) {
   process.exit(1);
 }
 
-
 /*
- * Make the output a deployable unit rather than a folder of files.
+ * Make the output deployable on Vercel, where the frontend lives.
  *
- * expo export emits one index.html and a pile of hashed assets; every route in this app is
- * client-side, so a plain file server answers /markets with a 404 and the app never boots. These
- * two files are what turn the export into something a host can run: a zero-dependency server that
- * falls back to index.html for anything that is not a real file, and a package.json so the host
- * knows how to start it without an install step.
+ * xorr.finance splits its hosting: the frontend is served by Vercel and the backend — executor,
+ * Postgres and the fork — stays on Railway. This script used to emit a zero-dependency Node server
+ * and a package.json so Railway could serve the bundle; that was a whole always-on service whose
+ * only job was falling back to index.html for routes that are not files.
+ *
+ * `vercel.json` does the same job without a server. expo export emits ONE index.html and every
+ * route in this app is client-side, so a plain file host answers /markets with a 404 and the app
+ * never boots. Vercel checks the filesystem before applying a rewrite, so real files — the hashed
+ * bundles, fonts, the favicon — are served as themselves and everything else falls back to the app,
+ * which then renders its own not-found screen for a route that really does not exist.
+ *
+ * Hashed assets are immutable; index.html must not be cached, or a deploy never reaches anyone.
  */
 writeFileSync(
-  join(OUT, 'server.mjs'),
-  `import http from 'node:http';
-import { existsSync, statSync, readFileSync } from 'node:fs';
-import { join, extname, normalize } from 'node:path';
-
-const ROOT = import.meta.dirname;
-const PORT = process.env.PORT ?? 8080;
-const TYPES = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.map': 'application/json',
-  '.ico': 'image/x-icon', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
-  '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2',
-};
-
-http
-  .createServer((req, res) => {
-    const path = decodeURIComponent((req.url ?? '/').split('?')[0]);
-    // normalize + the prefix check keeps ../ out of the file lookup.
-    const candidate = join(ROOT, normalize(path));
-    const isFile = candidate.startsWith(ROOT) && existsSync(candidate) && statSync(candidate).isFile();
-    const file = isFile ? candidate : join(ROOT, 'index.html');
-    const type = TYPES[extname(file)] ?? 'application/octet-stream';
-    // Hashed assets are immutable; index.html must not be, or a deploy never reaches anyone.
-    const cache = isFile && path.startsWith('/_expo/')
-      ? 'public, max-age=31536000, immutable'
-      : 'no-cache';
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache });
-    res.end(readFileSync(file));
-  })
-  .listen(PORT, () => console.log('xorr web on ' + PORT));
-`,
-);
-
-writeFileSync(
-  join(OUT, 'package.json'),
-  JSON.stringify({ name: 'xorr-web', private: true, type: 'module', scripts: { start: 'node server.mjs' } }, null, 2) + '\n',
+  join(OUT, 'vercel.json'),
+  JSON.stringify(
+    {
+      rewrites: [{ source: '/(.*)', destination: '/index.html' }],
+      headers: [
+        {
+          source: '/_expo/static/(.*)',
+          headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+        },
+        { source: '/index.html', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+        { source: '/', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+      ],
+    },
+    null,
+    2,
+  ) + '\n',
 );
 
 console.log(`\n  ${bundle}\n  points at ${API} — verified in the bundle, not assumed.\n`);
