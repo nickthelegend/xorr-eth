@@ -77,8 +77,18 @@ export async function fillQuality(): Promise<FillQuality> {
     [],
   );
 
+  /*
+   * A supply is not a fill against a market.
+   *
+   * 100 USDC into Aave is 100 aUSDC by construction, so its "distance from the arrival price" is
+   * zero every time — a figure that says nothing about execution and drags whichever venue it is
+   * filed under toward zero. It was filed under `1inch`. It is excluded, not re-labelled into the
+   * table, because there is nothing about it to measure.
+   */
+  const trades = rows.filter((r) => r.venue !== 'aave');
+
   const byVenue = new Map<string, number[]>();
-  for (const r of rows) {
+  for (const r of trades) {
     const quoted = Number(r.quoted);
     const filled = Number(r.filled);
     if (!Number.isFinite(quoted) || !Number.isFinite(filled) || quoted <= 0) continue;
@@ -102,7 +112,7 @@ export async function fillQuality(): Promise<FillQuality> {
 
   return {
     venues,
-    measured: rows.length,
+    measured: venues.reduce((n, v) => n + v.fills, 0),
     unmeasurable: Number(unmeasurableRow[0]?.n ?? 0),
     basis: CHAIN_KEY === 'base' ? 'same-chain' : 'forked',
   };

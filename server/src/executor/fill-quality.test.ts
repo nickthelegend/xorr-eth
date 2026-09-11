@@ -78,6 +78,21 @@ describe('how close each venue came to its quote', () => {
     expect(Number.isFinite(q.venues[0]!.meanBps)).toBe(true);
   });
 
+  /*
+   * The first Earn deposit on the rebuilt fork was written down as a 1inch fill, and the table read
+   * "1inch: 1 fill, 0 bps" for a trade the aggregator never saw. A supply is 1:1 by construction;
+   * there is no execution in it to grade.
+   */
+  it('leaves a supply to Aave out of the table instead of scoring it as a perfect fill', async () => {
+    rows = [
+      { venue: 'aave', quoted: '100', filled: '100' },
+      { venue: 'swapvm', quoted: '100', filled: '100.7' },
+    ];
+    const q = await fillQuality();
+    expect(q.venues.map((v) => v.venue)).toEqual(['swapvm']);
+    expect(q.measured).toBe(1);
+  });
+
   it('states how many fills could not be measured instead of dropping them silently', async () => {
     rows = [{ venue: 'aqua', quoted: '100', filled: '100' }];
     unmeasurable = 41;

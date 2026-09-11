@@ -25,8 +25,15 @@ import { buildAquaFill } from '../venues/aqua.js';
 import { buildSwapVmFill } from '../venues/swapvm.js';
 import type { TradeIntent } from './kinds/index.js';
 
-/** The venue that settled, as the activity log and `/metrics` name it. */
-export type SettlementVenue = 'aqua' | 'swapvm' | '1inch';
+/**
+ * The venue that settled, as the activity log and `/metrics` name it.
+ *
+ * `aave` is a direct leg — idle cash supplied to the pool, no swap anywhere. It was labelled
+ * `1inch`, because that was the fallthrough, so the first Earn deposit on the rebuilt fork was
+ * written down as an aggregator fill and `/metrics` reported "1inch: 1 fill, 0 bps" for a trade the
+ * aggregator never saw.
+ */
+export type SettlementVenue = 'aqua' | 'swapvm' | '1inch' | 'aave';
 
 export type Settlement = {
   /** The token being spent, from the registry. */
@@ -162,6 +169,6 @@ export async function chooseSettlement(params: {
   return {
     payToken,
     swap,
-    venue: aqua ? 'aqua' : swapVm ? 'swapvm' : '1inch',
+    venue: aqua ? 'aqua' : swapVm ? 'swapvm' : intent.direct ? 'aave' : '1inch',
   };
 }
