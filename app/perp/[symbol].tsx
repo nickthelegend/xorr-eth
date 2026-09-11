@@ -100,7 +100,7 @@ export default function PerpContract() {
           />
           <Text variant="cardTitle">{symbol}/USDT</Text>
         </View>
-        {m ? null : <Tag label="Simulated" small tone="warn" />}
+        {m ? null : <Tag label="No price feed" small tone="warn" />}
       </View>
 
       <View

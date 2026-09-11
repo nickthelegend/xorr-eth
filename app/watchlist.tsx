@@ -103,7 +103,7 @@ export default function Watchlist() {
                     {closes.length > 1 ? (
                       <Sparkline data={closes} />
                     ) : q?.price !== undefined || pricesLoading ? null : (
-                      <Tag label="Simulated" small tone="warn" />
+                      <Tag label="No price feed" small tone="warn" />
                     )}
                   </View>
                 }

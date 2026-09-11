@@ -122,7 +122,7 @@ export default function ClassList() {
                 secondary={`${item.name} · ${item.tag}`}
                 middle={
                   item.feed === 'simulated' ? (
-                    <Tag label="Simulated" small tone="warn" />
+                    <Tag label="No price feed" small tone="warn" />
                   ) : undefined
                 }
                 value={<Price>{item.px}</Price>}

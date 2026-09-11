@@ -147,6 +147,7 @@ const ROUTES = [
   ['93-oracle-equity', '/oracle/NVDAc'],
   ['94-crosscheck', '/crosscheck/WETH'],
   ['95-route', '/route/WETH'],
+  ['96-audit-anchor', '/audit/anchor'],
   ['46-dev-ui', '/_dev/ui'],
   ['46b-dev-ui-edge', '/_dev/ui-edge'],
   ['47-dev-fidelity', '/_dev/fidelity'],
@@ -176,9 +177,9 @@ const EXPECT = {
   '08-markets': { must: [/Crypto/, /Stocks/, /Commodities/, /\d+ shown/], never: [/^0 shown/m] },
   '09-markets-crypto': { must: [/\$[\d,]+/, /markets/] },
   '10-markets-stocks': { must: [/\$[\d,]+/] },
-  '11-markets-commodities': { must: [/SIMULATED/, /9 of 9/] },
-  '12-markets-indices': { must: [/SIMULATED/] },
-  '13-markets-preipo': { must: [/SIMULATED/] },
+  '11-markets-commodities': { must: [/NO PRICE FEED/, /9 of 9/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
+  '12-markets-indices': { must: [/NO PRICE FEED/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
+  '13-markets-preipo': { must: [/NO PRICE FEED/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
   '14-watchlist': { must: [/\$[\d,]+/] },
   '15-search': { must: [/Search/i] },
   // The asset screen headlines the instrument's NAME, not its ticker — "Bitcoin", not "BTC".
@@ -310,7 +311,11 @@ const EXPECT = {
   '74-tokens': { must: [/Tokens/, /settle/i] },
   '75-coverage': { must: [/Coverage/, /PRICED/i] },
   // Real feeds unlabelled, synthetic ones labelled — the whole point of this screen.
-  '76-movers': { must: [/Movers/, /UP|DOWN/, /SIMULATED/] },
+  /*
+   * A ranking of moves can only contain instruments that moved. It used to REQUIRE the SIMULATED
+   * tag — i.e. it asserted that invented moves were in the list. They must now never be.
+   */
+  '76-movers': { must: [/Movers/, /UP|DOWN/], never: [/SIMULATED/, /NO PRICE FEED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
   '77-stocks': { must: [/Equities/, /\$[\d,]+/] },
   '78-earnings': { must: [/Earnings/, /EDGAR/i] },
   '79-funding': { must: [/Funding/] },
@@ -335,7 +340,15 @@ const EXPECT = {
   // No oracle for a crypto symbol is a real answer; a retry on it is not.
   '93-oracle-equity': { must: [/NVDAc/, /Readings|oracle/i] },
   '94-crosscheck': { must: [/CROSS-CHECK/i, /agree|differ/i] },
-  '95-route': { must: [/Route/, /USDC/] },
+  '95-route': { must: [/Route/, /USDC/, /EVERY VENUE, SAME SIZE/] },
+  /*
+   * The anchor screen's whole claim is that the reader can repeat the read without us, so it must
+   * show a state, the head Base holds, and the two addresses that reproduce it.
+   */
+  '96-audit-anchor': {
+    must: [/On-chain anchor/, /COMMITTED|DIVERGED|NOT YET ANCHORED/, /CHECK IT YOURSELF/, /0x[0-9a-fA-F]{40}/],
+    never: [/DIVERGED/],
+  },
   '46-dev-ui': { must: [/Design system|TOTAL VALUE/] },
   '46b-dev-ui-edge': { must: [/Edge cases|TOTAL VALUE/] },
   '47-dev-fidelity': { must: [/Fidelity|fidelity|TOTAL VALUE/] },

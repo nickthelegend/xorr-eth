@@ -60,7 +60,18 @@ export default function Movers() {
   const { data, loading, error, reload } = useAsync(() => repos.markets.listClasses(), []);
 
   const { up, down } = useMemo(() => {
-    const all = (data ?? []).flatMap((c) => c.instruments);
+    /*
+     * Only instruments with a measured move.
+     *
+     * This ranked every class by `chg`, and 27 of the 44 instruments carried the design prototype's
+     * change figures with no feed behind them — so "sorted by how far they moved" could put a
+     * pre-IPO company's invented +3% above a real asset's real move. Those figures are gone from the
+     * data now; the filter is what keeps an instrument with no price out of a ranking of prices, and
+     * it also keeps out a live instrument whose feed did not answer this time.
+     */
+    const all = (data ?? [])
+      .flatMap((c) => c.instruments)
+      .filter((i) => i.feed === 'live' && i.chg.trim() !== '');
     const rank = (xs: Instrument[]) =>
       [...xs].sort((a, b) => magnitude(b.chg) - magnitude(a.chg)).slice(0, SHOWN);
     return {
@@ -94,7 +105,7 @@ export default function Movers() {
               response, with the flag dropped. Sorting by move size is precisely what puts the
               indicative ones on top, which makes this the screen that needed the label most.
             */
-            middle={i.feed === 'simulated' ? <Tag label="Simulated" small tone="warn" /> : undefined}
+            middle={i.feed === 'simulated' ? <Tag label="No price feed" small tone="warn" /> : undefined}
             value={<Price variant="rowPrimary">{i.px}</Price>}
             delta={i.chg}
             deltaTone={i.up ? 'up' : 'down'}

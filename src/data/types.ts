@@ -21,7 +21,12 @@ export type Instrument = GradientStops & {
   classId: AssetClassId;
   /**
    * Whether a real feed backs this instrument. PLAN.md §1.3 item 8: "Every price on screen is
-   * real, or labelled." The UI renders a SIMULATED tag whenever this is false.
+   * real, or labelled."
+   *
+   * `'simulated'` is the historical name and no longer describes anything: an instrument with no
+   * feed carries NO price (`px` is a dash, `chg` is empty) rather than a prototype number under a
+   * SIMULATED tag, and the UI labels it "No price feed". Kept as the value to avoid churning every
+   * consumer; read it as "nothing prices this".
    */
   feed: 'live' | 'simulated';
   /** On-chain mint/market id where one exists — used by the price service and the executor. */

@@ -155,7 +155,7 @@ export default function MarketsScreen() {
                 secondary={`${item.name} · ${item.tag}`}
                 value={
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s6 }}>
-                    {item.feed === 'simulated' ? <Tag label="Simulated" small tone="warn" /> : null}
+                    {item.feed === 'simulated' ? <Tag label="No price feed" small tone="warn" /> : null}
                     {/*
                       No glyph until there is a series. design.md puts the sparkline between the
                       symbol and the price; a symbol whose history has not arrived simply has none,

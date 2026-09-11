@@ -248,7 +248,7 @@ export default function AssetDetail() {
       <View style={{ alignItems: 'center', marginTop: space.s22, gap: space.s6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}>
           <Price variant="priceLg">{spot !== undefined ? fmtPrice(spot) : '—'}</Price>
-          {spot === undefined && !warmingAny ? <Tag label="Simulated" small tone="warn" /> : null}
+          {spot === undefined && !warmingAny ? <Tag label="No price feed" small tone="warn" /> : null}
         </View>
         {hasSeries ? (
           <DeltaChip
@@ -404,8 +404,8 @@ export default function AssetDetail() {
 
       {/*
         A Buy button on a market this chain cannot settle is a promise the app cannot keep.
-        These instruments are real markets and their prices are labelled SIMULATED; what does
-        not exist is a token on Base to route into. Saying so is better than a button that
+        These instruments are real markets, but nothing prices them on this build and none carries
+        a price here; what does not exist is a token on Base to route into. Saying so is better than a button that
         leads to an order ticket which can never be filled.
       */}
       <View style={{ paddingHorizontal: space.gutter }}>
