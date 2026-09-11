@@ -32,7 +32,7 @@ Three facts drive the ranking:
 | 5 | **Anchor history screen** — every commitment, its block, and whether the trail still hashes to it. | 4 | 4 | 4 | 64 | ✅ BUILT |
 | 6 | **Page `eth_getLogs`** so venue discovery survives a provider tightening its range limit. | 4 | 4 | 4 | 64 | ✅ BUILT |
 | 7 | **Compare venues net of gas**, not on quoted output alone. The winner can change. | 4 | 3 | 5 | 60 | ✅ BUILT |
-| 8 | **Fill quality: realised vs quoted**, measured per venue from the real trail. | 4 | 3 | 5 | 60 | ✅ BUILT |
+| 8 | **Execution quality: each fill against the market price at decision time**, per venue, from the real trail. | 4 | 3 | 5 | 60 | ✅ BUILT |
 
 ## Tier 2 — ranked, not built (30–59)
 
@@ -123,7 +123,7 @@ before the next was started; the evidence is quoted rather than asserted.
 | 5 | Anchor history screen | `/audit/anchor` renders COMMITTED, the head, the block, and the contract and signing key so the read can be repeated without us. Linked from `/audit/chain`. |
 | 6 | Page `eth_getLogs` | The provider had tightened to a 2,000-block range against a 9,000-block scan; discovery was silently returning nothing. Paging is what made #4 possible — `openPrograms()` found 16. |
 | 7 | Compare venues net of gas | Live: `1inch 0.040194 · gas $0.5681 · net $99.02` beside `swapvm 0.040074 · gas $0.8075 · net $98.48`. SwapVM costs more gas because it routes through our book contract — measured, not assumed. |
-| 8 | Measure how well each venue filled | `swapvm · 1 fill · +71.1 bps`, `measured 1, unmeasurable 36`, `basis "forked"`. Produced by a real strategy run: tx `0x042ee2dc…`, 0.010163 WETH at $2,477.40. |
+| 8 | Measure how well each venue filled | Two real fills measured against the arrival price: `swapvm +71.1 bps` (tx `0x042ee2dc…`) and `aqua −307.8 bps` (tx `0x64de680f…`), `basis "forked"`. |
 
 ## Two of these are worth a sentence each
 
@@ -133,12 +133,17 @@ claim that both venues settle real trades. A judge checking the trail would have
 and its refutation in the same table. It is now three fills, and the finding is rewritten with the
 transaction hashes.
 
-**#8's headline number is not what it looks like, and says so.** `+71 bps` is not SwapVM being 71
-basis points better than the aggregator. The reference quote prices live Base mainnet while the
-fill executed against a pinned fork block, so the figure carries however far the fork has drifted.
-That is reported in a `basis` field and printed on the screen, because the drift is not separable
-without a second price source for the fork's own block — and deriving one would put an invented
-number where a measured one belongs.
+**#8 was described wrongly when it shipped, and the correction is worth reading.** It was reported
+as "realised vs what the router quoted". It is not: `quoted_units` is `usd / priceOf(symbol)` — the
+units the live **market price** implied when the run decided to trade. So it measures implementation
+shortfall against the arrival price, which is the better metric (venue-neutral; the aggregator is not
+grading its own quote) but a different claim from the one first made.
+
+Its numbers are also not a ranking of venues. SwapVM came in at **+71 bps** and Aqua at **−308 bps**,
+and on a fork both mostly measure other things: the price is the live market while the fill runs
+against a pinned block, and the Aqua figure carries the pricing of the proof maker that shipped the
+book. `basis: "forked"` is on the screen for that reason. What the −308 does show honestly is that
+the metric reports bad fills too — which is the only reason to trust it when it reports good ones.
 
 ## Skipped, with the reason
 

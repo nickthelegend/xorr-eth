@@ -290,14 +290,14 @@ export type Metrics = {
   failuresByCause: Record<string, number>;
   fillsByVenue: Record<string, number>;
   /**
-   * How close each venue came to the quote it was chosen on.
+   * How far each venue's fills landed from the market price at the moment the run decided to trade.
    *
-   * `fillsByVenue` counts WHERE trades settled. This says how WELL — a count is a label, and the
-   * distance between what the router promised and what the chain delivered is the claim.
+   * `fillsByVenue` counts WHERE trades settled. This says how WELL — implementation shortfall against
+   * the arrival price, which is venue-neutral: it is not any venue's own quote.
    *
-   * `basis` matters as much as the numbers: on a fork the reference quote prices live mainnet
-   * while the fill executes against a pinned block, so the figure carries drift as well as venue
-   * quality. Null when the executor could not compute it at all.
+   * `basis` matters as much as the numbers: on a fork the price is the live market while the fill
+   * executes against a pinned block, so the figure carries drift as well as execution quality. Null
+   * when the executor could not compute it at all.
    */
   fillQuality: {
     venues: { venue: string; fills: number; meanBps: number; worstBps: number; bestBps: number }[];

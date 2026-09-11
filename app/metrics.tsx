@@ -189,14 +189,14 @@ export default function Metrics() {
 
             {/*
               How WELL each venue filled, not just where.
-              The card above counts settlements, which is a label. This is the distance between
-              what the router promised and what the chain delivered — the only thing that makes
-              "Aqua filled this" a claim about routing rather than a note about it.
+              The card above counts settlements, which is a label. This is how far each fill landed
+              from the market price when the run decided to trade — the same reference for every
+              venue, so they can be compared, and not any venue grading its own quote.
             */}
             {data.fillQuality ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
                 <Text variant="footnote" color={colors.ink40}>
-                  HOW CLOSE TO THE QUOTE
+                  HOW CLOSE TO THE MARKET PRICE
                 </Text>
                 {/*
                   An empty section that explains itself beats an invisible one.
@@ -208,7 +208,7 @@ export default function Metrics() {
                 {data.fillQuality.venues.length === 0 ? (
                   <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
                     {data.fillQuality.unmeasurable > 0
-                      ? `Nothing to compare yet: ${data.fillQuality.unmeasurable} fills were recorded before the quote was kept alongside them, and a quote cannot be recovered after the fact.`
+                      ? `Nothing to compare yet: ${data.fillQuality.unmeasurable} fills were recorded before the arrival price was kept alongside them, and it cannot be recovered after the fact.`
                       : 'No fills on this network to measure. 1inch has no deployment on Base Sepolia, so trades cannot settle here — the network screen says the same.'}
                   </Text>
                 ) : null}
@@ -218,7 +218,7 @@ export default function Metrics() {
                       <Text variant="secondarySm" color={colors.ink65}>
                         {`${v.venue} · ${v.fills} fill${v.fills === 1 ? '' : 's'}`}
                       </Text>
-                      {/* Positive beat the quote. The sign is the fact, so it is always shown. */}
+                      {/* Positive bought more than the market price implied. The sign is the fact. */}
                       <Text variant="secondarySm" color={v.meanBps >= 0 ? colors.up : colors.down}>
                         {`${v.meanBps >= 0 ? '+' : ''}${v.meanBps} bps`}
                       </Text>
@@ -234,8 +234,8 @@ export default function Metrics() {
                   {data.fillQuality.venues.length === 0
                     ? ''
                     : data.fillQuality.basis === 'forked'
-                      ? `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote. On a fork the reference quote prices live mainnet while the fill runs against a pinned block, so this carries drift as well as venue quality.`
-                      : `${data.fillQuality.measured} measured, ${data.fillQuality.unmeasurable} without a stored quote.`}
+                      ? `${data.fillQuality.measured} measured against the market price at decision time, ${data.fillQuality.unmeasurable} recorded before that was kept. On a fork the price is the live market while the fill runs against a pinned block, so this carries drift and the shipping maker's pricing as well as execution quality — not a ranking of venues.`
+                      : `${data.fillQuality.measured} measured against the market price at decision time, ${data.fillQuality.unmeasurable} recorded before that was kept.`}
                 </Text>
               </SheetCard>
             ) : null}

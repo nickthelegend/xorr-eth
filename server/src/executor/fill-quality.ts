@@ -1,34 +1,29 @@
 /**
- * How close each venue's fill came to the quote it was chosen on.
+ * How far each fill landed from the market price at the moment the run decided to trade.
  *
- * The trail already names the venue that settled every trade. That is a label, and a label is not
- * a claim about routing — "Aqua filled this" says nothing about whether Aqua was the right choice.
- * What makes it a claim is the distance between what the router promised and what the chain
- * delivered, measured per venue over real fills.
+ * WHAT THE REFERENCE IS — stated first, because it was described wrongly when this shipped.
+ * `quoted_units` is the `units` value `run.ts` computes before sending: `usd / priceOf(symbol)`,
+ * the amount of the asset the LIVE MARKET PRICE implied at decision time. It is not any venue's
+ * own quote. That makes this implementation shortfall against the arrival price — the standard,
+ * venue-neutral measure of execution — and it is what makes venues comparable at all: measuring
+ * the aggregator against its own quote would be the aggregator grading itself.
  *
- * Both halves already existed and were never compared. `chooseSettlement` knows the venue exactly,
- * and `measuredDelta` reads the owner's balance either side of the transaction so the units written
- * are the chain's rather than the router's. The quote was overwritten by the measurement before the
- * row was stored, so the comparison was lost at the moment it became possible. Migration 012 keeps
- * both.
+ * The trail already names the venue that settled every trade. That is a label. This is the claim:
+ * how many basis points of the market each venue actually delivered, over real fills.
  *
- * Reported in basis points, signed, from the taker's point of view: **positive means the fill
- * beat the quote**. Slippage is the negative side, and the sign is worth being explicit about
- * because "4 bps of slippage" and "+4 bps" are opposite facts about the same trade.
+ * Reported signed, from the taker's point of view: **positive means the fill bought more of the
+ * asset than the market price implied**. Negative is the cost. "30 bps of slippage" and "+30 bps"
+ * are opposite facts about the same trade, so the sign is always shown.
  *
  * WHAT THIS NUMBER IS NOT, ON A FORK
  *
- * The reference quote comes from 1inch, which prices **live Base mainnet**. A fork is pinned at a
- * block, so its pools have drifted from the chain the quote describes. On `base-fork` the figure
- * therefore mixes two things — how well the venue filled, and how far the fork has moved since it
- * was taken — and the first real measurement here came out at **+71 bps**, which is far more drift
- * than venue skill.
- *
- * That is stated rather than corrected, because there is no honest correction: the drift is not
- * separable from this measurement without a second price source for the fork's own block, and
- * inventing one would put a derived number where a measured one belongs. On Base mainnet, where
- * the quote and the fill describe the same chain, the figure means what it says. `basis` carries
- * which of the two situations produced it so a reader is never left to guess.
+ * The market price comes from a live feed; a fork is pinned at a block, so its pools have drifted
+ * from the market the price describes. On `base-fork` the figure therefore mixes venue quality
+ * with however far the fork has moved — and with the pricing of whichever maker happened to ship a
+ * book. The first measurements came out at **SwapVM +71 bps** and **Aqua −308 bps**, and neither
+ * is a ranking of the venues. `basis` says which situation produced the figure so a reader is never
+ * left to guess; on Base mainnet, where price and fill describe the same market, it means what it
+ * says.
  */
 import { query } from '../db/index.js';
 import { CHAIN_KEY } from '../evm/chains.js';
@@ -37,7 +32,7 @@ export type VenueQuality = {
   venue: string;
   /** Fills with BOTH a quote and a measured delta. Rows predating migration 012 are excluded. */
   fills: number;
-  /** Mean signed difference, in basis points. Positive = the fill beat the quote. */
+  /** Mean signed difference from the arrival price, in basis points. Positive = more asset than the price implied. */
   meanBps: number;
   /** The worst single fill, which a mean hides and a user cares about. */
   worstBps: number;
@@ -53,8 +48,8 @@ export type FillQuality = {
   /**
    * Whether the quote and the fill describe the same chain.
    *
-   * `same-chain` — the reference quote and the fill are both live Base. The figure is venue quality.
-   * `forked` — the quote prices live mainnet and the fill executed against a pinned block, so the
+   * `same-chain` — the market price and the fill describe the same chain. The figure is execution quality.
+   * `forked` — the price is the live market and the fill executed against a pinned block, so the
    * figure also carries however far the fork has drifted. Not a smaller number; a different one.
    */
   basis: 'same-chain' | 'forked';
