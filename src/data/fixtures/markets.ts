@@ -16,7 +16,7 @@
  *
  * NO PRICE IS STORED FOR AN INSTRUMENT NOTHING PRICES.
  *
- * The 27 instruments with no feed — every commodity, index and pre-IPO name — used to carry the
+ * The 27 instruments the catalog marks unfed — every commodity, index and pre-IPO name — used to carry the
  * design prototype's prices, shown under a SIMULATED tag: "OPENAI $164.20", "ANTHRP $121.55",
  * "SPACEX $402.70". Prices for companies that have no market, and change figures that also fed
  * the top-movers ranking, so a screen that sorts by "how far they moved" could list a move nobody
@@ -25,7 +25,9 @@
  * rather than the design's price.
  *
  * So they keep what is genuinely catalog — symbol, name, venue tag, colours — and carry no
- * number. `feed: 'simulated'` on them now means "no feed backs this", and the UI says so.
+ * number. One of them still shows a price on screen, and correctly: CoinGecko prices tokenized gold,
+ * so XAUT is given a real quote at runtime and stops being unfed. What it no longer has is a stored
+ * number to fall back on when that quote does not come. `feed: 'simulated'` on them now means "no feed backs this", and the UI says so.
  */
 import type { AssetClass } from '../types';
 
@@ -269,7 +271,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "commodities",
     "label": "Commodities",
-    "note": "No price feed — no tokenized commodity routes on Base yet",
+    "note": "Only gold has a price feed — no tokenized commodity routes on Base yet",
     "more": "Not tradable here",
     "instruments": [
       {

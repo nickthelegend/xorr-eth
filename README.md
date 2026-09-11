@@ -216,7 +216,7 @@ contract.
 | Fills | 1inch Aggregation Router v6, `XorrAquaBook` on official Aqua, and `XorrSwapVMBook` through the official SwapVM router |
 | History | The Graph, indexed from the contract's own events |
 | Permission | On-chain, signed by the user's embedded wallet |
-| Markets | 17 of 44 instruments have a real feed. **The other 27 — commodities, indices, pre-IPO — are listed with no price**, because nothing prices them. They used to show the design prototype's numbers under a SIMULATED tag, including prices for private companies; those were removed from the data, and a test keeps them out. |
+| Markets | Of 44 instruments, 18 have a real feed — crypto, the tokenized equities, and gold, which CoinGecko prices as `tether-gold`. **The other 26 — the rest of commodities, every index, every pre-IPO name — are listed with no price**, because nothing prices them. They used to show the design prototype's numbers under a SIMULATED tag, including prices for private companies; those were removed from the data, and a test keeps them out. |
 
 **The rule that settles arguments:** every price on screen is real, or it is labelled. A confident
 wrong number is the worst outcome available — that rule has caught eight bugs in this repo, most
