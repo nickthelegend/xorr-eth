@@ -71,6 +71,11 @@ hourly sweep with nobody pressing anything. Rewriting history stays possible; pr
 that hashes to a value Base has been holding since before the rewrite does not. `/audit/anchor`
 shows the commitment, the block, and the two addresses needed to repeat the read without us.
 
+<p align="center">
+  <img src="docs/screens/96-audit-anchor.png" width="240" alt="What Base holds: the trail's head, the block, and every commitment" />
+  <img src="docs/screens/95-route.png" width="240" alt="Every venue priced for the same trade, with gas and net" />
+</p>
+
 The one check that fails is here too, and stays failing. Two writers raced before the append lock
 existed and forked the Sepolia trail at entry 2. It is append-only, so it cannot be straightened
 without destroying what it proves — and `/verify` reports *"Exactly one, at entry 2, and none since —
