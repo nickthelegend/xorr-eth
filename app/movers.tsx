@@ -104,6 +104,11 @@ export default function Movers() {
               with "prices are indicative"; this screen showed the same instruments, from the same
               response, with the flag dropped. Sorting by move size is precisely what puts the
               indicative ones on top, which makes this the screen that needed the label most.
+
+              Superseded: those change figures were invented, and they are gone from the data. The
+              filter at the top of this component now keeps any instrument without a live feed out
+              of the ranking entirely, so this tag cannot render here. It stays as a guard in case
+              that filter is ever loosened.
             */
             middle={i.feed === 'simulated' ? <Tag label="No price feed" small tone="warn" /> : undefined}
             value={<Price variant="rowPrimary">{i.px}</Price>}

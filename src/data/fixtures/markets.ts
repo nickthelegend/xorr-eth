@@ -269,7 +269,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "commodities",
     "label": "Commodities",
-    "note": "Prices are indicative — no tokenized commodity routes on Base yet",
+    "note": "No price feed — no tokenized commodity routes on Base yet",
     "more": "Not tradable here",
     "instruments": [
       {
@@ -385,7 +385,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "indices",
     "label": "Indices",
-    "note": "Prices are indicative — no index token has liquidity on Base yet",
+    "note": "No price feed — no index token has liquidity on Base yet",
     "more": "Not tradable here",
     "instruments": [
       {
@@ -501,7 +501,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "preipo",
     "label": "Pre-IPO",
-    "note": "Prices are indicative — private markets have no on-chain instrument",
+    "note": "No price feed — private markets have no on-chain instrument",
     "more": "Not tradable here",
     "instruments": [
       {
