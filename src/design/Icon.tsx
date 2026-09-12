@@ -28,7 +28,13 @@ export type IconName =
   | 'check'
   | 'send'
   | 'bell'
-  | 'sort';
+  | 'sort'
+  | 'grid'
+  | 'swapH'
+  | 'shield'
+  | 'activity'
+  | 'chat'
+  | 'copy';
 
 export type IconProps = {
   name: IconName;
@@ -199,6 +205,52 @@ function render(name: IconName, c: Common, color: string) {
           <Path d="M4.5 7h15" {...c} />
           <Path d="M7 12h10" {...c} />
           <Path d="M10 17h4" {...c} />
+        </>
+      );
+
+    // ── The simple shell (2026-09-12) ────────────────────────────────────────
+    case 'grid':
+      return (
+        <>
+          <Rect x={3.5} y={3.5} width={7} height={7} rx={2} {...c} />
+          <Rect x={13.5} y={3.5} width={7} height={7} rx={2} {...c} />
+          <Rect x={3.5} y={13.5} width={7} height={7} rx={2} {...c} />
+          <Rect x={13.5} y={13.5} width={7} height={7} rx={2} {...c} />
+        </>
+      );
+    case 'swapH':
+      // ⇄ — two opposed horizontal arrows, the way wallets draw "swap".
+      return (
+        <>
+          <Path d="M4.5 8.5h14" {...c} />
+          <Path d="M15 5 L18.5 8.5 L15 12" {...c} />
+          <Path d="M19.5 15.5h-14" {...c} />
+          <Path d="M9 12 L5.5 15.5 L9 19" {...c} />
+        </>
+      );
+    case 'shield':
+      return <Path d="M12 3.5 L19 6.3 V11.5 C19 16.1 16 19.5 12 21 C8 19.5 5 16.1 5 11.5 V6.3 Z" {...c} />;
+    case 'activity':
+      return <Path d="M3 12h4 l2.5-6 l5 12 l2.5-6 H21" {...c} />;
+    case 'chat':
+      // The speech bubble with the agent's face — the same bot the roster and proposal cards draw.
+      return (
+        <>
+          <Path
+            d="M21 11.5c0 4.14-4.03 7.5-9 7.5a10.5 10.5 0 0 1-2.6-.32L4.5 20.5l1.2-3.2A7.02 7.02 0 0 1 3 11.5C3 7.36 7.03 4 12 4s9 3.36 9 7.5Z"
+            {...c}
+          />
+          <Circle cx={9.2} cy={11.2} r={1.15} fill={color} stroke="none" />
+          <Circle cx={14.8} cy={11.2} r={1.15} fill={color} stroke="none" />
+          <Path d="M9.3 14.2a3.4 3.4 0 0 0 5.4 0" {...c} />
+        </>
+      );
+    case 'copy':
+      // Two sheets, the front one whole — the way every wallet draws "copy".
+      return (
+        <>
+          <Rect x={8.5} y={8.5} width={12} height={12} rx={2.5} {...c} />
+          <Path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3" {...c} />
         </>
       );
   }

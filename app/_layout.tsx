@@ -104,6 +104,14 @@ export default function RootLayout() {
         >
           <Stack.Screen name="(onboarding)" />
           <Stack.Screen name="(tabs)" />
+          {/*
+            A coin opens as a sheet over the screen you tapped it on — the reference video's move.
+            Still the platform's own present, not a custom transition.
+          */}
+          <Stack.Screen name="asset/[symbol]" options={{ presentation: 'modal' }} />
+          {/* The balance opens the portfolio, and the wallet header opens the profile — both as sheets. */}
+          <Stack.Screen name="portfolio" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
           <Stack.Screen name="order/[symbol]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="auto-close/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="bot/[id]/intro" options={{ presentation: 'modal' }} />

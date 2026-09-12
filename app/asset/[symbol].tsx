@@ -18,16 +18,17 @@ import { assetGradient } from '@/design/gradients';
 import {
   AreaChart,
   AssetMark,
+  BackButton,
   Button,
   ButtonPair,
   Candlestick,
   DeltaChip,
   ErrorState,
   IconButton,
-  NoteStrip,
   Pill,
   PillRow,
   Segmented,
+  Placeholder,
   Press,
   Price,
   Row,
@@ -40,11 +41,13 @@ import {
   pnlTone,
   price as fmtPrice,
   quantity,
+  radius,
   size,
   space,
   tightProjection,
   toCandles,
 } from '@/ui';
+import { RollingNumber } from '@/ui/RollingNumber';
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { api } from '@/data/api';
@@ -182,14 +185,14 @@ export default function AssetDetail() {
 
   if (inst.error) {
     return (
-      <Screen>
+      <Screen sheet>
         <ErrorState error={inst.error} onRetry={inst.reload} />
       </Screen>
     );
   }
 
   return (
-    <Screen gutter="none">
+    <Screen gutter="none" sheet>
       <View
         style={{
           flexDirection: 'row',
@@ -199,12 +202,7 @@ export default function AssetDetail() {
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10, flex: 1 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
+          <BackButton onPress={() => goBack()} />
           {/*
             The mark does not depend on the instrument being in a market class.
 
@@ -247,7 +245,14 @@ export default function AssetDetail() {
       >
       <View style={{ alignItems: 'center', marginTop: space.s22, gap: space.s6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}>
-          <Price variant="priceLg">{spot !== undefined ? fmtPrice(spot) : '—'}</Price>
+          {/* The price rolls in when it first arrives; live ticks after that change in place. */}
+          {spot !== undefined ? (
+            <RollingNumber value={fmtPrice(spot)} variant="priceLg" />
+          ) : warmingAny ? (
+            <Placeholder width={150} height={34} style={{ borderRadius: radius.tile }} />
+          ) : (
+            <Price variant="priceLg">—</Price>
+          )}
           {spot === undefined && !warmingAny ? <Tag label="No price feed" small tone="warn" /> : null}
         </View>
         {hasSeries ? (
@@ -336,6 +341,7 @@ export default function AssetDetail() {
               projection={tightProjection(series)}
               height={CHART_H}
               lastPrice={{ value: closes.at(-1)!, label: fmtPrice(closes.at(-1)!) }}
+              drawIn
             />
           ) : (
             <AreaChart
@@ -343,6 +349,7 @@ export default function AssetDetail() {
               height={CHART_H}
               color={up ? colors.up : colors.down}
               endDot
+              drawIn
             />
           )}
         </Press>
@@ -355,9 +362,13 @@ export default function AssetDetail() {
             justifyContent: 'center',
           }}
         >
-          <Text variant="body" color={colors.ink40}>
-            {warmingAny ? 'Fetching price history…' : 'No chart for this market yet.'}
-          </Text>
+          {warmingAny || (candles.loading && !candles.data) ? (
+            <Placeholder height={CHART_H} style={{ borderRadius: radius.tile }} />
+          ) : (
+            <Text variant="body" color={colors.ink40}>
+              No chart for this market yet.
+            </Text>
+          )}
         </View>
       )}
 
@@ -386,19 +397,7 @@ export default function AssetDetail() {
               divider={false}
             />
           </>
-        ) : (
-          <Row
-            title="Your position"
-            value={<Text variant="rowPrimary" color={colors.ink55}>None</Text>}
-            height={ROW_H}
-            divider={false}
-          />
-        )}
-        <NoteStrip kind={held ? 'acted' : 'risk'} style={{ marginTop: space.s16 }}>
-          {held
-            ? 'Momentum Scout holds this from your recurring buys. It will not add without asking.'
-            : 'No agent holds this yet. Set up a recurring buy and it will start.'}
-        </NoteStrip>
+        ) : null}
       </View>
       </ScrollView>
 
@@ -441,7 +440,7 @@ export default function AssetDetail() {
                 on, which makes the sentence true for an index that has no instrument anywhere and
                 for an equity that has one everywhere but here.
               */}
-              {`${symbol} cannot be settled on ${chainLabel}, so there is no order to place.`}
+              {`Not tradable on ${chainLabel}`}
             </Text>
           </View>
         )}

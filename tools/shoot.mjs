@@ -148,6 +148,8 @@ const ROUTES = [
   ['94-crosscheck', '/crosscheck/WETH'],
   ['95-route', '/route/WETH'],
   ['96-audit-anchor', '/audit/anchor'],
+  ['97-portfolio', '/portfolio'],
+  ['98-agent', '/agent/momentum-scout'],
   ['46-dev-ui', '/_dev/ui'],
   ['46b-dev-ui-edge', '/_dev/ui-edge'],
   ['47-dev-fidelity', '/_dev/fidelity'],
@@ -173,7 +175,12 @@ const EXPECT = {
   '04-fund': { must: [/Fund the wallet/, /USDC on Base/, /SEND USDC TO/, /0x[0-9a-fA-F]{40}/], never: [/USDT or SOL/, /^Deposit \$/m] },
   '05-delegate': { must: [/It can place trades/, /cannot move your money out/, /expires on its own/, /\$[\d,]+/] },
   '06-proposal': { must: [/draft portfolio/, /100%/, /Aave v3/], never: [/Staked SOL/, /NVDAx/] },
-  '07-home': { must: [/TOTAL VALUE/, /\$[\d,]+\.\d\d/, /Available to trade/, /Aave/] },
+  // One balance on top, the Privy wallet above it, agents and gainers below (2026-09-12). The old
+  // breakdown moved to the portfolio, so it must not creep back onto Home.
+  '07-home': {
+    must: [/TOTAL BALANCE/, /\$[\d,]+\.\d\d/, /Privy wallet/, /Agents/, /Gainers/],
+    never: [/Available to trade/, /Ready to trade/, /Your coins/],
+  },
   '08-markets': { must: [/Crypto/, /Stocks/, /Commodities/, /\d+ shown/], never: [/^0 shown/m] },
   '09-markets-crypto': { must: [/\$[\d,]+/, /markets/] },
   '10-markets-stocks': { must: [/\$[\d,]+/] },
@@ -183,7 +190,8 @@ const EXPECT = {
   '14-watchlist': { must: [/\$[\d,]+/] },
   '15-search': { must: [/Search/i] },
   // The asset screen headlines the instrument's NAME, not its ticker — "Bitcoin", not "BTC".
-  '16-asset': { must: [/Bitcoin|BTC/, /\$[\d,]+/, /Your position/] },
+  // Trimmed 2026-09-12: no "Your position: None" row and no agent note on a coin nobody holds.
+  '16-asset': { must: [/Bitcoin|BTC/, /\$[\d,]+/], never: [/No agent holds this yet/] },
   '17-asset-stock': { must: [/Nvidia|NVDA/, /\$[\d,]+/, /No price history/] },
   '18-chart': { must: [/\$[\d,]+/, /15m/, /1H/, /1D/] },
   '19-order': { must: [/WETH/] },
@@ -324,7 +332,18 @@ const EXPECT = {
   '82-risk': { must: [/Risk limits/i] },
   // Privy holds the key; the app must not claim it attached the policy itself.
   '83-policy': { must: [/PRIVY POLICY/i], never: [/we attached/i] },
-  '84-profile': { must: [/ADDRESS|This wallet/i] },
+  // Who you are and where things live — the counts and the activity feed moved behind their rows.
+  '84-profile': {
+    must: [/0x[0-9A-Fa-f]{4}/, /Privy/, /Activity/, /Permissions/, /Approvals/, /Settings/],
+    never: [/Risk checks/, /Recent activity/],
+  },
+  // Where the balance goes: what the chain holds, what the book bought, and what it made.
+  '97-portfolio': { must: [/TOTAL BALANCE/, /Deposit/, /Withdraw/, /Positions/, /Profit/] },
+  // One agent: money in and out, what it runs, and a way to add to it — without the long caveats.
+  '98-agent': {
+    must: [/Momentum Scout/, /Add funds/, /Withdraw/, /Strategies/, /Add strategy/],
+    never: [/Past performance of a strategy/, /runs are recorded against strategies/],
+  },
   '85-notifications': { must: [/Notifications/] },
   '86-catchup': { must: [/Since you (looked|were)/i] },
   '87-export': { must: [/Export/, /audit trail/i] },

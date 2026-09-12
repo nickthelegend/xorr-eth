@@ -9,15 +9,20 @@
  *   The action 'GO_BACK' was not handled by any navigator. Is there any screen to go back to?
  *
  * and does nothing. The user sits on the form they just submitted, with no acknowledgement and no
- * way out but the browser's own back button — which is also empty. It is worst exactly where it
- * matters most: a screen that creates something and then "returns" leaves you staring at the
- * creation form, unsure whether it worked.
+ * way out but the browser's own back button — which is also empty.
  *
  * React Navigation's warning says it is development-only, which is true of the LOG and not of the
  * behaviour: in production the same tap silently does nothing at all.
+ *
+ * ASK THE SCREEN'S OWN NAVIGATOR (2026-09-12). This used to ask `router.canGoBack()` and then call
+ * `router.back()`. The first question is answered for the whole tree and the second action is sent
+ * from the root — so with a coin opened as a sheet over the tab shell, "can go back" was true and the
+ * GO_BACK still landed where no navigator took it: the back button on the price sheet did nothing,
+ * twice, on a real simulator. The screen's own `navigation` object asks and acts on the navigator the
+ * screen actually lives in, and bubbles to its parents from there.
  */
 import { useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 
 /**
@@ -26,8 +31,9 @@ import type { Href } from 'expo-router';
  */
 export function useGoBack(fallback: Href = '/'): () => void {
   const router = useRouter();
+  const navigation = useNavigation();
   return useCallback(() => {
-    if (router.canGoBack()) router.back();
+    if (navigation.canGoBack()) navigation.goBack();
     else router.replace(fallback);
-  }, [router, fallback]);
+  }, [navigation, router, fallback]);
 }

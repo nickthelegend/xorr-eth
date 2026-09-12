@@ -193,7 +193,7 @@ can reach them by URL.
 | D8 | `/(tabs)/holdings` | DATA | balanceUsd,positions,realised,sleeves | real values from `Reads` on screen; skeleton while loading; `ErrorState` with the server sentence on failure |
 | D9 | `/(tabs)/index` | DATA | balance,listAgents,positions,quotes | real values from `Reads` on screen; skeleton while loading; `ErrorState` with the server sentence on failure |
 | D10 | `/(tabs)/markets` | DATA | listClasses,sparklines | real values from `Reads` on screen; skeleton while loading; `ErrorState` with the server sentence on failure |
-| D11 | `/(tabs)/strategies` | DATA | list,runNow,setState | real values from `Reads` on screen; skeleton while loading; `ErrorState` with the server sentence on failure |
+| D11 | `/strategies` | DATA | list,runNow,setState | real values from `Reads` on screen; skeleton while loading; `ErrorState` with the server sentence on failure |
 | D12 | `/_dev/boom` | STATIC | - | documented content renders in full; every control navigates or is visibly disabled |
 | D13 | `/_dev/fidelity` | STATIC | - | documented content renders in full; every control navigates or is visibly disabled |
 | D14 | `/_dev/ui` | STATIC | - | documented content renders in full; every control navigates or is visibly disabled |

@@ -1,329 +1,493 @@
 /**
- * Screen 2 — Wallet home. screens.md Group B.
+ * Home — the reference video's layout, on this app's theme (2026-09-12).
  *
- * Rebuilt on `src/ui`, and re-checked against the prototype rather than against the previous
- * build, which had drifted: the hero column is CENTRED (eyebrow, balance, delta chip), the
- * action pills are 42pt at radius 24, and the agent cards hold a 74pt faced orb rather than
- * a 34pt mark in a 106pt-tall card.
+ * Top to bottom: who is signed in — the Privy wallet, tap for the profile; ONE balance — tap for the
+ * portfolio, where your coins, positions, profit, cash and earnings live; and a sheet with the agents,
+ * today's gainers, and — since 2026-09-13 — tokenized stocks and futures. A single figure on top is
+ * deliberate: the breakdown belongs to the portfolio.
  *
- * [G16] The floating chat pill is gone: after the pivot the bot has a centre tab, and a
- * second entry point to the same place on the busiest screen is clutter. PLAN.md 8.2.
+ * Everything arrives the way the reference's screens do, through `<Rise>` and `<RollingNumber>`, so
+ * reduced motion turns it off.
  */
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { agentGradient, assetGradient } from '@/design/gradients';
+import { Icon } from '@/design/Icon';
 import {
   AgentOrb,
   AssetMark,
-  DeltaChip,
+  Button,
   Eyebrow,
   IconButton,
-  NoteStrip,
+  LoadingRows,
+  Placeholder,
   Press,
   Price,
   Row,
   Screen,
+  Sparkline,
   Text,
   colors,
   money,
   percent,
-  pnlTone,
-  quantity,
+  price as fmtPrice,
   radius,
   size,
   space,
+  typeScale,
 } from '@/ui';
+import { Rise } from '@/ui/Rise';
+import { RollingNumber } from '@/ui/RollingNumber';
+import { STAGGER } from '@/ui/motion';
 import { repos } from '@/data';
+import { system, type Limits } from '@/data/system';
 import { useAsync } from '@/data/useAsync';
+import { logoProps, useLogos } from '@/data/useLogos';
+import { usePrivyIdentity } from '@/auth/usePrivyIdentity';
 import { useHasHydrated, useStore } from '@/state/store';
-import { DEFAULT_BUY } from '@/data/tradable';
-import { useLogo } from '@/data/useLogos';
-import { CatchUp } from '@/home/CatchUp';
+import type { Agent, Instrument } from '@/data/types';
 
-/** The three equal actions. screens.md: `flex:1`, gutter-padded, never fixed-width. */
-const ACTIONS = [
-  { label: 'Send', route: '/send' },
-  { label: 'Swap', route: '/swap' },
-  { label: 'More', route: '/settings' },
-] as const;
+type SheetTab = 'agents' | 'gainers' | 'stocks' | 'futures';
 
-/** Prototype metrics that belong to this screen alone, named rather than inlined twice. */
-const ACTION_H = 42;
+const TABS: readonly { key: SheetTab; label: string }[] = [
+  { key: 'agents', label: 'Agents' },
+  { key: 'gainers', label: 'Gainers' },
+  { key: 'stocks', label: 'Stocks' },
+  { key: 'futures', label: 'Futures' },
+];
+
+const AVATAR = 40;
+const DOT = 7;
+const GRABBER_W = 36;
+const GRABBER_H = 4;
+const TAB_RULE = 2;
+const SPARK_W = 56;
+const SPARK_H = 22;
+/** The agents are tiles, not rows: a medium orb with its name under it, four across. */
+const ORB = 56 as const;
+const TILE_W = '25%' as const;
+/** Placeholder tiles while the roster loads — the same shape it will arrive in. */
+const AGENT_SLOTS = 4;
+/** How many of today's gainers the sheet lists. */
+const GAINERS = 8;
+/** How many futures contracts the sheet lists before handing over to Futures. */
+const FUTURES = 8;
+/** Arrival order: header, balance, sheet — then each row after the sheet. */
+const ROWS_FROM = 3;
+
+/** `Instrument.chg` is formatted for display; this reads its size back out, for sorting. */
+function magnitude(chg: string): number {
+  const n = Number(chg.replace(/[^\d.]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Whether the bot may place an order right now: a permission that exists, is live, and is not stopped. */
+function isLive(limits: Limits | undefined, killed: boolean): boolean {
+  if (!limits || killed || limits.revoked || limits.dailyCapUsd <= 0) return false;
+  return limits.expiresAt === undefined || limits.expiresAt > Date.now();
+}
+
+function shortAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+function isSheetTab(value: string | undefined): value is SheetTab {
+  return TABS.some((t) => t.key === value);
+}
 
 export default function Home() {
   const router = useRouter();
   const hydrated = useHasHydrated();
   const wallet = useStore((s) => s.wallet);
   const walletChecked = useStore((s) => s.walletChecked);
-  const hired = useStore((s) => s.hired);
-  const toggleHire = useStore((s) => s.toggleHire);
+  const killed = useStore((s) => s.killed);
+  const { email } = usePrivyIdentity();
+  /* `/?tab=futures` opens straight onto a tab — for links from elsewhere in the app. */
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState<SheetTab>(() => (isSheetTab(params.tab) ? params.tab : 'agents'));
+  /* Stocks and futures load the first time their tab opens: Home does not pay for a tab nobody looked at. */
+  const [opened, setOpened] = useState<ReadonlySet<SheetTab>>(() => new Set([tab]));
+  const openTab = (key: SheetTab) => {
+    setTab(key);
+    setOpened((prev) => (prev.has(key) ? prev : new Set([...prev, key])));
+  };
 
   const balance = useAsync(() => repos.portfolio.balance(), []);
+  const limits = useAsync(() => system.limits(), []);
   const agents = useAsync(() => repos.bot.listAgents(), []);
-  const featured = useAsync(() => repos.markets.quotes([DEFAULT_BUY]), []);
-  // The featured coin is a real token, so it wears its real logo. `Cash` below keeps its
-  // gradient: a dollar balance is not an instrument and no registry issues it a mark.
-  const featuredLogo = useLogo(DEFAULT_BUY);
-  // The held quantity was hardcoded at 1,750.30. It comes from the position book now.
-  const positions = useAsync(() => repos.portfolio.positions(), []);
-  const staking = useAsync(() => repos.yield.staking(), []);
+  const classes = useAsync(() => repos.markets.listClasses(), []);
+  const stocksOpened = opened.has('stocks');
+  const futuresOpened = opened.has('futures');
+  const stocks = useAsync(async () => (stocksOpened ? system.stocks() : null), [stocksOpened]);
+  const futures = useAsync(async () => (futuresOpened ? repos.perps.markets() : null), [futuresOpened]);
 
   /*
-   * null means the balance could not be read. A dash, never a confident $0.00 for a funded wallet.
+   * Today's gainers: instruments on a LIVE feed whose change is up, largest first.
    *
-   * `cash` is a separate number from `total` and the screen needs both: the hero is everything
-   * the wallet is worth, the Cash row is what is actually spendable. It rendered `total` in both,
-   * so a wallet with $59 in WETH and $990 supplied to Aave reported all of it as "Available to
-   * trade" — money that is not available, on the row whose entire job is to say what is.
+   * Only live feeds — an instrument with no feed behind it has no change to rank, and ranking the
+   * design prototype's numbers is how an app ends up recommending a move that never happened.
    */
-  const total = balance.data?.total ?? null;
-  const cash = balance.data?.cash ?? null;
-  const featuredQuote = featured.data?.[DEFAULT_BUY];
-  const held = positions.data ?? [];
-  const featuredHeld = held.find((p) => p.symbol === DEFAULT_BUY);
+  const gainers = useMemo<Instrument[]>(() => {
+    const seen = new Set<string>();
+    return (classes.data ?? [])
+      .flatMap((c) => c.instruments)
+      .filter((i) => {
+        if (seen.has(i.sym) || i.feed !== 'live' || !i.up || i.chg.trim() === '') return false;
+        seen.add(i.sym);
+        return true;
+      })
+      .sort((a, b) => magnitude(b.chg) - magnitude(a.chg))
+      .slice(0, GAINERS);
+  }, [classes.data]);
+  const gainerSyms = useMemo(() => gainers.map((g) => g.sym), [gainers]);
+  const sparks = useAsync(() => repos.markets.sparklines(gainerSyms), [gainerSyms.join(',')]);
 
-  // Unrealised P&L across the book, as a percentage of what it cost. Both halves come from
-  // real fills; when nothing is held there is no percentage to show and the chip is absent.
-  const unrealised = held.reduce((sum, p) => sum + p.unrealised, 0);
-  const cost = held.reduce((sum, p) => sum + (p.notional - p.unrealised), 0);
-  const unrealisedPct = cost > 0 ? (unrealised / cost) * 100 : undefined;
+  const stockRows = useMemo(() => stocks.data ?? [], [stocks.data]);
+  const perpRows = useMemo(() => (futures.data?.markets ?? []).slice(0, FUTURES), [futures.data]);
+  const markSyms = useMemo(
+    () => [...gainerSyms, ...stockRows.map((s) => s.symbol), ...perpRows.map((m) => m.symbol)],
+    [gainerSyms, stockRows, perpRows],
+  );
+  const logos = useLogos(markSyms);
+
+  /* Hired agents first — the ones actually allowed to act on this wallet. */
+  const roster = useMemo<Agent[]>(
+    () => [...(agents.data ?? [])].sort((a, b) => Number(!!b.hired) - Number(!!a.hired)),
+    [agents.data],
+  );
+
+  const total = balance.data?.total ?? null;
+  const live = isLive(limits.data ?? undefined, killed);
+
+  /* The Privy account, named by its email when Privy has one, and by its wallet otherwise. */
+  const address = wallet?.address;
+  const title = email ?? (address ? shortAddress(address) : 'Privy wallet');
+  const subtitle = email && address ? `Privy wallet · ${shortAddress(address)}` : 'Privy wallet';
+  const initial = (email ?? address?.replace(/^0x/i, '') ?? 'x').charAt(0).toUpperCase();
 
   /*
-   * The entry gate — PLAN.md 2.7.
-   *
-   * "/" belongs to the tab shell; a user without a wallet is sent to onboarding from here
-   * rather than from a competing index route.
-   *
-   * It waits for TWO things. `hydrated` means the persisted store has loaded from storage;
-   * `walletChecked` means the executor has been asked. Waiting only for the first sent every
-   * signed-in user whose local storage lacked a wallet — a new device, cleared site data, a
-   * deep link — back through sign-up, while the server knew perfectly well who they were.
+   * The entry gate — PLAN.md 2.7. "/" belongs to the tab shell; a user without a wallet is sent to
+   * onboarding from here. It waits for the persisted store AND the executor's answer, so a signed-in
+   * user on a fresh device is not bounced back through sign-up.
    */
   if (hydrated && walletChecked && !wallet) return <Redirect href="/welcome" />;
 
   return (
     <Screen tabBar gutter="none">
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: space.gutter,
-        }}
+      <Rise
+        index={0}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10, paddingHorizontal: space.gutter }}
       >
-        <IconButton name="gear" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
-        {/* One wallet, so no switcher chevron — the prototype's "Wallets ⌄" implies a
-            picker this build does not have. */}
-        <Text variant="cardTitle">Wallet</Text>
-        <IconButton name="more" accessibilityLabel="More options" onPress={() => router.push('/settings')} />
-      </View>
+        <Press
+          onPress={() => router.push('/profile')}
+          accessibilityRole="button"
+          accessibilityLabel={`Your profile, ${title}`}
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.s12 }}
+        >
+          <View
+            style={{
+              width: AVATAR,
+              height: AVATAR,
+              borderRadius: AVATAR / 2,
+              backgroundColor: colors.ink,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text variant="rowPrimary" color={colors.sheet.ink}>
+              {initial}
+            </Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text variant="rowPrimary" numberOfLines={1}>
+              {title}
+            </Text>
+            <Text variant="secondarySm" color={colors.ink40} numberOfLines={1} style={{ marginTop: space.s2 }}>
+              {subtitle}
+            </Text>
+          </View>
+        </Press>
+        <IconButton name="bell" accessibilityLabel="Notifications" onPress={() => router.push('/inbox')} />
+      </Rise>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-        <View style={{ alignItems: 'center', marginTop: space.s22 }}>
-          <Eyebrow>Total value</Eyebrow>
-          {/*
-            A dash on this line means "we could not read your balance" — see the comment on `total`.
-            While the read is still in flight it means nothing of the kind, and against this
-            executor that window is twenty seconds on the first screen of the app. Fifth site with
-            this conflation; the others are Markets, Send, Watchlist and markets/[classId].
-          */}
-          <Price variant="heroBalance" style={{ marginTop: space.s6 }}>
-            {total !== null ? money(total) : balance.loading ? '· · ·' : '—'}
-          </Price>
-          {unrealisedPct !== undefined ? (
-            <DeltaChip
-              label={`${unrealised >= 0 ? 'up' : 'down'} ${percent(Math.abs(unrealisedPct)).replace('+', '')} unrealised`}
-              tone={pnlTone(unrealised)}
-              style={{ alignSelf: 'center', marginTop: space.s8 }}
-            />
-          ) : null}
-        </View>
+      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        <Rise index={1} style={{ marginTop: space.s26, paddingHorizontal: space.gutter }}>
+          <Press
+            onPress={() => router.push('/portfolio')}
+            accessibilityRole="button"
+            accessibilityLabel={`Total balance ${total !== null ? money(total) : 'not available'}. Opens your portfolio.`}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s6 }}>
+              <Eyebrow>Total balance</Eyebrow>
+              <Icon name="chevron" size={11} color={colors.ink40} />
+            </View>
+            {/* Rolls in once it is real. Dots while on its way, a dash when unreadable — never animated. */}
+            {total !== null ? (
+              <RollingNumber
+                value={money(total)}
+                variant="heroBalance"
+                delay={STAGGER}
+                containerStyle={{ marginTop: space.s6 }}
+              />
+            ) : balance.loading ? (
+              <Placeholder width={190} height={46} style={{ marginTop: space.s8, borderRadius: radius.tile }} />
+            ) : (
+              <Price variant="heroBalance" style={{ marginTop: space.s6 }}>
+                —
+              </Price>
+            )}
+          </Press>
+        </Rise>
 
-        <View
+        {/* The sheet: a grabber, a rounded top, and it runs to the bottom — the reference's watchlist. */}
+        <Rise
+          index={2}
           style={{
-            flexDirection: 'row',
-            gap: space.s10,
-            marginTop: space.s22,
-            paddingHorizontal: space.gutter,
+            flexGrow: 1,
+            marginTop: space.s26,
+            paddingTop: space.s10,
+            paddingBottom: space.s26,
+            borderTopLeftRadius: radius.sheet,
+            borderTopRightRadius: radius.sheet,
+            backgroundColor: colors.surfaceAlt,
           }}
         >
-          {ACTIONS.map((a) => (
-            <Press
-              key={a.label}
-              accessibilityRole="button"
-              accessibilityLabel={a.label}
-              onPress={() => router.push(a.route)}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                height: ACTION_H,
-                borderRadius: radius.panelLg,
-                backgroundColor: colors.control,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text variant="rowPrimary">{a.label}</Text>
-            </Press>
-          ))}
-        </View>
-
-        <View style={{ paddingHorizontal: space.gutter, marginTop: space.s26, gap: space.s20 }}>
-          <Row
-            left={<AssetMark gradient={{ c1: '#B58CFF', c2: '#6E3ED8' }} size={size.markSm} />}
-            title="Cash"
-            secondary="Available to trade"
-            value={
-              <Price>{cash !== null ? money(cash) : balance.loading ? '· · ·' : '—'}</Price>
-            }
-            height={size.hit}
+          <View
+            style={{
+              alignSelf: 'center',
+              width: GRABBER_W,
+              height: GRABBER_H,
+              borderRadius: GRABBER_H / 2,
+              backgroundColor: colors.ink28,
+            }}
           />
 
-          {/*
-            The premise, closed. Renders nothing when nothing happened — a card that reports
-            zero is a card people stop reading, and the moment it matters is the moment they
-            have stopped.
-          */}
-          <CatchUp />
-
-          <View>
-            <SectionHeader
-              title="Agents"
-              trailing={`${(agents.data ?? []).filter((a) => a.hired).length} hired`}
-              onPress={() => router.push('/bot/roster')}
-            />
-            <View style={{ flexDirection: 'row', gap: space.s10, marginTop: space.s14 }}>
-              {/* Hired agents first: the two cards on the busiest screen should be the two
-                  that are actually running, not the first two in roster order. */}
-              {[...(agents.data ?? [])]
-                .sort((a, b) => Number(!!b.hired) - Number(!!a.hired))
-                .slice(0, 2)
-                .map((a) => {
-                  // Was `idx === 1 && stocksPaused` — a prototype leftover that labelled the
-                  // second card from a global flag, so both cards read "Active" while the
-                  // header beside them said "1 hired". The hire record is the real state.
-                  const isHired = a.hired ?? !!hired[a.name];
-                  return (
-                    <Press
-                      key={a.id}
-                      onPress={() => toggleHire(a.name)}
-                      accessibilityRole="switch"
-                      accessibilityState={{ checked: isHired }}
-                      accessibilityLabel={`${a.name}, ${isHired ? 'hired' : 'not hired'}`}
-                      style={{
-                        // The prototype fixes these at 106pt, which reads as a scrollable
-                        // rail of many agents. This build shows exactly two, and at 106 the
-                        // pair sits in the left two-thirds with a lopsided gap beside it —
-                        // and real agent names wrap, dropping one card's status line below
-                        // the other's. `flex:1` fixes both.
-                        flex: 1,
-                        alignItems: 'center',
-                        gap: space.s8,
-                        paddingVertical: space.s12,
-                        paddingHorizontal: space.s4,
-                        borderRadius: radius.card,
-                        backgroundColor: colors.surface,
-                      }}
-                    >
-                      <AgentOrb
-                        gradient={agentGradient(a.name)}
-                        size={size.orb74}
-                        face
-                        name={a.name}
-                        status={isHired ? 'active' : 'paused'}
-                      />
-                    </Press>
-                  );
-                })}
-            </View>
-          </View>
-
-          <View>
-            <SectionHeader title="Coins" onPress={() => router.push('/watchlist')} />
-            <Row
-              left={<AssetMark gradient={assetGradient(DEFAULT_BUY)} {...featuredLogo} size={32} />}
-              title={DEFAULT_BUY}
-              secondary={
-                featuredHeld
-                  ? `Wrapped Ether · ${quantity(featuredHeld.units)}`
-                  : 'Wrapped Ether · not held'
-              }
-              value={<Price>{featuredQuote?.price !== undefined ? money(featuredQuote.price) : '—'}</Price>}
-              delta={
-                featuredQuote?.change24h !== undefined
-                  ? percent(featuredQuote.change24h, 2)
-                  : undefined
-              }
-              deltaTone={pnlTone(featuredQuote?.change24h ?? 0)}
-              height={size.rowSm}
-              divider={false}
-              onPress={() => router.push(`/asset/${DEFAULT_BUY}`)}
-            />
-
-            {/*
-              Tappable, because it stopped being only a fact. Once tier 4 can put money at
-              Aave, this strip is the only place on the home screen that mentions it — and a
-              user with a supplied balance needs somewhere to go to see it and take it back.
-              A statement about a rate you cannot act on is where the money goes to hide.
-            */}
-            <Press
-              onPress={() => router.push('/yield')}
-              accessibilityRole="button"
-              accessibilityLabel="See what you have earning at Aave"
-              style={{ marginTop: space.s6, marginBottom: space.s20 }}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginTop: space.s14,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.hairline,
+            }}
+          >
+            {/* Four tabs scroll sideways on a narrow phone rather than crowding the Live dot out. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flexGrow: 0, flexShrink: 1 }}
+              contentContainerStyle={{ gap: space.s22, paddingLeft: space.gutter, paddingRight: space.s14 }}
             >
-              <NoteStrip kind="acted">
-                {/*
-                  "Idle USDC can earn about 4.08% a year on Aave" is an offer, and it is only true
-                  where the pool exists. On a build without it the strip read as the offer followed
-                  immediately by the executor's note explaining that nothing can be supplied here —
-                  the sentence arguing with itself. The note alone is the honest half.
-                */}
-                {staking.data
-                  ? staking.data.availableHere === false
-                    ? staking.data.note
-                    : // `estimatedApy` is a fraction (0.0388); `percent` takes points.
-                      `Idle USDC can earn about ${percent(staking.data.estimatedApy * 100, 2).replace('+', '')} a year on Aave. ${staking.data.note}`
-                  : 'Supply rates are unavailable right now, so there is no figure to quote.'}
-              </NoteStrip>
+              {TABS.map((t) => {
+                const selected = t.key === tab;
+                return (
+                  <Press
+                    key={t.key}
+                    onPress={() => openTab(t.key)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                    aria-selected={selected}
+                    accessibilityLabel={t.label}
+                    style={{
+                      paddingBottom: space.s10,
+                      borderBottomWidth: TAB_RULE,
+                      borderBottomColor: selected ? colors.ink : colors.surfaceAlt,
+                    }}
+                  >
+                    <Text variant="cardTitle" color={selected ? colors.ink : colors.ink40}>
+                      {t.label}
+                    </Text>
+                  </Press>
+                );
+              })}
+            </ScrollView>
+            {/* Whether the agents can act right now, and the way to Safety — a dot, not a card. */}
+            <Press
+              onPress={() => router.push('/safety')}
+              accessibilityRole="button"
+              accessibilityLabel={live ? 'Agents can trade. Open Safety.' : 'Agents cannot trade right now. Open Safety.'}
+              style={{
+                marginLeft: 'auto',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space.s6,
+                paddingBottom: space.s10,
+                paddingRight: space.gutter,
+              }}
+            >
+              <View
+                style={{
+                  width: DOT,
+                  height: DOT,
+                  borderRadius: DOT / 2,
+                  backgroundColor: live ? colors.up : colors.ink30,
+                }}
+              />
+              {limits.loading && !limits.data ? (
+                <Placeholder width={44} height={12} />
+              ) : (
+                <Text variant="secondarySm" color={colors.ink55}>
+                  {live ? 'Live' : killed ? 'Stopped' : 'Not trading'}
+                </Text>
+              )}
             </Press>
           </View>
-        </View>
+
+          <View style={{ paddingHorizontal: space.gutter, marginTop: space.s4 }}>
+            {tab === 'agents' ? (
+              agents.loading && !agents.data ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space.s18 }}>
+                  {Array.from({ length: AGENT_SLOTS }, (_, i) => (
+                    <View key={i} style={{ width: TILE_W, alignItems: 'center', gap: space.s8 }}>
+                      <Placeholder width={ORB} height={ORB} style={{ borderRadius: radius.full }} />
+                      <Placeholder width={ORB} height={space.s10} />
+                    </View>
+                  ))}
+                </View>
+              ) : roster.length === 0 ? (
+                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                  {agents.error ? 'Your agents could not be loaded.' : 'No agents yet.'}
+                </Text>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: space.s18, marginTop: space.s18 }}>
+                  {roster.map((a, i) => (
+                    <Rise key={a.id} index={ROWS_FROM + i} style={{ width: TILE_W }}>
+                      <Press
+                        onPress={() => router.push(`/agent/${a.id}`)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${a.name}, ${a.hired ? 'hired' : 'not hired'}. ${a.role}`}
+                        style={{ alignItems: 'center', gap: space.s8, paddingHorizontal: space.s4 }}
+                      >
+                        <AgentOrb gradient={agentGradient(a.name)} size={ORB} face />
+                        {/* Two lines reserved for every name, so a short one does not lift its status line. */}
+                        <Text
+                          variant="orbName"
+                          align="center"
+                          numberOfLines={2}
+                          style={{ minHeight: typeScale.orbName.lineHeight * 2 }}
+                        >
+                          {a.name}
+                        </Text>
+                        {/* Grey, never green: hired is a fact about the roster, not a profit. */}
+                        <Text variant="orbStatus" color={a.hired ? colors.ink55 : colors.ink30}>
+                          {a.hired ? 'Hired' : 'Not hired'}
+                        </Text>
+                      </Press>
+                    </Rise>
+                  ))}
+                </View>
+              )
+            ) : tab === 'gainers' ? (
+              classes.loading && !classes.data ? (
+                <LoadingRows count={4} height={size.rowLg} spark />
+              ) : gainers.length === 0 ? (
+                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                  {classes.error ? 'Prices could not be loaded.' : 'Nothing on a live feed is up today.'}
+                </Text>
+              ) : (
+                gainers.map((g, i) => {
+                  const series = sparks.data?.[g.sym];
+                  return (
+                    <Rise key={g.sym} index={ROWS_FROM + i}>
+                      <Row
+                        height={size.rowLg}
+                        divider={i < gainers.length - 1}
+                        onPress={() => router.push(`/asset/${g.sym}`)}
+                        left={<AssetMark gradient={{ c1: g.c1, c2: g.c2 }} {...logoProps(logos, g.sym)} size={size.mark} />}
+                        title={g.sym}
+                        secondary={g.name}
+                        value={
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}>
+                            {/* No glyph without a series — a flat line would claim the price never moved. */}
+                            {series && series.length > 1 ? (
+                              <Sparkline data={series} width={SPARK_W} height={SPARK_H} />
+                            ) : sparks.loading && !sparks.data ? (
+                              <Placeholder width={SPARK_W} height={SPARK_H} />
+                            ) : null}
+                            <Price variant="rowPrimary">{g.px}</Price>
+                          </View>
+                        }
+                        delta={g.chg}
+                        deltaTone="up"
+                      />
+                    </Rise>
+                  );
+                })
+              )
+            ) : tab === 'stocks' ? (
+              !stocks.data ? (
+                stocks.error ? (
+                  <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                    Stocks could not be loaded.
+                  </Text>
+                ) : (
+                  <LoadingRows count={4} height={size.rowLg} />
+                )
+              ) : stockRows.length === 0 ? (
+                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                  No tokenized stocks on this build.
+                </Text>
+              ) : (
+                stockRows.map((s, i) => (
+                  <Rise key={s.symbol} index={ROWS_FROM + i}>
+                    <Row
+                      height={size.rowLg}
+                      divider={i < stockRows.length - 1}
+                      onPress={() => router.push(`/oracle/${s.symbol}`)}
+                      left={<AssetMark gradient={assetGradient(s.symbol)} {...logoProps(logos, s.symbol)} size={size.mark} />}
+                      title={s.symbol}
+                      secondary={s.name}
+                      value={
+                        s.price === null ? (
+                          <Text variant="rowPrimary" color={colors.ink40}>
+                            No route
+                          </Text>
+                        ) : (
+                          fmtPrice(s.price)
+                        )
+                      }
+                    />
+                  </Rise>
+                ))
+              )
+            ) : !futures.data ? (
+              futures.error ? (
+                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                  Futures could not be loaded.
+                </Text>
+              ) : (
+                <LoadingRows count={4} height={size.rowLg} />
+              )
+            ) : (
+              <>
+                {perpRows.map((m, i) => (
+                  <Rise key={m.symbol} index={ROWS_FROM + i}>
+                    <Row
+                      height={size.rowLg}
+                      onPress={() => router.push(`/perp/${m.symbol}`)}
+                      left={<AssetMark gradient={assetGradient(m.symbol)} {...logoProps(logos, m.symbol)} size={size.mark} />}
+                      title={m.symbol}
+                      secondary={`Up to ${m.maxLeverage}x`}
+                      value={fmtPrice(m.markPx)}
+                      delta={m.change24hPct === null ? undefined : percent(m.change24hPct, 2)}
+                      deltaTone={
+                        m.change24hPct === null || m.change24hPct === 0 ? 'neutral' : m.change24hPct > 0 ? 'up' : 'down'
+                      }
+                    />
+                  </Rise>
+                ))}
+                <Button
+                  label="All futures"
+                  variant="ghost"
+                  onPress={() => router.push('/futures')}
+                  style={{ marginTop: space.s16 }}
+                />
+              </>
+            )}
+          </View>
+        </Rise>
       </ScrollView>
     </Screen>
-  );
-}
-
-/**
- * A section break. The prototype writes it as a 14/600 ink55 label with a "›" and a quiet
- * trailing count — no rule above it, which is why this is a plain row and not a `Row`.
- */
-function SectionHeader({
-  title,
-  trailing,
-  onPress,
-}: {
-  title: string;
-  trailing?: string;
-  onPress?: () => void;
-}) {
-  return (
-    <Press
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      hitHeight={size.hit}
-      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-    >
-      <Text variant="rowPrimary" color={colors.ink55}>
-        {title} ›
-      </Text>
-      {trailing ? (
-        <Text variant="secondary" color={colors.ink40}>
-          {trailing}
-        </Text>
-      ) : null}
-    </Press>
   );
 }

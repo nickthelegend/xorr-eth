@@ -788,14 +788,9 @@ export default function UiScratch() {
         {/* -------------------------------------------------------- tab bar */}
 
         <Section title="TabBar · design.md §4">
-          <Case label="Four tabs and the raised chat button — tap the tabs, the button and the switch">
+          <Case label="Home, the chat button and the grid — tap the two places and the circle">
             <View style={{ borderRadius: radius.card, overflow: 'hidden' }}>
-              <TabBar
-                active={tab}
-                onSelect={setTab}
-                agentsLive={!killed}
-                onChat={() => setChatTapped((c) => !c)}
-              />
+              <TabBar active={tab} onSelect={setTab} onAction={() => setChatTapped((c) => !c)} />
             </View>
             <Text variant="footnote" color={colors.ink40}>
               {chatTapped ? 'Chat opened' : 'Chat closed'}

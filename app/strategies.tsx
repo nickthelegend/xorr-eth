@@ -1,8 +1,11 @@
 /**
- * Strategies tab — NEW. PLAN.md 10.1 / §3.5.
+ * Strategies — its own page (2026-09-12). PLAN.md 10.1 / §3.5.
  *
- * The handoff's "Trade" tab was never designed [G13]; the pivot gives it a job. Live
- * strategies with state, next run and capital committed; a library to add from, ordered by
+ * Reached from an agent's "Add strategy", a backtest and strategy alerts — not from the bar. It used
+ * to live in the tab shell, which drew the bottom bar under it with nothing lit and no way back but
+ * the bar; it now pushes like an agent page, with a back arrow and no bar.
+ *
+ * Live strategies with state, next run and capital committed; a library to add from, ordered by
  * the §1.2 ladder — DCA first, because it is the trust on-ramp.
  *
  * Built from Row / Segmented / SheetCard on `src/ui`. No new visual language.
@@ -11,6 +14,7 @@ import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
+  BackButton,
   Button,
   EmptyState,
   ErrorState,
@@ -33,6 +37,7 @@ import { quantity } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { errorText } from '@/data/apiError';
+import { useGoBack } from '@/nav/useGoBack';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { STRATEGY_LADDER } from '@/strategies/ladder';
 import type { Strategy } from '@/data/types';
@@ -49,6 +54,7 @@ const TIER = 22;
 
 export default function Strategies() {
   const router = useRouter();
+  const goBack = useGoBack();
   const [tab, setTab] = useState<Tab>('running');
   const { data, loading, error, reload } = useAsync(() => repos.strategies.list(), []);
   // Pulling down is the gesture people already try on a list of things that keep changing.
@@ -67,7 +73,10 @@ export default function Strategies() {
   const shown = [...live, ...paused];
 
   return (
-    <Screen tabBar>
+    <Screen>
+      <View style={{ flexDirection: 'row' }}>
+        <BackButton onPress={goBack} />
+      </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Strategies</Text>
         <Text variant="footnote" color={colors.ink28}>
