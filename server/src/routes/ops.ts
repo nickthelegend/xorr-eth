@@ -21,6 +21,16 @@ import { publicSurface } from '../auth/middleware.js';
 
 export const ops = new Hono();
 
+/**
+ * Which commit is running.
+ *
+ * The executors are CLI uploads, not git-linked deploys, so Railway records no commit — and the
+ * deployed code could not be matched to the repository at all. `scripts/deploy-executor.mjs` sets
+ * `XORR_BUILD_SHA` on the service just before it uploads, with `-dirty` when `server/` had
+ * uncommitted changes. Null means nobody recorded one, and the response says so.
+ */
+const BUILD_SHA: string | null = process.env.XORR_BUILD_SHA ?? null;
+
 type DepStatus = 'up' | 'degraded' | 'down';
 type Dep = { name: string; status: DepStatus; ms: number; detail: string; critical: boolean };
 
@@ -87,6 +97,7 @@ ops.get('/health', async (c) => {
       ok: !down,
       status,
       chain: CHAIN_KEY,
+      version: BUILD_SHA,
       delegation: DELEGATION_ADDRESS,
       uptimeSec: Math.round((Date.now() - started) / 1000),
       dependencies: deps,

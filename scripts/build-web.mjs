@@ -29,7 +29,11 @@ import { writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from 'no
 import { join } from 'node:path';
 
 const OUT = 'dist-web';
-const API = process.env.XORR_WEB_API ?? 'https://executor-production-1659.up.railway.app';
+/*
+ * The executor's own domain, not Railway's generated hostname. The two reach the same service today,
+ * but only one of them is ours to keep pointing at the right place.
+ */
+const API = process.env.XORR_WEB_API ?? 'https://api.xorr.finance';
 const ENV_FILE = '.env';
 
 /* Refuse to ship a bundle that talks to a machine nobody else can reach. */
