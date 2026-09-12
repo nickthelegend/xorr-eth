@@ -14,9 +14,9 @@ import { agentGradient } from '@/design/gradients';
 import {
   AgentOrb,
   Button,
+  CloseButton,
   EmptyState,
   Fill,
-  IconButton,
   Screen,
   Text,
   colors,
@@ -70,13 +70,7 @@ export default function AgentIntro() {
     return (
       <Screen style={{ backgroundColor: colors.surface, borderRadius: radius.sheetLg }}>
         <View style={{ alignItems: 'flex-end' }}>
-          <IconButton
-            name="close"
-            accessibilityLabel="Close"
-            onPress={() => goBack()}
-            background="none"
-            glyph={20}
-          />
+          <CloseButton onPress={() => goBack()} />
         </View>
         <Fill>
           <EmptyState
@@ -94,13 +88,7 @@ export default function AgentIntro() {
     // presentation in `app/_layout.tsx` is what puts black behind it.
     <Screen style={{ backgroundColor: colors.surface, borderRadius: radius.sheetLg }}>
       <View style={{ alignItems: 'flex-end' }}>
-        <IconButton
-          name="close"
-          accessibilityLabel="Close"
-          onPress={() => goBack()}
-          background="none"
-          glyph={20}
-        />
+        <CloseButton onPress={() => goBack()} />
       </View>
 
       <View style={{ alignItems: 'center', marginTop: space.s10, gap: space.s14 }}>

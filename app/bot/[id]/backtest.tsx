@@ -15,11 +15,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   AreaChart,
+  BackButton,
   Button,
   colors,
   ErrorState,
   Fill,
-  IconButton,
   LoadingRows,
   money,
   Pill,
@@ -76,12 +76,7 @@ export default function Backtest() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle">Backtest</Text>
       </View>
 

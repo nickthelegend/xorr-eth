@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  IconButton,
+  BackButton,
   Button,
   EmptyState,
   Fill,
@@ -91,7 +91,7 @@ export default function Alerts() {
       */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-          <IconButton name="back" accessibilityLabel="Back" background="none" onPress={() => goBack()} />
+          <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Alerts</Text>
         </View>
         <Text variant="footnote" color={colors.ink28}>

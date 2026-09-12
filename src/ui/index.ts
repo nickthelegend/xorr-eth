@@ -74,7 +74,7 @@ export {
   type ButtonVariant,
 } from './Button';
 export { Eyebrow, type EyebrowProps } from './Eyebrow';
-export { IconButton, HeaderBar, type IconButtonProps } from './IconButton';
+export { BackButton, CloseButton, IconButton, HeaderBar, type IconButtonProps } from './IconButton';
 export { Progress, type ProgressProps } from './Progress';
 export { Placeholder, LoadingRows, ErrorState, EmptyState } from './States';
 export { RadioCard, type RadioCardProps } from './RadioCard';

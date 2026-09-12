@@ -12,6 +12,7 @@ import { useGoBack } from '@/nav/useGoBack';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Icon } from '@/design/Icon';
 import {
+  BackButton,
   Button,
   Eyebrow,
   Fill,
@@ -107,12 +108,7 @@ export default function Swap() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
+          <BackButton onPress={() => goBack()} />
           <Text variant="cardTitle">Swap</Text>
         </View>
         <IconButton name="gear" accessibilityLabel="Swap settings" />

@@ -16,8 +16,8 @@ import { useGoBack } from '@/nav/useGoBack';
 import { chainLabel } from '@/chain';
 import {
   Button,
+  CloseButton,
   Fill,
-  IconButton,
   Keypad,
   Pill,
   Price,
@@ -204,14 +204,7 @@ export default function OrderTicket() {
         <Text variant="sheetTitle" color={colors.sheet.ink}>
           {symbol}
         </Text>
-        <IconButton
-          name="close"
-          accessibilityLabel="Close"
-          onPress={() => goBack()}
-          background="none"
-          color={colors.sheet.ink}
-          glyph={20}
-        />
+        <CloseButton onPress={() => goBack()} light />
       </View>
 
       <Segmented

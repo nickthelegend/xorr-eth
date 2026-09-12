@@ -8,9 +8,9 @@ import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   AssetMark,
+  CloseButton,
   EmptyState,
   Fill,
-  IconButton,
   Price,
   Row,
   Screen,
@@ -52,7 +52,7 @@ export default function Search() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Search</Text>
-        <IconButton name="close" accessibilityLabel="Close search" onPress={() => goBack()} />
+        <CloseButton onPress={() => goBack()} accessibilityLabel="Close search" />
       </View>
 
       <View

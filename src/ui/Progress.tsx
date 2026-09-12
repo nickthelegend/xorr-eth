@@ -12,7 +12,7 @@
 import React, { useEffect } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { IconButton } from './IconButton';
+import { BackButton } from './IconButton';
 import { Text } from './Text';
 import { timing, useReducedMotion } from './motion';
 import { colors, duration, space } from './tokens';
@@ -44,7 +44,7 @@ export function Progress({ step, total, onBack, style, testID }: ProgressProps) 
       testID={testID}
       style={[{ flexDirection: 'row', alignItems: 'center', gap: space.s14 }, style]}
     >
-      <IconButton name="back" accessibilityLabel="Back" onPress={onBack} />
+      <BackButton onPress={onBack} />
       <View
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: total, now: step }}

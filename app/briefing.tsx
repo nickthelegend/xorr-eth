@@ -15,7 +15,7 @@ import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  IconButton,
+  BackButton,
   Button,
   ErrorState,
   Fill,
@@ -56,7 +56,7 @@ export default function Briefing() {
       */}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-          <IconButton name="back" accessibilityLabel="Back" background="none" onPress={() => goBack()} />
+          <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Briefing</Text>
         </View>
         <Text variant="footnote" color={colors.ink28}>

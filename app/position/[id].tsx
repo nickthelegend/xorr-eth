@@ -18,12 +18,12 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { assetGradient } from '@/design/gradients';
 import {
   AssetMark,
+  BackButton,
   Button,
   ButtonRow,
   EmptyState,
   ErrorState,
   Fill,
-  IconButton,
   LoadingRows,
   NoteStrip,
   Pill,
@@ -119,12 +119,7 @@ export default function PositionScreen() {
       <View
         style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10, flex: 1, minWidth: 0 }}
       >
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         {p ? <AssetMark gradient={assetGradient(p.symbol)} {...logo} size={26} /> : null}
         <Text variant="cardTitle" numberOfLines={1}>
           {p ? `${p.symbol} ${p.side}` : 'Position'}

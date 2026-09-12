@@ -22,9 +22,9 @@ import React from 'react';
 import { View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  BackButton,
   Button,
   Fill,
-  IconButton,
   NoteStrip,
   Screen,
   SheetCard,
@@ -44,12 +44,7 @@ export default function Recovery() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle">Recovery</Text>
       </View>
 

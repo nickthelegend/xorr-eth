@@ -20,9 +20,9 @@ import { useGoBack } from '@/nav/useGoBack';
 import { assetGradient } from '@/design/gradients';
 import {
   AssetMark,
+  BackButton,
   Eyebrow,
   Fill,
-  IconButton,
   Pill,
   PillRow,
   Price,
@@ -70,12 +70,7 @@ export default function Watchlist() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Markets</Text>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
       </View>
 
       <PillRow style={{ marginTop: space.s16, flexGrow: 0 }}>

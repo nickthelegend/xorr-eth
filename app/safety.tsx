@@ -15,11 +15,11 @@ import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
+  BackButton,
   Button,
   ConsequenceCard,
   Eyebrow,
   Fill,
-  IconButton,
   Press,
   Row,
   Screen,
@@ -262,12 +262,7 @@ export default function Safety() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle">Safety</Text>
       </View>
 

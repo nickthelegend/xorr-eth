@@ -9,9 +9,9 @@ import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  BackButton,
   EmptyState,
   Fill,
-  IconButton,
   LoadingRows,
   Row,
   Screen,
@@ -46,12 +46,7 @@ export default function Inbox() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle">Inbox</Text>
       </View>
       <Text variant="secondary" style={{ marginTop: space.s10 }}>

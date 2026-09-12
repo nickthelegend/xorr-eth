@@ -14,13 +14,13 @@ import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  BackButton,
   Button,
   ButtonPair,
   Candlestick,
   DeltaChip,
   EmptyState,
   Fill,
-  IconButton,
   LoadingRows,
   NoteStrip,
   Pill,
@@ -86,12 +86,7 @@ export default function ProChart() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="cardTitle">{symbol}/USD</Text>
         {data?.feed === 'simulated' ? <Tag label="No price feed" small tone="warn" /> : null}
       </View>

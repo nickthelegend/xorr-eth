@@ -25,6 +25,8 @@ export interface IconButtonProps {
   /** Glyph size inside the circle. */
   glyph?: number;
   color?: string;
+  /** Glyph stroke. The icon set's 1.8 unless a control has to read heavier — see `BackButton`. */
+  strokeWidth?: number;
   /** Circle fill. `'none'` draws no circle — a bare glyph that still has a 44pt target. */
   background?: string | 'none';
   disabled?: boolean;
@@ -39,6 +41,7 @@ export function IconButton({
   circle = size.mark,
   glyph = size.stepperGlyph,
   color = colors.ink55,
+  strokeWidth,
   background = colors.surfaceAlt,
   disabled,
   style,
@@ -72,9 +75,89 @@ export function IconButton({
         once per render on every screen that draws an icon button — which is nearly all of them.
       */}
       <View style={{ pointerEvents: 'none' }}>
-        <Icon name={name} size={glyph} color={color} />
+        <Icon name={name} size={glyph} color={color} strokeWidth={strokeWidth} />
       </View>
     </Press>
+  );
+}
+
+/** Back's glyph: heavier than the set's 1.8, so a 20px chevron holds its own in a 44pt circle. */
+const BACK_GLYPH = 20;
+const BACK_STROKE = 2.4;
+
+/**
+ * Back — one control, drawn the same on every screen (2026-09-13).
+ *
+ * It used to be an `IconButton` drawn two ways: a bare grey chevron on most screens and every sheet,
+ * and the same 15px, 1.8-stroke glyph in a 34pt circle through `HeaderBar`. Both read as faint and
+ * small, and the product owner called every one of them bad. Now it is the whole 44pt target drawn as
+ * a circle in the control fill, with a white chevron at a heavier stroke.
+ *
+ * It does not navigate by itself — `src/ui` stays free of the router. Screens pass `useGoBack()`,
+ * which falls back to Home when there is no history to pop.
+ */
+export function BackButton({
+  onPress,
+  accessibilityLabel = 'Back',
+  style,
+  testID,
+}: {
+  onPress?: () => void;
+  accessibilityLabel?: string;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  return (
+    <IconButton
+      name="back"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      circle={size.hit}
+      glyph={BACK_GLYPH}
+      strokeWidth={BACK_STROKE}
+      color={colors.ink}
+      background={colors.control}
+      style={style}
+      testID={testID}
+    />
+  );
+}
+
+/** A cross reads larger than a chevron drawn at the same size, so close's glyph is a touch smaller. */
+const CLOSE_GLYPH = 18;
+
+/**
+ * Close — `BackButton`'s twin, for sheets that dismiss rather than pop (2026-09-13).
+ *
+ * The same 44pt circle and heavier stroke. `light` is for the white sheets — the order ticket, Auto
+ * Close, the strategy set-ups — where a dark circle would read as a hole in the page.
+ */
+export function CloseButton({
+  onPress,
+  accessibilityLabel = 'Close',
+  light = false,
+  style,
+  testID,
+}: {
+  onPress?: () => void;
+  accessibilityLabel?: string;
+  light?: boolean;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}) {
+  return (
+    <IconButton
+      name="close"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      circle={size.hit}
+      glyph={CLOSE_GLYPH}
+      strokeWidth={BACK_STROKE}
+      color={light ? colors.sheet.ink : colors.ink}
+      background={light ? colors.sheet.fill : colors.control}
+      style={style}
+      testID={testID}
+    />
   );
 }
 
@@ -112,7 +195,7 @@ export function HeaderBar({
         style,
       ]}
     >
-      {onBack ? <IconButton name="back" accessibilityLabel={backLabel} onPress={onBack} /> : null}
+      {onBack ? <BackButton onPress={onBack} accessibilityLabel={backLabel} /> : null}
       <View style={{ flex: 1 }}>{title}</View>
       {right}
     </View>

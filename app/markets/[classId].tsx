@@ -9,11 +9,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   AssetMark,
+  BackButton,
   Button,
   EmptyState,
   ErrorState,
   Fill,
-  IconButton,
   LoadingRows,
   Price,
   Row,
@@ -54,12 +54,7 @@ export default function ClassList() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8, flex: 1 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
+          <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle" numberOfLines={1}>
             {cls?.label ?? 'Markets'}
           </Text>

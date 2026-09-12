@@ -21,9 +21,9 @@ import React, { useCallback, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  BackButton,
   Eyebrow,
   Fill,
-  IconButton,
   Press,
   Price,
   Screen,
@@ -94,12 +94,7 @@ export default function Judge() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10, flex: 1 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
+          <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle" numberOfLines={1}>
             Check it yourself
           </Text>

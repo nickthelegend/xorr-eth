@@ -22,9 +22,9 @@ import {
   Button,
   ButtonRow,
   Candlestick,
+  CloseButton,
   EmptyState,
   Fill,
-  IconButton,
   LoadingRows,
   NoteStrip,
   Ruler,
@@ -213,14 +213,7 @@ export default function AutoClose() {
       <Text variant="sheetTitle" color={colors.sheet.ink}>
         Auto Close
       </Text>
-      <IconButton
-        name="close"
-        accessibilityLabel="Close"
-        onPress={() => goBack()}
-        background="none"
-        color={colors.sheet.ink}
-        glyph={20}
-      />
+      <CloseButton onPress={() => goBack()} light />
     </View>
   );
 

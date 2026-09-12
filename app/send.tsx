@@ -18,10 +18,10 @@ import { TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  BackButton,
   Button,
   Eyebrow,
   Fill,
-  IconButton,
   NoteStrip,
   Price,
   RadioCard,
@@ -80,12 +80,7 @@ export default function Send() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle">Send</Text>
       </View>
 

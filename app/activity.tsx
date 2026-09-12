@@ -15,7 +15,7 @@ import React, { useState } from 'react';
 import { Linking, ScrollView, Share, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  IconButton,
+  BackButton,
   Button,
   EmptyState,
   ErrorState,
@@ -138,7 +138,7 @@ export default function Activity() {
         exist on web at all. Same header as History, which had it right.
       */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton name="back" accessibilityLabel="Back" background="none" onPress={() => goBack()} />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle">Activity</Text>
       </View>
       <Text variant="secondary" style={{ marginTop: space.s10 }}>

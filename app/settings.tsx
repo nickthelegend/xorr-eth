@@ -8,9 +8,9 @@ import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import { useAuth } from '@/auth/useAuth';
 import {
+  CloseButton,
   Eyebrow,
   Fill,
-  IconButton,
   Price,
   Row,
   Screen,
@@ -94,7 +94,7 @@ export default function Settings() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Settings</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
+        <CloseButton onPress={() => goBack()} />
       </View>
 
       <Fill style={{ marginTop: space.s20 }}>

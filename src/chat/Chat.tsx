@@ -23,6 +23,7 @@ import {
   AssetMark,
   Button,
   ButtonRow,
+  CloseButton,
   Eyebrow,
   IconButton,
   Press,
@@ -268,13 +269,7 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
             <View style={{ flex: 1 }} />
           )}
           {onClose ? (
-            <IconButton
-              name="close"
-              accessibilityLabel="Close chat"
-              onPress={onClose}
-              background="none"
-              color={colors.ink40}
-            />
+            <CloseButton onPress={onClose} accessibilityLabel="Close chat" />
           ) : (
             <IconButton
               name="more"

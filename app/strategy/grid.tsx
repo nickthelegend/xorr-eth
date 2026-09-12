@@ -14,9 +14,9 @@ import { ScrollView, TextInput, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
+  CloseButton,
   Eyebrow,
   Fill,
-  IconButton,
   Press,
   Price,
   Screen,
@@ -154,14 +154,7 @@ export default function GridSetup() {
         <Text variant="sheetTitle" color={colors.sheet.ink}>
           Range accumulation
         </Text>
-        <IconButton
-          name="close"
-          accessibilityLabel="Close"
-          onPress={() => goBack()}
-          background="none"
-          color={colors.sheet.ink}
-          glyph={20}
-        />
+        <CloseButton onPress={() => goBack()} light />
       </View>
 
       <Segmented

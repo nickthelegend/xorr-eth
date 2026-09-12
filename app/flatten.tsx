@@ -19,9 +19,9 @@ import { ScrollView, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
+  CloseButton,
   Eyebrow,
   Fill,
-  IconButton,
   Price,
   Screen,
   SheetCard,
@@ -77,7 +77,7 @@ export default function Flatten() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Sell everything</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
+        <CloseButton onPress={() => goBack()} />
       </View>
 
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>

@@ -10,9 +10,9 @@ import { TextInput, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
+  CloseButton,
   Eyebrow,
   Fill,
-  IconButton,
   NoteStrip,
   Screen,
   Text,
@@ -114,7 +114,7 @@ export default function NewAlert() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">New alert</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
+        <CloseButton onPress={() => goBack()} />
       </View>
 
       <Text variant="secondary" style={{ marginTop: space.s10 }}>

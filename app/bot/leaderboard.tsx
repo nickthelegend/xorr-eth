@@ -15,6 +15,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { agentGradient } from '@/design/gradients';
 import {
   AssetMark,
+  BackButton,
   Fill,
   IconButton,
   LoadingRows,
@@ -60,12 +61,7 @@ export default function Leaderboard() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
+          <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Leaderboard</Text>
         </View>
         <IconButton

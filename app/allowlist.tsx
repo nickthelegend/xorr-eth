@@ -12,10 +12,10 @@ import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  BackButton,
   EmptyState,
   Button,
   Fill,
-  IconButton,
   Price,
   Row,
   Screen,
@@ -65,12 +65,7 @@ export default function Allowlist() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle">Allowlist</Text>
       </View>
 

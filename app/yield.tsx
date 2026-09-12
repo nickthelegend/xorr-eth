@@ -14,9 +14,9 @@ import { ScrollView, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
+  CloseButton,
   Eyebrow,
   Fill,
-  IconButton,
   Press,
   Price,
   Screen,
@@ -65,7 +65,7 @@ export default function Yield() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Earning at Aave</Text>
-        <IconButton name="close" accessibilityLabel="Close" onPress={() => goBack()} />
+        <CloseButton onPress={() => goBack()} />
       </View>
 
       <Fill style={{ marginTop: space.s16 }}>

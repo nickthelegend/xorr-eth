@@ -17,8 +17,8 @@ import { useGoBack } from '@/nav/useGoBack';
 import { agentGradient } from '@/design/gradients';
 import {
   AgentOrb,
+  BackButton,
   Fill,
-  IconButton,
   LoadingRows,
   Press,
   Screen,
@@ -69,12 +69,7 @@ export default function Roster() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
+          <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Agents</Text>
         </View>
         <Text variant="footnote" color={colors.ink28}>

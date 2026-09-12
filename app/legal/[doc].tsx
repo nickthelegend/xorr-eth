@@ -11,9 +11,9 @@ import { ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  BackButton,
   EmptyState,
   Fill,
-  IconButton,
   NoteStrip,
   Screen,
   Text,
@@ -40,12 +40,7 @@ export default function LegalDoc() {
     return (
       <Screen>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
+          <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle" numberOfLines={1} style={{ flex: 1 }}>
             Not found
           </Text>
@@ -64,12 +59,7 @@ export default function LegalDoc() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <IconButton
-          name="back"
-          accessibilityLabel="Back"
-          background="none"
-          onPress={() => goBack()}
-        />
+        <BackButton onPress={() => goBack()} />
         <Text variant="screenTitle" numberOfLines={1} style={{ flex: 1 }}>
           {entry.title}
         </Text>

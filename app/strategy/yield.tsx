@@ -15,9 +15,9 @@ import { ScrollView, View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
+  CloseButton,
   Eyebrow,
   Fill,
-  IconButton,
   Keypad,
   MINUS,
   Price,
@@ -123,14 +123,7 @@ export default function YieldSetup() {
         <Text variant="sheetTitle" color={colors.sheet.ink}>
           Idle cash to yield
         </Text>
-        <IconButton
-          name="close"
-          accessibilityLabel="Close"
-          onPress={() => goBack()}
-          background="none"
-          color={colors.sheet.ink}
-          glyph={20}
-        />
+        <CloseButton onPress={() => goBack()} light />
       </View>
 
       {/*
