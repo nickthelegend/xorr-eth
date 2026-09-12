@@ -1,5 +1,6 @@
 /**
- * Resilient JSON GET for the executor.
+ * Resilient JSON reads for the executor — GET, and POST for read APIs that take their question as a
+ * body.
  *
  * The public price tiers rate-limit hard (HTTP 429). A trading server that drops a scheduled buy
  * because a chart refreshed somewhere else is worse than one that waits a second, so this layer:
@@ -116,6 +117,7 @@ async function rawGet<T>(
   timeoutMs: number,
   headers: Record<string, string> = {},
   opts: GetOptions = {},
+  body?: string,
 ): Promise<T> {
   const lane = laneFor(url);
   const host = new URL(url).host;
@@ -133,7 +135,7 @@ async function rawGet<T>(
    * not politely return 503. So the whole attempt loop is wrapped, and any failure counts.
    */
   try {
-    return await attempt<T>(url, timeoutMs, headers, lane, opts.attempts ?? maxAttempts());
+    return await attempt<T>(url, timeoutMs, headers, lane, opts.attempts ?? maxAttempts(), body);
   } catch (e) {
     lane.failures += 1;
     if (lane.failures >= BREAKER_THRESHOLD && lane.openUntil <= Date.now()) {
@@ -150,6 +152,7 @@ async function attempt<T>(
   headers: Record<string, string>,
   lane: Lane,
   attempts: number,
+  body?: string,
 ): Promise<T> {
   let lastStatus = 0;
   let lastError: Error | undefined;
@@ -163,7 +166,14 @@ async function attempt<T>(
     try {
       const res = await fetch(url, {
         signal: ctrl.signal,
-        headers: { accept: 'application/json', ...headers },
+        // A body is a read API that takes its question as JSON — still a read, retried and cached
+        // exactly like a GET.
+        ...(body === undefined ? {} : { method: 'POST', body }),
+        headers: {
+          accept: 'application/json',
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...headers,
+        },
       });
       lastStatus = res.status;
       if (res.status === 429 || res.status >= 500) {
@@ -202,6 +212,43 @@ async function attempt<T>(
   throw new Error(`${lastStatus} after ${attempts} attempts: ${url}`);
 }
 
+/** The cache and in-flight bookkeeping both reads share, keyed by what was asked. */
+async function cachedRead<T>(
+  key: string,
+  url: string,
+  ttlMs: number,
+  timeoutMs: number,
+  headers: Record<string, string>,
+  opts: GetOptions,
+  body?: string,
+): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
+
+  // Two callers wanting the same URL at the same moment should cost one request, not two queue
+  // slots. This is what keeps a page that mounts three components off the rate limiter.
+  const pending = inflight.get(key);
+  if (pending) return pending as Promise<T>;
+
+  const lane = laneFor(url);
+  const run = lane.queue.then(() => rawGet<T>(url, timeoutMs, headers, opts, body));
+  lane.queue = run.catch(() => undefined);
+
+  const tracked = run.then(
+    (value) => {
+      cache.set(key, { at: Date.now(), value });
+      inflight.delete(key);
+      return value;
+    },
+    (e: unknown) => {
+      inflight.delete(key);
+      throw e;
+    },
+  );
+  inflight.set(key, tracked);
+  return tracked;
+}
+
 export async function getJson<T>(
   url: string,
   ttlMs = 30_000,
@@ -209,31 +256,33 @@ export async function getJson<T>(
   headers: Record<string, string> = {},
   opts: GetOptions = {},
 ): Promise<T> {
-  const hit = cache.get(url);
-  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
+  return cachedRead<T>(url, url, ttlMs, timeoutMs, headers, opts);
+}
 
-  // Two callers wanting the same URL at the same moment should cost one request, not two queue
-  // slots. This is what keeps a page that mounts three components off the rate limiter.
-  const pending = inflight.get(url);
-  if (pending) return pending as Promise<T>;
+/**
+ * The cache key for a POST read: the URL and the exact question asked of it.
+ *
+ * Two different questions to one endpoint — BTC candles and ETH candles — are two answers, so the
+ * body is part of the key. Pass it to `staleValue` for the last-known-good fallback.
+ */
+export function postKey(url: string, payload: unknown): string {
+  return `${url}#${JSON.stringify(payload)}`;
+}
 
-  const lane = laneFor(url);
-  const run = lane.queue.then(() => rawGet<T>(url, timeoutMs, headers, opts));
-  lane.queue = run.catch(() => undefined);
-
-  const tracked = run.then(
-    (value) => {
-      cache.set(url, { at: Date.now(), value });
-      inflight.delete(url);
-      return value;
-    },
-    (e: unknown) => {
-      inflight.delete(url);
-      throw e;
-    },
-  );
-  inflight.set(url, tracked);
-  return tracked;
+/**
+ * A read that has to be POSTed — Hyperliquid's `/info` takes every question as a JSON body.
+ *
+ * Same lane, breaker, retries and cache as `getJson`. Only for reads: a retried write could do its
+ * thing twice, and nothing here would know.
+ */
+export async function postJson<T>(
+  url: string,
+  payload: unknown,
+  ttlMs = 30_000,
+  timeoutMs = 15_000,
+  opts: GetOptions = {},
+): Promise<T> {
+  return cachedRead<T>(postKey(url, payload), url, ttlMs, timeoutMs, {}, opts, JSON.stringify(payload));
 }
 
 /**

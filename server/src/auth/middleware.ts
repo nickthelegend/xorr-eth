@@ -45,6 +45,8 @@ const PUBLIC_PATHS = new Set([
   '/metrics',
   /** A second opinion on a public price is still a public price. */
   '/market/crosscheck',
+  /** A futures venue's public market data — the Futures screens' list. */
+  '/market/futures',
 ]);
 
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */

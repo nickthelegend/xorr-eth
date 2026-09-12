@@ -29,7 +29,8 @@ import { currentWallet } from './wallet-context.js';
 import { isAddress, type Address } from 'viem';
 import { addressOfBasename, basenameOf } from '../evm/basename.js';
 import type { Context } from 'hono';
-import { perpMetrics, PriceTooSlow } from '../market/perp.js';
+import { findPerp, perpMetrics, PriceTooSlow } from '../market/perp.js';
+import { PERP_RANGES, perpCandles, perpMarkets, type PerpRange } from '../market/hyperliquid.js';
 import { crossCheck } from '../market/crosscheck.js';
 
 export const market = new Hono();
@@ -619,10 +620,10 @@ function keepPricesFresh(): void {
 
 
 /**
- * GET /perp/:symbol — mark price and funding schedule.
+ * GET /perp/:symbol — one futures contract, from the venue that lists it.
  *
- * Public: a mark price is not user data. 404 when there is no spot feed, because a perp screen
- * with no mark has nothing true to put on it.
+ * Public: a venue's market data is not user data. 404 when no venue lists the contract, because a
+ * futures screen with no mark has nothing true to put on it.
  */
 market.get('/perp/:symbol', async (c) => {
   let m;
@@ -630,17 +631,48 @@ market.get('/perp/:symbol', async (c) => {
     m = await perpMetrics(c.req.param('symbol'));
   } catch (e) {
     /*
-     * "The feed is cold" is a different answer from "this contract has no feed", and only one of
+     * "The venue is slow" is a different answer from "there is no such contract", and only one of
      * them is worth retrying. Same shape as `/market/ohlc`'s warming reply.
      */
     if (e instanceof PriceTooSlow) {
       c.header('retry-after', '3');
-      return c.json({ error: 'warming', detail: 'The price feed is being fetched; retry shortly.' }, 503);
+      return c.json({ error: 'warming', detail: 'The futures venue did not answer; retry shortly.' }, 503);
     }
     throw e;
   }
-  if (!m) return c.json({ error: 'no_feed', detail: 'No spot feed for this contract.' }, 404);
+  if (!m) return c.json({ error: 'no_feed', detail: 'No futures contract for this symbol.' }, 404);
   return c.json(m);
+});
+
+/**
+ * GET /market/futures — every live perpetual on Hyperliquid, busiest first (2026-09-13).
+ *
+ * Public, like the rest of `/market/*`. xorr does not trade these; this is what the Futures screens
+ * draw.
+ */
+market.get('/market/futures', async (c) => {
+  try {
+    return c.json({ venue: 'Hyperliquid', markets: await perpMarkets() });
+  } catch {
+    c.header('retry-after', '3');
+    return c.json({ error: 'warming', detail: 'The futures venue did not answer; retry shortly.' }, 503);
+  }
+});
+
+/** GET /perp/:symbol/candles?range=1D|1W|1M|1Y — the venue's own candles for one contract. */
+market.get('/perp/:symbol/candles', async (c) => {
+  const range = c.req.query('range') ?? '1D';
+  if (!(PERP_RANGES as readonly string[]).includes(range)) {
+    return c.json({ error: 'bad_range', detail: `range must be one of ${PERP_RANGES.join(', ')}` }, 400);
+  }
+  try {
+    const contract = findPerp(await perpMarkets(), c.req.param('symbol'));
+    if (!contract) return c.json({ error: 'no_feed', detail: 'No futures contract for this symbol.' }, 404);
+    return c.json(await perpCandles(contract.symbol, range as PerpRange));
+  } catch {
+    c.header('retry-after', '3');
+    return c.json({ error: 'warming', detail: 'The futures venue did not answer; retry shortly.' }, 503);
+  }
 });
 
 /**
