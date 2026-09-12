@@ -68,25 +68,39 @@ const card = {
  * could not be read, and never a guessed series.
  */
 function useClosesBySymbol(symbolsKey: string, timeframe: '1H' | '4H'): Record<string, number[] | null> {
-  const [closes, setCloses] = useState<Record<string, number[] | null>>({});
+  /*
+   * Tagged with the question it answers, so a new set of symbols reads as empty until its own answers
+   * arrive — rather than clearing state synchronously inside the effect, which re-rendered for nothing.
+   */
+  const key = `${timeframe}:${symbolsKey}`;
+  const [answered, setAnswered] = useState<{ key: string; closes: Record<string, number[] | null> }>({
+    key: '',
+    closes: NO_CLOSES,
+  });
   useEffect(() => {
     let alive = true;
-    setCloses({});
     for (const symbol of symbolsKey ? symbolsKey.split(',') : []) {
       repos.markets
         .candles(symbol, timeframe)
         .then((candles) => toCandles(candles.bars).map((c) => c.close))
         .catch(() => null)
         .then((value) => {
-          if (alive) setCloses((prev) => ({ ...prev, [symbol]: value }));
+          if (!alive) return;
+          setAnswered((prev) => ({
+            key,
+            closes: { ...(prev.key === key ? prev.closes : NO_CLOSES), [symbol]: value },
+          }));
         });
     }
     return () => {
       alive = false;
     };
-  }, [symbolsKey, timeframe]);
-  return closes;
+  }, [key, symbolsKey, timeframe]);
+  return answered.key === key ? answered.closes : NO_CLOSES;
 }
+
+/** One empty map, so "nothing answered yet" keeps the same identity across renders. */
+const NO_CLOSES: Record<string, number[] | null> = {};
 
 /** Take profit and stop loss on a symbol, from the exit rules set on it — and nothing when there are none. */
 function exitLevels(strategies: readonly Strategy[], symbol: string, entry: number): PositionLevel[] {

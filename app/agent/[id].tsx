@@ -10,7 +10,7 @@
  * Earnings Desk, idle cash for Yield Keeper, exits for Drawdown Guard — and lists this wallet's
  * strategies of that kind. The mapping is the mandate, written down; it attributes no run to anyone.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
@@ -68,11 +68,9 @@ export default function AgentDetail() {
 
   const agent = (agents.data ?? []).find((a) => a.id === id || a.personaId === id);
   const kinds = agent ? (MANDATE_KINDS[agent.name] ?? []) : [];
-  const kindsKey = kinds.join(',');
-  const mine = useMemo(
-    () => (strategies.data ?? []).filter((s) => kindsKey.split(',').includes(s.kind) && s.state !== 'ended'),
-    [strategies.data, kindsKey],
-  );
+  // Plain: the React Compiler memoizes this itself, and could not preserve a hand-written memo keyed
+  // on a joined string.
+  const mine = (strategies.data ?? []).filter((s) => kinds.includes(s.kind) && s.state !== 'ended');
   const addRoute = STRATEGY_LADDER.find((e) => kinds.includes(e.kind))?.route ?? '/strategies';
 
   const hire = async () => {

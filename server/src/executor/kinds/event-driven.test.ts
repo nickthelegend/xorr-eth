@@ -8,6 +8,12 @@
  */
 process.env.ONEINCH_API_KEY ??= 'test-key';
 process.env.XORR_CHAIN ??= 'base-sepolia';
+/*
+ * base-sepolia is a persistent chain, so the executor refuses to invent a delegate key there. This
+ * passed only on machines that happened to have one on disk. Anvil's public development key #0 — it
+ * holds nothing anywhere that matters, and no test here signs anything.
+ */
+process.env.DELEGATE_PRIVATE_KEY ??= '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 

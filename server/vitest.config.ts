@@ -34,6 +34,14 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     exclude: ['**/node_modules/**'],
+    // The same placeholders as the root config, for the same reason — see vitest.config.mts.
+    env: process.env.LIVE
+      ? {}
+      : {
+          ONEINCH_API_KEY: process.env.ONEINCH_API_KEY ?? 'unit-test-placeholder',
+          PRIVY_APP_ID: process.env.PRIVY_APP_ID ?? 'unit-test-placeholder',
+          PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET ?? 'unit-test-placeholder',
+        },
     fileParallelism: !process.env.LIVE ? undefined : false,
     globalSetup: ['../tools/wait-for-warm.ts'],
   },

@@ -15,7 +15,8 @@
     "test:live": "LIVE=1 vitest run live.test",
     "postinstall": "patch-package",
     "build:base": "node scripts/build-base.mjs",
-    "deploy:web": "node scripts/build-web.mjs && cd dist-web && vercel link --yes --project xorr-eth && vercel deploy --prod --yes"
+    "deploy:web": "node scripts/build-web.mjs && cd dist-web && vercel link --yes --project xorr-eth && vercel deploy --prod --yes",
+    "deploy:executor": "node scripts/deploy-executor.mjs"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
@@ -59,7 +60,7 @@
     "react-native-web": "^0.21.2",
     "react-native-webview": "13.16.1",
     "react-native-worklets": "0.10.1",
-    "viem": "^2.56.3",
+    "viem": "2.56.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

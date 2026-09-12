@@ -59,17 +59,19 @@ export function RollingNumber({ value, delay = 0, containerStyle, ...price }: Ro
 
   useEffect(() => {
     // Once, on mount. `ReduceMotion.System` asks the OS as it runs; `useReducedMotion` answers late.
-    clock.value = withDelay(
-      delay,
-      withTiming(span, { duration: span, easing: Easing.linear, reduceMotion: ReduceMotion.System }),
-      ReduceMotion.System,
+    clock.set(
+      withDelay(
+        delay,
+        withTiming(span, { duration: span, easing: Easing.linear, reduceMotion: ReduceMotion.System }),
+        ReduceMotion.System,
+      ),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     // The setting answered after mount: land the figure now rather than finish the ripple.
-    if (reduced) clock.value = span;
+    if (reduced) clock.set(span);
   }, [reduced, clock, span]);
 
   return (
@@ -102,7 +104,7 @@ function RollChar({
   children: string;
 }) {
   const style = useAnimatedStyle(() => {
-    const t = Math.min(1, Math.max(0, (clock.value - slot * DIGIT_STAGGER) / duration.enter));
+    const t = Math.min(1, Math.max(0, (clock.get() - slot * DIGIT_STAGGER) / duration.enter));
     const eased = easeOut(t);
     return { opacity: eased, transform: [{ translateY: (1 - eased) * RISE }] };
   });

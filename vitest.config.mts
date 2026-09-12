@@ -39,6 +39,21 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'server/src/**/*.test.ts'],
     exclude: process.env.LIVE ? [] : ['**/node_modules/**', '**/*.live.test.ts'],
     /*
+     * Placeholder credentials for the unit run, only where none are set.
+     *
+     * `venues/oneinch.ts` and `auth/privy.ts` throw at import without their keys — deliberately, since
+     * neither has an offline mode — and unit suites import them transitively. They passed only because
+     * this file loads the developer's `.env`; a clean checkout, CI included, could not even collect
+     * them. No unit test calls 1inch or Privy, and the live run (LIVE=1) still requires the real keys.
+     */
+    env: process.env.LIVE
+      ? {}
+      : {
+          ONEINCH_API_KEY: process.env.ONEINCH_API_KEY ?? 'unit-test-placeholder',
+          PRIVY_APP_ID: process.env.PRIVY_APP_ID ?? 'unit-test-placeholder',
+          PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET ?? 'unit-test-placeholder',
+        },
+    /*
      * The live suite runs one file at a time.
      *
      * `http/get.ts` serialises outbound requests per host with a minimum spacing, which is the

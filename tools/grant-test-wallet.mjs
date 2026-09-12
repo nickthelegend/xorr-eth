@@ -24,6 +24,7 @@
  *
  * Run: node tools/grant-test-wallet.mjs [days]      (days: 1, 3, 7 or 30 — default 30)
  */
+import { Buffer } from 'node:buffer';
 import { chromium } from 'playwright';
 
 try {

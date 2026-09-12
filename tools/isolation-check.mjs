@@ -11,6 +11,7 @@
  *
  * Run: node tools/isolation-check.mjs
  */
+import { Buffer } from 'node:buffer';
 import { chromium } from 'playwright';
 
 try { process.loadEnvFile(new URL('../.env', import.meta.url)); } catch {}
@@ -32,7 +33,11 @@ const other = accounts.find((a) => a.email !== primaryEmail);
 if (!other) throw new Error('needs a second Privy test credential and there is only one');
 
 let pass = 0, fail = 0;
-const check = (id, ok, detail) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${id} ${detail}`); ok ? pass++ : fail++; };
+const check = (id, ok, detail) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'} ${id} ${detail}`);
+  if (ok) pass++;
+  else fail++;
+};
 
 const browser = await chromium.launch();
 
