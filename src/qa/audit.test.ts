@@ -121,7 +121,12 @@ describe('13.6 motion audit — animations.md', () => {
     expect(offenders, `animate without a reduced-motion path:\n${offenders.join('\n')}`).toEqual([]);
   });
 
-  it('no entrance animations on screens — animations.md §5', () => {
+  /*
+   * The policy changed on 2026-09-12: screens now arrive (see motion.ts). The rule that survives is
+   * WHERE arrival motion is made — `<Rise>` and `<RollingNumber>` in src/ui, which honour reduced
+   * motion — so a screen that reaches for reanimated's builders directly still fails here.
+   */
+  it('screens arrive only through <Rise> — never a raw entrance builder', () => {
     const offenders: string[] = [];
     for (const f of screenFiles) {
       const src = stripComments(fs.readFileSync(f, 'utf8'));
@@ -143,9 +148,16 @@ describe('13.6 motion audit — animations.md', () => {
     expect(offenders, offenders.join('\n')).toEqual([]);
   });
 
-  it('the status dot never pulses — animations.md is explicit', () => {
+  it('the tab bar never animates itself — nothing on it moves while you read the screen', () => {
     const tabBar = fs.readFileSync(path.join(UI, 'TabBar.tsx'), 'utf8');
     expect(stripComments(tabBar)).not.toMatch(/withRepeat|withTiming|Animated/);
+  });
+
+  it('arrival motion honours reduced motion — the builder and the wrapper both ask', () => {
+    const motion = stripComments(fs.readFileSync(path.join(UI, 'motion.ts'), 'utf8'));
+    const rise = stripComments(fs.readFileSync(path.join(UI, 'Rise.tsx'), 'utf8'));
+    expect(motion).toMatch(/ReduceMotion\.System/);
+    expect(rise).toMatch(/useReducedMotion/);
   });
 });
 

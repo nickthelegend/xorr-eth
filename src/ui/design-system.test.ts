@@ -109,34 +109,44 @@ describe('type scale — design.md §2', () => {
 
 describe('motion — animations.md', () => {
   /*
-   * 150/180/250 is the INTERACTION scale and is still closed. `pulse` is not on it: it is the
-   * ambient skeleton loop, which nobody triggers and which is not going anywhere, and at 250 it
-   * strobes. animations.md carries the row and the reasoning. Anything else new still has to argue
+   * 150/180/250 is the INTERACTION scale and is still closed. Three durations sit off it, each with
+   * its reason in tokens.ts: `pulse`, the ambient skeleton loop; and — since 2026-09-12 — `enter` and
+   * `draw`, a screen ARRIVING rather than a control responding. Anything else new still has to argue
    * its way in here first.
    */
-  it('interaction durations are 150 / 180 / 250, and the only other one is the skeleton pulse', () => {
-    const { pulse, ...interaction } = duration;
+  it('interaction is 150 / 180 / 250; arrival is enter and draw; the skeleton pulses', () => {
+    const { pulse, enter, draw, ...interaction } = duration;
     expect(Object.values(interaction).sort((a, b) => a - b)).toEqual([150, 180, 250]);
+    expect(enter).toBe(420);
+    expect(draw).toBe(700);
     expect(pulse).toBe(900);
   });
 
-  // The whole animated inventory, and each one is a row in animations.md's table:
-  //   Switch     knob transform + track background   180ms
-  //   Segmented  thumb background                    150ms
-  //   Progress   track width                         250ms  ("reads as progress")
-  //   States     skeleton block opacity, looping     900ms  (the only loop in the app)
-  // A fifth entry appearing here means a primitive started animating something the spec
-  // does not sanction. Add the row to animations.md first, or take the animation out.
-  it('only Switch, Segmented, Progress and the skeleton animate', () => {
+  // The whole animated inventory:
+  //   Switch          knob transform + track background   180ms
+  //   Segmented       thumb background                    150ms
+  //   Progress        track width                         250ms  ("reads as progress")
+  //   States          skeleton block opacity, looping     900ms  (the only loop in the app)
+  //   Rise            a section fading up into place      420ms  (arrival, 2026-09-12)
+  //   RollingNumber   digits rising into their slots      420ms  (arrival, 28ms apart — never counting)
+  //   AreaChart       the line revealed left to right     700ms  (arrival)
+  //   Candlestick     the candles revealed left to right  700ms  (arrival)
+  // A new entry here means a primitive started animating something the policy does not sanction.
+  // Argue it into motion.ts first, or take the animation out.
+  it('only the sanctioned primitives animate', () => {
     const animated = sources()
       .filter(({ src }) => /from 'react-native-reanimated'/.test(src))
       .map(({ rel }) => rel)
       .sort();
     expect(animated).toEqual([
       'Progress.tsx',
+      'Rise.tsx',
+      'RollingNumber.tsx',
       'Segmented.tsx',
       'States.tsx',
       'Switch.tsx',
+      'charts/AreaChart.tsx',
+      'charts/Candlestick.tsx',
       'motion.ts',
     ]);
   });
@@ -284,8 +294,21 @@ describe('candle projection — design.md §6', () => {
     { open: 66300, high: 66620, low: 66240, close: 66560 },
   ];
 
-  it('tight is maxHigh + 120 / minLow − 120', () => {
+  it('tight pads by a fifth of the range, capped at 120 — the prototype series still gets ±120', () => {
+    // Range 600, a fifth is 120: the $66k prototype draws exactly as design.md §6 wrote it.
     expect(tightProjection(series)).toEqual({ hi: 66620 + 120, lo: 66020 - 120 });
+  });
+
+  it('a cheap asset fills the box instead of flattening into a line', () => {
+    // AAVE at ~$126 with a two-dollar day. A fixed ±120 made the range 1% of the box.
+    const cheap: Candle[] = [
+      { open: 125.1, high: 126.4, low: 124.9, close: 126.0 },
+      { open: 126.0, high: 126.9, low: 125.6, close: 126.2 },
+    ];
+    const p = tightProjection(cheap);
+    const range = 126.9 - 124.9;
+    expect(p.hi - p.lo).toBeCloseTo(range * 1.4, 6);
+    expect((range / (p.hi - p.lo)) * 100).toBeGreaterThan(70);
   });
 
   it('wide brackets the TP and SL prices at ±150, at any setting', () => {
@@ -384,7 +407,9 @@ describe('edge cases — section W of docs/QA-UI-PLAN.md', () => {
   it('a single candle projects without dividing by zero', () => {
     const one = [{ open: 10, high: 12, low: 8, close: 11 }];
     const p = tightProjection(one);
-    expect(p).toEqual({ hi: 12 + 120, lo: 8 - 120 });
+    // Range 4, a fifth is 0.8 — relative padding, not the old fixed 120.
+    expect(p.hi).toBeCloseTo(12.8, 9);
+    expect(p.lo).toBeCloseTo(7.2, 9);
     expect(Number.isFinite(candleGeometry(p, one[0]!).bodyTopPct)).toBe(true);
   });
 

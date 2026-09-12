@@ -288,7 +288,17 @@ export const duration = Object.freeze({
   /** Leaderboard re-sort, KYC progress. Long enough for the eye to follow one bar. */
   slow: 250,
   /**
-   * The skeleton pulse, and the only duration outside the 150/180/250 interaction scale.
+   * An arrival: a section or row rising into place when a screen appears (2026-09-12).
+   *
+   * Outside the 150/180/250 interaction scale on purpose. That scale is for a control the user
+   * touched, where anything slower reads as lag. An arrival answers nothing the user did — it is
+   * the screen coming in — and at 250 it reads as a flicker rather than a rise.
+   */
+  enter: 420,
+  /** A chart line drawing itself left to right, and a figure's digits rolling into place. */
+  draw: 700,
+  /**
+   * The skeleton pulse, and the one other duration outside the 150/180/250 interaction scale.
    *
    * That scale is calibrated for a transition the user CAUSED — under 150 reads as a glitch, over
    * 250 reads as lag on a control they just touched. A skeleton is neither: nobody pressed it, and
@@ -408,8 +418,17 @@ export const chart = Object.freeze({
     bodyRadius: 3,
     /** 1.4% of the plot box — the doji floor, so a flat candle still draws. */
     bodyMinPct: 1.4,
-    /** Tight projection (pro chart): candles fill the box. */
+    /**
+     * Tight projection (pro chart): candles fill the box.
+     *
+     * `tightPad` is the CAP, in price. The padding itself is relative (2026-09-12): a fifth of the
+     * series' own range, or a tenth of a percent of the price when the range is flat. A fixed ±120
+     * suited the $66,000 prototype and flattened every cheap asset into one line — AAVE at $126 drew
+     * as a strip, because 120 dollars of padding dwarfed a day's two-dollar range.
+     */
     tightPad: 120,
+    tightPadOfRange: 0.2,
+    tightPadOfPrice: 0.001,
     /** Wide projection (Auto Close): bounds follow the TP/SL prices. */
     widePad: 150,
     axisTicks: [0, 0.25, 0.5, 0.75, 1] as const,

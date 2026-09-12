@@ -48,11 +48,22 @@ export interface Projection {
 }
 
 /**
- * Tight — the pro chart. `tHi = maxHigh + 120`, `tLo = minLow − 120`. Candles fill the box.
+ * Tight — the pro chart. Candles fill the box.
+ *
+ * The padding is relative (2026-09-12): a fifth of the series' own range, or a tenth of a percent of
+ * the price when the range is flat, capped at `chart.candle.tightPad`. The prototype's ±120 is still
+ * exactly what a $66k series gets; a $126 coin now fills the box instead of drawing as one line.
  */
 export function tightProjection(series: readonly Candle[]): Projection {
   const { maxHigh, minLow } = extent(series);
-  return { hi: maxHigh + chart.candle.tightPad, lo: minLow - chart.candle.tightPad };
+  const pad = Math.min(
+    chart.candle.tightPad,
+    Math.max(
+      (maxHigh - minLow) * chart.candle.tightPadOfRange,
+      Math.abs(maxHigh) * chart.candle.tightPadOfPrice,
+    ),
+  );
+  return { hi: maxHigh + pad, lo: minLow - pad };
 }
 
 /**

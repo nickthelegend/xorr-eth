@@ -24,12 +24,16 @@
  * driving the real app on a simulator; it is invisible on web, where the keyboard is hardware.
  */
 import React from 'react';
-import { Keyboard, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Keyboard, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, space } from './tokens';
 
 /** The breathing room design.md folds into its 54px top padding. */
 const TOP_BREATHING_ROOM = space.s10;
+
+/** The grabber at the top of a sheet — the reference video's notch, as a plain handle. */
+const GRABBER_W = 36;
+const GRABBER_H = 5;
 
 export interface ScreenProps {
   children?: React.ReactNode;
@@ -42,6 +46,15 @@ export interface ScreenProps {
   tabBar?: boolean;
   /** The light sheet (Auto Close, order ticket). Everything else is true black. */
   light?: boolean;
+  /**
+   * Presented as an iOS sheet (`presentation: 'modal'`) rather than pushed.
+   *
+   * A sheet already starts below the status bar, and the safe-area insets come from the window, not
+   * the sheet — so the usual top padding opened an empty band the height of the status bar inside
+   * it. On iOS a sheet gets a grabber and a small margin instead. Android presents full-screen, so
+   * there the status bar still needs its inset.
+   */
+  sheet?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -51,10 +64,12 @@ export function Screen({
   gutter = 'gutter',
   tabBar = false,
   light = false,
+  sheet = false,
   style,
   testID,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const asSheet = sheet && Platform.OS === 'ios';
 
   const paddingHorizontal =
     gutter === 'none' ? 0 : gutter === 'sheet' ? space.sheetGutter : space.gutter;
@@ -75,13 +90,25 @@ export function Screen({
         {
           flex: 1,
           backgroundColor: light ? colors.sheet.bg : colors.bg,
-          paddingTop: insets.top + TOP_BREATHING_ROOM,
+          paddingTop: asSheet ? space.s8 : insets.top + TOP_BREATHING_ROOM,
           paddingBottom: tabBar ? 0 : Math.max(insets.bottom, space.s26),
           paddingHorizontal,
         },
         style,
       ]}
     >
+      {asSheet ? (
+        <View
+          style={{
+            alignSelf: 'center',
+            width: GRABBER_W,
+            height: GRABBER_H,
+            borderRadius: GRABBER_H / 2,
+            backgroundColor: light ? colors.sheet.tick : colors.ink28,
+            marginBottom: space.s8,
+          }}
+        />
+      ) : null}
       {children}
     </View>
   );

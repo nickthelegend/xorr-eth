@@ -15,15 +15,19 @@
  * that is an `feDropShadow` with no offset and `stdDeviation` = blur / 2, which is the
  * CSS-to-SVG conversion for a blur radius.
  *
- * animations.md: candles are **not animated**. No draw-on, no grow-from-baseline. The
- * chart is data; it renders complete, and a live update mutates the last candle in place.
+ * Motion (2026-09-12, motion.ts): with `drawIn`, the candles are REVEALED left to right when the
+ * chart appears, the way the reference video's chart draws itself. Never grown from a baseline and
+ * never interpolated — every candle is complete and in place from the first frame, only uncovered.
+ * A live update still mutates the last candle in place.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Defs, FeDropShadow, Filter, G, Line, Rect } from 'react-native-svg';
+import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
+import Svg, { ClipPath, Defs, FeDropShadow, Filter, G, Line, Rect } from 'react-native-svg';
+import { arrival, useReducedMotion } from '../motion';
 import { Value } from '../Text';
 import { type as typeScale } from '../type';
-import { chart, colors, radius, space } from '../tokens';
+import { chart, colors, duration, radius, space } from '../tokens';
 import { Press } from '../Press';
 import { columns, useMeasuredBox } from './useMeasuredBox';
 import { axisLabels, projectSeries, toPct, type Candle, type Projection } from './projection';
@@ -38,6 +42,8 @@ const FILTER_MARGIN = '-50%';
 const FILTER_SPAN = '200%';
 /** The axis gutter on the right of the plot, from the prototype. */
 const AXIS_WIDTH = chart.axisWidth;
+
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 /** How far an unselected candle steps back. Enough to recede, not enough to vanish. */
 const DIMMED = 0.35;
@@ -77,6 +83,8 @@ export interface CandlestickProps {
    */
   selected?: number | null;
   onSelect?: (index: number | null) => void;
+  /** Reveal the candles left to right when the chart appears, and again when the series changes. */
+  drawIn?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -93,6 +101,7 @@ export function Candlestick({
   light = false,
   selected = null,
   onSelect,
+  drawIn = false,
   style,
   testID,
 }: CandlestickProps) {
@@ -102,6 +111,20 @@ export function Candlestick({
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const bloomUp = `candle-up-${uid}`;
   const bloomDown = `candle-down-${uid}`;
+  const clipId = `candle-reveal-${uid}`;
+
+  /* The reveal: a clip whose width runs 0 → the full box, restarted when the series changes. */
+  const reduced = useReducedMotion();
+  const reveal = useSharedValue(drawIn ? 0 : 1);
+  const measured = box.width > 0;
+  const seriesKey = `${series.length}:${series[0]?.close ?? ''}:${series[series.length - 1]?.close ?? ''}`;
+  useEffect(() => {
+    if (!drawIn || !measured) return;
+    reveal.value = 0;
+    reveal.value = withTiming(1, arrival(duration.draw, reduced));
+  }, [drawIn, measured, seriesKey, reduced, reveal]);
+  const revealWidth = box.width;
+  const clipProps = useAnimatedProps(() => ({ width: reveal.value * revealWidth }));
 
   /* With no data there is nothing to project. Drawing an axis anyway would put a price
      scale on the screen that no price produced — on a trading surface an invented axis is
@@ -160,6 +183,9 @@ export function Candlestick({
                   floodOpacity={BLOOM_OPACITY_DOWN}
                 />
               </Filter>
+              <ClipPath id={clipId}>
+                <AnimatedRect x={0} y={0} height={height} animatedProps={clipProps} />
+              </ClipPath>
             </Defs>
 
             {grid
@@ -176,6 +202,7 @@ export function Candlestick({
                 ))
               : null}
 
+            <G clipPath={`url(#${clipId})`}>
             {geometry.map((g, i) => {
               const colour = g.up ? colors.candleUp : colors.candleDown;
               const x = xOf(i);
@@ -204,6 +231,7 @@ export function Candlestick({
                 </G>
               );
             })}
+            </G>
 
             {lastPrice && (
               <Line

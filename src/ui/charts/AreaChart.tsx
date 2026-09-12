@@ -13,11 +13,15 @@
  * points instead, so the stroke is 2 in both axes and the dot is round. Every coordinate
  * is still derived — from the data and the measured size, never placed.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
-import { chart, colors } from '../tokens';
+import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
+import Svg, { Circle, ClipPath, Defs, G, LinearGradient, Line, Path, Rect, Stop } from 'react-native-svg';
+import { arrival, useReducedMotion } from '../motion';
+import { chart, colors, duration } from '../tokens';
 import { useMeasuredBox } from './useMeasuredBox';
+
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 export interface AreaChartProps {
   /** The series, in value space. Scaled to its own min/max unless bounds are given. */
@@ -34,6 +38,12 @@ export interface AreaChartProps {
   endDot?: boolean;
   /** Vertical room so a stroke at the very top or bottom isn't clipped in half. */
   inset?: number;
+  /**
+   * Draw the line and its fill left to right when the chart appears, and again when the series
+   * changes. The shape is only revealed, never interpolated — every point is where the data puts it
+   * from the first frame. Instant under reduced motion.
+   */
+  drawIn?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -46,12 +56,30 @@ export function AreaChart({
   grid = false,
   endDot = false,
   inset,
+  drawIn = false,
   style,
   testID,
 }: AreaChartProps) {
   const [box, onLayout] = useMeasuredBox();
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const gradientId = `area-${uid}`;
+  const clipId = `reveal-${uid}`;
+
+  /*
+   * The reveal: a clip whose width runs 0 → the full box. Restarted when the series changes, so a
+   * new timeframe draws in the same way the first one did.
+   */
+  const reduced = useReducedMotion();
+  const reveal = useSharedValue(drawIn ? 0 : 1);
+  const measured = box.width > 0;
+  const seriesKey = `${data.length}:${data[0] ?? ''}:${data[data.length - 1] ?? ''}`;
+  useEffect(() => {
+    if (!drawIn || !measured) return;
+    reveal.value = 0;
+    reveal.value = withTiming(1, arrival(duration.draw, reduced));
+  }, [drawIn, measured, seriesKey, reduced, reveal]);
+  const width = box.width;
+  const clipProps = useAnimatedProps(() => ({ width: reveal.value * width }));
 
   /* Half the stroke, plus the dot's radius when there is one — the smallest inset that
      guarantees nothing is clipped. It applies on both axes: a round linecap at the last
@@ -90,6 +118,9 @@ export function AreaChart({
               <Stop offset={0} stopColor={color} stopOpacity={chart.area.fillOpacityTop} />
               <Stop offset={1} stopColor={color} stopOpacity={chart.area.fillOpacityBottom} />
             </LinearGradient>
+            <ClipPath id={clipId}>
+              <AnimatedRect x={0} y={0} height={height} animatedProps={clipProps} />
+            </ClipPath>
           </Defs>
 
           {grid &&
@@ -105,24 +136,26 @@ export function AreaChart({
               />
             ))}
 
-          <Path d={area} fill={`url(#${gradientId})`} />
-          <Path
-            d={line}
-            fill="none"
-            stroke={color}
-            strokeWidth={chart.area.strokeWidth}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-
-          {endDot && lastValue !== undefined && (
-            <Circle
-              cx={xOf(data.length - 1)}
-              cy={yOf(lastValue)}
-              r={chart.area.endDotRadius}
-              fill={color}
+          <G clipPath={`url(#${clipId})`}>
+            <Path d={area} fill={`url(#${gradientId})`} />
+            <Path
+              d={line}
+              fill="none"
+              stroke={color}
+              strokeWidth={chart.area.strokeWidth}
+              strokeLinejoin="round"
+              strokeLinecap="round"
             />
-          )}
+
+            {endDot && lastValue !== undefined && (
+              <Circle
+                cx={xOf(data.length - 1)}
+                cy={yOf(lastValue)}
+                r={chart.area.endDotRadius}
+                fill={color}
+              />
+            )}
+          </G>
         </Svg>
       )}
     </View>
