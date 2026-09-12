@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/brand/xorr-banner.png" width="820" alt="XORR. — A bot that trades your capital while you get on with your life." />
+</p>
+
 # xorr
 
 **A bot that trades your capital while you get on with your life.**
