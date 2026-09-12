@@ -65,7 +65,7 @@ export default function RosterCompare() {
               >
                 <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12 }}>
-                    <AgentOrb gradient={agentGradient(a.name)} size={52} face />
+                    <AgentOrb gradient={agentGradient(a.name)} identity={a.name} size={52} face />
                     <View style={{ flex: 1 }}>
                       <Text variant="rowPrimary">{a.name}</Text>
                       <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s2 }}>

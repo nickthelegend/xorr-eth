@@ -64,7 +64,7 @@ export default function Risk() {
             {withLimits.map((a) => (
               <SheetCard key={a.id} bordered borderRadius={radius.panel} padding={space.s16}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12 }}>
-                  <AgentOrb gradient={agentGradient(a.name)} size={52} face />
+                  <AgentOrb gradient={agentGradient(a.name)} identity={a.name} size={52} face />
                   <Text variant="rowPrimary" style={{ flex: 1 }}>
                     {a.name}
                   </Text>

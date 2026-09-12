@@ -107,7 +107,7 @@ export default function Roster() {
                     accessibilityLabel={`${a.name}, ${a.role}`}
                     style={{ flexDirection: 'row', alignItems: 'center', gap: space.s14 }}
                   >
-                    <AgentOrb gradient={agentGradient(a.name)} size={size.orb52} face specular />
+                    <AgentOrb gradient={agentGradient(a.name)} identity={a.name} size={size.orb52} face specular />
                     <View style={{ flex: 1, gap: space.s4 }}>
                       <Text variant="cardTitle">{a.name}</Text>
                       <Text variant="secondarySm">{a.role}</Text>

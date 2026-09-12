@@ -113,9 +113,9 @@ export default function Splash() {
               justifyContent: 'center',
             }}
           >
-            <AgentOrb gradient={agentGradients['Momentum Scout']} size={size.orb56} face specular />
-            <AgentOrb gradient={agentGradients['Yield Keeper']} size={size.orb56} face specular />
-            <AgentOrb gradient={agentGradients['Drawdown Guard']} size={size.orb56} face specular />
+            <AgentOrb gradient={agentGradients['Momentum Scout']} identity="Momentum Scout" size={size.orb56} face specular />
+            <AgentOrb gradient={agentGradients['Yield Keeper']} identity="Yield Keeper" size={size.orb56} face specular />
+            <AgentOrb gradient={agentGradients['Drawdown Guard']} identity="Drawdown Guard" size={size.orb56} face specular />
           </View>
         </SheetCard>
       </Fill>

@@ -19,6 +19,10 @@
  *
  * Every dimension below is a fraction of `size`, measured off the 74px orb in the
  * prototype, so all six sizes are the same drawing rather than six hand-placed ones.
+ *
+ * `identity` draws the face from the agent's name instead (`agentGlyph`): eyes, a mouth and a
+ * mark on the sphere, the same for that name on every screen. The orb — gradient, specular,
+ * bloom — is untouched; without `identity` the face is §5's single design.
  */
 import React from 'react';
 import { Image } from 'expo-image';
@@ -34,6 +38,7 @@ import Svg, {
   Rect,
   Stop,
 } from 'react-native-svg';
+import { agentGlyph, pathData, type GlyphShape } from '../design/agentGlyph';
 import { Placeholder } from './States';
 import { Text, Value } from './Text';
 import { colors, orbBloom, radius, size as metrics, space, type Gradient } from './tokens';
@@ -52,6 +57,12 @@ export interface AgentOrbProps {
   specular?: boolean;
   /** Eyes and a smile. Off for asset marks, which reuse the same gradient recipe. */
   face?: boolean;
+  /**
+   * Whose face this is — the agent's name. With `face`, the eyes, mouth and marks are generated
+   * from it by `agentGlyph`, so every agent is recognisably itself and the same name draws the
+   * same face everywhere. Without it, the face is §5's one design.
+   */
+  identity?: string;
   /** A P&L chip pinned outside the top-left of the orb. Already formatted, with a sign. */
   badge?: string;
   /** Positive or negative P&L on the badge. */
@@ -83,12 +94,61 @@ const STATUS_LABEL: Readonly<Record<OrbStatus, string>> = {
   paused: 'Paused',
 };
 
+/**
+ * One shape of a generated face, scaled from the glyph's 100-unit box to the orb.
+ *
+ * The glyph names two tones rather than colours, and they resolve here to tokens: white for the
+ * face, black at low opacity for marks set into the sphere.
+ */
+function GlyphPart({ shape, unit }: { shape: GlyphShape; unit: number }) {
+  const paint = shape.tone === 'ink' ? colors.ink : colors.bg;
+  switch (shape.kind) {
+    case 'rect':
+      return (
+        <Rect
+          x={shape.x * unit}
+          y={shape.y * unit}
+          width={shape.w * unit}
+          height={shape.h * unit}
+          rx={shape.r * unit}
+          fill={paint}
+          opacity={shape.opacity}
+        />
+      );
+    case 'circle':
+      return (
+        <Circle
+          cx={shape.cx * unit}
+          cy={shape.cy * unit}
+          r={shape.r * unit}
+          fill={paint}
+          opacity={shape.opacity}
+        />
+      );
+    case 'fill':
+      return <Path d={pathData(shape.d, unit)} fill={paint} opacity={shape.opacity} />;
+    case 'stroke':
+      return (
+        <Path
+          d={pathData(shape.d, unit)}
+          fill="none"
+          stroke={paint}
+          strokeWidth={shape.width * unit}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity={shape.opacity}
+        />
+      );
+  }
+}
+
 export function AgentOrb({
   gradient,
   size = 70,
   bloom = false,
   specular = true,
   face = false,
+  identity,
   badge,
   badgeTone = 'up',
   name,
@@ -100,6 +160,12 @@ export function AgentOrb({
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const gradientId = `orb-g-${uid}`;
   const blurId = `orb-b-${uid}`;
+
+  const glyph = React.useMemo(
+    () => (face && identity !== undefined ? agentGlyph(identity) : undefined),
+    [face, identity],
+  );
+  const unit = size / 100;
 
   const eyeW = EYE.w * size;
   const eyeH = EYE.h * size;
@@ -139,6 +205,9 @@ export function AgentOrb({
 
         <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={`url(#${gradientId})`} />
 
+        {/* Marks sit under the specular, so the highlight stays the brightest thing on the sphere. */}
+        {glyph?.marks.map((shape, i) => <GlyphPart key={`mark-${i}`} shape={shape} unit={unit} />)}
+
         {specular && (
           <Ellipse
             cx={(SPECULAR.left + SPECULAR.w / 2) * size}
@@ -151,37 +220,39 @@ export function AgentOrb({
           />
         )}
 
-        {face && (
-          <>
-            <Rect
-              x={eyeLeftX}
-              y={eyeY}
-              width={eyeW}
-              height={eyeH}
-              rx={eyeW / 2}
-              fill={colors.ink}
-            />
-            <Rect
-              x={eyeRightX}
-              y={eyeY}
-              width={eyeW}
-              height={eyeH}
-              rx={eyeW / 2}
-              fill={colors.ink}
-            />
-            <Path
-              d={
-                `M ${smileX} ${smileY}` +
-                ` H ${smileX + smileW}` +
-                ` A ${smileR} ${smileR} 0 0 1 ${smileX + smileW - smileR} ${smileY + smileH}` +
-                ` H ${smileX + smileR}` +
-                ` A ${smileR} ${smileR} 0 0 1 ${smileX} ${smileY}` +
-                ' Z'
-              }
-              fill={colors.ink}
-            />
-          </>
-        )}
+        {glyph
+          ? glyph.face.map((shape, i) => <GlyphPart key={`face-${i}`} shape={shape} unit={unit} />)
+          : face && (
+              <>
+                <Rect
+                  x={eyeLeftX}
+                  y={eyeY}
+                  width={eyeW}
+                  height={eyeH}
+                  rx={eyeW / 2}
+                  fill={colors.ink}
+                />
+                <Rect
+                  x={eyeRightX}
+                  y={eyeY}
+                  width={eyeW}
+                  height={eyeH}
+                  rx={eyeW / 2}
+                  fill={colors.ink}
+                />
+                <Path
+                  d={
+                    `M ${smileX} ${smileY}` +
+                    ` H ${smileX + smileW}` +
+                    ` A ${smileR} ${smileR} 0 0 1 ${smileX + smileW - smileR} ${smileY + smileH}` +
+                    ` H ${smileX + smileR}` +
+                    ` A ${smileR} ${smileR} 0 0 1 ${smileX} ${smileY}` +
+                    ' Z'
+                  }
+                  fill={colors.ink}
+                />
+              </>
+            )}
       </Svg>
 
       {badge !== undefined && (

@@ -85,7 +85,7 @@ export default function Proposal() {
   return (
     <Screen>
       <View style={{ alignItems: 'center', gap: space.s14 }}>
-        <AgentOrb gradient={agentGradients.Strategist} size={size.orb56} face specular bloom />
+        <AgentOrb gradient={agentGradients.Strategist} identity="Strategist" size={size.orb56} face specular bloom />
         <Text variant="onboardingTitle" align="center">
           Your draft portfolio
         </Text>

@@ -9,6 +9,7 @@
  */
 
 import { assetClasses } from '../data/fixtures/markets';
+import { normaliseSeed, pick, seededRandom } from './seed';
 
 export type GradientPair = { c1: string; c2: string };
 
@@ -26,6 +27,23 @@ export const agentGradients = {
 
 export type AgentGradientName = keyof typeof agentGradients;
 
+/**
+ * Gradients for agents §1 does not name.
+ *
+ * `agentGradient` used to give any unknown name Momentum Scout's blue, so a new agent arrived wearing
+ * another agent's identity — the mistake `assetGradient` below already refuses to make. These sit
+ * beside the §1 five (a light c1 falling into a deeper c2 at the same lightness), none of them
+ * repeats one, and none is the profit green or the loss red.
+ */
+export const AGENT_PALETTE = [
+  { c1: '#5ED8F5', c2: '#1690C4' }, // cyan
+  { c1: '#FF8FC7', c2: '#D1408F' }, // rose
+  { c1: '#FFB35C', c2: '#DD6B12' }, // orange
+  { c1: '#8F8CFF', c2: '#4A45D8' }, // indigo
+  { c1: '#B7C0CC', c2: '#667183' }, // slate
+  { c1: '#5BE6D0', c2: '#139C8B' }, // mint
+] as const satisfies readonly GradientPair[];
+
 /** The exact geometry of the recipe. Consumed by AgentOrb / AssetMark; never hand-tune per call. */
 export const RADIAL = {
   /** `circle at 32% 26%` — the specular origin. */
@@ -37,11 +55,16 @@ export const RADIAL = {
   r: '74%',
 } as const;
 
+/**
+ * An agent's gradient: its own from §1, or — for a name §1 does not list — one from `AGENT_PALETTE`,
+ * chosen from the name so the same agent always gets the same one.
+ */
 export function agentGradient(name: string): GradientPair {
-  return (
-    (agentGradients as Record<string, GradientPair | undefined>)[name] ??
-    agentGradients['Momentum Scout']
-  );
+  const key = normaliseSeed(name);
+  for (const [known, pair] of Object.entries(agentGradients)) {
+    if (normaliseSeed(known) === key) return pair;
+  }
+  return pick(seededRandom(name), AGENT_PALETTE);
 }
 
 /**

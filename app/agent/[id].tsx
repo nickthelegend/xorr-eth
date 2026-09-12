@@ -91,6 +91,7 @@ export default function AgentDetail() {
             <View style={{ alignItems: 'center', paddingVertical: space.s16 }}>
               <AgentOrb
                 gradient={agentGradient(agent.name)}
+                identity={agent.name}
                 size={84}
                 face
                 name={agent.name}

@@ -60,6 +60,7 @@ import {
   type TabKey,
   type TypeVariant,
 } from '@/ui';
+import { agentGradient } from '@/design/gradients';
 
 /* ---------------------------------------------------------------- fixtures */
 
@@ -332,6 +333,20 @@ export default function UiScratch() {
               <AssetMark gradient={{ c1: '#F5CE5F', c2: '#B98A0C' }} size={size.mark} />
               <AssetMark gradient={{ c1: '#5B93FF', c2: '#49E39B' }} size={size.markSm} />
               <AssetMark gradient={{ c1: '#E8464B', c2: '#98181C' }} size={size.noteOrb} />
+            </View>
+          </Case>
+
+          <Case label="Generated faces — identity={name}: the same name draws the same face everywhere">
+            <View style={{ flexDirection: 'row', gap: space.s12, flexWrap: 'wrap' }}>
+              {(
+                [
+                  'Momentum Scout', 'Earnings Desk', 'Yield Keeper', 'Drawdown Guard', 'Strategist',
+                  'Night Owl', 'Basis Trader', 'Grid Runner', 'Funding Hunter', 'Vol Seller',
+                  'Delta Neutral', 'Gamma Ghost',
+                ] as const
+              ).map((n) => (
+                <AgentOrb key={n} gradient={agentGradient(n)} identity={n} size={52} face />
+              ))}
             </View>
           </Case>
         </Section>
@@ -773,14 +788,9 @@ export default function UiScratch() {
         {/* -------------------------------------------------------- tab bar */}
 
         <Section title="TabBar · design.md §4">
-          <Case label="Four tabs and the raised chat button — tap the tabs, the button and the switch">
+          <Case label="Home, the chat button and the grid — tap the two places and the circle">
             <View style={{ borderRadius: radius.card, overflow: 'hidden' }}>
-              <TabBar
-                active={tab}
-                onSelect={setTab}
-                agentsLive={!killed}
-                onChat={() => setChatTapped((c) => !c)}
-              />
+              <TabBar active={tab} onSelect={setTab} onAction={() => setChatTapped((c) => !c)} />
             </View>
             <Text variant="footnote" color={colors.ink40}>
               {chatTapped ? 'Chat opened' : 'Chat closed'}

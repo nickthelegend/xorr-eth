@@ -106,6 +106,7 @@ export default function AgentIntro() {
       <View style={{ alignItems: 'center', marginTop: space.s10, gap: space.s14 }}>
         <AgentOrb
           gradient={agentGradient(agent?.name ?? 'Earnings Desk')}
+          identity={agent?.name}
           size={size.orb104}
           face
           specular
