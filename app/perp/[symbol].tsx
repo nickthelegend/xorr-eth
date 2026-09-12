@@ -1,259 +1,255 @@
 /**
- * Screen 25 — Commodity perpetual contract. screens.md Group B.
+ * A futures contract — Hyperliquid's market for one symbol (2026-09-13). screens.md Group B, screen 25.
  *
- * Tag chips PERPETUAL (amber-tinted) / NO EXPIRY / max leverage. A 132pt area chart.
- * Leverage card: "Leverage / on ${margin} margin" + 22/700 multiplier, 2x/5x/10x segmented,
- * then Position size / Liquidation / Funding rows and a warning line that changes colour
- * with leverage. A 2×2 stat grid whose 1pt gutters read as hairlines. Short / Long.
+ * The mark and its move, the venue's own candles, and the four figures a futures trader reads first:
+ * the funding rate and when it is next paid, open interest, and the day's volume. Every number is the
+ * venue's.
  *
- * Short and Long had no `onPress`; they open the order ticket now.
+ * What left: the leverage calculator and the Short / Long buttons. The calculator was arithmetic about
+ * a contract xorr does not offer, and both buttons opened the SPOT ticket — someone who set 10x and
+ * tapped Long got an unleveraged spot buy. xorr does not trade futures, and the screen says so in one
+ * line instead of offering buttons that do something else.
  */
-import React, { useEffect, useState } from 'react';
-import { ScrollView, View  } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ScrollView, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
   AreaChart,
-  Button,
-  ButtonPair,
-  Fill,
-  IconButton,
-  NoteStrip,
-  Price,
-  Row,
+  AssetMark,
+  BackButton,
+  Candlestick,
+  DeltaChip,
+  ErrorState,
+  Pill,
+  PillRow,
+  Placeholder,
+  Press,
   Screen,
   Segmented,
-  SheetCard,
   StatGrid,
   Tag,
   Text,
   colors,
-  money,
   percent,
+  pnlTone,
   price as fmtPrice,
   radius,
   size,
   space,
+  tightProjection,
+  toCandles,
 } from '@/ui';
+import { RollingNumber } from '@/ui/RollingNumber';
 import { compactMoney, countdown } from '@/format';
-import { LEVERAGE_OPTIONS, PERP_MARGIN, leverageSummary } from '@/state/derived';
+import { assetGradient } from '@/design/gradients';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { useStore } from '@/state/store';
+import { useLogo } from '@/data/useLogos';
+import type { PerpMetrics, PerpRange } from '@/data/repositories';
 
-/**
- * No proxy table, on purpose.
- *
- * This screen used to map XAUT to **BTC** so that a symbol with no feed entry would still
- * produce a number — and it read "XAUT/USDT $79,900" while gold traded near $4,400. Nothing
- * about Bitcoin's price, funding or open interest says anything about gold, and the
- * liquidation price and margin warning on this screen were computed off it. A "Proxy feed"
- * label does not make another asset's number true; PLAN.md §1.3.8 says every price on screen
- * is real, or labelled, and that was neither.
- *
- * The fix belongs in the feed, not here: `server/src/market/ids.ts` now carries XAUT's own
- * CoinGecko id. A symbol with no feed gets no number and the screen says "No feed", which is
- * the honest answer.
- */
+const RANGES: readonly PerpRange[] = ['1D', '1W', '1M', '1Y'];
+/** How each range reads in the move under the price. */
+const RANGE_WORDS: Readonly<Record<PerpRange, string>> = {
+  '1D': 'today',
+  '1W': 'this week',
+  '1M': 'this month',
+  '1Y': 'this year',
+};
 
-const CHART_H = 132;
-const LEV_OPTIONS = LEVERAGE_OPTIONS.map((l) => ({ value: l as number, label: `${l}x` }));
+/** Candles or line, as a visible control — the asset screen's, word for word. */
+const CHART_VIEWS: { value: number; label: string }[] = [
+  { value: 0, label: 'Candles' },
+  { value: 1, label: 'Line' },
+];
+const CHART_VIEW_SEGMENT = 58;
+const CHART_VIEW_W = CHART_VIEW_SEGMENT * 2 + space.s4 + size.segPad * 2;
+
+const CHART_H = 170;
+const MARK = 26;
+/** The stat grid's height, for its placeholder while the contract loads. */
+const STATS_H = 150;
+const HOUR_MS = 60 * 60 * 1000;
 
 export default function PerpContract() {
-  const { symbol = 'XAUT' } = useLocalSearchParams<{ symbol: string }>();
-  const router = useRouter();
+  const { symbol = 'BTC' } = useLocalSearchParams<{ symbol: string }>();
   const goBack = useGoBack();
-  const lev = useStore((s) => s.lev);
-  const setLev = useStore((s) => s.setLev);
+  const [range, setRange] = useState<PerpRange>('1D');
+  const [candleView, setCandleView] = useState(true);
 
-  // Everything on this screen comes from the venue. PLAN.md 12.15 [G37].
-  const feedSymbol = symbol;
-  const { data: m, loading } = useAsync(() => repos.perps.metrics(feedSymbol), [feedSymbol]);
-  // The venue's own recent marks, for the same contract the metrics above describe.
-  const series = useAsync(() => repos.markets.candles(feedSymbol, '1H'), [feedSymbol]);
-  const closes = (series.data?.bars ?? []).map((b) => b[3]);
-  const summary = leverageSummary(lev, m?.markPx);
+  const metrics = useAsync(() => repos.perps.metrics(symbol), [symbol]);
+  const candles = useAsync(() => repos.perps.candles(symbol, range), [symbol, range]);
+  const logo = useLogo(symbol);
+  const m = metrics.data;
+  const name = m?.symbol ?? symbol;
 
-  // The countdown is DERIVED from the venue's next-funding time plus a ticking clock,
-  // rather than seeded into state by an effect — seeding causes a cascading render on
-  // every data change.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-  const fundingIn = m ? Math.max(0, Math.round((m.nextFundingAt - now) / 1000)) : 0;
-
-  const warnColor =
-    summary.band === 'danger' ? colors.down : summary.band === 'warn' ? colors.warn : colors.ink40;
+  const series = useMemo(() => toCandles(candles.data?.bars ?? []), [candles.data]);
+  const closes = useMemo(() => series.map((c) => c.close), [series]);
+  const projection = useMemo(() => tightProjection(series), [series]);
+  const lastClose = closes.at(-1);
+  const lastPrice = useMemo(
+    () => (lastClose === undefined ? undefined : { value: lastClose, label: fmtPrice(lastClose) }),
+    [lastClose],
+  );
+  const hasSeries = closes.length > 1;
+  const windowPct = hasSeries ? ((closes.at(-1)! - closes[0]!) / closes[0]!) * 100 : null;
+  /* Today is the venue's own 24-hour change; a longer range is measured across the candles drawn. */
+  const changePct = range === '1D' ? (m?.change24hPct ?? windowPct) : windowPct;
 
   return (
-    <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8, flex: 1 }}>
-          <IconButton
-            name="back"
-            accessibilityLabel="Back"
-            background="none"
-            onPress={() => goBack()}
-          />
-          <Text variant="cardTitle">{symbol}/USDT</Text>
+    <Screen gutter="none">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10, paddingHorizontal: space.gutter }}>
+        <BackButton onPress={goBack} />
+        <AssetMark gradient={assetGradient(name)} {...logo} size={MARK} />
+        <Text variant="cardTitleLg" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {name}
+        </Text>
+        <Tag label="Perp" small colors={{ bg: colors.surfaceAlt, fg: colors.ink55 }} style={{ alignSelf: 'center' }} />
+        <View style={{ marginLeft: 'auto' }}>
+          {m ? (
+            <Tag label={`Up to ${m.maxLeverage}x`} small colors={{ bg: colors.goldBg, fg: colors.goldFill }} />
+          ) : metrics.loading ? (
+            <Placeholder width={72} height={22} style={{ borderRadius: radius.full }} />
+          ) : null}
         </View>
-        {m ? null : <Tag label="No price feed" small tone="warn" />}
       </View>
 
-      <View
-        style={{
-          marginTop: space.s18,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: space.s10,
-        }}
-      >
-        <Price variant="priceMd">{m ? fmtPrice(m.markPx) : loading ? '—' : 'No feed'}</Price>
-        {m ? (
-          <Price variant="delta" tone={m.markVsIndex >= 0 ? 'up' : 'down'}>
-            {money(m.markVsIndex, { signed: true })} vs index
-          </Price>
-        ) : null}
-      </View>
-
-      <View style={{ flexDirection: 'row', gap: space.s6, marginTop: space.s12 }}>
-        <Tag label="Perpetual" small colors={{ bg: colors.goldBg, fg: colors.goldFill }} />
-        <Tag label="No expiry" small colors={{ bg: colors.surfaceAlt, fg: colors.ink55 }} />
-        <Tag
-          label={m ? `Max ${m.maxLeverage}x` : 'Spot feed'}
-          small
-          colors={{ bg: colors.surfaceAlt, fg: colors.ink55 }}
-        />
-      </View>
-
-      {/* This drew `areaSeries.XAUT` — one hand-authored curve, rendered under EVERY perp
-          symbol regardless of which one you opened, and regardless of whether a feed
-          existed. It was a picture of a price history that never happened. The chart is
-          the venue's own recent marks or it is nothing. */}
-      {closes.length > 1 ? (
-        <AreaChart
-          data={closes}
-          height={CHART_H}
-          color={colors.goldFill}
-          style={{ marginTop: space.s16 }}
-        />
+      {metrics.error ? (
+        <View style={{ marginTop: space.s22, paddingHorizontal: space.gutter }}>
+          <ErrorState error={metrics.error} onRetry={metrics.reload} />
+        </View>
+      ) : !m && !metrics.loading ? (
+        <Text
+          variant="body"
+          color={colors.ink40}
+          align="center"
+          style={{ marginTop: space.s30, paddingHorizontal: space.gutter }}
+        >
+          {`No futures contract for ${symbol}.`}
+        </Text>
       ) : (
-        <View style={{ height: CHART_H, marginTop: space.s16, justifyContent: 'center' }}>
-          <Text variant="secondary">No price history for {symbol}.</Text>
-        </View>
-      )}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: space.s30 }} showsVerticalScrollIndicator={false}>
+          <View style={{ alignItems: 'center', marginTop: space.s22, gap: space.s6 }}>
+            {m ? (
+              <RollingNumber value={fmtPrice(m.markPx)} variant="priceLg" />
+            ) : (
+              <Placeholder width={150} height={34} style={{ borderRadius: radius.tile }} />
+            )}
+            {m && changePct !== null ? (
+              <DeltaChip
+                label={`${changePct >= 0 ? 'up' : 'down'} ${percent(Math.abs(changePct)).replace('+', '')} ${RANGE_WORDS[range]}`}
+                tone={pnlTone(changePct)}
+                style={{ alignSelf: 'center' }}
+              />
+            ) : !m ? (
+              <Placeholder width={110} height={24} style={{ borderRadius: radius.full }} />
+            ) : null}
+          </View>
 
-      {/*
-        Scrolls. Measured at 375×667: 87pt of overflow, two elements below the fold.
-
-        A leverage screen that hides part of itself is hiding risk disclosure by definition — the
-        liquidation price and the margin warning are the point of the screen.
-      */}
-      <Fill style={{ marginTop: space.s16 }}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
-        <SheetCard borderRadius={radius.panel} padding={space.s16}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'flex-end',
-              justifyContent: 'space-between',
-            }}
-          >
-            <View style={{ gap: space.s2 }}>
-              <Text variant="cardTitle">Leverage</Text>
-              <Text variant="secondarySm">
-                on {money(PERP_MARGIN, { decimals: 0 })} margin
-              </Text>
+          {hasSeries ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                marginTop: space.s12,
+                paddingHorizontal: space.gutter,
+              }}
+            >
+              <Segmented
+                options={CHART_VIEWS}
+                value={candleView ? 0 : 1}
+                onChange={(v) => setCandleView(v === 0)}
+                height={size.segThumbSm}
+                style={{ width: CHART_VIEW_W }}
+              />
             </View>
-            <Price variant="screenTitle">{lev}x</Price>
+          ) : null}
+
+          {hasSeries ? (
+            <Press
+              onPress={() => setCandleView((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={`${name} ${candleView ? 'candlestick' : 'price'} chart, ${range}. Switch to the ${candleView ? 'line' : 'candle'} view.`}
+              style={{ marginTop: space.s10, paddingHorizontal: space.gutter }}
+            >
+              {candleView ? (
+                <Candlestick
+                  series={series}
+                  projection={projection}
+                  height={CHART_H}
+                  lastPrice={lastPrice}
+                  drawIn
+                />
+              ) : (
+                <AreaChart
+                  data={closes}
+                  height={CHART_H}
+                  color={(windowPct ?? 0) < 0 ? colors.down : colors.up}
+                  endDot
+                  drawIn
+                />
+              )}
+            </Press>
+          ) : (
+            <View style={{ height: CHART_H, marginTop: space.s18, paddingHorizontal: space.gutter, justifyContent: 'center' }}>
+              {candles.error ? (
+                <ErrorState error={candles.error} onRetry={candles.reload} />
+              ) : candles.loading ? (
+                <Placeholder height={CHART_H} style={{ borderRadius: radius.tile }} />
+              ) : (
+                <Text variant="body" color={colors.ink40} align="center">
+                  No candles for this range yet.
+                </Text>
+              )}
+            </View>
+          )}
+
+          <PillRow style={{ marginTop: space.s16 }} contentPadding={space.gutter}>
+            {RANGES.map((r) => (
+              <Pill key={r} label={r} selected={r === range} onPress={() => setRange(r)} />
+            ))}
+          </PillRow>
+
+          <View style={{ marginTop: space.s22, paddingHorizontal: space.gutter }}>
+            {m ? (
+              <ContractStats m={m} />
+            ) : (
+              <Placeholder height={STATS_H} style={{ borderRadius: radius.panel }} />
+            )}
+            <Text variant="footnote" color={colors.ink28} align="center" style={{ marginTop: space.s16 }}>
+              {`Market data from ${m?.venue ?? 'the venue'}. xorr does not trade futures.`}
+            </Text>
           </View>
-
-          <Segmented
-            options={LEV_OPTIONS}
-            value={lev}
-            onChange={setLev}
-            style={{ marginTop: space.s14 }}
-          />
-
-          <View style={{ marginTop: space.s6 }}>
-            <Row title="Position size" value={<Price>{summary.notional}</Price>} height={size.rowSm} />
-            <Row
-              title="Liquidation"
-              value={<Price tone="down">{summary.liquidation}</Price>}
-              height={size.rowSm}
-            />
-            <Row
-              title="Funding"
-              value={
-                <Price>
-                  {m?.fundingRate != null ? `${percent(m.fundingRate * 100, 4)} / 1h` : '—'}
-                </Price>
-              }
-              height={size.rowSm}
-              divider={false}
-            />
-          </View>
-
-          <Text variant="secondarySm" color={warnColor} style={{ marginTop: space.s8 }}>
-            {summary.warning}
-          </Text>
-        </SheetCard>
-
-        {/*
-          The one thing this screen was not saying.
-          
-          `server/src/market/perp.ts` opens with "xorr does not run a perp venue and does not
-          pretend to", and it keeps that promise field by field: open interest, day volume and the
-          funding rate all come back null because they need a venue's order book, and the screen
-          prints an em dash for each. What neither side stated is the consequence of that for the
-          three numbers it DOES print. The leverage, the position size and the liquidation price
-          are arithmetic on a spot price — correct arithmetic about a contract nobody here offers.
-          
-          And the buttons underneath open `/order/:symbol`, which is the spot ticket. Someone who
-          sets 10x and taps Long gets an unleveraged spot buy. That gap is worth one paragraph.
-        */}
-        <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
-          {`xorr does not run a perpetual venue. The mark is a spot price, and the leverage, position size and liquidation above are what those figures would mean on a venue that offered them — nothing here is a live contract. Short and Long open the spot ticket for ${symbol}, unleveraged.`}
-        </NoteStrip>
-
-        <StatGrid
-          style={{ marginTop: space.s16 }}
-          items={[
-            // Null where the venue's own order book would be needed. `compactMoney(null)`
-            // would print "$0.0" and read as "no interest" rather than "not knowable".
-            {
-              label: 'Open interest',
-              value: m?.openInterestUsd != null ? compactMoney(m.openInterestUsd) : '—',
-            },
-            { label: '24h volume', value: m?.dayVolumeUsd != null ? compactMoney(m.dayVolumeUsd) : '—' },
-            { label: 'Mark vs index', value: m ? money(m.markVsIndex, { signed: true }) : '—' },
-            { label: 'Next funding', value: m ? countdown(fundingIn) : '—' },
-          ]}
-        />
         </ScrollView>
-      </Fill>
-
-      <ButtonPair
-        style={{ marginTop: space.s14 }}
-        left={
-          <Button
-            label="Short"
-            variant="secondary"
-            onPress={() => router.push(`/order/${symbol}?side=sell`)}
-          />
-        }
-        right={
-          <Button
-            label="Long"
-            backgroundColor={colors.goldFill}
-            color={colors.goldInk}
-            onPress={() => router.push(`/order/${symbol}?side=buy`)}
-          />
-        }
-      />
+      )}
     </Screen>
+  );
+}
+
+/**
+ * The four figures under the chart.
+ *
+ * It owns the funding clock, so only this block re-renders every second — not the screen, and not the
+ * chart above it. Funding is paid at the top of every interval, so the countdown needs nothing but a
+ * clock.
+ */
+function ContractStats({ m }: { m: PerpMetrics }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const intervalMs = m.fundingIntervalHours * HOUR_MS;
+  const fundingIn = Math.max(0, Math.round((Math.ceil(now / intervalMs) * intervalMs - now) / 1000));
+
+  return (
+    <StatGrid
+      items={[
+        { label: 'Funding / hour', value: percent(m.fundingRate * 100, 4) },
+        { label: 'Next funding', value: countdown(fundingIn) },
+        { label: 'Open interest', value: compactMoney(m.openInterestUsd) },
+        { label: '24h volume', value: compactMoney(m.dayVolumeUsd) },
+      ]}
+    />
   );
 }

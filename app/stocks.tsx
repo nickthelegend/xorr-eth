@@ -48,9 +48,9 @@ export default function Stocks() {
   return (
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
-        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Equities</Text>} />
+        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Stocks</Text>} />
         <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
-          Priced by asking 1inch what a real buy would cost — not by a feed.
+          Tokenized stocks, priced by what a real 1inch buy would cost.
         </Text>
       </View>
 

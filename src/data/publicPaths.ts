@@ -18,10 +18,16 @@ export const PUBLIC_PATHS: readonly string[] = [
   '/market/sparklines',
   '/market/ohlc',
   '/market/symbols',
+  /*
+   * Public on the server all along and missing here, so every logo request waited for the session
+   * first — a second on a cold start, measured, before a single mark could draw.
+   */
+  '/market/logos',
   '/market/tradable',
   '/market/stocks',
   '/market/stocks/history',
   '/market/crosscheck',
+  '/market/futures',
   '/yield/supply',
 ];
 

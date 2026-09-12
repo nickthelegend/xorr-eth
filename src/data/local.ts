@@ -44,6 +44,8 @@ import type {
 } from './types';
 import type {
   OrderOutcome,
+  PerpCandles,
+  PerpMarket,
   PerpMetrics,
   PositionClose,
   Repositories,
@@ -487,10 +489,26 @@ export const LocalRepositories: Repositories = {
 
   perps: {
     async metrics(symbol) {
-      // No live metrics means the screen says so. It never falls back to the design's figures.
-      return (
-        (await api.get<PerpMetrics | null>(`/perp/${symbol}`).catch(() => undefined)) ?? null
-      );
+      /*
+       * Null only for "there is no such contract".
+       *
+       * Catching everything turned a venue that was merely slow — the route's 503 "warming" — into the
+       * same null as a symbol nobody lists, so a busy minute read as "no contract". That one is an
+       * error the screen states and retries. It still never falls back to the design's figures.
+       */
+      try {
+        return await api.get<PerpMetrics>(`/perp/${encodeURIComponent(symbol)}`);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+    async markets() {
+      // No catch: a venue that did not answer is an error the screen states, not an empty market.
+      return api.get<{ venue: string; markets: PerpMarket[] }>('/market/futures');
+    },
+    async candles(symbol, range) {
+      return api.get<PerpCandles>(`/perp/${encodeURIComponent(symbol)}/candles?range=${range}`);
     },
   },
 

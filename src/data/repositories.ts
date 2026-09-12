@@ -208,30 +208,61 @@ export interface NewsRepository {
  * app that advertises a rate it cannot deliver is the thing copy.md's "never oversell" rule
  * exists to prevent.
  */
-/** Live perp metrics — PLAN.md 12.15 [G37]. Screen 25's 2x2 grid was static in the handoff. */
+/**
+ * One futures contract, from the venue that lists it — Hyperliquid (2026-09-13). PLAN.md 12.15 [G37].
+ *
+ * Every field is the venue's own. This used to be a spot price with nulls wherever a venue's book was
+ * needed; there is a venue behind it now. xorr still does not trade futures.
+ */
 export type PerpMetrics = {
   symbol: string;
   markPx: number;
   oraclePx: number;
   markVsIndex: number;
-  /**
-   * Null where xorr cannot know it.
-   *
-   * These three need a venue's own order book, and xorr does not run one. Null so the screen can
-   * say "not available" — a plausible number here is the kind a perp trader would act on.
-   */
-  openInterestUsd: number | null;
-  dayVolumeUsd: number | null;
-  fundingRate: number | null;
+  /** Null when the venue has no price from 24 hours earlier. */
+  change24hPct: number | null;
+  openInterestUsd: number;
+  dayVolumeUsd: number;
+  /** Per funding interval, as a fraction. Positive means longs pay shorts. */
+  fundingRate: number;
+  fundingIntervalHours: number;
   maxLeverage: number;
   nextFundingSeconds: number;
   /** Absolute unix ms — the client counts down from this, purely. */
   nextFundingAt: number;
+  venue: string;
   feed: 'live';
+};
+
+/** A row in the futures list — the same figures as `PerpMetrics`, for every live contract. */
+export type PerpMarket = {
+  symbol: string;
+  markPx: number;
+  oraclePx: number;
+  change24hPct: number | null;
+  fundingRate: number;
+  openInterestUsd: number;
+  dayVolumeUsd: number;
+  maxLeverage: number;
+};
+
+export type PerpRange = '1D' | '1W' | '1M' | '1Y';
+
+export type PerpCandles = {
+  symbol: string;
+  range: PerpRange;
+  interval: string;
+  /** Candle open times, unix ms. */
+  times: number[];
+  /** `[open, high, low, close]`. */
+  bars: [number, number, number, number][];
 };
 
 export interface PerpRepository {
   metrics(symbol: string): Promise<PerpMetrics | null>;
+  /** Every live contract, busiest first, with the venue they come from. */
+  markets(): Promise<{ venue: string; markets: PerpMarket[] }>;
+  candles(symbol: string, range: PerpRange): Promise<PerpCandles>;
 }
 
 export interface YieldRepository {
