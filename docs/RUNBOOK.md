@@ -188,8 +188,8 @@ so anything holding a balance on the previous fork is gone with it.
 
 | Piece | Host | Name |
 |---|---|---|
-| The app (static web export) | Vercel | project `xorr-eth` → `https://xorr-eth.vercel.app` |
-| Executor, Base Sepolia | Railway | `executor` → `https://executor-production-1659.up.railway.app` (Postgres: `Postgres-gWN2`) |
+| The app (static web export) | Vercel | project `xorr-eth` → `https://app.xorr.finance` (also `https://xorr-eth.vercel.app`) |
+| Executor, Base Sepolia | Railway | `executor` → `https://api.xorr.finance`, i.e. `https://executor-production-1659.up.railway.app` (Postgres: `Postgres-gWN2`) |
 | Executor, Base mainnet fork | Railway | `executor-fork` → `https://executor-fork-production.up.railway.app` (Postgres: `Postgres-WPy4`) |
 | The fork itself (anvil) | Railway | `base-fork` → `https://base-fork-production.up.railway.app` — no volume, so a restart re-forks |
 
@@ -203,7 +203,13 @@ npm run deploy:web          # XORR_WEB_API overrides the executor it points at
 ```
 
 The executor's CORS is `ALLOWED_ORIGINS` on each Railway service — `*` today. If it is ever narrowed,
-the Vercel origin has to be in the list or the app loads and every request fails.
+both app origins have to be in the list, or the app loads and every request fails.
+
+**DNS.** `xorr.finance` is on Vercel's nameservers, in the same Vercel team as the project. `app` is a
+project domain on `xorr-eth` — moving it between projects is a domain move, no DNS change. `api` is a
+CNAME to the target Railway issued for the executor's custom domain, with Railway's
+`_railway-verify.api` TXT record beside it; the certificate is Railway's. The bundle still calls the
+`up.railway.app` address directly, so the app does not depend on that record.
 
 **Recovering a project scheduled for deletion.** On 2026-09-11, during the move of the frontend to
 Vercel, the whole Railway project was scheduled for deletion. Every

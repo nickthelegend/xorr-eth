@@ -52,7 +52,7 @@ try {
  * else could open. A demo of the deployed product is the only demo worth having, so the deployed
  * product is what this records unless told otherwise.
  */
-const BASE = process.env.APP_URL ?? 'https://xorr-eth.vercel.app';
+const BASE = process.env.APP_URL ?? 'https://app.xorr.finance';
 const OUT = path.resolve(import.meta.dirname, '../docs/demo');
 /** design.md's canvas. A phone layout recorded at desktop width looks like a mistake. */
 const VIEWPORT = { width: 402, height: 874 };

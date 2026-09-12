@@ -1,6 +1,6 @@
 # Submission — ETHOnline 2026
 
-**Live app:** [`xorr-eth.vercel.app`](https://xorr-eth.vercel.app)
+**Live app:** [`app.xorr.finance`](https://app.xorr.finance)
 — open it and sign in. A new wallet is sent testnet gas automatically so the permission is signable,
 and the demo wallet's own permission is live until **2026-10-11**. The frontend is on Vercel; the
 executors, the fork and Postgres are on Railway.

@@ -15,7 +15,7 @@ import { chromium } from 'playwright';
 
 try { process.loadEnvFile(new URL('../.env', import.meta.url)); } catch {}
 
-const APP = process.env.APP_URL ?? 'https://xorr-eth.vercel.app';
+const APP = process.env.APP_URL ?? 'https://app.xorr.finance';
 const API = process.env.EXPO_PUBLIC_API_URL ?? 'https://executor-production-1659.up.railway.app';
 const appId = process.env.PRIVY_APP_ID;
 const secret = process.env.PRIVY_APP_SECRET;

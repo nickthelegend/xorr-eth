@@ -23,7 +23,7 @@ Chain: **Base**. ETH Online 2026 · Base Build Camp 2026.
 
 91 seconds, recorded against **the hosted app, not a local dev server** — on Base Sepolia, against
 the same public executor a stranger's session talks to. The frontend has since moved to Vercel, where
-you can open it yourself: [`xorr-eth.vercel.app`](https://xorr-eth.vercel.app). Full quality:
+you can open it yourself: [`app.xorr.finance`](https://app.xorr.finance). Full quality:
 [`docs/demo/demo.mp4`](docs/demo/demo.mp4). The path it walks, and the words to say over it, are in
 [`docs/DEMO-SCRIPT.md`](docs/DEMO-SCRIPT.md); it was produced by
 [`tools/demo.mjs`](tools/demo.mjs), which drives a real signed-in Privy session rather than a
@@ -135,13 +135,13 @@ published to Base, so the history you check is not a history we hold.
 
 | | |
 |---|---|
-| **The app** | **[`xorr-eth.vercel.app`](https://xorr-eth.vercel.app)** — open it, sign in, it is the real thing against the Sepolia executor below. Frontend on Vercel; executors, fork and Postgres on Railway |
+| **The app** | **[`app.xorr.finance`](https://app.xorr.finance)** — open it, sign in, it is the real thing against the Sepolia executor below. Frontend on Vercel; executors, fork and Postgres on Railway |
 | `XorrDelegation` | [`0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e`](https://sepolia.basescan.org/address/0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e) on Base Sepolia |
 | `XorrAuditAnchor` | [`0xB58cB717867988582DcCB7f3155DeD3fC7A76caf`](https://sepolia.basescan.org/address/0xB58cB717867988582DcCB7f3155DeD3fC7A76caf) on Base Sepolia — holds the audit trail's head, published hourly |
 | Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.2`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2) — synced, no indexing errors |
 | Aqua venue subgraph | built + pinned `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ` |
 | Bot delegate key | `0xC38f38f45463f77bD823FebE16b15714Eb98c8A5` — the key the deployed executor signs with, funded for its own gas |
-| Executor (Base Sepolia) | [`executor-production-1659.up.railway.app`](https://executor-production-1659.up.railway.app/verify) — the public, explorer-checkable deployment |
+| Executor (Base Sepolia) | [`api.xorr.finance`](https://api.xorr.finance/verify), which is [`executor-production-1659.up.railway.app`](https://executor-production-1659.up.railway.app/verify) — the public, explorer-checkable deployment |
 | Executor (Base mainnet fork) | [`executor-fork-production.up.railway.app`](https://executor-fork-production.up.railway.app/verify) — where fills actually execute |
 
 The hosted app runs on Base Sepolia, and that is a correctness choice rather than a convenience
