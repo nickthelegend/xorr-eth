@@ -37,8 +37,9 @@ import {
   DELEGATION_ADDRESS,
 } from '../evm/delegation.js';
 import { requireUser } from '../auth/middleware.js';
+import { bindWallet, findLinkedWallet } from '../auth/walletBinding.js';
 import { currentWallet, requireWallet, type WalletRow } from './wallet-context.js';
-import { erc20Abi, formatUnits } from 'viem';
+import { erc20Abi, formatUnits, getAddress } from 'viem';
 import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
@@ -77,16 +78,41 @@ routes.get('/wallet', async (c) => {
   return c.json({ ...w, chain: CHAIN_KEY });
 });
 
+/** Privy could not be asked which wallets this account has — which is not the same as it having none. */
+function identityUnavailable(c: Context) {
+  return c.json(
+    {
+      error: 'identity_unavailable',
+      message: 'Could not confirm this wallet with Privy just now. Try again in a moment.',
+    },
+    503,
+  );
+}
+
+/** The row exists under a different account. Reported, never resolved in the caller's favour. */
+function ownedElsewhere(c: Context) {
+  return c.json(
+    {
+      error: 'wallet_owned_by_another_account',
+      message: 'This wallet is already registered to a different account.',
+    },
+    409,
+  );
+}
+
 routes.post('/wallet/create', async (c) => {
-  const { userId, walletAddress } = requireUser(c);
+  const user = requireUser(c);
   const existing = await currentWallet(c);
   if (existing) return c.json(existing);
 
-  // Privy owns the embedded wallet, so the address comes from the verified identity rather than
-  // from a keypair this server generated. The user's keys never touch the executor.
-  const body = (await c.req.json().catch(() => ({}))) as { address?: string };
-  const address = walletAddress ?? body.address;
-  if (!address) {
+  /*
+   * Privy owns the embedded wallet, so the address comes from the verified identity and nowhere else.
+   * This used to fall back to `body.address`, which let a request name any wallet at all and — through
+   * the upsert below it — take the row from whoever held it. See `auth/walletBinding.ts`.
+   */
+  if (!user.wallets) return identityUnavailable(c);
+  const embedded = user.wallets.find((w) => w.embedded);
+  if (!embedded) {
     return c.json(
       {
         error: 'no_wallet',
@@ -96,15 +122,20 @@ routes.post('/wallet/create', async (c) => {
     );
   }
 
-  const row = await one<WalletRow>(
-    `INSERT INTO wallets (id, user_id, address, kind, cluster, active_at)
-     VALUES ($1,$2,$3,'embedded',$4, now())
-     ON CONFLICT (address) DO UPDATE
-       SET user_id = EXCLUDED.user_id, active_at = now() RETURNING *`,
-    [randomUUID(), userId, address, CHAIN_KEY],
-  );
+  const bound = await bindWallet({
+    id: randomUUID(),
+    userId: user.userId,
+    address: getAddress(embedded.address),
+    kind: 'embedded',
+    cluster: CHAIN_KEY,
+  });
+  if (bound.status !== 'bound') return ownedElsewhere(c);
+  const row = bound.row;
+  const address = row.address;
+  if (!bound.inserted) return c.json(row);
+
   await append({
-    walletId: row!.id,
+    walletId: row.id,
     agent: 'xorr',
     action: 'Wallet connected',
     detail: `Your keys, held by you. ${CHAIN_KEY}.`,
@@ -129,7 +160,7 @@ routes.post('/wallet/create', async (c) => {
     reason: e instanceof Error ? e.message : String(e),
   }));
   await append({
-    walletId: row!.id,
+    walletId: row.id,
     agent: 'xorr',
     action: drip.sent ? `Sent ${drip.amountEth} test ETH for gas` : 'No gas sent',
     detail: drip.sent
@@ -152,29 +183,45 @@ routes.post('/wallet/create', async (c) => {
  * still arrived with nothing to pay gas with.
  */
 routes.post('/wallet/connect', async (c) => {
-  const { userId } = requireUser(c);
+  const user = requireUser(c);
   const body = z.object({ address: z.string().regex(/^0x[a-fA-F0-9]{40}$/) }).parse(await c.req.json());
 
   /*
-   * Was this wallet already known? Asked BEFORE the upsert, because afterwards there is no way to
-   * tell an insert from an update — and the drip must fire once, on first sight, not on every app
-   * load for as long as the wallet stays empty.
+   * Only a wallet on the caller's own Privy account.
+   *
+   * This trusted `body.address` and upserted with `SET user_id = EXCLUDED.user_id`, so any signed-in
+   * user could take any wallet row — and with it trade, close and flatten on that owner's permission.
+   * Privy is the authority on which wallets an account has; a request body is not.
    */
-  const known = await one<{ id: string }>(`SELECT id FROM wallets WHERE address = $1`, [body.address]);
+  if (!user.wallets) return identityUnavailable(c);
+  const linked = findLinkedWallet(user.wallets, body.address);
+  if (!linked) {
+    return c.json(
+      {
+        error: 'wallet_not_linked',
+        message: 'That address is not a wallet on your account, so it cannot be connected here.',
+      },
+      403,
+    );
+  }
 
-  const row = await one<WalletRow>(
-    // `active_at` is the point of this call as much as the row is: the app is telling us which of
-    // this user's addresses it is on, and that is what `currentWallet` orders by.
-    `INSERT INTO wallets (id, user_id, address, kind, cluster, active_at)
-     VALUES ($1,$2,$3,'connected',$4, now())
-     ON CONFLICT (address) DO UPDATE
-       SET kind='connected', user_id = EXCLUDED.user_id, active_at = now() RETURNING *`,
-    [randomUUID(), userId, body.address, CHAIN_KEY],
-  );
+  // `active_at` is the point of this call as much as the row is: the app is telling us which of this
+  // user's addresses it is on, and that is what `currentWallet` orders by.
+  const bound = await bindWallet({
+    id: randomUUID(),
+    userId: user.userId,
+    address: getAddress(linked.address),
+    kind: linked.embedded ? 'embedded' : 'connected',
+    cluster: CHAIN_KEY,
+  });
+  if (bound.status !== 'bound') return ownedElsewhere(c);
+  const row = bound.row;
 
-  if (!known) {
+  // Once, on first sight — decided by the insert itself, so two concurrent first connects cannot both
+  // send gas.
+  if (bound.inserted) {
     await append({
-      walletId: row!.id,
+      walletId: row.id,
       agent: 'xorr',
       action: 'Wallet connected',
       detail: `Your keys, held by you. ${CHAIN_KEY}.`,
@@ -194,12 +241,12 @@ routes.post('/wallet/connect', async (c) => {
      * must not be blocked by a faucet that had nothing to give. Recorded in the trail because a
      * transfer out of the delegate's key should never happen unlogged.
      */
-    const drip = await dripGasIfNeeded(body.address as Address).catch((e: unknown) => ({
+    const drip = await dripGasIfNeeded(row.address as Address).catch((e: unknown) => ({
       sent: false as const,
       reason: e instanceof Error ? e.message : String(e),
     }));
     await append({
-      walletId: row!.id,
+      walletId: row.id,
       agent: 'xorr',
       action: drip.sent ? `Sent ${drip.amountEth} test ETH for gas` : 'No gas sent',
       detail: drip.sent

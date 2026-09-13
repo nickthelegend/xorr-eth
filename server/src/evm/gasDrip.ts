@@ -16,9 +16,10 @@
  *     public Sepolia RPC, a balance read immediately after `waitForTransactionReceipt` still
  *     returned zero, and a second call in the same breath sent again — 0.004 ETH into an address
  *     that should have had 0.002. Read-after-write on a public node is not a lock. The guarantee
- *     that this happens once per wallet is the `known` check in `/wallet/connect`, which asks the
- *     database before the upsert and cannot lag; this check only stops a wallet that already has
- *     gas from being topped up.
+ *     that this happens once per wallet is `inserted` from `bindWallet` (`auth/walletBinding.ts`):
+ *     the insert itself reports whether it created the row, so two concurrent first connects cannot
+ *     both be first, and only an address verified as the caller's reaches it. This check only stops
+ *     a wallet that already has gas from being topped up.
  *   - **Only while the delegate can still pay for its own work.** The bot's gas is what makes every
  *     other trade possible; a faucet that eats it has broken more than it fixed. `RESERVE` is the
  *     floor it will not spend below.

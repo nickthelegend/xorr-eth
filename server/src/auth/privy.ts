@@ -23,11 +23,24 @@ if (!APP_ID || !APP_SECRET) {
 
 export const privy = new PrivyClient(APP_ID, APP_SECRET);
 
+export type LinkedWallet = {
+  /** As Privy returns it — checksummed. */
+  address: string;
+  /** Privy's own embedded wallet, as opposed to one the user brought and linked. */
+  embedded: boolean;
+};
+
 export type AuthedUser = {
   /** Privy DID, e.g. did:privy:xxx. The primary key for everything this user owns. */
   userId: string;
   /** The embedded wallet address Privy manages for them, when they have one. */
   walletAddress?: string;
+  /**
+   * Every Ethereum wallet on this Privy account, embedded or linked — the only addresses this user may
+   * register as theirs (`/wallet/connect`). Undefined when Privy could not be asked, which is not the
+   * same as an account with no wallets and must not be treated as one.
+   */
+  wallets?: LinkedWallet[];
   email?: string;
 };
 
@@ -57,10 +70,14 @@ export async function verifyToken(authorization: string | undefined): Promise<Au
   }
 
   const user = await privy.getUser(claims.userId).catch(() => null);
-  const wallet = user?.linkedAccounts?.find(
-    (a): a is typeof a & { address: string } =>
-      a.type === 'wallet' && typeof (a as { address?: unknown }).address === 'string',
-  );
+  const wallets: LinkedWallet[] | undefined = user
+    ? (user.linkedAccounts ?? []).flatMap((a) => {
+        const w = a as { type?: string; address?: unknown; chainType?: string; walletClientType?: string };
+        return w.type === 'wallet' && w.chainType === 'ethereum' && typeof w.address === 'string'
+          ? [{ address: w.address, embedded: w.walletClientType === 'privy' }]
+          : [];
+      })
+    : undefined;
   const email = user?.linkedAccounts?.find(
     (a): a is typeof a & { address: string } =>
       a.type === 'email' && typeof (a as { address?: unknown }).address === 'string',
@@ -68,7 +85,10 @@ export async function verifyToken(authorization: string | undefined): Promise<Au
 
   return {
     userId: claims.userId,
-    walletAddress: wallet?.address,
+    // The embedded wallet when there is one. "The first wallet of any kind" was whichever the account
+    // happened to link first — a browser extension, on web.
+    walletAddress: (wallets?.find((w) => w.embedded) ?? wallets?.[0])?.address,
+    wallets,
     email: email?.address,
   };
 }
