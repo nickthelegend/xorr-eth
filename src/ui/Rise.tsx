@@ -5,11 +5,17 @@
  * the way the reference video's sheets fill in from the top down. Screens never touch reanimated's
  * entrance builders themselves: this is the one place arrival motion is made, so it is the one place
  * that has to honour reduced motion — and does.
+ *
+ * Drawn from a timing (`riseTo` in motion.ts) rather than an `entering` builder, so the web arrives on
+ * the same ease-out curve as the phone; motion.ts says why the builder could not.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { type StyleProp, type ViewStyle } from 'react-native';
-import Animated from 'react-native-reanimated';
-import { enterAt, useReducedMotion } from './motion';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { riseTo, useReducedMotion } from './motion';
+
+/** How far a section travels as it arrives: the 25pt reanimated's FadeInDown travelled, so nothing looks different. */
+const RISE_FROM = 25;
 
 export interface RiseProps {
   /** Its place in the arrival order — 0 arrives first. */
@@ -20,9 +26,16 @@ export interface RiseProps {
 
 export function Rise({ index = 0, children, style }: RiseProps) {
   const reduced = useReducedMotion();
-  return (
-    <Animated.View entering={enterAt(index, reduced)} style={style}>
-      {children}
-    </Animated.View>
-  );
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = riseTo(index, reduced);
+  }, [index, reduced, progress]);
+
+  const arriving = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: (1 - progress.value) * RISE_FROM }],
+  }));
+
+  return <Animated.View style={[style, arriving]}>{children}</Animated.View>;
 }
