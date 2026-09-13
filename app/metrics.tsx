@@ -166,7 +166,7 @@ export default function Metrics() {
                 <Text variant="footnote" color={colors.ink40}>
                   WHERE FILLS SETTLED
                 </Text>
-                {/* The claim the 1inch integration rests on, counted from the audit trail. */}
+                {/* The claim the 1inch integration rests on, counted from the runs that filled. */}
                 {Object.entries(data.fillsByVenue)
                   .sort((a, b) => b[1] - a[1])
                   .map(([venue, n]) => (
@@ -213,10 +213,10 @@ export default function Metrics() {
                   </Text>
                 ) : null}
                 {data.fillQuality.venues.map((v) => (
-                  <View key={v.venue} style={{ marginTop: space.s10 }}>
+                  <View key={`${v.venue}-${v.assetClass ?? ''}`} style={{ marginTop: space.s10 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                       <Text variant="secondarySm" color={colors.ink65}>
-                        {`${v.venue} · ${v.fills} fill${v.fills === 1 ? '' : 's'}`}
+                        {`${v.venue}${v.assetClass === 'equity' ? ' · equities' : ''} · ${v.fills} fill${v.fills === 1 ? '' : 's'}${v.sells ? `, ${v.sells} sale${v.sells === 1 ? '' : 's'}` : ''}`}
                       </Text>
                       {/* Positive bought more than the market price implied. The sign is the fact. */}
                       <Text variant="secondarySm" color={v.meanBps >= 0 ? colors.up : colors.down}>

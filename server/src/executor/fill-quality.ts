@@ -31,6 +31,10 @@ import { CHAIN_KEY } from '../evm/chains.js';
 
 export type VenueQuality = {
   venue: string;
+  /** `crypto` or `equity`: tokenized equities fill against other liquidity and are not averaged in with crypto (PLAN.md 2.9). */
+  assetClass: string;
+  /** How many of `fills` were sales, measured by the USDC they paid. */
+  sells: number;
   /** Fills with BOTH a quote and a measured delta. Rows predating migration 012 are excluded. */
   fills: number;
   /** Mean signed difference from the arrival price, in basis points. Positive = more asset than the price implied. */
@@ -63,18 +67,11 @@ export async function fillQuality(): Promise<FillQuality> {
    * `quoted_units > 0` excludes both the pre-migration rows and any fill whose quote was never
    * established — dividing by that would produce an infinity and a very confident chart.
    */
-  const rows = await query<{ venue: string | null; quoted: string; filled: string }>(
-    `SELECT venue, quoted_units::text AS quoted, units::text AS filled
+  const rows = await query<FillRow>(
+    `SELECT venue, side, asset_class, quoted_units::text, units::text, quoted_usd::text, usd::text
        FROM strategy_runs
       WHERE status = 'filled' AND chain = ${THIS_CHAIN}
-        AND quoted_units IS NOT NULL AND quoted_units > 0
-        AND units IS NOT NULL AND units > 0`,
-    [],
-  );
-
-  const unmeasurableRow = await query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM strategy_runs
-      WHERE status = 'filled' AND chain = ${THIS_CHAIN} AND (quoted_units IS NULL OR quoted_units <= 0)`,
+        AND side IS DISTINCT FROM 'supply'`,
     [],
   );
 
@@ -88,25 +85,32 @@ export async function fillQuality(): Promise<FillQuality> {
    */
   const trades = rows.filter((r) => r.venue !== 'aave');
 
-  const byVenue = new Map<string, number[]>();
+  const groups = new Map<string, { venue: string; assetClass: string; bps: number[]; sells: number }>();
+  let unmeasurable = 0;
   for (const r of trades) {
-    const quoted = Number(r.quoted);
-    const filled = Number(r.filled);
-    if (!Number.isFinite(quoted) || !Number.isFinite(filled) || quoted <= 0) continue;
-    const bps = ((filled - quoted) / quoted) * 10_000;
-    const key = r.venue ?? 'unrecorded';
-    const list = byVenue.get(key) ?? [];
-    list.push(bps);
-    byVenue.set(key, list);
+    const bps = shortfallBps(r);
+    if (bps === undefined) {
+      unmeasurable += 1;
+      continue;
+    }
+    const venue = r.venue ?? 'unrecorded';
+    const assetClass = r.asset_class ?? 'unrecorded';
+    const key = `${venue}|${assetClass}`;
+    const group = groups.get(key) ?? { venue, assetClass, bps: [], sells: 0 };
+    group.bps.push(bps);
+    if (r.side === 'sell') group.sells += 1;
+    groups.set(key, group);
   }
 
-  const venues: VenueQuality[] = [...byVenue.entries()]
-    .map(([venue, bpsList]) => ({
-      venue,
-      fills: bpsList.length,
-      meanBps: Math.round((bpsList.reduce((a, b) => a + b, 0) / bpsList.length) * 10) / 10,
-      worstBps: Math.round(Math.min(...bpsList) * 10) / 10,
-      bestBps: Math.round(Math.max(...bpsList) * 10) / 10,
+  const venues: VenueQuality[] = [...groups.values()]
+    .map((g) => ({
+      venue: g.venue,
+      assetClass: g.assetClass,
+      fills: g.bps.length,
+      sells: g.sells,
+      meanBps: Math.round((g.bps.reduce((a, b) => a + b, 0) / g.bps.length) * 10) / 10,
+      worstBps: Math.round(Math.min(...g.bps) * 10) / 10,
+      bestBps: Math.round(Math.max(...g.bps) * 10) / 10,
     }))
     // Most fills first: a venue with one lucky fill should not lead a table about consistency.
     .sort((a, b) => b.fills - a.fills);
@@ -114,7 +118,34 @@ export async function fillQuality(): Promise<FillQuality> {
   return {
     venues,
     measured: venues.reduce((n, v) => n + v.fills, 0),
-    unmeasurable: Number(unmeasurableRow[0]?.n ?? 0),
+    unmeasurable,
     basis: CHAIN_KEY === 'base' ? 'same-chain' : 'forked',
   };
+}
+
+type FillRow = {
+  venue: string | null;
+  side: string | null;
+  asset_class: string | null;
+  quoted_units: string | null;
+  units: string | null;
+  quoted_usd: string | null;
+  usd: string | null;
+};
+
+/**
+ * One fill's distance from the arrival price, signed so that positive is better for the taker — or
+ * undefined when it cannot be measured.
+ *
+ * A buy is measured in the asset: units that arrived against the units the price implied. A sale is
+ * measured in what it paid: USDC that arrived against the USDC the price implied (PLAN.md 2.9). Sales
+ * were compared in the asset they sold, which the delegation moves exactly, so every one scored zero.
+ * A sale with no quote — recorded before one was kept, or whose proceeds could not be read back — is
+ * unmeasurable, not perfect.
+ */
+export function shortfallBps(r: FillRow): number | undefined {
+  const [quoted, filled] =
+    r.side === 'sell' ? [Number(r.quoted_usd), Number(r.usd)] : [Number(r.quoted_units), Number(r.units)];
+  if (!Number.isFinite(quoted) || !Number.isFinite(filled) || quoted <= 0 || filled <= 0) return undefined;
+  return ((filled - quoted) / quoted) * 10_000;
 }

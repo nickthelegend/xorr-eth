@@ -55,25 +55,38 @@ export async function cashUsd(owner: Address): Promise<number> {
  *
  * Code length is checked once and cached, because it cannot change for a given chain.
  */
-let readableCache: string[] | null = null;
+/**
+ * What the chain has at each token's address: code that can be called, code that cannot, or nothing.
+ *
+ * `unreadable` is the Ondo case above. `absent` is a registry address with no contract on this chain at
+ * all — mainnet cbBTC on Base Sepolia — where a wallet holds none, which is an answer and not an
+ * unknown (PLAN.md 2.7). A lookup that fails throws and is not remembered: cached as unreadable, one RPC
+ * hiccup at boot hid a token from every balance for the life of the process.
+ */
+type CodeState = 'readable' | 'unreadable' | 'absent';
+let codeCache: Map<string, CodeState> | null = null;
+
+async function codeStates(): Promise<Map<string, CodeState>> {
+  if (codeCache) return codeCache;
+  const entries = Object.entries(TOKENS).filter(([sym]) => sym !== 'ETH' && sym !== 'USDC');
+  const codes = await Promise.all(entries.map(([, t]) => publicClient.getCode({ address: t.address })));
+  codeCache = new Map(
+    entries.map(([sym], i): [string, CodeState] => {
+      const length = codes[i]?.length ?? 0;
+      return [sym, length > 4 ? 'readable' : length > 2 ? 'unreadable' : 'absent'];
+    }),
+  );
+  return codeCache;
+}
 
 async function readableTokens(): Promise<[string, { address: Address; decimals: number }][]> {
-  const entries = Object.entries(TOKENS).filter(([sym]) => sym !== 'ETH' && sym !== 'USDC');
-  if (!readableCache) {
-    const codes = await Promise.all(
-      entries.map(([, t]) => publicClient.getCode({ address: t.address }).catch(() => undefined)),
-    );
-    readableCache = entries
-      .filter((_, i) => (codes[i]?.length ?? 0) > 4)
-      .map(([sym]) => sym);
-  }
-  const allowed = new Set(readableCache);
-  return entries.filter(([sym]) => allowed.has(sym));
+  const states = await codeStates();
+  return Object.entries(TOKENS).filter(([sym]) => states.get(sym) === 'readable');
 }
 
 /** Testing only. */
 export function clearReadableTokenCache(): void {
-  readableCache = null;
+  codeCache = null;
 }
 
 /**
@@ -116,9 +129,10 @@ export async function holdings(owner: Address): Promise<Holding[]> {
 /**
  * How many units of each symbol this wallet holds on the chain — for holding a ledger to it (PLAN.md 2.7).
  *
- * `null` for a symbol this chain cannot be asked about: not in the registry, the settlement token, or
- * one whose code cannot be called here (see `readableTokens`). That means "not checked", never "holds
- * none". One multicall, and a read that fails throws, so a failure cannot come back as a zero.
+ * `null` for a symbol this chain cannot be asked about: not in the registry, the settlement token, or one
+ * whose code cannot be called here (see `codeStates`). That means "not checked", never "holds none". `0`
+ * where the registry address has no contract on this chain at all: nothing can be held there. One
+ * multicall, and a read that fails throws, so a failure cannot come back as a zero.
  */
 export async function chainUnitsOf(owner: Address, symbols: string[]): Promise<Map<string, number | null>> {
   const out = new Map<string, number | null>(symbols.map((s) => [s, null]));
@@ -137,6 +151,11 @@ export async function chainUnitsOf(owner: Address, symbols: string[]): Promise<M
   }
   // Nothing in the registry means nothing to ask, and no code checks either.
   if (spellings.size === 0) return out;
+  const states = await codeStates();
+  for (const [name, spelled] of spellings) {
+    // No contract at this address on this chain: the wallet holds none of it here.
+    if (states.get(name) === 'absent') for (const s of spelled) out.set(s, 0);
+  }
   const readable = new Map(await readableTokens());
   const asked = [...spellings.keys()].filter((name) => readable.has(name));
   if (asked.length === 0) return out;

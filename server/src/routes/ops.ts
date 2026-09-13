@@ -176,15 +176,16 @@ ops.get('/metrics', async (c) => {
     failuresByCause[k] = (failuresByCause[k] ?? 0) + Number(row.n);
   }
 
-  /** Which venue actually settled each fill, read from the audit trail's own wording. */
+  /*
+   * Which venue settled each fill, as the run recorded it when it filled (PLAN.md 2.9).
+   *
+   * This was counted from the audit trail's wording — "Aqua book", "SwapVM program", and any other
+   * "Bought"/"Sold" as 1inch — so a reworded sentence was a miscounted venue. `strategy_runs.venue` is
+   * written with the fill, and closes and flattens write runs too (2.8).
+   */
   const venues = await query<{ venue: string; n: string }>(
-    `SELECT CASE
-              WHEN action ILIKE '%Aqua book%'        THEN 'aqua'
-              WHEN action ILIKE '%SwapVM program%'   THEN 'swapvm'
-              WHEN action ILIKE 'Bought%' OR action ILIKE 'Sold%' THEN '1inch'
-              ELSE 'other' END AS venue,
-            count(*) AS n
-       FROM audit_log WHERE kind = 'trade' GROUP BY 1`,
+    `SELECT COALESCE(venue, 'unrecorded') AS venue, count(*) AS n
+       FROM strategy_runs WHERE status = 'filled' AND chain = ${THIS_CHAIN} GROUP BY 1`,
   ).catch(() => []);
 
   return c.json({

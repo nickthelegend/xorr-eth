@@ -12,6 +12,7 @@
  */
 import { erc20Abi, formatUnits, type Address } from 'viem';
 import { publicClient } from '../evm/client.js';
+import { ADDRESSES } from '../evm/chains.js';
 import { TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { priceOf } from '../market/prices.js';
 
@@ -60,4 +61,31 @@ export async function estimateOutUnits(
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The owner's settlement-token balance, exactly as the chain holds it — what a sale's proceeds are
+ * measured against (PLAN.md 2.8). Undefined if it cannot be read.
+ *
+ * The settlement address, not the routing registry's: `TOKENS` is Base mainnet everywhere, and the
+ * USDC a sale pays into is the one `XORR_CHAIN` settles in.
+ */
+export async function usdcRawOf(owner: Address): Promise<bigint | undefined> {
+  return publicClient
+    .readContract({ address: ADDRESSES.usdcBase, abi: erc20Abi, functionName: 'balanceOf', args: [owner] })
+    .catch(() => undefined);
+}
+
+/**
+ * The USDC that arrived since `before`, in dollars.
+ *
+ * Undefined when either read failed or nothing arrived — a sale pays a non-zero floor by contract
+ * (PLAN.md 1.4), so "nothing" means the reading cannot be trusted, and the caller keeps its estimate
+ * and says so rather than recording a sale for zero.
+ */
+export async function proceedsSince(owner: Address, before: bigint | undefined): Promise<number | undefined> {
+  if (before === undefined) return undefined;
+  const after = await usdcRawOf(owner);
+  if (after === undefined || after <= before) return undefined;
+  return Number(formatUnits(after - before, 6));
 }

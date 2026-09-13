@@ -284,8 +284,8 @@ export type StrategyBacktest = {
  * from the stored error text into the things an operator would act on differently — a price that
  * moved is the market, a revoked permission is the user, a venue that could not fill is us.
  *
- * `fillsByVenue` counts where trades actually settled, read from the audit trail's own wording. It
- * is the claim the 1inch integration rests on, as a number.
+ * `fillsByVenue` counts where trades actually settled, from the venue each filled run recorded — closes
+ * and flattens included. It is the claim the 1inch integration rests on, as a number.
  */
 export type Metrics = {
   runs: Record<string, number>;
@@ -305,7 +305,17 @@ export type Metrics = {
    * when the executor could not compute it at all.
    */
   fillQuality: {
-    venues: { venue: string; fills: number; meanBps: number; worstBps: number; bestBps: number }[];
+    venues: {
+      venue: string;
+      /** `crypto` or `equity`: equities are reported beside crypto, not averaged in with it. */
+      assetClass?: string;
+      fills: number;
+      /** How many of `fills` were sales, scored by the USDC they paid. */
+      sells?: number;
+      meanBps: number;
+      worstBps: number;
+      bestBps: number;
+    }[];
     measured: number;
     unmeasurable: number;
     basis: 'same-chain' | 'forked';

@@ -28,7 +28,7 @@ import { decide } from '../graph/decide.js';
 import type { Address } from 'viem';
 import { periodKey, advance, type Cadence } from './schedule.js';
 import { humanFailure, isTransient } from './failure.js';
-import { rawBalanceOf, measuredDelta, estimateOutUnits } from './fill-measure.js';
+import { rawBalanceOf, measuredDelta, estimateOutUnits, proceedsSince, usdcRawOf } from './fill-measure.js';
 import { applyFill } from '../positions/index.js';
 import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { priceOf } from '../market/prices.js';
@@ -37,6 +37,7 @@ import { PLANNERS, observationFor, type TradeIntent } from './kinds/index.js';
 import { chooseSettlement, type SettlementVenue } from './settle.js';
 import { canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { agentForKind } from '../agents/attribution.js';
+import { isStock } from '../venues/stocks.js';
 
 /**
  * Our XorrAquaBook deployment, when there is one. Aqua only exists on Base mainnet, so on Sepolia
@@ -684,6 +685,8 @@ async function runStrategyInner(
     const balanceBefore = intent.direct
       ? undefined
       : await rawBalanceOf(owner, intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol);
+    // A sale is also measured by what it paid, in the settlement token (PLAN.md 2.8).
+    const usdcBefore = isClose ? await usdcRawOf(owner) : undefined;
     const signature = isClose
       ? await closeAsDelegate({
           owner,
@@ -746,6 +749,18 @@ async function runStrategyInner(
     }
 
     /*
+     * What a sale actually paid (PLAN.md 2.8).
+     *
+     * A close recorded `intent.usd` — the value its run started from — as its proceeds, so realised
+     * P&L was booked from an estimate. It is the USDC that arrived. When the balance cannot be read
+     * back the estimate stands, and the run keeps no quote to compare it with, so fill quality counts
+     * it as unmeasured rather than as a perfect fill.
+     */
+    const proceeds = isClose ? await proceedsSince(owner, usdcBefore) : undefined;
+    const recordedUsd = proceeds ?? intent.usd;
+    const tradedSymbol = intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol;
+
+    /*
      * Record what just happened.
      *
      * This was missing entirely: the trade settled on chain and the app learned nothing from it —
@@ -760,7 +775,7 @@ async function runStrategyInner(
       await client.query(
         `UPDATE strategy_runs
             SET status='filled', signature=$2, units=$3, price=$4, usd=$5,
-                quoted_units=$6, venue=$7, finished_at=now()
+                quoted_units=$6, venue=$7, side=$8, quoted_usd=$9, asset_class=$10, finished_at=now()
           WHERE id=$1`,
         /*
          * `usd` was never written on a fill, so the one column that records what a run COST was
@@ -773,7 +788,18 @@ async function runStrategyInner(
          *
          * `venue` is written rather than inferred later from the audit sentence.
          */
-        [runId, signature, filledUnits, price, intent.usd, units, venue],
+        [
+          runId,
+          signature,
+          filledUnits,
+          price,
+          recordedUsd,
+          units,
+          venue,
+          intent.direct ? 'supply' : isClose ? 'sell' : 'buy',
+          proceeds === undefined ? null : intent.usd,
+          isStock(tradedSymbol) ? 'equity' : 'crypto',
+        ],
       );
       /*
        * A supply is not a position, so it does not go in the position book.
@@ -792,7 +818,7 @@ async function runStrategyInner(
         walletId,
         symbol: intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol,
         units: intent.outSymbol === 'USDC' ? -filledUnits : filledUnits,
-        usd: intent.outSymbol === 'USDC' ? -intent.usd : intent.usd,
+        usd: intent.outSymbol === 'USDC' ? -recordedUsd : intent.usd,
       });
       // Closing is not spending, so it does not consume the day's allowance — the contract
       // agrees, and the two tallies must not disagree.
@@ -816,6 +842,7 @@ async function runStrategyInner(
             units: filledUnits,
             price,
             usd,
+            ...(isClose ? { proceedsUsd: recordedUsd, proceedsMeasured: proceeds !== undefined } : {}),
             explorer: explorerTx(signature),
           },
         },
