@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { log } from '../http/request-id.js';
+import { readChain } from '../http/chain-read.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
@@ -263,15 +264,19 @@ routes.post('/wallet/connect', async (c) => {
 routes.get('/wallet/balance', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json({ usd: 0 });
+  /*
+   * A failed read is an error, not a zero (PLAN.md 1.7).
+   *
+   * Both reads caught their own failures: a balance read that failed returned `total: 0` — "$0.00"
+   * on the home screen of a funded wallet, logged and then served as fact — and a permission read
+   * that failed became "no cap". `readChain` turns either into a 502, which the client shows as a
+   * dash rather than a number.
+   */
   const [policy, value] = await Promise.all([
-    readPolicy(w.address as Address).catch(() => null),
+    readChain('your permission', () => readPolicy(w.address as Address)),
     // Read the chain. This used to be a hardcoded 0, so the home screen said "$0.00" while the
     // wallet held a real position.
-    totalValueUsd(w.address as Address).catch((e: unknown) => {
-      // A zero that came from a failed read looks exactly like a zero balance. Say which.
-      log.error('[balance] chain read failed:', e instanceof Error ? e.message : e);
-      return { cash: 0, holdings: [], supplied: 0, total: 0 };
-    }),
+    readChain('your balance', () => totalValueUsd(w.address as Address)),
   ]);
   // Balance is what the user holds; the policy tells us what the bot may touch of it.
   return c.json({
@@ -296,7 +301,8 @@ routes.get('/wallet/balance', async (c) => {
 routes.get('/delegation', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json(null);
-  const policy = await readPolicy(w.address as Address).catch(() => null);
+  // `null` is the chain saying there is no permission; a read that failed is a 502, not that.
+  const policy = await readChain('your permission', () => readPolicy(w.address as Address));
   if (!policy) return c.json(null);
   /*
    * What the user ACTUALLY allowed, asked of the contract.
@@ -305,7 +311,9 @@ routes.get('/delegation', async (c) => {
    * it wrongly for anyone who granted before a venue was added — the safety screen would have
    * shown them a permission they never gave. The chain knows; ask it.
    */
-  const allowed = await allowedVenues(w.address as Address).catch(() => []);
+  // An empty list here is "you allowed nothing" on the one screen that must be exactly true, so a
+  // failed read cannot be allowed to produce one.
+  const allowed = await readChain('the venues you allowed', () => allowedVenues(w.address as Address));
   /*
    * Who the two parties actually are, in words.
    *
@@ -794,7 +802,11 @@ routes.get('/disposals', async (c) => {
 
 routes.get('/positions/:id', async (c) => {
   const w = await requireWallet(c);
-  return c.json((await getPosition(w.id, c.req.param('id'))) ?? null);
+  const position = await getPosition(w.id, c.req.param('id'));
+  // An id that is not in this wallet's book is not found — see `getPosition`, which used to answer
+  // it with the first position it had.
+  if (!position) return c.json({ error: 'not_found', message: 'No position with that id in this wallet.' }, 404);
+  return c.json(position);
 });
 
 routes.get('/activity', async (c) => {
@@ -905,15 +917,27 @@ routes.post('/audit/anchor', async (c) => {
  */
 routes.get('/limits', async (c) => {
   const w = await requireWallet(c);
-  const policy = await readPolicy(w.address as Address).catch(() => null);
+  const policy = await readChain('your permission', () => readPolicy(w.address as Address));
   const ourSpend = await spentToday(w.id);
 
-  if (!policy || policy.revoked) {
+  /*
+   * Never granted and revoked are different answers (PLAN.md 1.7).
+   *
+   * Both — and a read that failed — came back `revoked: true`, so a wallet that had simply not granted
+   * anything yet was told its permission was "off", and an RPC timeout told a live wallet the same. A
+   * failed read is now a 502, and `granted` says whether there is a permission at all.
+   */
+  if (!policy) {
+    return c.json({ dailyCapUsd: 0, spentTodayUsd: ourSpend, remainingUsd: 0, revoked: false, granted: false });
+  }
+  if (policy.revoked) {
     return c.json({
       dailyCapUsd: 0,
       spentTodayUsd: ourSpend,
       remainingUsd: 0,
       revoked: true,
+      granted: true,
+      expiresAt: policy.expiresAt,
     });
   }
 
@@ -923,6 +947,7 @@ routes.get('/limits', async (c) => {
     spentTodayUsd: policy.spentTodayUsd,
     remainingUsd: Math.max(0, Math.min(policy.remainingTodayUsd, policy.dailyCapUsd - ourSpend)),
     revoked: false,
+    granted: true,
     /*
      * The expiry, so a zero here can say WHY it is zero.
      *
@@ -956,7 +981,8 @@ routes.get('/limits', async (c) => {
 routes.post('/limits/check', async (c) => {
   const body = z.object({ usd: z.number() }).parse(await c.req.json());
   const w = await requireWallet(c);
-  const policy = await readPolicy(w.address as Address).catch(() => null);
+  // Fails closed either way, but a timeout is not "no permission" and must not say it is.
+  const policy = await readChain('your permission', () => readPolicy(w.address as Address));
   if (!policy) {
     return c.json({
       allowed: false,

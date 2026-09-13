@@ -265,7 +265,31 @@ async function runStrategyInner(
 
   // ── 1. Claim the period, atomically. ──
   const runId = await tx(async (client) => claimRun(client, strategy.id, key));
-  if (!runId) return { status: 'skipped', reason: 'already_ran_this_period' };
+  if (!runId) {
+    /*
+     * This period already has a run. If that run has finished and the schedule still says due, move
+     * the schedule on (PLAN.md 1.6).
+     *
+     * A period claimed by a run that ended before `settleSchedule` existed — or by a manual trigger
+     * ahead of the schedule — otherwise left the strategy due: re-selected and skipped on every tick
+     * until the period rolled over, holding one of the tick's twenty places the whole time. A run
+     * still `pending` is left alone; it settles its own schedule when it finishes, and moving it here
+     * would cancel a retry it might be about to schedule.
+     */
+    if (strategy.cadence && strategy.next_run_at && new Date(strategy.next_run_at) <= at) {
+      const existing = await one<{ status: string }>(`SELECT status FROM strategy_runs WHERE period_key = $1`, [
+        key,
+      ]).catch(() => undefined);
+      if (existing && existing.status !== 'pending') {
+        await query(`UPDATE strategies SET next_run_at = $2 WHERE id = $1 AND next_run_at <= $3`, [
+          strategy.id,
+          advance(at, strategy.cadence),
+          at,
+        ]).catch(() => undefined);
+      }
+    }
+    return { status: 'skipped', reason: 'already_ran_this_period' };
+  }
 
   const usd = Number(strategy.params.usd ?? strategy.daily_allocation_usd ?? 0);
   /*

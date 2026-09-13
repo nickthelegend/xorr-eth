@@ -17,6 +17,7 @@ import { compareVenues } from '../venues/compare.js';
 import { requireUser } from '../auth/middleware.js';
 import { currentWallet } from './wallet-context.js';
 import { armExits, money, placeOrder } from '../executor/order.js';
+import { readChain } from '../http/chain-read.js';
 import { readPolicy } from '../evm/delegation.js';
 import type { Address } from 'viem';
 import { decide } from '../graph/decide.js';
@@ -99,7 +100,9 @@ extra.get('/agents/:id/backtest', async (c) => {
    * they could not run. Falls back to the default only when there is no policy to read.
    */
   const w = await currentWallet(c).catch(() => null);
-  const policy = w ? await readPolicy(w.address as Address).catch(() => null) : null;
+  // The default is for a wallet with no policy. A read that FAILED used to take it too, scaling the
+  // chart to a cap the user may not have (PLAN.md 1.7) — that is a 502 now, not a guess.
+  const policy = w ? await readChain('your permission', () => readPolicy(w.address as Address)) : null;
   const cap = policy?.dailyCapUsd ?? 1600;
 
   /*

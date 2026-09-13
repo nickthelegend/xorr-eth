@@ -12,6 +12,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({
   statements: [] as { text: string; params: unknown[] }[],
   owner: '0x95A0b368588713011a15f4b1041423f31B08e615',
+  /** When true, the period is already claimed: the INSERT returns no row. */
+  claimTaken: false,
+  /** The status of the run that already holds the period. */
+  existingStatus: 'blocked',
 }));
 
 const record = (text: string, params: unknown[] = []) => {
@@ -22,7 +26,7 @@ vi.mock('../db/index.js', () => {
   const client = {
     query: async (text: string, params: unknown[] = []) => {
       record(text, params);
-      return { rows: /INSERT INTO strategy_runs/.test(text) ? [{ id: 'run-1' }] : [] };
+      return { rows: /INSERT INTO strategy_runs/.test(text) && !h.claimTaken ? [{ id: 'run-1' }] : [] };
     },
   };
   return {
@@ -33,6 +37,7 @@ vi.mock('../db/index.js', () => {
     },
     one: async (text: string, params: unknown[] = []) => {
       record(text, params);
+      if (/FROM strategy_runs/.test(text)) return { status: h.existingStatus };
       return /FROM wallets/.test(text) ? { address: h.owner } : undefined;
     },
   };
@@ -85,6 +90,7 @@ const actions = () => vi.mocked(append).mock.calls.map((c) => (c[0] as { action:
 
 beforeEach(() => {
   h.statements.length = 0;
+  h.claimTaken = false;
   vi.mocked(append).mockClear();
   vi.mocked(readPolicy).mockReset();
 });
@@ -146,5 +152,33 @@ describe('a blocked run', () => {
     expect(next).toBeGreaterThanOrEqual(before + DAY);
     expect(next).toBeLessThanOrEqual(Date.now() + DAY);
     expect(actions()).toEqual(['Skipped WETH']);
+  });
+});
+
+describe('a period that already has a run', () => {
+  it('moves a schedule that is still due on, instead of re-selecting it every tick', async () => {
+    h.claimTaken = true;
+    h.existingStatus = 'blocked';
+
+    const out = await runStrategy(strategy(), at);
+    expect(out).toEqual({ status: 'skipped', reason: 'already_ran_this_period' });
+    const moved = statementsLike(/UPDATE strategies SET next_run_at = \$2 WHERE id = \$1 AND next_run_at <= \$3/)[0];
+    expect(moved?.params).toEqual(['strategy-1', new Date(at.getTime() + DAY), at]);
+  });
+
+  it('leaves the schedule alone while that run is still in flight', async () => {
+    h.claimTaken = true;
+    h.existingStatus = 'pending';
+
+    await runStrategy(strategy(), at);
+    expect(statementsLike(/UPDATE strategies SET next_run_at/)).toHaveLength(0);
+  });
+
+  it('leaves a schedule that is not yet due alone', async () => {
+    h.claimTaken = true;
+    h.existingStatus = 'filled';
+
+    await runStrategy(strategy({ next_run_at: new Date(at.getTime() + 3_600_000) }), at);
+    expect(statementsLike(/UPDATE strategies SET next_run_at/)).toHaveLength(0);
   });
 });

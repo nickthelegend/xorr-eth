@@ -78,11 +78,13 @@ export default function Limits() {
                 color={data.revoked || expired ? colors.ink40 : colors.ink}
                 style={{ marginTop: space.s6 }}
               >
-                {data.revoked
-                  ? 'Nothing — permission is off'
-                  : expired
-                    ? 'Nothing — permission has ended'
-                    : money(Math.max(0, data.remainingUsd))}
+                {data.granted === false
+                  ? 'Nothing — no permission granted yet'
+                  : data.revoked
+                    ? 'Nothing — permission is off'
+                    : expired
+                      ? 'Nothing — permission has ended'
+                      : money(Math.max(0, data.remainingUsd))}
               </Text>
 
               {/*

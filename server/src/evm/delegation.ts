@@ -351,8 +351,27 @@ export const delegatePublicKey = delegateAccount.address;
  * Deliberately not a shortcut around the check — a transaction that IS pending still gets the full
  * wait, because that is the case the wait exists for.
  */
-export async function waitForTx(hash: Hex, timeoutMs = 30_000): Promise<boolean | undefined> {
-  const known = await publicClient.getTransaction({ hash }).catch(() => undefined);
+export async function waitForTx(
+  hash: Hex,
+  timeoutMs = 30_000,
+  lookupMs = 15_000,
+): Promise<boolean | undefined> {
+  /*
+   * Looked up for a few seconds, not once (2026-09-13).
+   *
+   * The app posts a hash the moment its wallet broadcasts — through Privy's RPC — and this asks a
+   * different node, where the transaction can take a second or two to appear. Asking once turned
+   * that propagation gap into "That transaction is not on this chain": a real $1,600 grant, signed
+   * through the hosted app's permission screen, was refused by `/delegation/record` while it was
+   * landing, and the screen stayed on the permission step as though it had failed. A hash still
+   * unknown after `lookupMs` is absent, which keeps the check this function exists for.
+   */
+  const deadline = Date.now() + lookupMs;
+  let known = await publicClient.getTransaction({ hash }).catch(() => undefined);
+  while (!known && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    known = await publicClient.getTransaction({ hash }).catch(() => undefined);
+  }
   if (!known) return undefined;
 
   const receipt = await publicClient

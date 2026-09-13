@@ -86,6 +86,11 @@ export type Limits = {
   spentTodayUsd: number;
   remainingUsd: number;
   revoked: boolean;
+  /**
+   * Whether there is a permission at all. `false` is a wallet that never granted one, which is not
+   * the same as revoked. Optional: an executor that predates the field cannot answer.
+   */
+  granted?: boolean;
   /** Optional: an executor that predates the field cannot answer, and absent is not expired. */
   expiresAt?: number;
 };

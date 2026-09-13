@@ -254,9 +254,16 @@ export async function listPositions(walletId: string): Promise<Position[]> {
   return out;
 }
 
+/**
+ * One of this wallet's positions, or null when the id is not one of them.
+ *
+ * It fell back to `all[0]`, so an id that was not in the book — a stale link, a closed position, a
+ * mistyped route — opened the wallet's first position instead, and the screen showed WETH under a
+ * tap on something else. PLAN.md 1.7.
+ */
 export async function getPosition(walletId: string, id: string): Promise<Position | null> {
   const all = await listPositions(walletId);
-  return all.find((p) => p.id === id) ?? all[0] ?? null;
+  return all.find((p) => p.id === id) ?? null;
 }
 
 /**
