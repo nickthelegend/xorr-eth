@@ -43,8 +43,7 @@ export default function Goals() {
         {'What should your\nbot optimise for?'}
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
-        Pick as many as apply. This sets the strategies you get offered, and the hard limits
-        they run inside.
+        Pick any.
       </Text>
 
       <PillWrap style={{ marginTop: space.s20 }}>

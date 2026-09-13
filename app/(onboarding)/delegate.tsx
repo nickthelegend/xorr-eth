@@ -73,7 +73,7 @@ export default function GrantDelegation() {
           promptMessage: 'Let the bot trade inside your limits',
         });
         if (!res.success) {
-          setLocalError('Not confirmed — no permission was granted.');
+          setLocalError('Not confirmed. Nothing was granted.');
           return;
         }
       }
@@ -91,8 +91,7 @@ export default function GrantDelegation() {
     <Screen>
       <Text variant="screenTitle">Let the bot trade</Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
-        This is the permission that lets the bot act while you are not looking. Read what it
-        can and cannot do before you sign it.
+        What it can and can’t do.
       </Text>
 
       {/*
@@ -112,22 +111,22 @@ export default function GrantDelegation() {
           <ConsequenceCard
             tone="up"
             label="It can place trades"
-            detail={`Only on the venues xorr supports, and only up to ${capLabel(cap)}.`}
+            detail={`Up to ${capLabel(cap)}.`}
           />
           <ConsequenceCard
             tone="down"
             label="It cannot move your money out"
-            detail="No transfers, no withdrawals, no address it chooses. That permission is never granted."
+            detail="No transfers or withdrawals, ever."
           />
           <ConsequenceCard
             tone="up"
             label="It expires on its own"
-            detail={`After ${RUN_FOR[runFor]} the permission lapses unless you renew it.`}
+            detail={`After ${RUN_FOR[runFor]!.toLowerCase()}.`}
           />
           <ConsequenceCard
             tone="up"
             label="You can take it back in one tap"
-            detail="Safety, then Stop all agents. It takes effect on-chain, not on our servers."
+            detail="From Safety, anytime."
           />
         </View>
 
@@ -165,8 +164,7 @@ export default function GrantDelegation() {
         </SheetCard>
 
         <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
-          A bot with permission to trade can lose money inside these limits. The limits cap
-          the damage; they do not prevent it.
+          Trading can lose money within these limits.
         </NoteStrip>
 
         {/*
@@ -176,9 +174,7 @@ export default function GrantDelegation() {
         */}
         {signatures > 2 ? (
           <NoteStrip kind="risk" style={{ marginTop: space.s10 }}>
-            Your wallet will ask you to sign {signatures} times: one approval for each token the
-            bot may need to sell, then the permission itself. Stopping part way leaves the bot
-            without permission — nothing is granted until the last one.
+            You’ll sign {signatures} times. Nothing is granted until the last.
           </NoteStrip>
         ) : null}
 

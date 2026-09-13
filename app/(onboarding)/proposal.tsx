@@ -35,7 +35,6 @@ import {
 } from '@/ui';
 import { canApprove, proposalCta, proposalRebalance, weightBarPct, weightTotal } from '@/state/derived';
 import { sleeveFixtures } from '@/data/fixtures/sleeves';
-import { onboarding } from '@/data/fixtures/onboarding';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
 import { system } from '@/data/system';
@@ -49,7 +48,6 @@ export default function Proposal() {
   const bumpWeight = useStore((s) => s.bumpWeight);
   const approved = useStore((s) => s.approved);
   const setApproved = useStore((s) => s.setApproved);
-  const riskQ = useStore((s) => s.riskQ);
   const cap = useStore((s) => s.cap);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -73,7 +71,6 @@ export default function Proposal() {
 
   const total = weightTotal(weights);
   const ok = canApprove(weights);
-  const risk = onboarding.riskLevels[riskQ] ?? 'Balanced';
 
   async function approve() {
     if (!ok || approved) {
@@ -103,7 +100,7 @@ export default function Proposal() {
         watchable,
       );
       if (Object.keys(targets).length === 0) {
-        throw new Error('Nothing in this portfolio can be traded or followed on this network, so there is nothing to rebalance.');
+        throw new Error('Nothing here can be traded or followed on this network.');
       }
       setSettles(state === 'live');
       await repos.strategies.create({
@@ -131,8 +128,7 @@ export default function Proposal() {
           Your draft portfolio
         </Text>
         <Text variant="body" color={colors.ink40} align="center">
-          Built from your goals and a {risk} risk setting. Move the weights — nothing is
-          placed until you approve.
+          Adjust the weights. Nothing trades until you approve.
         </Text>
       </View>
 
@@ -215,8 +211,7 @@ export default function Proposal() {
         ) : null}
         {settles === false ? (
           <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
-            Trades can’t settle on this network, so this portfolio is watched: it shows what it would trade and
-            moves nothing.
+            Watch-only here: it shows what it would trade.
           </Text>
         ) : null}
       </Fill>

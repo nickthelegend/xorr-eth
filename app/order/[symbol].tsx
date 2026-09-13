@@ -13,7 +13,6 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
-import { chainLabel } from '@/chain';
 import {
   Button,
   CloseButton,
@@ -26,12 +25,11 @@ import {
   Text,
   colors,
   money,
-  percent,
   quantity,
   size,
   space,
 } from '@/ui';
-import { orderCta, slPnl, tpPnl } from '@/state/derived';
+import { orderCta } from '@/state/derived';
 import { api } from '@/data/api';
 import { unitsFor, usePrice } from '@/data/usePrices';
 import { repos } from '@/data';
@@ -84,8 +82,6 @@ export default function OrderTicket() {
   const setOrderAmt = useStore((s) => s.setOrderAmt);
   const side = useStore((s) => s.side);
   const setSide = useStore((s) => s.setSide);
-  const tp = useStore((s) => s.tp);
-  const sl = useStore((s) => s.sl);
 
   React.useEffect(() => {
     if (sideParam === 'buy' || sideParam === 'sell') setSide(sideParam);
@@ -276,9 +272,7 @@ export default function OrderTicket() {
         }}
       >
         <Text variant="secondary" color={colors.sheet.muted}>
-          {routeQuote.data?.venues?.length
-            ? `At worst, via ${routeQuote.data.venues.slice(0, 2).join(', ')}`
-            : 'At worst'}
+          Minimum received
         </Text>
         <Price variant="secondary" color={colors.sheet.ink}>
           {routeQuote.loading
@@ -297,7 +291,7 @@ export default function OrderTicket() {
           {routeQuote.loading
             ? '…'
             : typeof routeQuote.data?.gas?.feeUsd === 'number'
-              ? `≈ ${money(routeQuote.data.gas.feeUsd)} · paid by xorr`
+              ? `On us · ≈ ${money(routeQuote.data.gas.feeUsd)}`
               : '—'}
         </Price>
       </View>
@@ -320,17 +314,8 @@ export default function OrderTicket() {
       ) : (
         <View style={{ paddingVertical: space.s14, alignItems: 'center' }}>
           <Text variant="secondary" color={colors.sheet.muted} align="center">
-            {/*
-              Name the CHAIN, not "Base".
-
-              This screen refuses two different things with one sentence. A symbol like SOL has no
-              instrument on Base at all — "cannot be settled on Base" is exactly right for it. A
-              tokenized equity is the opposite case: NVDAc is live and busy on Base mainnet and does
-              not function on a fork of it, so telling someone it cannot be settled on Base is the
-              one claim that is actually false. `chainLabel` says which chain this build is on, and
-              the two cases then read as what they are.
-            */}
-            {`${symbol} cannot be settled on ${chainLabel}, so there is no order to place.`}
+            {/* "Here", not a chain's name: an equity trades on Base and not on a fork of it, and no network is named off the money screens. */}
+            Not tradable here
           </Text>
         </View>
       )}
@@ -352,22 +337,11 @@ export default function OrderTicket() {
           style={{ marginTop: space.s10 }}
         >
           {side === 'buy'
-            ? `That is more than the ${money(availableUsd ?? 0)} you have settled.`
+            ? `You have ${money(availableUsd ?? 0)}.`
             : `You hold ${money(heldUsd ?? 0)} of ${symbol}.`}
         </Text>
       ) : null}
 
-      {/* A promise about an order that cannot be placed is worse than saying nothing. */}
-      {tradable ? (
-        <Text
-          variant="footnote"
-          color={colors.sheet.dim}
-          align="center"
-          style={{ marginTop: space.s12 }}
-        >
-          {`Auto Close is on: TP ${percent(tp)} / SL ${percent(sl)} — make ${money(tpPnl(tp))} or lose ${money(slPnl(sl))}`}
-        </Text>
-      ) : null}
     </Screen>
   );
 }

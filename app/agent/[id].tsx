@@ -108,7 +108,7 @@ export default function AgentDetail() {
       ) : !agent ? (
         <View style={{ paddingHorizontal: space.gutter }}>
           <Text variant="body" color={colors.ink40}>
-            No agent with that id.
+            Agent not found.
           </Text>
         </View>
       ) : (
@@ -169,7 +169,7 @@ export default function AgentDetail() {
               </View>
             ) : mine.length === 0 ? (
               <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
-                {strategies.error ? 'Strategies could not be loaded.' : 'Nothing running yet.'}
+                {strategies.error ? 'Couldn’t load strategies.' : 'Nothing running yet.'}
               </Text>
             ) : (
               mine.map((s, i) => (

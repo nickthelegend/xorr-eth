@@ -32,18 +32,10 @@ import {
   size,
   space,
 } from '@/ui';
-import { money, quantity, shortAddress } from '@/format';
+import { money, quantity } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { history, unitsOf, type HistoryItem } from '@/data/history';
 import { useRefreshControl } from '@/ui/useRefreshControl';
-
-/** The executor's venue names, as a person writes them. Anything else arrives as an address. */
-const VENUE_NAMES: Record<string, string> = { '1inch': '1inch', aqua: 'Aqua', swapvm: 'SwapVM', aave: 'Aave' };
-
-function venueLabel(venue: string | null): string | undefined {
-  if (!venue) return undefined;
-  return VENUE_NAMES[venue] ?? shortAddress(venue);
-}
 
 /** `SwapExactInput` reads as "Swap exact input". */
 function eventWords(type: string): string {
@@ -55,11 +47,11 @@ function eventWords(type: string): string {
 function titleOf(item: HistoryItem): string {
   const symbol = item.token?.symbol ?? 'an unlisted token';
   if (item.kind === 'spent') {
-    const bought = item.run && item.run.symbol !== item.token?.symbol ? ` for ${item.run.symbol}` : '';
+    const bought = item.run && item.run.symbol !== item.token?.symbol ? ` for ${item.run.symbol === 'PORTFOLIO' ? 'the portfolio' : item.run.symbol}` : '';
     return `Spent ${symbol}${bought}`;
   }
   if (item.kind === 'closed') return `Closed ${symbol}`;
-  return item.oneinch ? eventWords(item.oneinch.type) : '1inch';
+  return item.oneinch ? eventWords(item.oneinch.type) : 'Trade';
 }
 
 /** Cents where the amount is dollars; more digits for an asset, where 0.0001 of it is a real amount. */
@@ -76,10 +68,11 @@ function amountOf(item: HistoryItem): string {
  */
 function Receipt({ explorer }: { explorer: string }) {
   if (!explorer.startsWith('http')) {
-    const [kind, ref] = explorer.split(':');
+    // The hash alone: which network it is on is not named off the money screens (PLAN.md O3).
+    const ref = explorer.split(':')[1];
     return (
-      <Text variant="footnote" color={colors.ink28}>
-        {`${kind} · ${ref?.slice(0, 10) ?? ''}…`}
+      <Text variant="footnote" color={colors.ink55}>
+        {`${ref?.slice(0, 10) ?? ''}…`}
       </Text>
     );
   }
@@ -87,11 +80,11 @@ function Receipt({ explorer }: { explorer: string }) {
     <Press
       onPress={() => void Linking.openURL(explorer)}
       accessibilityRole="link"
-      accessibilityLabel="View this transaction on BaseScan"
+      accessibilityLabel="View this transaction"
       hitHeight={24}
     >
       <Text variant="footnote" color={colors.ink55}>
-        View on BaseScan ›
+        View transaction ›
       </Text>
     </Press>
   );
@@ -104,9 +97,8 @@ function HistoryRow({ item }: { item: HistoryItem }) {
    */
   const usd = item.usd ?? item.run?.usd ?? null;
   const measured = item.usd === null && usd !== null;
-  const context = [venueLabel(item.venue), item.at ? new Date(item.at).toLocaleString('en-US') : 'Time not read']
-    .filter(Boolean)
-    .join(' · ');
+  // When, and nothing about which venue: the network and the venues are not named off the money screens (PLAN.md O3).
+  const context = item.at ? new Date(item.at).toLocaleString('en-US') : 'Time not read';
 
   return (
     <View style={[{ flexDirection: 'row', gap: space.s12, paddingVertical: space.s14 }, divider]}>
@@ -143,30 +135,15 @@ export default function History() {
    * The window, said out loud. The executor reads a bounded stretch of the chain, so "nothing here" only ever means
    * "nothing since then" — and a list that did not say so would claim more than it looked at.
    */
-  const scope = data
-    ? data.window.since
-      ? `since ${new Date(data.window.since).toLocaleString('en-US')}`
-      : `from block ${data.window.fromBlock.toLocaleString('en-US')}`
-    : '';
+  const scope = data?.window.since ? `since ${new Date(data.window.since).toLocaleString('en-US')}` : '';
 
   return (
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">History</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
-          What settled on chain for this wallet: every spend and close the delegation contract recorded, each with its
-          transaction. Activity is what the bot decided; this is what the chain says happened.
-        </Text>
-        {data ? (
-          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s8 }}>
-            {data.source === 'chain+1inch'
-              ? `The contract's events ${scope}, and 1inch's latest for this wallet on Base.`
-              : `The contract's events ${scope}.`}
-          </Text>
-        ) : null}
         {data?.unavailable ? (
           <Text variant="footnote" color={colors.warn} style={{ marginTop: space.s4 }}>
-            {`1inch's history could not be read (${data.unavailable.reason}), so only the contract's own events are shown.`}
+            Some history couldn’t load.
           </Text>
         ) : null}
       </View>
@@ -178,8 +155,8 @@ export default function History() {
           <LoadingRows count={6} height={size.rowLg} />
         ) : items.length === 0 ? (
           <EmptyState
-            text={`Nothing settled on chain for this wallet ${scope}. This reads the contract's own events, not our records.`}
-            actionLabel="See what the bot decided"
+            text={scope ? `No trades ${scope}.` : 'No trades yet.'}
+            actionLabel="See activity"
             onAction={() => router.push('/activity')}
           />
         ) : (

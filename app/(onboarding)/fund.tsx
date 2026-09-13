@@ -60,23 +60,6 @@ const METHODS = [
     feePct: 0,
     lands: () => 'After 1 confirmation',
   },
-  {
-    /*
-     * Listed, and honestly unavailable.
-     *
-     * There is no on-ramp integration in this build, and this option quoted a **1.5% fee** for
-     * it — $37.50 on a $2,500 deposit, invented, on the screen where a user decides how to pay.
-     * Selecting it did nothing except change that number. Either the fee is real and the flow
-     * exists, or the row says so; a made-up price for a service that cannot be bought is the
-     * worst of the three options.
-     */
-    name: 'Card on-ramp',
-    detail: 'Not enabled in this build',
-    tag: 'Soon',
-    feePct: 0,
-    lands: () => '—',
-    unavailable: true,
-  },
 ] as const;
 
 const PRESETS = [250, 500, 1000, 2500];
@@ -101,7 +84,7 @@ export default function Fund() {
         Fund the wallet
       </Text>
       <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
-        The bot can only trade what has settled. You can top up or withdraw whenever you like.
+        Top up or withdraw anytime.
       </Text>
 
       <Price variant="heroAmount" align="center" style={{ marginTop: space.s26 }}>
@@ -144,7 +127,7 @@ export default function Fund() {
               selected={i === method}
               // A card that cannot be chosen gets no handler, so `RadioCard` renders it disabled
               // rather than accepting a tap that changes nothing.
-              onPress={'unavailable' in opt && opt.unavailable ? undefined : () => setMethod(i)}
+              onPress={() => setMethod(i)}
             />
           ))}
         </View>
@@ -193,15 +176,10 @@ export default function Fund() {
             </View>
           ) : null}
           <Text variant="body" selectable>
-            {wallet?.address ?? 'Finish signing in to see your address.'}
+            {wallet?.address ?? 'Sign in to see your address.'}
           </Text>
-          {depositQrWorks ? null : (
-            <Text variant="footnote" color={colors.ink32}>
-              {depositQrNote}
-            </Text>
-          )}
-          <Text variant="footnote" color={colors.ink32}>
-            {`On ${chainLabel}. Nothing else on this screen moves money — xorr has no custody and no rail to move it for you.`}
+          <Text variant="footnote" color={colors.ink55}>
+            {depositQrWorks ? `Send only USDC on ${chainLabel}.` : depositQrNote}
           </Text>
         </View>
         </ScrollView>

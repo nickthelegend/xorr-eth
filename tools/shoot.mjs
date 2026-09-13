@@ -174,7 +174,7 @@ const EXPECT = {
   '03-wallet': { must: [/Your wallet, your keys/, /Signed in/, /Wallet created/, /Network ready/] },
   '04-fund': { must: [/Fund the wallet/, /USDC on Base/, /SEND USDC TO/, /0x[0-9a-fA-F]{40}/], never: [/USDT or SOL/, /^Deposit \$/m] },
   '05-delegate': { must: [/It can place trades/, /cannot move your money out/, /expires on its own/, /\$[\d,]+/] },
-  '06-proposal': { must: [/draft portfolio/, /100%/, /Aave v3/], never: [/Staked SOL/, /NVDAx/] },
+  '06-proposal': { must: [/draft portfolio/, /100%/, /Stable yield/], never: [/Staked SOL/, /NVDAx/] },
   // One balance on top, the Privy wallet above it, agents and gainers below (2026-09-12). The old
   // breakdown moved to the portfolio, so it must not creep back onto Home.
   '07-home': {

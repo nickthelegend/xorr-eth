@@ -37,8 +37,8 @@ import { NotSignedIn } from '@/data/api';
 
 const STEPS = [
   { label: 'Signed in', detail: 'An email code, no password to lose' },
-  { label: 'Wallet created', detail: 'Keys are yours, held on your device' },
-  { label: 'Network ready', detail: 'Connected to Base' },
+  { label: 'Wallet created', detail: 'Only you can sign' },
+  { label: 'Network ready', detail: 'Connected' },
   { label: 'Ready to fund', detail: 'Nothing is deposited yet' },
 ] as const;
 

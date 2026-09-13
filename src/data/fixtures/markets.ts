@@ -159,7 +159,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "stocks",
     "label": "Stocks",
-    "note": "Tokenized shares on Base · routed through 1inch",
+    "note": "Tokenized shares",
     "more": "See all tokenized equities",
     "instruments": [
       {
