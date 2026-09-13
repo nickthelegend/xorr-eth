@@ -44,6 +44,12 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # The app bundled for iOS, as a phone loads it. Web never loads a `.native` file, so a dependency only the
+      # native build imports can be missing while every step above passes — Privy's QR code peer was, and the iOS
+      # app could not start (PLAN.md X78).
+      - name: Bundle the app for iOS
+        run: npx expo export --platform ios --output-dir "$RUNNER_TEMP/ios-export"
+
   contracts:
     runs-on: ubuntu-latest
     steps:
