@@ -287,6 +287,16 @@ export type StrategyBacktest = {
  * `fillsByVenue` counts where trades actually settled, from the venue each filled run recorded — closes
  * and flattens included. It is the claim the 1inch integration rests on, as a number.
  */
+export type AgentsStopped = { stopped: boolean; since: number | null };
+
+/** Oldest first. `reason` says why each value was read: the 15-minute interval, or a fill, close or withdrawal. */
+export type PortfolioHistory = {
+  range: '1D' | '1W' | '1M' | 'ALL';
+  chain: string;
+  everyMinutes?: number;
+  points: { at: number; totalUsd: number; reason: 'interval' | 'fill' | 'close' | 'withdrawal' }[];
+};
+
 export type Metrics = {
   runs: Record<string, number>;
   /** Fills that did not happen because something broke, as a fraction of attempts. */
@@ -457,6 +467,13 @@ export const system = {
   }) => api.post<StrategyBacktest>('/strategies/backtest', body),
   proposals: () => api.get<ProposalRow[]>('/proposals'),
   notificationPrefs: () => api.get<NotificationPref[]>('/notifications/prefs'),
+  /** The stop-all the executor enforces on every run, proposal and order (PLAN.md 2.14). */
+  agentsStopped: () => api.get<AgentsStopped>('/agents/stopped'),
+  stopAgents: () => api.post<AgentsStopped>('/agents/stop', {}),
+  resumeAgents: () => api.post<AgentsStopped>('/agents/resume', {}),
+  /** What the wallet was worth over time, from snapshots read on the chain (PLAN.md 2.10). */
+  portfolioHistory: (range: '1D' | '1W' | '1M' | 'ALL') =>
+    api.get<PortfolioHistory>(`/portfolio/history?range=${range}`),
   // POST: the executor registers GET and POST on this path, and the PATCH that was sent here 404'd, so a
   // toggle looked saved and was not (PLAN.md 2.12).
   setNotificationPref: (kind: string, enabled: boolean) =>

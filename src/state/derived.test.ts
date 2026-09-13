@@ -581,3 +581,33 @@ describe('a position the wallet does not match — PLAN.md 2.7', () => {
   });
 });
 
+describe('the onboarding portfolio as a rebalance holds it — PLAN.md 2.17', () => {
+  const sleeves = [
+    { name: 'Blue-chip crypto', weight: 55 },
+    { name: 'Tokenized equities', weight: 30 },
+    { name: 'Stable yield', weight: 15 },
+  ];
+  const equities = ['NVDAc', 'AAPLc', 'TSLAc', 'METAc', 'MSFTc', 'AMZNc', 'GOOGLc', 'MSTRc'];
+
+  it('splits each sleeve across what it names, and leaves stable yield as cash', () => {
+    const { targets, cashPct } = d.targetsFromSleeves(sleeves, ['WETH', 'cbBTC', 'USDC', ...equities]);
+    expect(targets.WETH).toBe(27.5);
+    expect(targets.CBBTC).toBe(27.5);
+    for (const e of equities) expect(targets[e]).toBe(3.75);
+    expect(targets.USDC).toBeUndefined();
+    expect(cashPct).toBe(15);
+  });
+
+  it('a sleeve with nothing tradable on this chain stays cash rather than vanishing', () => {
+    const { targets, cashPct } = d.targetsFromSleeves(sleeves, ['WETH', 'cbBTC', 'USDC']);
+    expect(Object.keys(targets).sort()).toEqual(['CBBTC', 'WETH']);
+    expect(cashPct).toBe(45);
+  });
+
+  it('rounds down, so the targets never add up past the whole portfolio', () => {
+    const { targets, cashPct } = d.targetsFromSleeves([{ name: 'Blue-chip crypto', weight: 33.33 }], ['WETH', 'cbBTC']);
+    expect(targets).toEqual({ WETH: 16.66, CBBTC: 16.66 });
+    expect(cashPct).toBe(66.68);
+  });
+});
+

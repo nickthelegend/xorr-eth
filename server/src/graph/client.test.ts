@@ -45,3 +45,27 @@ describe('a subgraph query', () => {
     await expect(health()).rejects.toThrow(SubgraphUnavailable);
   });
 });
+
+describe('which contract the index is about', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('is unknown — not a stale default — when the deployment does not say', async () => {
+    vi.resetModules();
+    vi.stubEnv('SUBGRAPH_DELEGATION_ADDRESS', '');
+    vi.stubEnv('DELEGATION_ADDRESS', '0x6c5528Fd8E74a047A85bAb413856A9239E73540e');
+    const fresh = await import('./client.js');
+    expect(fresh.indexesThisDeployment()).toBe(false);
+    expect(fresh.indexDescription().indexedDelegation).toBe('');
+  });
+
+  it('matches this deployment when it names the same contract, in any case', async () => {
+    vi.resetModules();
+    vi.stubEnv('SUBGRAPH_DELEGATION_ADDRESS', '0x6c5528fd8e74a047a85bab413856a9239e73540e');
+    vi.stubEnv('DELEGATION_ADDRESS', '0x6c5528Fd8E74a047A85bAb413856A9239E73540e');
+    expect((await import('./client.js')).indexesThisDeployment()).toBe(true);
+  });
+});
+

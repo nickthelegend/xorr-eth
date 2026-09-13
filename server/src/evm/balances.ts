@@ -140,7 +140,7 @@ export async function chainUnitsOf(owner: Address, symbols: string[]): Promise<M
   /*
    * Asked under the registry's name, answered under the ledger's.
    *
-   * Ledger rows can predate the registry's spelling — `CBBTC` for `cbBTC` — and looked up as written
+   * Ledger rows are not always in the registry's case — `weth` for `WETH`, `NVDAC` for `NVDAc` — and looked up as written
    * they were never checked at all. Two rows spelling one token differently would each be held to the
    * whole balance; the book has none, and the unique index is per spelling, so it is said here.
    */

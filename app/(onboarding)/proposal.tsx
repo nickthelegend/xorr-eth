@@ -33,11 +33,12 @@ import {
   timing,
   useReducedMotion,
 } from '@/ui';
-import { canApprove, proposalCta, weightBarPct, weightTotal } from '@/state/derived';
+import { canApprove, proposalCta, targetsFromSleeves, weightBarPct, weightTotal } from '@/state/derived';
 import { sleeveFixtures } from '@/data/fixtures/sleeves';
 import { onboarding } from '@/data/fixtures/onboarding';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
+import { system } from '@/data/system';
 import { errorText } from '@/data/apiError';
 
 const BAR_H = 8;
@@ -65,12 +66,26 @@ export default function Proposal() {
     setBusy(true);
     setError(undefined);
     try {
+      /*
+       * The weights as a rebalance can hold them (PLAN.md 2.17). This sent `weights` and sleeve names, which
+       * the rebalance planner does not read — it needs `targets` keyed by tradable symbols — and the executor
+       * refused the strategy outright, so approving the one portfolio a new user builds created nothing. What
+       * this network can settle decides where each sleeve's weight goes; the rest stays cash.
+       */
+      const tradable = (await system.tradable()).map((t) => t.symbol);
+      const { targets, cashPct } = targetsFromSleeves(
+        sleeveFixtures.map((s, i) => ({ name: s.name, weight: weights[i] ?? 0 })),
+        tradable,
+      );
+      if (Object.keys(targets).length === 0) {
+        throw new Error('Nothing in this portfolio can be traded on this network yet, so there is nothing to rebalance.');
+      }
       await repos.strategies.create({
         kind: 'rebalance',
         state: 'live',
         label: 'Rebalance to targets',
         symbol: 'PORTFOLIO',
-        params: { weights, sleeves: sleeveFixtures.map((s) => s.name) },
+        params: { targets, cashPct, weights, sleeves: sleeveFixtures.map((s) => s.name) },
         cadence: 'weekly',
         dailyAllocationUsd: Math.round(cap / 4),
       });

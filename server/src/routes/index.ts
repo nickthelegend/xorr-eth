@@ -1069,6 +1069,8 @@ routes.post('/limits/check', async (c) => {
       dailyCapUsd: policy.dailyCapUsd,
       delegationExpiresAt: new Date(policy.expiresAt),
       delegationRevoked: policy.revoked,
+      // The stop the user set on the executor (PLAN.md 2.14).
+      killed: w.agents_stopped === true,
     }),
   );
 });

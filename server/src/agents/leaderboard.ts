@@ -39,13 +39,16 @@ export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
      * when it has one, otherwise the persona that runs its kind (`personaForKind`). It was found by
      * searching the wallet's audit log for each run's id inside JSON — a scan of the trail per run —
      * and a run that search missed was credited to Yield Keeper by default.
+     *
+     * Buys only (PLAN.md 2.15). A sale's `usd` is what it paid, so valuing it as units at today's mark
+     * minus that amount scored every profitable exit as a loss of roughly its own proceeds.
      */
     `SELECT s.kind, ag.persona_id, s.symbol, r.usd, r.units, r.price
      FROM strategy_runs r
      JOIN strategies s ON s.id = r.strategy_id
      LEFT JOIN agents ag ON ag.id = s.agent_id
      WHERE s.wallet_id = $1 AND s.chain = ${THIS_CHAIN}
-       AND r.status = 'filled' AND r.started_at > now() - interval '30 days'`,
+       AND r.status = 'filled' AND r.side = 'buy' AND r.started_at > now() - interval '30 days'`,
     [walletId],
   );
 

@@ -20,12 +20,12 @@ vi.mock('../market/prices.js', () => ({ priceOf: vi.fn() }));
 vi.mock('../venues/oneinch.js', () => ({
   TOKENS: {
     WETH: { address: '0x4200000000000000000000000000000000000006', decimals: 18 },
-    cbBTC: { address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', decimals: 8 },
+    CBBTC: { address: '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', decimals: 8 },
     NVDAc: { address: '0xb2000000000000000000000000000000000000c1', decimals: 18 },
     USDC: { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6 },
   },
   canonicalSymbol: (raw: string) =>
-    ({ CBBTC: 'cbBTC', WETH: 'WETH', USDC: 'USDC', NVDAC: 'NVDAc' })[raw.toUpperCase()] ?? raw,
+    ({ CBBTC: 'CBBTC', WETH: 'WETH', USDC: 'USDC', NVDAC: 'NVDAc' })[raw.toUpperCase()] ?? raw,
 }));
 
 const { priceOf } = await import('../market/prices.js');
@@ -42,10 +42,11 @@ describe('units held, for holding a ledger to the chain (PLAN.md 2.7)', () => {
   it('asks each token once under its registry name and answers under the spelling it was asked with', async () => {
     h.getCode.mockResolvedValue('0x6080604052');
     h.multicall.mockResolvedValue([0n, 449_116n]);
-    const held = await chainUnitsOf(OWNER, ['WETH', 'CBBTC', 'NOPE', 'USDC']);
+    const held = await chainUnitsOf(OWNER, ['WETH', 'cbbtc', 'NOPE', 'USDC']);
     expect(h.multicall).toHaveBeenCalledTimes(1);
     expect(held.get('WETH')).toBe(0);
-    expect(held.get('CBBTC')).toBe(0.00449116);
+    // Asked as `cbbtc`, answered as `cbbtc`: the registry's `CBBTC` is how it was looked up.
+    expect(held.get('cbbtc')).toBe(0.00449116);
     // Not in the registry, and the settlement token: not checked, which is not the same as none held.
     expect(held.get('NOPE')).toBeNull();
     expect(held.get('USDC')).toBeNull();

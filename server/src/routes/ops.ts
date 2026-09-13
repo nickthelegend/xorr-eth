@@ -95,6 +95,9 @@ ops.get('/health', async (c) => {
     probe('subgraph', false, async () => {
       const [h, index] = [await graphHealth(), indexDescription()];
       if (!h.healthy) throw new Error(`indexing errors at block ${h.block}`);
+      if (!index.indexedDelegation) {
+        throw new Error(`at block ${h.block}, but SUBGRAPH_DELEGATION_ADDRESS is not set, so which contract it follows is unknown`);
+      }
       if (!index.indexesThisDeployment) {
         throw new Error(`at block ${h.block}, but indexing ${index.indexedDelegation}, not this deployment's ${index.activeDelegation}`);
       }

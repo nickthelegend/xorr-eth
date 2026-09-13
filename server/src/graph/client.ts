@@ -30,8 +30,16 @@ const ENDPOINT =
  * through. When it is not, `indexesThisDeployment()` is false, the agent says so, and the contract
  * itself remains the authority — which it always was.
  */
-const INDEXED_DELEGATION = (process.env.SUBGRAPH_DELEGATION_ADDRESS ??
-  '0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e').toLowerCase();
+/*
+ * The contract the subgraph indexes, as the deployment states it — never a default.
+ *
+ * This defaulted to the first Sepolia delegation, `0xb14C…0a4e`. When the contract was redeployed and the
+ * subgraph moved to `0x6c55…540e` (PLAN.md 1.5) the variable was never set, so every executor compared its
+ * live contract with the stale default, decided the index was about another deployment, and the Graph
+ * decision stood aside on every run. The `/health` subgraph probe found it (2.11). An address that goes stale
+ * in code is worse than one plainly missing: unset now reads as unknown, and says so.
+ */
+const INDEXED_DELEGATION = (process.env.SUBGRAPH_DELEGATION_ADDRESS ?? '').toLowerCase();
 
 /** What the index is, for a screen that has to say whether it applies here. */
 export function indexDescription(): {
@@ -50,7 +58,7 @@ export function indexDescription(): {
 
 export function indexesThisDeployment(): boolean {
   const active = (process.env.DELEGATION_ADDRESS ?? '').toLowerCase();
-  return active.length > 0 && active === INDEXED_DELEGATION;
+  return active.length > 0 && INDEXED_DELEGATION.length > 0 && active === INDEXED_DELEGATION;
 }
 
 export type Policy = {

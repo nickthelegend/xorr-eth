@@ -17,6 +17,9 @@ export type WalletRow = {
   user_id: string;
   /** When the user last read their catch-up. Distinct from `active_at`; see migration 011. */
   last_seen_at: Date | null;
+  /** The stop-all the executor enforces (migration 019). Absent on a database that has not run it. */
+  agents_stopped?: boolean;
+  agents_stopped_at?: Date | null;
 };
 
 /**

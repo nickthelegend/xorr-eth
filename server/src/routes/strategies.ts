@@ -71,6 +71,9 @@ function utcStamp(at: Date): string {
 
 
 
+/** A rebalance across the whole portfolio carries its targets instead of one symbol (PLAN.md 2.17). */
+const PORTFOLIO = 'PORTFOLIO';
+
 const StrategyInput = z.object({
   /**
    * A kind the executor can actually run.
@@ -92,17 +95,67 @@ const StrategyInput = z.object({
    * that schedules forever and fails every run, and the failure would look like our bug rather
    * than an impossible request.
    */
-  symbol: z
-    .string()
-    .refine((v) => canonicalSymbol(v) in TOKENS, {
-      message: `not tradable on this chain — one of: ${Object.keys(TOKENS).join(', ')}`,
-    }),
+  symbol: z.string(),
   params: z.record(z.string(), z.unknown()).default({}),
   cadence: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
   nextRunAt: z.number().optional(),
   dailyAllocationUsd: z.number().nonnegative(),
   /** Which hired agent runs this. Optional: a user can set a strategy up themselves. */
   agentId: z.string().uuid().optional(),
+}).superRefine((s, ctx) => {
+  /*
+   * The symbol — or, for a portfolio rebalance, its targets — must be something this executor settles.
+   *
+   * Onboarding creates exactly one strategy, "Rebalance to targets" on `PORTFOLIO`, and the symbol check
+   * refused it: `PORTFOLIO` is not a token. The one strategy a new user approves failed validation and
+   * nothing was created (PLAN.md 2.17). A portfolio rebalance is accepted when `params.targets` names
+   * tradable symbols with positive percents of the whole portfolio summing to 100 or less — what is not
+   * targeted stays cash, which is why the settlement token itself is not a target.
+   */
+  if (s.symbol !== PORTFOLIO) {
+    if (!(canonicalSymbol(s.symbol) in TOKENS)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['symbol'],
+        message: `not tradable on this chain — one of: ${Object.keys(TOKENS).join(', ')}`,
+      });
+    }
+    return;
+  }
+  if (s.kind !== 'rebalance') {
+    ctx.addIssue({ code: 'custom', path: ['symbol'], message: `${PORTFOLIO} is only for a rebalance; a ${s.kind} strategy needs a tradable symbol` });
+    return;
+  }
+  const targets = s.params.targets;
+  if (!targets || typeof targets !== 'object' || Array.isArray(targets) || Object.keys(targets).length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['params', 'targets'],
+      message: 'a portfolio rebalance needs targets: tradable symbols and the percent of the portfolio each should be',
+    });
+    return;
+  }
+  let total = 0;
+  for (const [symbol, weight] of Object.entries(targets as Record<string, unknown>)) {
+    const name = canonicalSymbol(symbol);
+    if (!(name in TOKENS)) {
+      ctx.addIssue({ code: 'custom', path: ['params', 'targets', symbol], message: `${symbol} is not tradable on this chain` });
+    } else if (name === SETTLEMENT_SYMBOL) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['params', 'targets', symbol],
+        message: `${SETTLEMENT_SYMBOL} is not a target: whatever is not targeted stays in ${SETTLEMENT_SYMBOL}`,
+      });
+    }
+    if (typeof weight !== 'number' || !(weight > 0)) {
+      ctx.addIssue({ code: 'custom', path: ['params', 'targets', symbol], message: `${symbol} needs a percent above zero` });
+    } else {
+      total += weight;
+    }
+  }
+  if (total > 100.0001) {
+    ctx.addIssue({ code: 'custom', path: ['params', 'targets'], message: `the targets add up to ${total}%, more than the whole portfolio` });
+  }
 });
 
 function toApi(r: StrategyRow) {
@@ -433,6 +486,14 @@ strategyRoutes.post('/strategies/:id/run', async (c) => {
 
 strategyRoutes.post('/strategies', async (c) => {
   const body = StrategyInput.parse(await c.req.json());
+  // Stored under the registry's names, which the planner and holdings use: `weth` or `nvdac` from a client is `WETH` or `NVDAc` here.
+  if (body.symbol === PORTFOLIO) {
+    const targets = body.params.targets as Record<string, number>;
+    body.params = {
+      ...body.params,
+      targets: Object.fromEntries(Object.entries(targets).map(([symbol, weight]) => [canonicalSymbol(symbol), weight])),
+    };
+  }
 
   /*
    * Refuse at creation what cannot settle here, rather than at run time.
@@ -444,12 +505,15 @@ strategyRoutes.post('/strategies', async (c) => {
    * and the failure read as our bug rather than an impossible request. That is the same reasoning
    * the schema check is there for, one layer deeper.
    */
-  if (isStock(body.symbol) && !(await equitiesFunctional())) {
+  // A portfolio rebalance settles each of its targets, so each is held to the same test.
+  const settles = body.symbol === PORTFOLIO ? Object.keys(body.params.targets as Record<string, number>) : [body.symbol];
+  const equity = settles.find((symbol) => isStock(symbol));
+  if (equity && !(await equitiesFunctional())) {
     return c.json(
       {
         error: 'not_settleable_here',
         message:
-          `${canonicalSymbol(body.symbol)} cannot be settled on ${CHAIN_KEY}. The tokenized ` +
+          `${canonicalSymbol(equity)} cannot be settled on ${CHAIN_KEY}. The tokenized ` +
           'equities are live on Base mainnet and do not function on a fork of it, so a strategy ' +
           'for one would schedule forever and fill never.',
       },

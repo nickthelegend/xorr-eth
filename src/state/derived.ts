@@ -598,3 +598,35 @@ export function driftSentence(symbol: string, drift: { kind: 'missing' | 'unreco
     ? `${quantity(drift.units)} ${symbol} on record is not in your wallet, so size and value show what the wallet holds.`
     : `${quantity(drift.units)} ${symbol} in your wallet was not bought here, so it has no recorded cost and is not counted.`;
 }
+
+/** Which tradable symbols each onboarding sleeve means (PLAN.md 2.17). Stable yield is Aave, not a swap: cash here. */
+export const SLEEVE_SYMBOLS: Readonly<Record<string, readonly string[]>> = {
+  'Blue-chip crypto': ['WETH', 'CBBTC'],
+  'Tokenized equities': ['NVDAc', 'AAPLc', 'TSLAc', 'METAc', 'MSFTc', 'AMZNc', 'GOOGLc', 'MSTRc'],
+  'Stable yield': [],
+};
+
+/**
+ * The onboarding weights as a rebalance holds them (PLAN.md 2.17): each sleeve's percent split evenly across
+ * the symbols it names that this chain can settle. What is left — a sleeve with nothing tradable here, like
+ * the equities on Base Sepolia, and the stable-yield sleeve — is cash, because a rebalance's untargeted weight
+ * is cash. Rounded down to a hundredth of a percent, so the targets never add up past the whole.
+ */
+export function targetsFromSleeves(
+  sleeves: readonly { name: string; weight: number }[],
+  tradable: readonly string[],
+): { targets: Record<string, number>; cashPct: number } {
+  const settles = new Set(tradable.map((s) => s.toUpperCase()));
+  const targets: Record<string, number> = {};
+  let placed = 0;
+  for (const sleeve of sleeves) {
+    const symbols = (SLEEVE_SYMBOLS[sleeve.name] ?? []).filter((s) => settles.has(s.toUpperCase()));
+    if (symbols.length === 0 || !(sleeve.weight > 0)) continue;
+    const each = Math.floor((sleeve.weight / symbols.length) * 100) / 100;
+    for (const s of symbols) {
+      targets[s] = Math.round(((targets[s] ?? 0) + each) * 100) / 100;
+      placed += each;
+    }
+  }
+  return { targets, cashPct: Math.round((100 - placed) * 100) / 100 };
+}

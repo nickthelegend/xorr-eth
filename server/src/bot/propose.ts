@@ -140,9 +140,11 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
    *
    * `readPolicy` is what `/orders`, `/strategies` and `run.ts` already use.
    */
-  const ownerAddress = (
-    await one<{ address: string }>(`SELECT address FROM wallets WHERE id = $1`, [walletId])
-  )?.address as Address | undefined;
+  const wallet = await one<{ address: string; agents_stopped?: boolean }>(
+    `SELECT address, agents_stopped FROM wallets WHERE id = $1`,
+    [walletId],
+  );
+  const ownerAddress = wallet?.address as Address | undefined;
   if (!ownerAddress) {
     return { created: false, reason: 'no_wallet', detail: 'This wallet has no address on file.' };
   }
@@ -209,6 +211,8 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
     dailyCapUsd: del.dailyCapUsd,
     delegationExpiresAt: new Date(del.expiresAt),
     delegationRevoked: del.revoked,
+    // Stopped agents do not ask either (PLAN.md 2.14).
+    killed: wallet?.agents_stopped === true,
   });
   if (!verdict.allowed) return { created: false, reason: verdict.reason, detail: verdict.detail };
 

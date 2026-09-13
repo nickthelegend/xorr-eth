@@ -39,6 +39,7 @@ import { canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { agentForKind } from '../agents/attribution.js';
 import { isStock } from '../venues/stocks.js';
 import { snapshotWallet } from '../portfolio/snapshots.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 
 /**
  * Our XorrAquaBook deployment, when there is one. Aqua only exists on Base mainnet, so on Sepolia
@@ -81,6 +82,8 @@ export type StrategyRow = {
   daily_allocation_usd: string;
   /** Consecutive transient failures, reset when a run reaches an answer. Migration 014. */
   retry_attempts?: number;
+  /** The hired agent that runs this strategy, when one does — its limits apply (PLAN.md 2.15). */
+  agent_id?: string | null;
 };
 
 /**
@@ -286,28 +289,7 @@ async function runStrategyInner(
   // never be mistaken for a fill.
   if (strategy.state === 'watch') {
     try {
-      const price = await priceOf(strategy.symbol);
-      const units = usd / price;
-      await tx(async (client) => {
-        await client.query(
-          `UPDATE strategy_runs SET status='skipped', usd=$2, units=$3, price=$4, error='watch_mode', finished_at=now()
-           WHERE id=$1`,
-          [runId, usd, units, price],
-        );
-        await settleSchedule(client, strategy, at);
-        await append(
-          {
-            walletId,
-            agent: agentForKind(strategy.kind),
-            action: `Would have bought ${units.toFixed(4)} ${strategy.symbol}`,
-            detail: `Simulated · ${strategy.label} · $${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. No capital moved.`,
-            kind: 'risk',
-            payload: { runId, strategyId: strategy.id, simulated: true },
-          },
-          client,
-        );
-      });
-      return { status: 'watch', runId, units, price };
+      return await watchRun({ runId, walletId, strategy, usd, at });
     } catch (e) {
       return failRun({ runId, walletId, strategy, error: messageOf(e), sent: false, at });
     }
@@ -332,10 +314,15 @@ async function runStrategyInner(
    */
   let ownerAddress: Address;
   let chainPolicy: NonNullable<Awaited<ReturnType<typeof readPolicy>>>;
+  // The stop the user set on the executor (PLAN.md 2.14), read with the address.
+  let agentsStopped = false;
   try {
-    const found = (
-      await one<{ address: string }>(`SELECT address FROM wallets WHERE id = $1`, [walletId])
-    )?.address as Address | undefined;
+    const wallet = await one<{ address: string; agents_stopped?: boolean }>(
+      `SELECT address, agents_stopped FROM wallets WHERE id = $1`,
+      [walletId],
+    );
+    agentsStopped = wallet?.agents_stopped === true;
+    const found = wallet?.address as Address | undefined;
     if (!found) {
       return await finishBlocked(runId, walletId, strategy, 'no_wallet', 'This wallet has no address on file.');
     }
@@ -371,6 +358,7 @@ async function runStrategyInner(
       dailyCapUsd: chainPolicy.dailyCapUsd,
       delegationExpiresAt: new Date(chainPolicy.expiresAt),
       delegationRevoked: chainPolicy.revoked,
+      killed: agentsStopped,
       /*
        * A kind that can only close is exempt from the cap, here and on chain.
        *
@@ -572,6 +560,18 @@ async function runStrategyInner(
         strategy,
         'Checked, and there was nothing to do this run.',
       );
+    }
+
+    /*
+     * The hired agent's own limits (PLAN.md 2.15).
+     *
+     * `agents.risk_limits` was stored, shown on the Risk screen and enforced nowhere, so an agent limited to
+     * $50 a trade placed whatever its planner sized. Checked here with the other gates — before a trade is
+     * proposed or placed — and never against a close, which only reduces risk.
+     */
+    if (strategy.agent_id && !isCloseIntent(intent)) {
+      const refusal = await agentLimitRefusal(strategy.agent_id, intent.usd);
+      if (refusal) return await finishBlocked(runId, walletId, strategy, refusal.reason, refusal.detail);
     }
 
     /*
@@ -1077,6 +1077,119 @@ async function proposeInstead(p: {
  * A close and a supply are both "not a scheduled buy", but only the close is urgent enough to pay
  * up for. Kept as one function so the slippage decision and the cap decision cannot drift apart.
  */
+/**
+ * The hired agent's own limits, or null when this trade is inside them (PLAN.md 2.15).
+ *
+ * `maxUsdPerTrade` bounds one entry; `maxUsdPerDay` bounds the filled buys of every strategy the agent runs,
+ * since the start of the UTC day, on this chain. Both are the user dividing what the permission already
+ * allows between the agents they hired, so neither can raise anything — the cap and the contract still
+ * apply on top.
+ */
+async function agentLimitRefusal(agentId: string, usd: number): Promise<{ reason: string; detail: string } | null> {
+  const agent = await one<{ name: string; risk_limits: Record<string, unknown> | null }>(
+    `SELECT name, risk_limits FROM agents WHERE id = $1`,
+    [agentId],
+  );
+  if (!agent) return null;
+  const limits = agent.risk_limits ?? {};
+  const dollars = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const perTrade = Number(limits.maxUsdPerTrade);
+  if (Number.isFinite(perTrade) && perTrade > 0 && usd > perTrade + 0.005) {
+    return {
+      reason: 'agent_trade_limit',
+      detail: `${agent.name} is limited to ${dollars(perTrade)} a trade, and this one was ${dollars(usd)}.`,
+    };
+  }
+  const perDay = Number(limits.maxUsdPerDay);
+  if (Number.isFinite(perDay) && perDay > 0) {
+    const spentRows = await query<{ spent: string | null }>(
+      `SELECT COALESCE(SUM(r.usd), 0) AS spent
+         FROM strategy_runs r
+         JOIN strategies s ON s.id = r.strategy_id
+        WHERE s.agent_id = $1 AND s.chain = ${THIS_CHAIN}
+          AND r.status = 'filled' AND r.side = 'buy'
+          AND r.finished_at >= date_trunc('day', now() AT TIME ZONE 'UTC')`,
+      [agentId],
+    );
+    const spent = Number(spentRows[0]?.spent ?? 0);
+    if (spent + usd > perDay + 0.005) {
+      return {
+        reason: 'agent_daily_limit',
+        detail: `${agent.name} may place ${dollars(perDay)} a day; ${dollars(spent)} is already placed and this asks for ${dollars(usd)}.`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Watch mode: the kind's own planner, run for real and placed nowhere (PLAN.md 2.16).
+ *
+ * Every watch run said "Would have bought {usd ÷ price} {symbol}" whatever the strategy was — a stop-loss
+ * watching a position reported a buy, a rebalance priced "PORTFOLIO", and a momentum strategy reported an
+ * entry on a day it would have done nothing. The trust ramp exists to show what THIS strategy would do, so
+ * it asks the planner the live path asks, against the live wallet and prices, and reports that leg — or
+ * that there was none. Nothing is signed, and nothing observed is kept: a watch run leaves its run row, its
+ * trail entry and the strategy's state as it found it.
+ */
+async function watchRun(p: {
+  runId: string;
+  walletId: string;
+  strategy: StrategyRow;
+  usd: number;
+  at: Date;
+}): Promise<RunOutcome> {
+  const { runId, walletId, strategy, usd, at } = p;
+  const planner = PLANNERS[strategy.kind];
+  if (!planner) {
+    return finishBlocked(
+      runId,
+      walletId,
+      strategy,
+      'kind_not_executable',
+      `Nothing here knows how to run a "${strategy.kind}" strategy yet, so it was not watched.`,
+    );
+  }
+  const owner = (await one<{ address: string }>(`SELECT address FROM wallets WHERE id = $1`, [walletId]))
+    ?.address as Address | undefined;
+  if (!owner) return finishBlocked(runId, walletId, strategy, 'no_wallet', 'This wallet has no address on file.');
+
+  let params = strategy.params as Record<string, unknown>;
+  const context = { owner, budgetUsd: usd, params, symbol: strategy.symbol };
+  const observed = await observationFor(strategy.kind, context).catch(() => null);
+  if (observed) params = { ...params, ...observed };
+  const intent = await planner({ ...context, params });
+
+  const traded = intent ? (intent.outSymbol === 'USDC' ? intent.inSymbol : intent.outSymbol) : undefined;
+  const price = intent && !intent.direct && traded ? await priceOf(traded) : 0;
+  const units = !intent ? 0 : intent.direct ? intent.usd : intent.outSymbol === 'USDC' ? intent.amountIn : intent.usd / price;
+  const leg = intent ? describeLeg(intent, units) : null;
+
+  await tx(async (client) => {
+    await client.query(
+      `UPDATE strategy_runs SET status='skipped', usd=$2, units=$3, price=$4, error='watch_mode', finished_at=now()
+       WHERE id=$1`,
+      [runId, intent ? intent.usd : null, intent ? units : null, price > 0 ? price : null],
+    );
+    await settleSchedule(client, strategy, at);
+    await append(
+      {
+        walletId,
+        agent: agentForKind(strategy.kind),
+        action: leg ? `Would have ${leg.charAt(0).toLowerCase()}${leg.slice(1)}` : 'Would have done nothing',
+        detail: intent
+          ? `Simulated · ${strategy.label}${price > 0 ? ` · $${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}. ${intent.because} No capital moved.`
+          : `Simulated · ${strategy.label}. Watched, and there was nothing to do this run. No capital moved.`,
+        kind: 'risk',
+        payload: { runId, strategyId: strategy.id, simulated: true, ...(intent ? { symbol: traded, usd: intent.usd, units } : {}) },
+      },
+      client,
+    );
+  });
+  return intent ? { status: 'watch', runId, units, price } : { status: 'skipped', reason: 'nothing_to_do' };
+}
+
 function isCloseIntent(intent: TradeIntent): boolean {
   return !intent.direct && intent.outSymbol === 'USDC';
 }

@@ -127,6 +127,56 @@ const HireInput = z.object({
   personaId: z.string().refine((v) => v in PERSONAS, { message: 'unknown persona' }),
 });
 
+/**
+ * Stop every agent on this wallet, now, until resumed — and read that state (PLAN.md 2.14).
+ *
+ * Enforced by the executor rather than remembered by one browser: every rule check reads it (`evaluate`'s
+ * `killed`), so a scheduled run, a proposal and an order are all refused while it holds. It signs nothing
+ * and costs nothing; the revoke on the Safety screen remains the stop that does not depend on this server
+ * at all. A close the user places themselves is not an agent trading, and stays available.
+ */
+async function stoppedState(walletId: string): Promise<{ stopped: boolean; since: number | null }> {
+  const row = await one<{ agents_stopped: boolean; agents_stopped_at: Date | null }>(
+    `SELECT agents_stopped, agents_stopped_at FROM wallets WHERE id = $1`,
+    [walletId],
+  );
+  return {
+    stopped: row?.agents_stopped === true,
+    since: row?.agents_stopped_at ? new Date(row.agents_stopped_at).getTime() : null,
+  };
+}
+
+async function setStopped(c: Context, stopped: boolean) {
+  const id = await walletId(c);
+  if (!id) return c.json({ error: 'no_wallet' }, 400);
+  const changed = await one<{ id: string }>(
+    `UPDATE wallets SET agents_stopped = $2, agents_stopped_at = CASE WHEN $2 THEN now() ELSE NULL END
+      WHERE id = $1 AND agents_stopped IS DISTINCT FROM $2 RETURNING id`,
+    [id, stopped],
+  );
+  // Written once per change: a second tap on "stop" is not a second event.
+  if (changed) {
+    await append({
+      walletId: id,
+      agent: 'xorr',
+      action: stopped ? 'You stopped the agents' : 'You resumed the agents',
+      detail: stopped
+        ? 'Nothing will be placed for you until you resume. Closing a position yourself still works.'
+        : 'Strategies run on their schedules again, inside the same limits.',
+      kind: 'risk',
+    });
+  }
+  return c.json(await stoppedState(id));
+}
+
+agents.get('/agents/stopped', async (c) => {
+  const id = await walletId(c);
+  if (!id) return c.json({ stopped: false, since: null });
+  return c.json(await stoppedState(id));
+});
+agents.post('/agents/stop', (c) => setStopped(c, true));
+agents.post('/agents/resume', (c) => setStopped(c, false));
+
 /** POST /agents — hire. Idempotent: hiring twice is the same agent, not two of them. */
 agents.post('/agents', async (c) => {
   const body = HireInput.parse(await c.req.json());
@@ -155,9 +205,23 @@ agents.post('/agents', async (c) => {
   return c.json(toApi(row!));
 });
 
+/**
+ * The limits an agent can be held to (PLAN.md 2.15), and nothing else.
+ *
+ * Any record was accepted and nothing read it, so a limit spelled any way at all was saved and silently
+ * ignored. These two are enforced on every run (`agentLimitRefusal` in `executor/run.ts`); an unknown key is
+ * refused rather than stored as a limit that does nothing.
+ */
+const RiskLimits = z
+  .object({
+    maxUsdPerTrade: z.number().positive().optional(),
+    maxUsdPerDay: z.number().positive().optional(),
+  })
+  .strict();
+
 const PatchInput = z.object({
   tone: z.enum(['dry', 'sharp', 'flat']).optional(),
-  riskLimits: z.record(z.string(), z.unknown()).optional(),
+  riskLimits: RiskLimits.optional(),
 });
 
 /** PATCH /agents/:id — tone and limits. */
