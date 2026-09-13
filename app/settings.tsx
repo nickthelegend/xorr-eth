@@ -107,22 +107,17 @@ export default function Settings() {
                 {wallet
                   ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
                   : unreachable
-                    ? 'Could not reach the executor'
+                    ? 'Unavailable'
                     : 'None'}
               </Price>
             }
             height={SETTING_ROW}
           />
           <Row
-            title="Network"
-            value={<Text variant="rowPrimary" color={colors.ink55}>{wallet?.cluster ?? '—'}</Text>}
-            height={SETTING_ROW}
-          />
-          <Row
             title="Recovery"
             value={
               <Text variant="rowPrimary" color={recoveryBackedUp ? colors.ink55 : colors.warn}>
-                {recoveryBackedUp ? 'Acknowledged' : 'Read this'}
+                {recoveryBackedUp ? 'Done' : 'Review'}
               </Text>
             }
             height={SETTING_ROW}
@@ -146,7 +141,7 @@ export default function Settings() {
           />
 
           <Eyebrow small style={{ marginTop: space.s26 }}>
-            What the bot may do
+            Permission
           </Eyebrow>
           {/*
             "Live · $1,600/day" for a wallet that has granted nothing.
@@ -192,7 +187,7 @@ export default function Settings() {
             height={SETTING_ROW}
           />
           <Row
-            title="Withdrawal allowlist"
+            title="Allowlist"
             value={
               <Text variant="rowPrimary" color={colors.ink55}>
                 {/* The executor holds the list: a count it has not given is not zero addresses. */}
@@ -210,7 +205,7 @@ export default function Settings() {
           />
 
           <Eyebrow small style={{ marginTop: space.s26 }}>
-            How the bot talks
+            Voice
           </Eyebrow>
           <SheetCard
             borderRadius={radius.panel}
@@ -223,12 +218,8 @@ export default function Settings() {
               onChange={setTone}
               height={size.segThumbSm}
             />
-            <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s12 }}>
+            <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s12 }}>
               {TONES.find((t) => t.id === tone)?.description}
-            </Text>
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s10 }}>
-              This changes how the bot writes, never what it reports. Prices, sizes and
-              limits read the same on every setting.
             </Text>
           </SheetCard>
 
@@ -273,8 +264,8 @@ export default function Settings() {
             }
             secondary={
               confirmingSignOut
-                ? 'You will need your email code to get back in.'
-                : 'Ends this session on this device. The bot keeps whatever permission you granted it on-chain — stop that on Safety.'
+                ? 'You’ll need an email code to sign back in.'
+                : 'Your permission stays on. Stop it in Safety.'
             }
             height={SETTING_ROW}
             divider={false}

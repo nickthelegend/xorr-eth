@@ -49,7 +49,7 @@ const SMALLEST_UNITS = 0.0001;
 const CENT = 0.01;
 
 function tokenUnits(units: number): string {
-  return units > 0 && units < SMALLEST_UNITS ? `< ${quantity(SMALLEST_UNITS)}` : quantity(units);
+  return units > 0 && units < SMALLEST_UNITS ? `< ${quantity(SMALLEST_UNITS)}` : quantity(units, units >= 1 ? 2 : 4);
 }
 
 function tokenUsd(usd: number): string {
@@ -58,10 +58,11 @@ function tokenUsd(usd: number): string {
 
 /** Said rather than left out, because a list that silently omits a held token reads as the whole wallet. */
 function undescribedNote(count: number): string {
-  return count === 1
-    ? 'One more token is held here but not listed: 1inch would not say what it is.'
-    : `${count} more tokens are held here but not listed: 1inch would not say what they are.`;
+  return `${count} more ${count === 1 ? 'token' : 'tokens'} held, not listed.`;
 }
+
+/** Below a cent, a position is left over from a sale rather than held. */
+const DUST_USD = 0.01;
 
 export default function Assets() {
   const router = useRouter();
@@ -85,7 +86,7 @@ export default function Assets() {
   const weights = (sleeves.data ?? []).map((sleeve, i) => approvedWeights[i] ?? sleeve.weight);
   // Real holdings from the position book. This previously listed watchlist FIXTURES, so it
   // showed assets the user did not own at prices that never moved.
-  const holdings = useMemo(() => positions.data ?? [], [positions.data]);
+  const holdings = useMemo(() => (positions.data ?? []).filter((p) => p.notional >= DUST_USD), [positions.data]);
   const logos = useLogos(useMemo(() => holdings.map((h) => h.symbol), [holdings]));
   const tokenRows = useMemo(() => tokens.data?.tokens ?? [], [tokens.data]);
   /*
@@ -120,7 +121,7 @@ export default function Assets() {
         </Price>
         {balance.error ? (
           <Text variant="secondary" style={{ marginTop: space.s6 }}>
-            Could not reach the executor, so this is not your balance.
+            Couldn’t load your balance.
           </Text>
         ) : null}
 
@@ -133,9 +134,6 @@ export default function Assets() {
             fine; the word was wrong, and the caption now says which of the two this is.
           */}
           <Eyebrow small>Target mix</Eyebrow>
-          <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s6 }}>
-            What you asked the bot to aim for. Holdings below are what it actually owns.
-          </Text>
           {/* The 8pt stacked proportion bar from screen 10, reused verbatim. */}
           <View style={{ flexDirection: 'row', gap: space.s2, height: BAR_H, marginTop: space.s12 }}>
             {(sleeves.data ?? []).map((s, i) => (
@@ -189,8 +187,8 @@ export default function Assets() {
           <ErrorState error={positions.error} onRetry={positions.reload} />
         ) : holdings.length === 0 ? (
           <EmptyState
-            text="Nothing held yet. A recurring buy is the simplest way to start."
-            actionLabel="Set one up"
+            text="Nothing held yet."
+            actionLabel="Start a recurring buy"
             onAction={() => router.push('/strategy/dca')}
           />
         ) : (
@@ -228,18 +226,13 @@ export default function Assets() {
         <Text variant="cardTitle" style={{ marginTop: space.s26, marginBottom: space.s6 }}>
           Tokens
         </Text>
-        <Text variant="secondarySm" color={colors.ink40} style={{ marginBottom: space.s6 }}>
-          {tokens.data?.source === '1inch'
-            ? 'Read from the chain through 1inch, not from the ledger above.'
-            : 'Read from the chain, not from the ledger above.'}
-        </Text>
         {tokens.error ? (
           /* A failed read says so. An empty list here would be a claim that the wallet holds nothing. */
           <ErrorState error={tokens.error} onRetry={tokens.reload} />
         ) : tokens.loading && !tokens.data ? (
           <LoadingRows count={2} height={size.rowLg} />
         ) : tokenRows.length === 0 ? (
-          <EmptyState text="The chain shows no tokens in this wallet." />
+          <EmptyState text="No tokens." />
         ) : (
           tokenRows.map((t) => (
             <Row
@@ -253,7 +246,7 @@ export default function Assets() {
           ))
         )}
         {tokens.data && tokens.data.undescribed.length > 0 ? (
-          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s10 }}>
+          <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
             {undescribedNote(tokens.data.undescribed.length)}
           </Text>
         ) : null}
@@ -301,9 +294,8 @@ export default function Assets() {
                 </Price>
               </View>
             ))}
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
-              At average cost. Closed positions stay here even though they are no longer
-              holdings.
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s12 }}>
+              At average cost.
             </Text>
           </SheetCard>
         ) : null}
@@ -317,11 +309,8 @@ export default function Assets() {
           <Text variant="body" style={{ marginTop: space.s8 }} numberOfLines={1}>
             {wallet?.address ?? 'No wallet connected'}
           </Text>
-          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
-            {wallet
-              ? // The live chain, not the one the wallet row was stamped with at creation.
-                `${wallet.kind === 'embedded' ? 'Created in xorr' : 'Connected'} · ${wallet.chain ?? wallet.cluster}`
-              : 'Create or connect one to let the bot trade.'}
+          <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
+            {wallet ? (wallet.kind === 'embedded' ? 'Created in xorr' : 'Connected') : 'Connect a wallet to start.'}
           </Text>
         </SheetCard>
       </ScrollView>

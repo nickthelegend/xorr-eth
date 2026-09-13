@@ -13,7 +13,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
-import { chainLabel } from '@/chain';
 import { assetGradient } from '@/design/gradients';
 import {
   AreaChart,
@@ -24,7 +23,6 @@ import {
   Candlestick,
   DeltaChip,
   ErrorState,
-  IconButton,
   Pill,
   PillRow,
   Segmented,
@@ -87,7 +85,6 @@ export default function AssetDetail() {
   const router = useRouter();
   const goBack = useGoBack();
   const [range, setRange] = useState(0);
-  const [starred, setStarred] = useState(false);
   // design.md calls the candlestick the centrepiece, and the bars are already fetched — the
   // area chart was only ever a summary of the same data. Both are offered; candles are the
   // default wherever there are real ones to draw.
@@ -96,7 +93,8 @@ export default function AssetDetail() {
   const logo = useLogo(symbol);
   const inst = useAsync(() => repos.markets.getInstrument(symbol!), [symbol]);
   const positions = useAsync(() => repos.portfolio.positions(), []);
-  const held = (positions.data ?? []).find((p) => p.symbol === symbol);
+  // Dust a sale left behind is not a position (as on Portfolio): a cent or more is held.
+  const held = (positions.data ?? []).find((p) => p.symbol === symbol && p.notional >= 0.01);
   const candles = useAsync(
     () => repos.markets.candles(symbol!, RANGE_TF[RANGES[range]!]),
     [symbol, range],
@@ -221,13 +219,6 @@ export default function AssetDetail() {
             {i?.name ?? symbol}
           </Text>
         </View>
-        <IconButton
-          name={starred ? 'starFilled' : 'star'}
-          accessibilityLabel={starred ? 'Remove from watchlist' : 'Add to watchlist'}
-          background="none"
-          color={starred ? colors.ink : colors.ink55}
-          onPress={() => setStarred((s) => !s)}
-        />
       </View>
 
       {/*
@@ -263,11 +254,7 @@ export default function AssetDetail() {
           />
         ) : (
           <Text variant="body" color={colors.ink40}>
-            {warmingAny
-              ? 'Fetching the latest price…'
-              : spot === undefined
-                ? 'No live price for this market.'
-                : 'Spot price. No price history for this market.'}
+            {warmingAny ? 'Loading…' : spot === undefined ? 'No price yet.' : 'No history yet.'}
           </Text>
         )}
 
@@ -365,8 +352,8 @@ export default function AssetDetail() {
           {warmingAny || (candles.loading && !candles.data) ? (
             <Placeholder height={CHART_H} style={{ borderRadius: radius.tile }} />
           ) : (
-            <Text variant="body" color={colors.ink40}>
-              No chart for this market yet.
+            <Text variant="body" color={colors.ink55}>
+              No chart yet.
             </Text>
           )}
         </View>
@@ -430,17 +417,8 @@ export default function AssetDetail() {
         ) : (
           <View style={{ marginTop: space.s14, paddingVertical: space.s14, alignItems: 'center' }}>
             <Text variant="secondary" align="center">
-              {/*
-                This said "Not tradable on Base. There is no token for this market to settle into."
-                The order ticket had already been corrected away from that sentence and this screen
-                was missed — so the Stocks tab listed NVDAc at a live 1inch price ON BASE, and
-                tapping it said there is no token for it on Base. Both halves were wrong for an
-                equity: the token exists and is busy on Base mainnet; what it does not do is
-                function on a fork of it. `chainLabel` names the chain this build actually settles
-                on, which makes the sentence true for an index that has no instrument anywhere and
-                for an equity that has one everywhere but here.
-              */}
-              {`Not tradable on ${chainLabel}`}
+              {/* "Here", not a chain's name: an equity trades on Base and not on a fork of it, and no network is named off the money screens. */}
+              Not tradable here
             </Text>
           </View>
         )}

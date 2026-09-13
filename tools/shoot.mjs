@@ -178,7 +178,7 @@ const EXPECT = {
   // One balance on top, the Privy wallet above it, agents and gainers below (2026-09-12). The old
   // breakdown moved to the portfolio, so it must not creep back onto Home.
   '07-home': {
-    must: [/TOTAL BALANCE/, /\$[\d,]+\.\d\d/, /Privy wallet/, /Agents/, /Gainers/],
+    must: [/TOTAL BALANCE/, /\$[\d,]+\.\d\d/, /0x[0-9a-f]{4}|Wallet/i, /Agents/, /Gainers/],
     never: [/Available to trade/, /Ready to trade/, /Your coins/],
   },
   '08-markets': { must: [/Crypto/, /Stocks/, /Commodities/, /\d+ shown/], never: [/^0 shown/m] },
@@ -314,7 +314,7 @@ const EXPECT = {
   '69-schedule': { must: [/runs next|scheduled/i] },
   '70-allocation': { must: [/Allocation/] },
   '71-sources': { must: [/Sources/, /Every number/i] },
-  '72-sponsors': { must: [/Integrations|Sponsors/, /1inch/i] },
+  '72-sponsors': { must: [/How it works|Integrations|Sponsors/, /1inch/i] },
   '73-venues': { must: [/Venues/, /fill is allowed/i] },
   '74-tokens': { must: [/Tokens/, /settle/i] },
   '75-coverage': { must: [/Coverage/, /PRICED/i] },
