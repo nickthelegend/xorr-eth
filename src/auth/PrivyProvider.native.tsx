@@ -1,7 +1,8 @@
 /**
  * Privy — identity and the embedded wallet, in one object.
  *
- * The user logs in with an email or a passkey and gets a wallet they own. There is no separate
+ * The user logs in with a code sent to their email and gets a wallet they own — the only login built; passkeys
+ * need Privy's dashboard and the app's associated domains first (PLAN.md 4.11, 8.9). There is no separate
  * account system to keep in sync with a wallet, which is what makes "your keys, your wallet"
  * true rather than a slogan: xorr never sees the private key, and the bot's authority over that
  * wallet is a separate on-chain permission the user signs and can revoke.

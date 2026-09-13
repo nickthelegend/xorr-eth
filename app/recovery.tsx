@@ -1,45 +1,39 @@
 /**
- * Recovery — PLAN.md 10.8 [G31].
+ * Recovery — PLAN.md 10.8, 4.10; distilled 2026-09-14.
  *
- * Screen 20 shows "Not backed up" in `warn` with nowhere to go. After the pivot this is not
- * a nicety: NON-CUSTODIAL MEANS LOSING THE KEY LOSES THE FUNDS.
- *
- * It offered a "Reveal phrase" button over a panel that revealed no phrase, so the button
- * went. Then the replacement text was wrong in the other direction, and stayed wrong through
- * the pivot: it told the user "its key is held by the executor" and "this wallet is not yours
- * alone" — describing a Solana devnet keypair the executor generated, on a build where the
- * wallet has been a Privy embedded wallet for months and the executor has never held a user
- * key at all.
- *
- * That is the worst sentence in the app to get wrong. This is the screen whose entire job is
- * to say where the key is, and it was telling a user that a wallet they solely control is
- * shared with us — which would reasonably stop them funding it, and is not true.
- *
- * So it says what is actually the case: Privy holds the key in a way that needs the user's own
- * auth to use, xorr never sees it, and the recovery that matters is the login itself.
+ * The login is the recovery: the same email on any device reaches the same wallet, and xorr never holds its key. Where
+ * a copy of the key can be had — Privy's export window on the web — the screen offers it; a phone says where to go.
+ * It once told a user their wallet was shared with the executor, which was never true; it now says only what is.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useGoBack } from '@/nav/useGoBack';
-import {
-  BackButton,
-  Button,
-  Fill,
-  NoteStrip,
-  Screen,
-  SheetCard,
-  Text,
-  colors,
-  radius,
-  space,
-} from '@/ui';
+import { BackButton, Button, Fill, Screen, Text, colors, space } from '@/ui';
 import { useStore } from '@/state/store';
+import { useKeyExport } from '@/wallet/useKeyExport';
+import { errorText } from '@/data/apiError';
 
 export default function Recovery() {
   const goBack = useGoBack();
   const wallet = useStore((s) => s.wallet);
   const setRecoveryBackedUp = useStore((s) => s.setRecoveryBackedUp);
   const acknowledged = useStore((s) => s.recoveryBackedUp);
+  const keyExport = useKeyExport(wallet?.address);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string>();
+
+  async function exportKey() {
+    if (!keyExport.supported || exporting) return;
+    setExportError(undefined);
+    setExporting(true);
+    try {
+      await keyExport.exportKey();
+    } catch (e) {
+      setExportError(errorText(e));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <Screen>
@@ -49,60 +43,39 @@ export default function Recovery() {
       </View>
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s20 }}>
-        Where the key actually is
+        Your email is the way back
       </Text>
-      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
-        This is a Privy embedded wallet on {wallet?.chain ?? wallet?.cluster ?? 'Base'}. Its key
-        is split so that no single party — not Privy, and certainly not xorr — can reconstruct
-        it alone; using it needs you to be signed in. xorr never sees it, which is why the bot
-        gets a permission instead of a key.
+      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
+        Sign in with it on any device to open this wallet.
       </Text>
 
-      <Fill style={{ marginTop: space.s22 }}>
-        <SheetCard borderRadius={radius.panel} padding={space.s18}>
-          <Text variant="cardTitle">What recovery means here</Text>
-          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s10 }}>
-            There is no phrase to write down, and that is the design rather than something
-            missing: your login IS the recovery. Sign in on a new device with the same email
-            and the same wallet is there. Lose access to that email and you lose the wallet —
-            xorr cannot recover it for you, because xorr never had it.
-          </Text>
-          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s12 }}>
-            The bot never gets that key. It gets a separate on-chain permission that can
-            trade and cannot withdraw, and you can revoke it from Safety at any time.
-          </Text>
-        </SheetCard>
-
-        {/*
-          The warning is about the NETWORK, which is a fact we can check, rather than about
-          custody, which the previous version got backwards.
-        */}
-        {wallet?.chain && wallet.chain !== 'base' ? (
-          <NoteStrip kind="blocked" style={{ marginTop: space.s16 }}>
-            This wallet is on {wallet.chain}, not Base mainnet. Nothing here is real money.
-          </NoteStrip>
+      <Fill style={{ marginTop: space.s26 }}>
+        {keyExport.supported ? (
+          <>
+            <Button label="Export private key" variant="secondary" loading={exporting} onPress={exportKey} />
+            <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s10 }}>
+              Shown in a secure window. xorr never sees it.
+            </Text>
+          </>
         ) : (
-          <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
-            Keep the email you signed in with. It is the only way back to this wallet.
-          </NoteStrip>
+          <Text variant="footnote" color={colors.ink55}>
+            {keyExport.reason}
+          </Text>
         )}
+        {exportError ? (
+          <Text variant="footnote" color={colors.down} style={{ marginTop: space.s10 }}>
+            {exportError}
+          </Text>
+        ) : null}
       </Fill>
 
       <Button
-        label={acknowledged ? 'Understood' : 'I understand'}
+        label={acknowledged ? 'Done' : 'Got it'}
         onPress={() => {
           setRecoveryBackedUp(true);
           goBack();
         }}
       />
-      <Text
-        variant="footnote"
-        color={colors.ink28}
-        align="center"
-        style={{ marginTop: space.s12 }}
-      >
-        The bot never gets this key — only a permission you can revoke.
-      </Text>
     </Screen>
   );
 }

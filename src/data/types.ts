@@ -225,7 +225,7 @@ export type ProposalDecision = {
 
 export type Wallet = {
   address: string;
-  /** 'embedded' = created in-app with passkey recovery; 'connected' = user brought their own. */
+  /** 'embedded' = created by Privy at the email login, recovered by signing in again; 'connected' = user brought their own. */
   kind: 'embedded' | 'connected';
   /**
    * The chain this wallet was created on — history, and left alone.

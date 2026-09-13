@@ -196,8 +196,7 @@ export default function WalletSetup() {
         ) : null}
 
         <NoteStrip kind={authenticated ? 'acted' : 'risk'} style={{ marginTop: space.s16 }}>
-          Losing this wallet means losing the funds in it. Back up the recovery method before
-          you deposit anything.
+          Your email is how you get back to this wallet.
         </NoteStrip>
 
         {error ? (
