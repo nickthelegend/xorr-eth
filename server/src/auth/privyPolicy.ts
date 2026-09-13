@@ -23,8 +23,8 @@
  * rather than pretending the engineering was the only motive.)
  */
 import type { Address } from 'viem';
-import { ADDRESSES, AAVE_V3_POOL, CHAIN_KEY, IS_BASE_MAINNET_STATE } from '../evm/chains.js';
-import { DELEGATION_ADDRESS } from '../evm/delegation.js';
+import { ADDRESSES, CHAIN_KEY, IS_BASE_MAINNET_STATE } from '../evm/chains.js';
+import { DELEGATION_ADDRESS, delegatePublicKey } from '../evm/delegation.js';
 import { STOCKS } from '../venues/stocks.js';
 import { one, query } from '../db/index.js';
 import { createSign, createPrivateKey } from 'node:crypto';
@@ -43,11 +43,26 @@ const BASE = 'https://api.privy.io/v1';
  */
 export const POLICY_NAME = `xorr wallet policy (${CHAIN_KEY})`;
 
-type PrivyRule = {
+/** Where the transaction goes. */
+type ToCondition = { field_source: 'ethereum_transaction'; field: 'to'; operator: 'eq'; value: string };
+
+/**
+ * What the transaction does: a decoded argument of the call (`approve.spender`, `grant.delegate`) or
+ * its `function_name`. Privy decodes the calldata with `abi` and compares addresses case-insensitively.
+ */
+type CalldataCondition = {
+  field_source: 'ethereum_calldata';
+  field: string;
+  abi: readonly Record<string, unknown>[];
+  operator: 'eq';
+  value: string;
+};
+
+export type PrivyRule = {
   name: string;
   method: 'eth_sendTransaction';
   action: 'ALLOW';
-  conditions: { field_source: 'ethereum_transaction'; field: 'to'; operator: 'eq'; value: string }[];
+  conditions: (ToCondition | CalldataCondition)[];
 };
 
 export type PrivyPolicy = {
@@ -153,40 +168,142 @@ async function privyFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
+/** The one ERC-20 call a grant needs from each token. */
+const APPROVE_ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+const GRANT_ABI = [
+  {
+    type: 'function',
+    name: 'grant',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'delegate', type: 'address' },
+      { name: 'dailyCap', type: 'uint256' },
+      { name: 'expiresAt', type: 'uint64' },
+      { name: 'venues', type: 'address[]' },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const REVOKE_ABI = [{ type: 'function', name: 'revoke', stateMutability: 'nonpayable', inputs: [], outputs: [] }] as const;
+
 /**
- * Every address this wallet has a legitimate reason to send to, and no others.
- *
- * Derived from the same registries the app itself uses, so a token that becomes tradable becomes
- * allowed in the same change rather than two releases later — and, more importantly, a token that
- * is NOT tradable is never allowed by accident.
+ * The tokens a grant approves: every one the delegation may need to pull, buy side and sell side.
+ * Derived from the same registries the app uses, so a token that becomes tradable is approvable in the
+ * same change — and a token that is not tradable never is.
  */
-export function allowedDestinations(): { label: string; address: string }[] {
-  const out: { label: string; address: string }[] = [
-    { label: 'XorrDelegation — grant, revoke', address: DELEGATION_ADDRESS },
-    { label: 'USDC — approve, transfer', address: ADDRESSES.usdcBase },
-    { label: 'WETH — approve, transfer', address: ADDRESSES.wethBase },
-    { label: 'cbBTC — approve, transfer', address: ADDRESSES.cbbtcBase },
+function approvableTokens(): { symbol: string; address: string }[] {
+  const out: { symbol: string; address: string }[] = [
+    { symbol: 'USDC', address: ADDRESSES.usdcBase },
+    { symbol: 'WETH', address: ADDRESSES.wethBase },
+    { symbol: 'cbBTC', address: ADDRESSES.cbbtcBase },
   ];
   if (IS_BASE_MAINNET_STATE) {
-    out.push({ label: 'Aave v3 pool — supply, withdraw', address: AAVE_V3_POOL });
-    for (const s of Object.values(STOCKS)) {
-      out.push({ label: `${s.symbol} — approve, transfer`, address: s.address });
-    }
+    for (const s of Object.values(STOCKS)) out.push({ symbol: s.symbol, address: s.address });
   }
-  // Privy compares `to` as a string. Lowercase both sides so a checksummed address in a request
-  // cannot slip past a rule written with different casing.
-  return out.map((d) => ({ ...d, address: d.address.toLowerCase() }));
+  return out;
 }
 
-function desiredRules(): PrivyRule[] {
-  return allowedDestinations().map((d) => ({
-    name: d.label,
-    method: 'eth_sendTransaction' as const,
-    action: 'ALLOW' as const,
-    conditions: [
-      { field_source: 'ethereum_transaction' as const, field: 'to' as const, operator: 'eq' as const, value: d.address },
-    ],
-  }));
+// Privy compares `to` as a string. Lowercase both sides so a checksummed address in a request cannot
+// slip past a rule written with different casing.
+const to = (address: string): ToCondition => ({
+  field_source: 'ethereum_transaction',
+  field: 'to',
+  operator: 'eq',
+  value: address.toLowerCase(),
+});
+
+/**
+ * Every call this wallet has a legitimate reason to make, and no others (PLAN.md 1.9).
+ *
+ * The rules matched `to` alone, so a token on the list allowed ANY call to that token — including
+ * `USDC.transfer(attacker, everything)`, the one transaction this policy exists to refuse. Each rule
+ * now pins what the call does as well as where it goes:
+ *   - a token may be `approve`d, and only with the delegation contract as the spender;
+ *   - the delegation may be `grant`ed only to this executor's delegate, and `revoke`d freely — a
+ *     grant to any other key would hand the user's cap to someone else's bot;
+ *   - nothing else: no `transfer`, no `setVenue`, no call to an address on no list.
+ *
+ * The Aave pool is deliberately absent. `supply(onBehalfOf)` and `withdraw(to)` name a recipient, and
+ * one policy is shared by every wallet on a deployment, so it cannot say "only this wallet itself" —
+ * allowing the pool would allow supplying or withdrawing into anyone's hands.
+ */
+export function desiredRules(): PrivyRule[] {
+  const delegation = DELEGATION_ADDRESS.toLowerCase();
+  const base = { method: 'eth_sendTransaction' as const, action: 'ALLOW' as const };
+  const rules: PrivyRule[] = [
+    {
+      ...base,
+      name: 'Grant the permission to the xorr bot',
+      conditions: [
+        to(delegation),
+        {
+          field_source: 'ethereum_calldata',
+          field: 'grant.delegate',
+          abi: GRANT_ABI,
+          operator: 'eq',
+          value: delegatePublicKey.toLowerCase(),
+        },
+      ],
+    },
+    {
+      ...base,
+      name: 'Revoke the permission',
+      conditions: [
+        to(delegation),
+        { field_source: 'ethereum_calldata', field: 'function_name', abi: REVOKE_ABI, operator: 'eq', value: 'revoke' },
+      ],
+    },
+  ];
+  for (const t of approvableTokens()) {
+    rules.push({
+      ...base,
+      name: `Approve ${t.symbol} for the delegation`,
+      conditions: [
+        to(t.address),
+        { field_source: 'ethereum_calldata', field: 'approve.spender', abi: APPROVE_ABI, operator: 'eq', value: delegation },
+      ],
+    });
+  }
+  return rules;
+}
+
+/** The same rules, as a person reads them — what `/privy/policy` reports under "would allow". */
+export function allowedDestinations(): { label: string; address: string; call: string }[] {
+  return desiredRules().map((r) => {
+    const target = r.conditions.find((c): c is ToCondition => c.field_source === 'ethereum_transaction');
+    const call = r.conditions.find((c): c is CalldataCondition => c.field_source === 'ethereum_calldata');
+    return {
+      label: r.name,
+      address: target?.value ?? '',
+      call: !call ? 'any call' : call.field === 'function_name' ? `${call.value}()` : `${call.field} = ${call.value}`,
+    };
+  });
+}
+
+/** What a rule enforces, independent of the ids and ordering Privy hands back. */
+function rulesKey(rules: { conditions?: { field_source?: string; field?: string; operator?: string; value?: unknown }[] }[]): string {
+  return rules
+    .map((r) =>
+      (r.conditions ?? [])
+        .map((c) => `${c.field_source}:${c.field}:${c.operator}:${String(c.value).toLowerCase()}`)
+        .sort()
+        .join('&'),
+    )
+    .sort()
+    .join('|');
 }
 
 export async function getPolicy(id: string): Promise<PrivyPolicy> {
@@ -231,7 +348,22 @@ async function rememberPolicyId(id: string): Promise<void> {
  * that silently blocks a legitimate approval is indistinguishable, from the user's side, from the
  * wallet being broken.
  */
-export async function ensurePolicy(): Promise<PrivyPolicy> {
+/** How long a policy check stays good. It was a Privy read — and sometimes a PATCH — on every GET. */
+const POLICY_TTL_MS = 5 * 60_000;
+let ensured: { at: number; policy: Promise<PrivyPolicy> } | undefined;
+
+export function ensurePolicy(): Promise<PrivyPolicy> {
+  if (ensured && Date.now() - ensured.at < POLICY_TTL_MS) return ensured.policy;
+  const policy = ensurePolicyFresh();
+  ensured = { at: Date.now(), policy };
+  // A failure is not remembered: the next caller asks Privy again.
+  policy.catch(() => {
+    if (ensured?.policy === policy) ensured = undefined;
+  });
+  return policy;
+}
+
+async function ensurePolicyFresh(): Promise<PrivyPolicy> {
   const wanted = desiredRules();
   const knownId = await rememberedPolicyId();
   // A remembered id that Privy no longer recognises is a deleted policy, not a fatal error: fall
@@ -267,14 +399,12 @@ export async function ensurePolicy(): Promise<PrivyPolicy> {
     }).catch(() => undefined);
   }
 
-  const same =
-    existing.rules.length === wanted.length &&
-    wanted.every((w) =>
-      existing.rules.some(
-        (e) => e.conditions?.[0]?.value?.toLowerCase() === w.conditions[0]!.value,
-      ),
-    );
-  if (same) return existing;
+  /*
+   * Compared by everything each rule enforces, not by its first condition. Comparing the first `to`
+   * alone would call the old destination-only rules "the same" as these and never replace them —
+   * which is exactly how a policy keeps allowing `transfer` after the code stopped meaning to.
+   */
+  if (rulesKey(existing.rules) === rulesKey(wanted)) return existing;
 
   return privyFetch<PrivyPolicy>(`/policies/${existing.id}`, {
     method: 'PATCH',
@@ -290,9 +420,18 @@ export type PrivyWallet = {
   owner_id: string | null;
 };
 
+/** The app's wallet list, for a minute. Every `/privy/policy` read listed every wallet in the app. */
+let walletList: { at: number; data: Promise<PrivyWallet[]> } | undefined;
+
 export async function findWallet(address: string): Promise<PrivyWallet | undefined> {
-  const r = await privyFetch<{ data: PrivyWallet[] }>('/wallets');
-  return (r.data ?? []).find((w) => w.address.toLowerCase() === address.toLowerCase());
+  if (!walletList || Date.now() - walletList.at > 60_000) {
+    const data = privyFetch<{ data: PrivyWallet[] }>('/wallets').then((r) => r.data ?? []);
+    walletList = { at: Date.now(), data };
+    data.catch(() => {
+      if (walletList?.data === data) walletList = undefined;
+    });
+  }
+  return (await walletList.data).find((w) => w.address.toLowerCase() === address.toLowerCase());
 }
 
 /**
@@ -316,6 +455,7 @@ export async function attachPolicy(
     // the opposite of what a policy is for.
     body: JSON.stringify({ policy_ids: [policy.id] }),
   });
+  walletList = undefined;
   return { walletId: wallet.id, policyId: policy.id, changed: true };
 }
 

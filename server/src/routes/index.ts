@@ -13,7 +13,7 @@ import {
   ANCHOR_ADDRESS,
   agreement,
   anchorHistory,
-  anchorWallet,
+  anchorOnDemand,
   anchoringConfigured,
 } from '../audit/anchor.js';
 import { evaluate, spentToday } from '../rules/engine.js';
@@ -888,8 +888,13 @@ routes.get('/audit/anchor', async (c) => {
  */
 routes.post('/audit/anchor', async (c) => {
   const w = await requireWallet(c);
-  const out = await anchorWallet(w.id, w.address as Address);
+  // At most once an hour per wallet when it would spend gas — see `audit/anchor-limit.ts`.
+  const out = await anchorOnDemand(w.id, w.address as Address);
   if (!out.anchored && out.reason === 'not_configured') return c.json(out, 501);
+  if (!out.anchored && out.reason === 'rate_limited') {
+    c.header('retry-after', String(out.retryAfterSec));
+    return c.json(out, 429);
+  }
   return c.json(out);
 });
 

@@ -50,6 +50,11 @@ export const PUSH_KINDS = [
   },
   { kind: 'alert-fired', label: 'An alert you set', detail: 'Price levels and risk thresholds.' },
   { kind: 'panic-flatten', label: 'Everything sold', detail: 'When you ask to be flattened.' },
+  {
+    kind: 'proposal-awaiting',
+    label: 'The bot wants to trade',
+    detail: 'A momentum or event-driven strategy found a setup and is waiting for your yes.',
+  },
 ] as const;
 
 /**

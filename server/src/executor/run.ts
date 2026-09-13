@@ -94,7 +94,7 @@ export type RunOutcome =
    * gave permission to." Two accounts of one failure, and the user met the useless one first.
    */
   | { status: 'failed'; runId: string; error: string; raw: string }
-  | { status: 'skipped'; reason: 'already_ran_this_period' | 'nothing_to_do' };
+  | { status: 'skipped'; reason: 'already_ran_this_period' | 'nothing_to_do' | 'awaiting_approval' };
 
 export type StrategyRow = {
   id: string;
@@ -205,6 +205,13 @@ export const CLOSE_ONLY_KINDS = new Set(['exit-rules']);
  * to prevent. So the decision is made per INTENT — see `reducesRiskOnly` — rather than per kind.
  */
 export const DUAL_SIDED_KINDS = new Set(['momentum', 'event-driven']);
+
+/**
+ * Tiers that buy only when someone says yes (PLAN.md 1.10): momentum (6) and event-driven (7), whose
+ * entries are judgment calls rather than a schedule. The server's copy of `requiresApprovalByDefault`
+ * in `src/strategies/ladder.ts`, which returns true from tier 6 up.
+ */
+export const APPROVAL_FIRST_KINDS: ReadonlySet<string> = new Set(['momentum', 'event-driven']);
 
 /**
  * Will this run only ever reduce exposure?
@@ -598,6 +605,20 @@ async function runStrategyInner(
     }
 
     /*
+     * Tiers 6 and 7 ask first (PLAN.md 1.10).
+     *
+     * The ladder says so (`requiresApprovalByDefault`), and the momentum planner's own docblock says
+     * so — and nothing on the server enforced it: a live momentum strategy bought its breakout with
+     * nobody asked. An entry now becomes a proposal the user approves or skips, and approving places
+     * the same trade through `placeOrder`. `params.autoExecute: true` is the explicit opt-out.
+     *
+     * A close never waits. A stop that needs a yes at the moment it fires is a stop that does not.
+     */
+    if (APPROVAL_FIRST_KINDS.has(strategy.kind) && !isCloseIntent(intent) && params.autoExecute !== true) {
+      return await proposeInstead({ runId, walletId, strategy, intent, at });
+    }
+
+    /*
      * Some legs are not swaps.
      *
      * Supplying to a lending pool has no route to quote and no market price to look up: the
@@ -961,6 +982,94 @@ async function failRun(p: {
     );
   });
   return { status: 'failed', runId, error: humanFailure(error), raw: error };
+}
+
+/**
+ * A tier 6–7 entry, put to the user instead of placed.
+ *
+ * The run ends `skipped · awaiting_approval` and moves the schedule on. The proposal carries what
+ * approving needs — the size, the symbol, the stop, and the state the strategy should hold once the
+ * position is open — and names the strategy, so the one that asked manages the exit. One open
+ * proposal per strategy: a breakout that holds for three runs is one question, not three.
+ */
+async function proposeInstead(p: {
+  runId: string;
+  walletId: string;
+  strategy: StrategyRow;
+  intent: TradeIntent;
+  at: Date;
+}): Promise<RunOutcome> {
+  const { runId, walletId, strategy, intent, at } = p;
+  const symbol = intent.outSymbol;
+  const agent = agentForKind(strategy.kind);
+  const usdText = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+
+  const open = await one<{ id: string }>(
+    `SELECT id FROM proposals
+      WHERE wallet_id = $1 AND decision IS NULL AND expires_at > now() AND payload->>'strategyId' = $2
+      LIMIT 1`,
+    [walletId, strategy.id],
+  );
+  const price = await priceOf(symbol).catch(() => 0);
+  const stopPrice = Number(intent.stateAfter?.stopPrice ?? 0);
+
+  await tx(async (client) => {
+    await client.query(
+      `UPDATE strategy_runs SET status='skipped', error='awaiting_approval', finished_at=now() WHERE id=$1`,
+      [runId],
+    );
+    await settleSchedule(client, strategy, at);
+    if (open) return;
+
+    await client.query(
+      `INSERT INTO proposals (id, wallet_id, agent, payload, expires_at)
+       VALUES ($1, $2, $3, $4, now() + interval '15 minutes')`,
+      [
+        randomUUID(),
+        walletId,
+        agent,
+        JSON.stringify({
+          symbol,
+          usd: String(intent.usd),
+          stopPrice: stopPrice > 0 ? String(stopPrice) : '',
+          targetPrice: '',
+          strategyId: strategy.id,
+          stateAfter: JSON.stringify(intent.stateAfter ?? {}),
+          status: `${strategy.label} wants to trade`,
+          opening: null,
+          action: `Buy ${usdText(intent.usd)} of ${symbol}`,
+          notional: usdText(intent.usd),
+          entry: price > 0 ? usdText(price) : 'Market',
+          stop: stopPrice > 0 ? usdText(stopPrice) : 'Managed by the strategy',
+          target: '—',
+          rationale: intent.because,
+          onApprove: `Buys ${usdText(intent.usd)} of ${symbol} through your permission; ${strategy.label} then manages the exit.`,
+          onSkip: `Skipped. ${strategy.label} will look again on its next run.`,
+        }),
+      ],
+    );
+    await append(
+      {
+        walletId,
+        agent,
+        action: `Asked before buying ${symbol}`,
+        detail: `${intent.because} ${strategy.label} trades only with your approval, so this is waiting for a yes.`,
+        kind: 'risk',
+        payload: { runId, strategyId: strategy.id },
+      },
+      client,
+    );
+  });
+
+  if (!open) {
+    void send(walletId, {
+      title: `${strategy.label} wants to buy ${symbol}`,
+      body: intent.because,
+      route: '/bot',
+      kind: 'proposal-awaiting',
+    }).catch(() => undefined);
+  }
+  return { status: 'skipped', reason: 'awaiting_approval' };
 }
 
 /**

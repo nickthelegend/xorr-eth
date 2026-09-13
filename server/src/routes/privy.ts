@@ -6,7 +6,10 @@
  * assert is the worst example of that.
  */
 import { Hono } from 'hono';
-import { requireUser } from '../auth/middleware.js';
+import { encodeFunctionData, erc20Abi } from 'viem';
+import { requireScope } from '../auth/middleware.js';
+import { ADDRESSES } from '../evm/chains.js';
+import { DELEGATION_ABI, DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { currentWallet } from './wallet-context.js';
 import {
   allowedDestinations,
@@ -48,16 +51,18 @@ privyRoutes.get('/privy/policy', async (c) => {
 /**
  * Prove it, live.
  *
- * Two requests, both made with every credential this server holds:
- *  - one to an address the policy names, which Privy passes through;
- *  - one to an address it does not, which Privy refuses.
+ * Four requests, all made with every credential this server holds, each a zero-value call so
+ * nothing is spent either way — what is tested is whether the request survives the policy:
+ *  - `USDC.approve(delegation, 0)`, which the policy names and Privy must pass;
+ *  - `USDC.transfer(stranger, 0)` — to a token the policy names, which is exactly the call a
+ *    destination-only policy let through (PLAN.md 1.9) and Privy must now refuse;
+ *  - `grant` naming a stranger as the delegate, which Privy must refuse;
+ *  - a send to an address on no list, which Privy must refuse.
  *
- * The second is the whole point, and it is worth *doing* rather than describing. The transaction
- * is a zero-value call so nothing is spent either way — what is being tested is whether the
- * request survives the policy, not what it would do on the other side.
+ * Operator-only. It creates and drives the deployment's demo wallet through Privy's signing API; a
+ * signed-in user had no business being able to spend the app's Privy request budget on it.
  */
-privyRoutes.post('/privy/policy/prove', async (c) => {
-  requireUser(c);
+privyRoutes.post('/privy/policy/prove', requireScope('admin'), async (c) => {
   const walletId = await demoWalletId();
   if (!walletId) {
     return c.json({ error: 'no_demo_wallet', message: 'No policy-bound wallet on this deployment.' }, 400);
@@ -65,36 +70,54 @@ privyRoutes.post('/privy/policy/prove', async (c) => {
   const caip2 = `eip155:${process.env.XORR_CHAIN === 'base-sepolia' ? 84532 : 8453}`;
   const chainId = process.env.XORR_CHAIN === 'base-sepolia' ? 84532 : 8453;
 
-  const attempt = async (to: string) => {
+  const attempt = async (call: string, to: string, data?: `0x${string}`) => {
     try {
       await rpcAsWallet(walletId, {
         method: 'eth_sendTransaction',
         caip2,
-        params: { transaction: { to, value: '0x0', chain_id: chainId } },
+        params: { transaction: { to, value: '0x0', chain_id: chainId, ...(data ? { data } : {}) } },
       });
-      return { to, blockedByPolicy: false, detail: 'accepted by the policy' };
+      return { call, to, blockedByPolicy: false, detail: 'accepted by the policy' };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       /*
        * Only a POLICY refusal counts as blocked.
        *
-       * A call that gets past Privy and then reverts on chain is the policy having ALLOWED it —
-       * the opposite result — and the two are easy to confuse because both arrive as an error.
-       * Reading the reason is what makes this a test rather than a coin toss.
+       * A call that gets past Privy and then fails — an unfunded wallet, a revert — is the policy
+       * having ALLOWED it, the opposite result, and the two are easy to confuse because both arrive
+       * as an error. Reading the reason is what makes this a test rather than a coin toss.
        */
-      return { to, blockedByPolicy: /policy violation/i.test(msg), detail: msg.slice(0, 200) };
+      return { call, to, blockedByPolicy: /policy violation/i.test(msg), detail: msg.slice(0, 200) };
     }
   };
 
-  const allowed = allowedDestinations()[0]!.address;
-  const forbidden = '0x000000000000000000000000000000000000dEaD';
-  const [onList, offList] = await Promise.all([attempt(allowed), attempt(forbidden)]);
+  const stranger = '0x000000000000000000000000000000000000dEaD';
+  const [approve, transfer, grantToStranger, offList] = await Promise.all([
+    attempt(
+      'USDC.approve(delegation, 0)',
+      ADDRESSES.usdcBase,
+      encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [DELEGATION_ADDRESS, 0n] }),
+    ),
+    attempt(
+      'USDC.transfer(stranger, 0)',
+      ADDRESSES.usdcBase,
+      encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [stranger, 0n] }),
+    ),
+    attempt(
+      'grant(stranger, …)',
+      DELEGATION_ADDRESS,
+      encodeFunctionData({ abi: DELEGATION_ABI, functionName: 'grant', args: [stranger, 1n, 4_102_444_800n, []] }),
+    ),
+    attempt('send to an address on no list', stranger),
+  ]);
   return c.json({
     walletId,
-    onList,
-    offList,
-    // The claim only holds if BOTH halves behave: refusing everything would prove nothing either.
-    proven: offList.blockedByPolicy && !onList.blockedByPolicy,
+    allowed: [approve],
+    refused: [transfer, grantToStranger, offList],
+    // Every half has to behave: refusing everything would prove nothing either.
+    proven:
+      !approve.blockedByPolicy && transfer.blockedByPolicy && grantToStranger.blockedByPolicy && offList.blockedByPolicy,
+    rules: allowedDestinations(),
     authorizationKey: await proveAuthorizationKey(),
   });
 });

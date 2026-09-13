@@ -18,6 +18,7 @@
 import type { Address, Hex } from 'viem';
 import { publicClient, walletClient, delegateAccount } from '../evm/client.js';
 import { one, query } from '../db/index.js';
+import { anchorCooldownSec } from './anchor-limit.js';
 import 'dotenv/config';
 
 export const ANCHOR_ADDRESS = (process.env.ANCHOR_ADDRESS ??
@@ -214,6 +215,45 @@ export async function anchorWallet(
   }
 
   return { anchored: true, txHash, head: local.head, entryCount: local.entryCount };
+}
+
+/** What `anchorOnDemand` adds to an anchor's outcomes: a press too soon after the last anchor. */
+export type OnDemandOutcome =
+  | AnchorOutcome
+  | { anchored: false; reason: 'rate_limited'; detail: string; retryAfterSec: number };
+
+/** An on-demand anchor already on its way for a wallet: a second press waits for it instead of paying again. */
+const inFlight = new Map<string, Promise<OnDemandOutcome>>();
+
+/**
+ * Anchor because someone asked, at most once an hour per wallet (PLAN.md 1.12).
+ *
+ * An unchanged head still answers `unchanged` straight away and costs nothing; only a press that
+ * would spend gas is held to the limit, and two presses at once share one transaction.
+ */
+export async function anchorOnDemand(walletId: string, owner: Address): Promise<OnDemandOutcome> {
+  const running = inFlight.get(walletId);
+  if (running) return running;
+
+  const attempt = (async (): Promise<OnDemandOutcome> => {
+    if (!anchoringConfigured()) return anchorWallet(walletId, owner);
+    const [local, onChain] = await Promise.all([localHead(walletId), latestAnchor(owner)]);
+    const unchanged = local && onChain && onChain.head.toLowerCase() === local.head.toLowerCase();
+    const wait = unchanged ? 0 : anchorCooldownSec(onChain?.at, Math.floor(Date.now() / 1000));
+    if (wait > 0) {
+      const minutes = Math.ceil(wait / 60);
+      return {
+        anchored: false,
+        reason: 'rate_limited',
+        detail: `This trail was anchored to Base less than an hour ago. The next anchor can be published in ${minutes} minute${minutes === 1 ? '' : 's'}, and the hourly anchor will publish it anyway.`,
+        retryAfterSec: wait,
+      };
+    }
+    return anchorWallet(walletId, owner);
+  })().finally(() => inFlight.delete(walletId));
+
+  inFlight.set(walletId, attempt);
+  return attempt;
 }
 
 export type AnchorAgreement =

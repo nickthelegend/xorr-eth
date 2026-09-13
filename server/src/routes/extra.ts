@@ -351,7 +351,9 @@ extra.post('/proposals/:id/decide', async (c) => {
     });
 
   if (body.decision === 'skip') {
-    const message = `Skipped. I will not re-propose ${symbol || 'this'} today.`;
+    // A strategy's proposal says what skipping means for it — it looks again on its next run — so the
+    // reply cannot promise "not today", which only the chat agent's own proposals keep.
+    const message = text('onSkip') || `Skipped. I will not re-propose ${symbol || 'this'} today.`;
     await record(message, 'block');
     return c.json({ status: 'skip', message });
   }
@@ -383,12 +385,43 @@ extra.post('/proposals/:id/decide', async (c) => {
     return c.json({ status, message, orderId });
   }
 
-  const exits = await armExits(w, {
-    symbol,
-    entryPrice: outcome.price,
-    stopPrice: Number(text('stopPrice')),
-    targetPrice: Number(text('targetPrice')),
-  });
+  /*
+   * Who looks after the position now.
+   *
+   * A tier 6–7 proposal names the strategy that asked (PLAN.md 1.10). That strategy has its own exit —
+   * momentum's stop, event-driven's close after the event — and runs it only for a position it knows
+   * it opened, so the state an unattended fill would have written is written now, with the entry at
+   * the price actually paid. Arming a separate exit as well would give one holding two sellers.
+   */
+  const strategyId = text('strategyId');
+  let exits: { strategyId: string | null; sentence: string };
+  if (strategyId) {
+    let state: Record<string, unknown> = {};
+    try {
+      state = JSON.parse(text('stateAfter') || '{}') as Record<string, unknown>;
+    } catch {
+      state = {};
+    }
+    if ('openEntryPrice' in state) state.openEntryPrice = outcome.price;
+    const managed = await one<{ label: string }>(
+      `UPDATE strategies SET params = params || $3::jsonb WHERE id = $1 AND wallet_id = $2 RETURNING label`,
+      [strategyId, w.id, JSON.stringify(state)],
+    );
+    const stop = Number(state.stopPrice ?? 0);
+    exits = managed
+      ? { strategyId: null, sentence: `${managed.label} now manages it${stop > 0 ? `, with its stop at ${money(stop)}` : ''}.` }
+      : {
+          strategyId: null,
+          sentence: 'The strategy that asked no longer exists, so nothing is watching this position. Set a stop in Auto Close.',
+        };
+  } else {
+    exits = await armExits(w, {
+      symbol,
+      entryPrice: outcome.price,
+      stopPrice: Number(text('stopPrice')),
+      targetPrice: Number(text('targetPrice')),
+    });
+  }
   const message = `Bought ${outcome.units.toFixed(4)} ${symbol} at ${money(outcome.price)}. ${exits.sentence}`;
   await record(message, 'trade', {
     orderId,
