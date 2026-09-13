@@ -29,13 +29,22 @@ const sha = git('rev-parse', 'HEAD');
 const dirty = git('status', '--porcelain', '--', 'server') !== '';
 const stamp = dirty ? `${sha}-dirty` : sha;
 
+/*
+ * Project and environment named explicitly, and the upload run from inside server/.
+ *
+ * `railway up server` from the repo root failed with "prefix not found" before uploading anything —
+ * the path argument and the directory the project is linked from did not agree. Naming the target
+ * outright means neither the working directory's link nor a path argument decides where this goes.
+ */
+const PROJECT = '7bceeadb-7a50-462a-9554-3282d389ebff';
+const ENVIRONMENT = 'production';
+const target = ['--project', PROJECT, '--environment', ENVIRONMENT, '--service', service];
+
 console.log(`\n  ${service} <- ${stamp}\n`);
-execFileSync(
-  'railway',
-  ['variable', 'set', `XORR_BUILD_SHA=${stamp}`, '--service', service, '--skip-deploys'],
-  { stdio: 'inherit' },
-);
-execFileSync('railway', ['up', 'server', '--service', service, '--ci'], { stdio: 'inherit' });
+execFileSync('railway', ['variable', 'set', `XORR_BUILD_SHA=${stamp}`, ...target, '--skip-deploys'], {
+  stdio: 'inherit',
+});
+execFileSync('railway', ['up', ...target, '--ci'], { stdio: 'inherit', cwd: 'server' });
 
 /* The upload returning is not the deploy being live: wait for the service to say which commit it runs. */
 const base = SERVICES[service];
