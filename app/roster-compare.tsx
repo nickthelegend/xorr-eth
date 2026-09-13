@@ -68,7 +68,7 @@ export default function RosterCompare() {
                     <AgentOrb gradient={agentGradient(a.name)} identity={a.name} size={52} face />
                     <View style={{ flex: 1 }}>
                       <Text variant="rowPrimary">{a.name}</Text>
-                      <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s2 }}>
+                      <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
                         {a.role}
                       </Text>
                     </View>
@@ -89,7 +89,7 @@ export default function RosterCompare() {
             ))}
 
             {agents.length > 0 ? (
-              <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s10 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                 {/* Once, at the bottom. Four copies of a caveat is a caveat nobody reads. */}
                 Past performance of a strategy says nothing about tomorrow.
               </Text>
@@ -104,7 +104,7 @@ export default function RosterCompare() {
 function Cell({ label, value, tone }: { label: string; value: string; tone?: 'up' | 'down' | 'neutral' }) {
   return (
     <View style={{ gap: space.s2 }}>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         {label}
       </Text>
       <Text

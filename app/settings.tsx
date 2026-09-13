@@ -179,7 +179,7 @@ export default function Settings() {
                 */
                 <Price color={colors.ink55}>{capLabel(delegation.dailyCapUsd)}</Price>
               ) : (
-                <Text variant="rowPrimary" color={colors.ink38}>
+                <Text variant="rowPrimary" color={colors.ink55}>
                   —
                 </Text>
               )

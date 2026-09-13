@@ -69,7 +69,7 @@ export default function Verify() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Verification</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Each row is a claim, the call that tests it, and what came back. Run against whatever this
           build is actually pointed at.
         </Text>
@@ -107,7 +107,7 @@ export default function Verify() {
               <Tally label="Not asked" value={data.skipped} tone={colors.ink40} />
             </View>
 
-            <Text variant="footnote" color={colors.ink28}>
+            <Text variant="footnote" color={colors.ink55}>
               {data.chain} · {new Date(data.at).toLocaleString('en-US')}
             </Text>
 
@@ -130,7 +130,7 @@ export default function Verify() {
                       that both are here: a claim with only a verdict is an assertion, and a claim
                       with the method and the observation is a receipt.
                     */}
-                    <Text variant="footnote" color={colors.ink40}>
+                    <Text variant="footnote" color={colors.ink55}>
                       {c.how}
                     </Text>
                     <Text
@@ -156,7 +156,7 @@ function Tally({ label, value, tone }: { label: string; value: number; tone: str
       <Text variant="screenTitle" color={tone}>
         {String(value)}
       </Text>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         {label}
       </Text>
     </View>

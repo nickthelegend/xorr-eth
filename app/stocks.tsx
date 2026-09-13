@@ -49,7 +49,7 @@ export default function Stocks() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Stocks</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Tokenized stocks, priced by what a real 1inch buy would cost.
         </Text>
       </View>
@@ -104,7 +104,7 @@ export default function Stocks() {
                 }
                 value={
                   s.price === null ? (
-                    <Text variant="rowPrimary" color={colors.ink40}>
+                    <Text variant="rowPrimary" color={colors.ink55}>
                       No route
                     </Text>
                   ) : (

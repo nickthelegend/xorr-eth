@@ -67,7 +67,7 @@ export default function StrategyDetail() {
         ) : strategies.loading && !strategies.data ? (
           <Placeholder height={160} />
         ) : !strategy ? (
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             No strategy with that id.
           </Text>
         ) : (
@@ -76,19 +76,19 @@ export default function StrategyDetail() {
             contentContainerStyle={{ paddingBottom: space.s30, gap: space.s10 }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 {strategy.kind.toUpperCase()} · {strategy.state.toUpperCase()}
               </Text>
               <Text variant="screenTitle" style={{ marginTop: space.s6 }}>
                 {strategy.label}
               </Text>
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {strategy.symbol}
               </Text>
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 SET TO
               </Text>
               {/*
@@ -114,13 +114,13 @@ export default function StrategyDetail() {
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 HAS DONE
               </Text>
               <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
                 {filled.length} filled · {mine.length - filled.length} did not
               </Text>
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {money(spent)} spent across its fills.
               </Text>
             </SheetCard>

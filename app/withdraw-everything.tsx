@@ -124,7 +124,7 @@ export default function WithdrawEverything() {
               <Eyebrow small>To</Eyebrow>
               <View style={{ gap: space.s10, marginTop: space.s12 }}>
                 {allowlist.loading ? (
-                  <Text variant="secondary" color={colors.ink40}>
+                  <Text variant="secondary" color={colors.ink55}>
                     Reading your allowlist…
                   </Text>
                 ) : allowlist.error && allowlist.addresses.length === 0 ? (
@@ -132,7 +132,7 @@ export default function WithdrawEverything() {
                     Your allowlist could not be read: {errorText(allowlist.error)}
                   </Text>
                 ) : allowlist.addresses.length === 0 ? (
-                  <Text variant="secondary" color={colors.ink40}>
+                  <Text variant="secondary" color={colors.ink55}>
                     No saved addresses yet.
                   </Text>
                 ) : (
@@ -150,7 +150,7 @@ export default function WithdrawEverything() {
                       />
                     ))}
                     {allowlist.pending.map((a) => (
-                      <Text key={a.address} variant="secondarySm" color={colors.ink40}>
+                      <Text key={a.address} variant="secondarySm" color={colors.ink55}>
                         {a.label} · {shortAddress(a.address)} — usable from {usableFromText(a)}
                         {allowlist.serverTime !== undefined ? `, ${usableIn(a, allowlist.serverTime)}` : ''}
                       </Text>
@@ -177,7 +177,7 @@ export default function WithdrawEverything() {
                 />
               </SheetCard>
 
-              <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s10 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                 {preview.data && preview.data.skipped.length > 0
                   ? `${preview.data.skipped.join(', ')} ${preview.data.skipped.length === 1 ? 'stays' : 'stay'}: under ${money(preview.data.dustBelowUsd)}. `
                   : ''}
@@ -243,7 +243,7 @@ function PlanLine({ n, title, detail }: { n: number; title: string; detail: stri
       <Text variant="rowPrimary">
         {n}. {title}
       </Text>
-      <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s4 }}>
+      <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s4 }}>
         {detail}
       </Text>
     </View>
@@ -276,7 +276,7 @@ function Progress({ steps }: { steps: Step[] }) {
                 {line.text}
               </Text>
               {line.txHash ? (
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }} selectable>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }} selectable>
                   {line.txHash}
                 </Text>
               ) : null}

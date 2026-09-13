@@ -208,10 +208,10 @@ export default function TradeSettings() {
                 marginTop: space.s8,
               }}
             >
-              <Text variant="footnoteSm" color={colors.ink28}>
+              <Text variant="footnoteSm" color={colors.ink55}>
                 {money(CAP_MIN, { decimals: 0 })} · conservative
               </Text>
-              <Text variant="footnoteSm" color={colors.ink28}>
+              <Text variant="footnoteSm" color={colors.ink55}>
                 {money(CAP_MAX, { decimals: 0 })} · max
               </Text>
             </View>
@@ -229,7 +229,7 @@ export default function TradeSettings() {
       <Button label={runLabel(auto)} loading={busy} onPress={commit} />
       <Text
         variant="footnote"
-        color={colors.ink28}
+        color={colors.ink55}
         align="center"
         style={{ marginTop: space.s12 }}
       >

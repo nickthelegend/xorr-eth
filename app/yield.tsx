@@ -71,7 +71,7 @@ export default function Yield() {
       <Fill style={{ marginTop: space.s16 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {pos.loading && !p ? (
-            <Text variant="body" color={colors.ink40}>
+            <Text variant="body" color={colors.ink55}>
               Reading the pool…
             </Text>
           ) : pos.error ? (
@@ -79,19 +79,19 @@ export default function Yield() {
               <Text variant="rowPrimary" color={colors.down}>
                 Couldn’t load the rate.
               </Text>
-              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 {pos.error.message}
               </Text>
             </SheetCard>
           ) : p && !p.available ? (
             <SheetCard borderRadius={radius.note} padding={space.s16}>
               <Text variant="rowPrimary">No lending pool here.</Text>
-              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 {p.reason ?? 'Not available on this network.'}
               </Text>
               {/* "Nothing supplied" and "nowhere to supply" are different, and the
                   difference matters — the second one is not something the user did. */}
-              <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s10 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                 Your balance is unaffected.
               </Text>
             </SheetCard>
@@ -102,13 +102,13 @@ export default function Yield() {
                 <Price variant="heroAmount" style={{ marginTop: space.s6 }}>
                   {money(supplied)}
                 </Price>
-                <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   {percent(p.apy * 100, 2).replace('+', '')} a year, paid into the balance.
                 </Text>
               </SheetCard>
 
               {supplied <= 0 ? (
-                <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s16 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s16 }}>
                   Nothing earning yet.
                 </Text>
               ) : (
@@ -145,7 +145,7 @@ export default function Yield() {
                     ))}
                   </View>
 
-                  <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
+                  <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s14 }}>
                     {portion === 1
                       ? 'Withdraws all of it, with interest.'
                       : `Withdraws about ${money(amount)}, leaving ${money(supplied - amount)} earning.`}
@@ -167,7 +167,7 @@ export default function Yield() {
                   </Text>
                   <Text
                     variant="footnote"
-                    color={colors.ink32}
+                    color={colors.ink55}
                     style={{ marginTop: space.s6 }}
                     selectable
                   >
@@ -196,7 +196,7 @@ export default function Yield() {
       {/* The claim that makes tier 4 safe to hand someone, restated where it is relied on. */}
       <Text
         variant="footnote"
-        color={colors.ink28}
+        color={colors.ink55}
         align="center"
         style={{ marginTop: space.s12 }}
       >

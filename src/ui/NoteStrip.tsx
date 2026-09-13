@@ -87,7 +87,7 @@ export function NoteStrip({
           }}
         />
       )}
-      <Text variant="secondarySm" color={colors.ink45} style={{ flex: 1 }}>
+      <Text variant="secondarySm" color={colors.ink55} style={{ flex: 1 }}>
         {children}
       </Text>
     </View>

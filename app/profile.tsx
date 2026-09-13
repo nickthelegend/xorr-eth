@@ -173,7 +173,7 @@ export default function Profile() {
 
         {wallet.data ? (
           <Rise index={2}>
-            <Text variant="footnote" color={colors.ink28} align="center" style={{ marginTop: space.s18 }}>
+            <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s18 }}>
               {`Privy ${wallet.data.kind} wallet · ${chainLabel}`}
             </Text>
           </Rise>

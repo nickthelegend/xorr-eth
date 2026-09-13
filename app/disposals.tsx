@@ -42,7 +42,7 @@ export default function Disposals() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Disposals</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           One row per sale, with the cost it was matched against.
         </Text>
       </View>
@@ -87,7 +87,7 @@ function DisposalRow({ disposal }: { disposal: Disposal }) {
         </Price>
       </View>
 
-      <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s4 }}>
+      <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
         {new Date(disposal.at).toLocaleString('en-US')}
       </Text>
 
@@ -113,7 +113,7 @@ function DisposalRow({ disposal }: { disposal: Disposal }) {
 function Cell({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ gap: space.s2 }}>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         {label}
       </Text>
       <Text variant="secondarySm">{value}</Text>

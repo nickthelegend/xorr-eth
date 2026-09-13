@@ -123,7 +123,7 @@ export default function WalletSetup() {
       <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         Your wallet, your keys
       </Text>
-      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
         xorr never holds your money. You keep the wallet; the bot gets a separate, limited
         permission to trade inside it — which you can take back at any time.
       </Text>

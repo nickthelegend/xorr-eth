@@ -153,7 +153,7 @@ export default function Send() {
         </View>
         <View style={{ gap: space.s10, marginTop: space.s12 }}>
           {listLoading ? (
-            <Text variant="secondary" color={colors.ink40}>
+            <Text variant="secondary" color={colors.ink55}>
               Loading…
             </Text>
           ) : listError && addresses.length === 0 ? (
@@ -162,7 +162,7 @@ export default function Send() {
               Couldn’t load your allowlist.
             </Text>
           ) : addresses.length === 0 ? (
-            <Text variant="secondary" color={colors.ink40}>
+            <Text variant="secondary" color={colors.ink55}>
               No addresses yet.
             </Text>
           ) : (
@@ -179,7 +179,7 @@ export default function Send() {
               ))}
               {/* Pending addresses are shown, and cannot be chosen: when each becomes usable is the executor's answer. */}
               {pending.map((a) => (
-                <Text key={a.address} variant="secondarySm" color={colors.ink40}>
+                <Text key={a.address} variant="secondarySm" color={colors.ink55}>
                   {a.label} · {shortAddress(a.address)} — usable from {usableFromText(a)}
                   {serverTime !== undefined ? `, ${usableIn(a, serverTime)}` : ''}
                 </Text>

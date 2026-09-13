@@ -189,7 +189,7 @@ export default function Swap() {
                 accessibilityRole={balanceUnread ? 'button' : undefined}
                 accessibilityLabel={balanceUnread ? `Retry reading your ${pay} balance` : undefined}
               >
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   {/* A dash while the balance loads, never a zero: see the note on `swapSpendable`. */}
                   {balanceUnread
                     ? `Balance ${MINUS} · tap to retry`
@@ -275,7 +275,7 @@ export default function Swap() {
                     <Text variant="rowPrimary" style={{ flex: 1 }}>
                       {symbol}
                     </Text>
-                    <Text variant="footnote" color={colors.ink40}>
+                    <Text variant="footnote" color={colors.ink55}>
                       {held === undefined ? MINUS : `${units(held)} held`}
                     </Text>
                   </Press>

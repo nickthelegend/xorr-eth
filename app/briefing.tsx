@@ -59,7 +59,7 @@ export default function Briefing() {
           <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Briefing</Text>
         </View>
-        <Text variant="footnote" color={colors.ink28}>
+        <Text variant="footnote" color={colors.ink55}>
           {loadedAt === undefined ? '' : `Loaded ${loadedAt}`}
         </Text>
       </View>
@@ -81,7 +81,7 @@ export default function Briefing() {
               <SheetCard key={n.id} borderRadius={radius.panel} padding={space.s16}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
                   <Tag label={n.tag} small colors={{ bg: n.tagBg, fg: n.tagFg }} />
-                  <Text variant="footnote" color={colors.ink28}>
+                  <Text variant="footnote" color={colors.ink55}>
                     {n.t}
                   </Text>
                 </View>

@@ -121,7 +121,7 @@ export default function PerpContract() {
       ) : !m && !metrics.loading ? (
         <Text
           variant="body"
-          color={colors.ink40}
+          color={colors.ink55}
           align="center"
           style={{ marginTop: space.s30, paddingHorizontal: space.gutter }}
         >
@@ -197,7 +197,7 @@ export default function PerpContract() {
               ) : candles.loading ? (
                 <Placeholder height={CHART_H} style={{ borderRadius: radius.tile }} />
               ) : (
-                <Text variant="body" color={colors.ink40} align="center">
+                <Text variant="body" color={colors.ink55} align="center">
                   No candles for this range yet.
                 </Text>
               )}
@@ -216,7 +216,7 @@ export default function PerpContract() {
             ) : (
               <Placeholder height={STATS_H} style={{ borderRadius: radius.panel }} />
             )}
-            <Text variant="footnote" color={colors.ink28} align="center" style={{ marginTop: space.s16 }}>
+            <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s16 }}>
               {`Market data from ${m?.venue ?? 'the venue'}. xorr does not trade futures.`}
             </Text>
           </View>

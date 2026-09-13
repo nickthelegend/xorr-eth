@@ -107,7 +107,7 @@ export default function AgentDetail() {
         </View>
       ) : !agent ? (
         <View style={{ paddingHorizontal: space.gutter }}>
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             Agent not found.
           </Text>
         </View>
@@ -121,7 +121,7 @@ export default function AgentDetail() {
             <Text variant="screenTitle" align="center" style={{ marginTop: space.s6 }}>
               {agent.name}
             </Text>
-            <Text variant="secondarySm" color={colors.ink40} align="center">
+            <Text variant="secondarySm" color={colors.ink55} align="center">
               {agent.role}
             </Text>
             <View
@@ -168,7 +168,7 @@ export default function AgentDetail() {
                 <Placeholder height={48} />
               </View>
             ) : mine.length === 0 ? (
-              <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+              <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
                 {strategies.error ? 'Couldn’t load strategies.' : 'Nothing running yet.'}
               </Text>
             ) : (
@@ -214,7 +214,7 @@ function Stat({ label, value, tone = 'neutral' }: { label: string; value: string
       <Price variant="cardTitleLg" tone={tone} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
         {value}
       </Price>
-      <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s4 }}>
+      <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
         {label}
       </Text>
     </View>

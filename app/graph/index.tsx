@@ -53,7 +53,7 @@ export default function GraphHealth() {
         ) : !graph.data ? null : (
           <>
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 INDEXED TO
               </Text>
               <Text variant="screenTitle" style={{ marginTop: space.s6 }}>
@@ -70,7 +70,7 @@ export default function GraphHealth() {
                 Two different facts, kept apart. A subgraph can be error-free and badly behind, and
                 that is the failure that actually happens.
               */}
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s6 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 {behind === null
                   ? 'Cannot compare to the chain head right now.'
                   : behind <= 1

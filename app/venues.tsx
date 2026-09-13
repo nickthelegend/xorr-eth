@@ -45,7 +45,7 @@ export default function Venues() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Venues</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Where a fill is allowed to go. Anything not here reverts on-chain, whatever the executor
           intended.
         </Text>
@@ -72,18 +72,18 @@ export default function Venues() {
             }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 CONTRACT
               </Text>
               <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
                 {shortAddress(data!.contract)}
               </Text>
-              <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 signs as {shortAddress(data!.delegate)}
               </Text>
             </SheetCard>
 
-            <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s10 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
               {venues.length === 1 ? 'ONE VENUE' : `${venues.length} VENUES`}
             </Text>
             {venues.map((v) => (
@@ -96,13 +96,13 @@ export default function Venues() {
 
             {tokens.length > 0 ? (
               <>
-                <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s10 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                   TOKENS IT MAY PULL
                 </Text>
                 {tokens.map((t) => (
                   <SheetCard key={t.address} bordered borderRadius={radius.panel} padding={space.s14}>
                     <Text variant="rowPrimary">{t.symbol}</Text>
-                    <Text variant="footnoteSm" color={colors.ink28} style={{ marginTop: space.s6 }}>
+                    <Text variant="footnoteSm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                       {t.address}
                     </Text>
                   </SheetCard>

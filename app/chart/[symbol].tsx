@@ -117,12 +117,12 @@ export default function ProChart() {
             )}
           </>
         ) : loading ? (
-          <Price variant="priceMd" color={colors.ink30}>
+          <Price variant="priceMd" color={colors.ink55}>
             —
           </Price>
         ) : (
           <>
-            <Price variant="priceMd" color={colors.ink30}>
+            <Price variant="priceMd" color={colors.ink55}>
               —
             </Price>
             <Text variant="secondary">No price feed for {symbol}.</Text>

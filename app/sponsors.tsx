@@ -63,7 +63,7 @@ export default function Sponsors() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">How it works</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           What each one does here, and the evidence it is doing it.
         </Text>
       </View>
@@ -165,7 +165,7 @@ export default function Sponsors() {
             />
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-              <Text variant="secondarySm" color={colors.ink40}>
+              <Text variant="secondarySm" color={colors.ink55}>
                 Every figure here is read live. Nothing on this screen is a claim the app cannot
                 check while you are looking at it.
               </Text>
@@ -225,7 +225,7 @@ function Track({
       </Text>
 
       {extra ? (
-        <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
           {extra}
         </Text>
       ) : null}

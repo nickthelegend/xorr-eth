@@ -57,7 +57,7 @@ export default function Pnl() {
             contentContainerStyle={{ paddingBottom: space.s30 }}
           >
             <View style={{ paddingBottom: space.s16 }}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 TOTAL REALISED
               </Text>
               <Price variant="screenTitle" tone={pnlTone(data!.total)} style={{ marginTop: space.s6 }}>

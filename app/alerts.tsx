@@ -94,7 +94,7 @@ export default function Alerts() {
           <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Alerts</Text>
         </View>
-        <Text variant="footnote" color={colors.ink28}>
+        <Text variant="footnote" color={colors.ink55}>
           {onCount} of {data?.length ?? 0} on
         </Text>
       </View>

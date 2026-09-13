@@ -79,7 +79,7 @@ export default function Coverage() {
     rows.length === 0 ? null : (
       <View style={{ marginTop: space.s20 }}>
         <Eyebrow>{title}</Eyebrow>
-        <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s4 }}>
+        <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
           {blurb}
         </Text>
         {rows.map((r) => (
@@ -87,7 +87,7 @@ export default function Coverage() {
             <Text variant="rowPrimary">{r.symbol}</Text>
             {/* Named, because "BTC settles" is only true through a token with another ticker. */}
             {r.via ? (
-              <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s2 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
                 settles as {r.via}
               </Text>
             ) : null}

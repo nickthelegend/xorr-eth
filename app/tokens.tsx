@@ -50,7 +50,7 @@ export default function Tokens() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Tokens</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           What the executor can settle on this chain. Anything not here is a chart you can look at,
           not an order you can place.
         </Text>
@@ -93,7 +93,7 @@ export default function Tokens() {
                     <Text variant="rowPrimary" style={{ flex: 1 }}>
                       {t.symbol}
                     </Text>
-                    <Text variant="footnote" color={colors.ink40}>
+                    <Text variant="footnote" color={colors.ink55}>
                       {t.decimals} dp
                     </Text>
                   </View>
@@ -101,7 +101,7 @@ export default function Tokens() {
                     In full. A token IS its address; six characters of it identifies nothing, and
                     this screen exists so someone can check the contract is the one they expect.
                   */}
-                  <Text variant="footnoteSm" color={colors.ink28} style={{ marginTop: space.s10 }}>
+                  <Text variant="footnoteSm" color={colors.ink55} style={{ marginTop: space.s10 }}>
                     {t.address}
                   </Text>
                 </SheetCard>

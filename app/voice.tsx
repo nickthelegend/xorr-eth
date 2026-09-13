@@ -33,7 +33,7 @@ export default function Voice() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Voice</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Every reply is written under one of these. The rules about numbers do not change.
         </Text>
       </View>
@@ -84,7 +84,7 @@ export default function Voice() {
                     The actual instruction, verbatim. This is what the model is told, and a person
                     choosing a register deserves to read it rather than infer it from an adjective.
                   */}
-                  <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
+                  <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s12 }}>
                     {t.instruction}
                   </Text>
                 </SheetCard>
@@ -93,7 +93,7 @@ export default function Voice() {
           })}
 
           <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-            <Text variant="secondarySm" color={colors.ink40}>
+            <Text variant="secondarySm" color={colors.ink55}>
               None of these loosen the rules that matter. Whatever the tone, a reply that contains a
               figure is rejected before it reaches the screen — every number you see is rendered by
               the app from its own records.

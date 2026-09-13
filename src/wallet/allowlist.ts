@@ -118,7 +118,7 @@ export function useAllowlist() {
   const add = useCallback(
     async (label: string, address: string) => {
       if (!isValidAddress(address)) {
-        throw new Error('That is not a Base address. It should start 0x and be 42 characters.');
+        throw new Error('Not a valid address: it starts with 0x and has 42 characters.');
       }
       /*
        * The duplicate check is the executor's, where the list is authoritative.

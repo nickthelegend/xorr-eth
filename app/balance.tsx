@@ -53,13 +53,13 @@ export default function Balance() {
         ) : loading && !data ? (
           <Placeholder height={160} />
         ) : !data ? (
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             The balance could not be read from the chain.
           </Text>
         ) : (
           <>
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 TOTAL
               </Text>
               <Price variant="screenTitle" style={{ marginTop: space.s6 }}>
@@ -99,7 +99,7 @@ export default function Balance() {
             />
             <Slice
               label="Supplied"
-              note="Earning at Aave. Withdraw before it can be spent."
+              note="Earning. Withdraw it before spending."
               usd={data.supplied}
               share={share(data.supplied)}
             />
@@ -129,10 +129,10 @@ function Slice({
         <Text variant="rowPrimary">{label}</Text>
         <Price variant="rowPrimary">{money(usd)}</Price>
       </View>
-      <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s4 }}>
+      <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
         {pct(share * 100)}
       </Text>
-      <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+      <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
         {note}
       </Text>
     </SheetCard>

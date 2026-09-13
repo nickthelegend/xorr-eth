@@ -76,7 +76,7 @@ export default function Network() {
             }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 CHAIN
               </Text>
               <Text variant="screenTitle" style={{ marginTop: space.s6 }}>
@@ -93,14 +93,14 @@ export default function Network() {
 
             {block ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   BLOCK
                 </Text>
                 <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
                   {Number(block).toLocaleString('en-US')}
                 </Text>
                 {rpc?.ms === undefined ? null : (
-                  <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s4 }}>
+                  <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
                     RPC answered in {rpc.ms}ms
                   </Text>
                 )}
@@ -108,20 +108,20 @@ export default function Network() {
             ) : null}
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 DELEGATION CONTRACT
               </Text>
               <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
                 {shortAddress(data.delegation)}
               </Text>
-              <Text variant="footnoteSm" color={colors.ink28} style={{ marginTop: space.s4 }}>
+              <Text variant="footnoteSm" color={colors.ink55} style={{ marginTop: space.s4 }}>
                 {data.delegation}
               </Text>
             </SheetCard>
 
             {gas ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   GAS WALLET
                 </Text>
                 <Text variant="secondary" color={colors.ink65} style={{ marginTop: space.s6 }}>

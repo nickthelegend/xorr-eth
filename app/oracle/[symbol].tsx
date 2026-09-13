@@ -45,7 +45,7 @@ export default function Oracle() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">{symbol}</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Readings this executor took, not a vendor&apos;s series.
         </Text>
       </View>
@@ -85,7 +85,7 @@ export default function Oracle() {
                   key={p.at}
                   style={{ flexDirection: 'row', justifyContent: 'space-between' }}
                 >
-                  <Text variant="secondarySm" color={colors.ink40}>
+                  <Text variant="secondarySm" color={colors.ink55}>
                     {new Date(p.at).toLocaleString('en-US')}
                   </Text>
                   <Text variant="secondarySm">{fmtPrice(p.usd)}</Text>

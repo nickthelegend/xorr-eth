@@ -96,7 +96,7 @@ export default function Allocation() {
             contentContainerStyle={{ paddingBottom: space.s30 }}
           >
             <View style={{ paddingBottom: space.s16 }}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 TOTAL
               </Text>
               <Price variant="screenTitle" style={{ marginTop: space.s6 }}>
@@ -147,7 +147,7 @@ export default function Allocation() {
                       />
                     </View>
 
-                    <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s6 }}>
+                    <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
                       {pct(share * 100)}
                     </Text>
                   </View>

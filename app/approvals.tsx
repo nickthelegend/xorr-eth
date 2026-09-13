@@ -44,7 +44,7 @@ export default function Approvals() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Approvals</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           What may take tokens from this wallet — the delegation contract and the 1inch router — read from the
           chain rather than from our record of it.
         </Text>
@@ -95,7 +95,7 @@ function SpenderSection({
   return (
     <View style={{ gap: space.s10 }}>
       <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-        <Text variant="footnote" color={colors.ink40}>
+        <Text variant="footnote" color={colors.ink55}>
           {spender.role === 'router' ? 'Spender · the 1inch router' : 'Spender · the delegation contract'}
         </Text>
         <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
@@ -149,7 +149,7 @@ function ApprovalRow({
           {state}
         </Text>
       </View>
-      <Text variant="footnote" color={colors.ink35} style={{ marginTop: space.s4 }}>
+      <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
         {shortAddress(token.address)}
       </Text>
       {token.none || token.unlimited || token.unread ? null : (
@@ -162,7 +162,7 @@ function ApprovalRow({
         uint256 with an ellipsis in the middle cannot be compared to anything.
       */}
       {token.none || token.unread ? null : (
-        <Text variant="footnoteSm" color={colors.ink28} style={{ marginTop: space.s6 }}>
+        <Text variant="footnoteSm" color={colors.ink55} style={{ marginTop: space.s6 }}>
           {token.allowance}
         </Text>
       )}

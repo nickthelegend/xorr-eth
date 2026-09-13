@@ -66,7 +66,7 @@ export default function Policy() {
             }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 PRIVY POLICY
               </Text>
               <Text
@@ -82,7 +82,7 @@ export default function Policy() {
                   : 'The policy exists but is not attached to this wallet. Attaching it is authorised by the wallet owner, which is you — not us.'}
               </Text>
               {data.policyName ? (
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s8 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   {data.policyName}
                 </Text>
               ) : null}
@@ -90,13 +90,13 @@ export default function Policy() {
 
             {destinations.length > 0 ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   {data.enforced ? 'MAY SEND TO' : 'WOULD ALLOW'}
                 </Text>
                 {destinations.map((d) => (
                   <View key={`${d.label}:${d.address}`} style={{ marginTop: space.s10 }}>
                     <Text variant="rowPrimary">{d.label}</Text>
-                    <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
+                    <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
                       {shortAddress(d.address)}
                     </Text>
                   </View>
@@ -106,7 +106,7 @@ export default function Policy() {
 
             {data.ownedByQuorum ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   OWNED BY
                 </Text>
                 <Text variant="secondarySm" color={colors.ink65} style={{ marginTop: space.s6 }}>

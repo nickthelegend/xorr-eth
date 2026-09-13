@@ -90,7 +90,7 @@ export default function GrantDelegation() {
   return (
     <Screen>
       <Text variant="screenTitle">Let the bot trade</Text>
-      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
         What it can and can’t do.
       </Text>
 

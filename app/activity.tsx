@@ -62,7 +62,7 @@ function ExplorerLink({ explorer }: { explorer: string }) {
     // The hash alone: which network it is on is not named off the money screens (PLAN.md O3).
     const ref = explorer.split(':')[1];
     return (
-      <Text variant="footnote" color={colors.ink28}>
+      <Text variant="footnote" color={colors.ink55}>
         {`${ref?.slice(0, 10) ?? ''}…`}
       </Text>
     );
@@ -187,7 +187,7 @@ export default function Activity() {
                   <View style={{ flex: 1, gap: space.s2 }}>
                     <Text variant="rowPrimary">{r.action}</Text>
                     <Text variant="secondarySm">{r.detail}</Text>
-                    <Text variant="footnote" color={colors.ink28}>
+                    <Text variant="footnote" color={colors.ink55}>
                       {r.agent} · {r.t}
                     </Text>
                     {/*

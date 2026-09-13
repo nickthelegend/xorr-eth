@@ -118,7 +118,7 @@ export default function AuditAnchorScreen() {
             contentContainerStyle={{ paddingBottom: space.s30, gap: space.s12 }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 STATE
               </Text>
               <Text variant="screenTitle" color={STATE[data.state].tone} style={{ marginTop: space.s6 }}>
@@ -131,16 +131,16 @@ export default function AuditAnchorScreen() {
 
             {data.latest ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   WHAT BASE HOLDS
                 </Text>
                 <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
                   {shortHash(data.latest.head)}
                 </Text>
-                <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s6 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
                   {`entry ${data.latest.entryCount.toLocaleString('en-US')} · block ${data.latest.blockNo.toLocaleString('en-US')}`}
                 </Text>
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
                   {`since ${new Date(data.latest.at * 1000).toUTCString().replace(' GMT', ' UTC')}`}
                 </Text>
               </SheetCard>
@@ -152,17 +152,17 @@ export default function AuditAnchorScreen() {
               public RPC reproduce everything above.
             */}
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 CHECK IT YOURSELF
               </Text>
               <Text variant="secondarySm" color={colors.ink65} style={{ marginTop: space.s6 }}>
                 {`Read latest(${shortAddr(data.anchoredBy)}, your address) on ${shortAddr(data.contract)}, on ${data.chain}. The signing key is the bot's key, the same one on the safety screen.`}
               </Text>
               <View style={{ marginTop: space.s10, gap: space.s4 }}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   {`contract  ${data.contract}`}
                 </Text>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   {`anchored by  ${data.anchoredBy}`}
                 </Text>
               </View>
@@ -170,13 +170,13 @@ export default function AuditAnchorScreen() {
 
             {data.history.length > 1 ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   {`EVERY COMMITMENT (${data.history.length})`}
                 </Text>
                 {[...data.history].reverse().map((a: AuditAnchor) => (
                   <View key={`${a.blockNo}-${a.head}`} style={{ marginTop: space.s10 }}>
                     <Text variant="secondarySm">{shortHash(a.head)}</Text>
-                    <Text variant="footnote" color={colors.ink40}>
+                    <Text variant="footnote" color={colors.ink55}>
                       {`entry ${a.entryCount.toLocaleString('en-US')} · block ${a.blockNo.toLocaleString('en-US')}`}
                     </Text>
                   </View>
@@ -185,7 +185,7 @@ export default function AuditAnchorScreen() {
             ) : null}
 
             {note ? (
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 {note}
               </Text>
             ) : null}

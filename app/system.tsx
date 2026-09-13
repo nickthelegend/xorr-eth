@@ -83,7 +83,7 @@ export default function Status() {
             }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 EXECUTOR
               </Text>
               <Text
@@ -93,10 +93,10 @@ export default function Status() {
               >
                 {criticalDown > 0 ? 'Degraded' : 'Up'}
               </Text>
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {data.chain} · up {uptime(data.uptimeSec)}
               </Text>
-              <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s4 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
                 {shortAddress(data.delegation)}
               </Text>
             </SheetCard>
@@ -131,7 +131,7 @@ function DependencyRow({ dep }: { dep: HealthDependency }) {
           words and only one of them stops the product working.
         */}
         {dep.critical ? null : (
-          <Text variant="footnote" color={colors.ink28}>
+          <Text variant="footnote" color={colors.ink55}>
             not critical
           </Text>
         )}
@@ -142,7 +142,7 @@ function DependencyRow({ dep }: { dep: HealthDependency }) {
         )}
       </View>
       {dep.detail ? (
-        <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
           {dep.detail}
         </Text>
       ) : null}

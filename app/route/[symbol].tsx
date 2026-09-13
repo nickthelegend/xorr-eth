@@ -60,7 +60,7 @@ export default function RouteInspector() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Route</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           {PAYS_WITH} into {into}, quoted live. Nothing here places an order.
         </Text>
       </View>
@@ -82,23 +82,23 @@ export default function RouteInspector() {
             contentContainerStyle={{ paddingBottom: space.s30, gap: space.s10 }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 YOU WOULD RECEIVE
               </Text>
               <Text variant="screenTitle" style={{ marginTop: space.s6 }}>
                 {quantity(data.outAmount)} {into}
               </Text>
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 At worst {quantity(data.minimumOut)}, at {data.slippagePct}% slippage.
               </Text>
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 THROUGH
               </Text>
               {data.venues.length === 0 ? (
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   The router named no venues for this size.
                 </Text>
               ) : (
@@ -111,7 +111,7 @@ export default function RouteInspector() {
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 PRICE IMPACT
               </Text>
               {/*
@@ -123,7 +123,7 @@ export default function RouteInspector() {
                   ? '—'
                   : percent(data.priceImpactPct, { digits: 2, explicitSign: false })}
               </Text>
-              <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s8 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {data.route}
               </Text>
             </SheetCard>
@@ -178,7 +178,7 @@ function VenueComparison({
 
   return (
     <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         EVERY VENUE, SAME SIZE
       </Text>
       {data.quotes.map((q) => (
@@ -195,7 +195,7 @@ function VenueComparison({
               {q.served ? `${quantity(q.outAmount)} ${outSymbol}` : 'cannot serve'}
             </Text>
           </View>
-          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
+          <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
             {q.served ? q.detail : q.reason}
           </Text>
           {/*
@@ -206,7 +206,7 @@ function VenueComparison({
             rather than zero when the cost could not be estimated — free is a claim.
           */}
           {q.served && q.gasUsd !== undefined ? (
-            <Text variant="footnote" color={colors.ink28}>
+            <Text variant="footnote" color={colors.ink55}>
               {`gas ${money(q.gasUsd, { fractionDigits: 4 })}${q.netUsd !== undefined ? ` · net ${money(q.netUsd)}` : ''}`}
             </Text>
           ) : null}
@@ -222,7 +222,7 @@ function VenueComparison({
           {`${VENUE_LABEL[data.bestNet] ?? data.bestNet} wins after gas, even though ${VENUE_LABEL[data.best] ?? data.best} quotes more.`}
         </Text>
       ) : null}
-      <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s12 }}>
+      <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s12 }}>
         {data.edgeBps !== undefined
           ? `${VENUE_LABEL[data.best ?? ''] ?? data.best} wins by ${data.edgeBps} bps.`
           : data.best

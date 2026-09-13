@@ -163,7 +163,7 @@ export function SwitchRow({
         <Text variant="bodyLg" color={colors.ink}>
           {label}
         </Text>
-        <Text variant="secondarySm" color={colors.ink32} style={{ marginTop: space.s2 }}>
+        <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s2 }}>
           {caption(on)}
         </Text>
       </View>

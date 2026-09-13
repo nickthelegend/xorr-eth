@@ -45,7 +45,7 @@ export default function Catchup() {
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Since you looked</Text>} />
         {data ? (
-          <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+          <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
             {data.isFirstVisit
               ? 'First visit — this is everything from the last day.'
               : data.since
@@ -80,7 +80,7 @@ export default function Catchup() {
                 {counts.map(([kind, n]) => (
                   <View key={kind} style={{ gap: space.s2 }}>
                     <Text variant="screenTitle">{String(n)}</Text>
-                    <Text variant="footnote" color={colors.ink40}>
+                    <Text variant="footnote" color={colors.ink55}>
                       {kind}
                     </Text>
                   </View>
@@ -92,11 +92,11 @@ export default function Catchup() {
               <SheetCard key={`${e.at}-${i}`} bordered borderRadius={radius.panel} padding={space.s14}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <Text variant="rowPrimary">{e.action}</Text>
-                  <Text variant="footnote" color={colors.ink28}>
+                  <Text variant="footnote" color={colors.ink55}>
                     {new Date(e.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 </View>
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s6 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                   {e.detail}
                 </Text>
               </SheetCard>

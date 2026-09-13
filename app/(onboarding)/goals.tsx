@@ -42,7 +42,7 @@ export default function Goals() {
       <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         {'What should your\nbot optimise for?'}
       </Text>
-      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
         Pick any.
       </Text>
 
@@ -73,7 +73,7 @@ export default function Goals() {
 
       <Fill />
 
-      <Text variant="footnote" color={colors.ink28} style={{ marginBottom: space.s12 }}>
+      <Text variant="footnote" color={colors.ink55} style={{ marginBottom: space.s12 }}>
         {goals.length} selected · {risk}
       </Text>
       <Button

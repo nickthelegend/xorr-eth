@@ -83,7 +83,7 @@ export default function Fund() {
       <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
         Fund the wallet
       </Text>
-      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
         Top up or withdraw anytime.
       </Text>
 

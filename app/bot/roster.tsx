@@ -72,7 +72,7 @@ export default function Roster() {
           <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Agents</Text>
         </View>
-        <Text variant="footnote" color={colors.ink28}>
+        <Text variant="footnote" color={colors.ink55}>
           {hiredCount} of {agents.length || 4} hired
         </Text>
       </View>
@@ -137,7 +137,7 @@ export default function Roster() {
 
       <Text
         variant="footnote"
-        color={colors.ink28}
+        color={colors.ink55}
         align="center"
         style={{ marginTop: space.s14 }}
       >

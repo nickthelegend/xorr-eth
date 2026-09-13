@@ -77,7 +77,7 @@ export default function Backtest() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Backtest</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           A weekly buy, over real past prices. Nothing is created.
         </Text>
       </View>
@@ -113,7 +113,7 @@ export default function Backtest() {
             ) : busy ? (
               <Placeholder height={CHART_H} />
             ) : !result ? (
-              <Text variant="secondarySm" color={colors.ink40}>
+              <Text variant="secondarySm" color={colors.ink55}>
                 Pick a market, a window and a size. The result is computed from daily closes the
                 executor already holds, not from a model.
               </Text>
@@ -129,13 +129,13 @@ export default function Backtest() {
                 ) : null}
 
                 <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-                  <Text variant="footnote" color={colors.ink40}>
+                  <Text variant="footnote" color={colors.ink55}>
                     RETURN
                   </Text>
                   <Price variant="screenTitle" tone={pnlTone(result.ret)} style={{ marginTop: space.s6 }}>
                     {percent(result.ret)}
                   </Price>
-                  <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s10 }}>
+                  <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s10 }}>
                     Worst drawdown {percent(result.maxDd, { explicitSign: false })} · {result.trades}{' '}
                     buys
                   </Text>
@@ -147,10 +147,10 @@ export default function Backtest() {
                     for exactly this reason, and a client that keeps the return and discards the
                     caveat has turned a calculation into a claim.
                   */}
-                  <Text variant="footnote" color={colors.ink40}>
+                  <Text variant="footnote" color={colors.ink55}>
                     {result.source}
                   </Text>
-                  <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                  <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                     {result.disclaimer}
                   </Text>
                 </SheetCard>

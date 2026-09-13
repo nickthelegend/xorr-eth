@@ -67,7 +67,7 @@ export default function LegalDoc() {
 
       <Fill style={{ marginTop: space.s18 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Text variant="footnote" color={colors.ink28}>
+          <Text variant="footnote" color={colors.ink55}>
             {entry.updated}
           </Text>
           {entry.sections.map((s) => (
@@ -76,7 +76,7 @@ export default function LegalDoc() {
               {s.paragraphs.map((p, i) => (
                 // Legal prose is read in long passes, so it takes a looser leading than the
                 // body variant's 1.5 — the one place in the app that is the right call.
-                <Text key={i} variant="body" color={colors.ink45} style={{ lineHeight: 14 * 1.6 }}>
+                <Text key={i} variant="body" color={colors.ink55} style={{ lineHeight: 14 * 1.6 }}>
                   {p}
                 </Text>
               ))}

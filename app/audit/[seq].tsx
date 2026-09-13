@@ -47,7 +47,7 @@ export default function AuditEntry() {
         ) : loading && !data ? (
           <Placeholder height={170} />
         ) : !entry ? (
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             No entry with that sequence number is in the trail.
           </Text>
         ) : (
@@ -56,7 +56,7 @@ export default function AuditEntry() {
             contentContainerStyle={{ paddingBottom: space.s30, gap: space.s10 }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 {entry.agent.toUpperCase()} · {entry.t}
               </Text>
               <Text variant="screenTitle" style={{ marginTop: space.s6 }}>
@@ -75,14 +75,14 @@ export default function AuditEntry() {
 
             {entry.signature ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   TRANSACTION
                 </Text>
                 <Text variant="footnoteSm" color={colors.ink65} style={{ marginTop: space.s6 }}>
                   {entry.signature}
                 </Text>
                 {entry.explorer ? (
-                  <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s10 }}>
+                  <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                     {/*
                       As sent. A `fork:` label instead of a URL is the server saying this chain has
                       no public explorer — better than a link that 404s and makes a real transaction
@@ -94,7 +94,7 @@ export default function AuditEntry() {
               </SheetCard>
             ) : (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="secondarySm" color={colors.ink40}>
+                <Text variant="secondarySm" color={colors.ink55}>
                   No transaction. This entry records something the bot decided, not something it
                   sent — which is why the trail has more rows than the chain does.
                 </Text>

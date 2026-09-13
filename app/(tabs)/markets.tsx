@@ -105,10 +105,10 @@ export default function MarketsScreen() {
           gap: space.s12,
         }}
       >
-        <Text variant="secondarySm" color={colors.ink40} style={{ flex: 1, maxWidth: 220 }}>
+        <Text variant="secondarySm" color={colors.ink55} style={{ flex: 1, maxWidth: 220 }}>
           {cls?.note ?? ''}
         </Text>
-        <Text variant="footnote" color={colors.ink28} numberOfLines={1}>
+        <Text variant="footnote" color={colors.ink55} numberOfLines={1}>
           {/*
             "0 shown" is a claim, and until the classes land it is a false one. This screen waits
             on four upstream calls and `/market/stocks` alone can take eight seconds, so the

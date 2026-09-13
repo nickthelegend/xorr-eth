@@ -59,7 +59,7 @@ export default function ClassList() {
             {cls?.label ?? 'Markets'}
           </Text>
         </View>
-        <Text variant="footnote" color={colors.ink28}>
+        <Text variant="footnote" color={colors.ink55}>
           {/*
             "0 of 0 markets" is a claim, and while the classes are loading it is a false one — this
             screen showed it for a full twenty seconds before rendering nine. The list below already

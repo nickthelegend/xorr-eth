@@ -52,7 +52,7 @@ export default function Spend() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Spend</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Day by day, from what the contract emitted.
         </Text>
       </View>
@@ -95,7 +95,7 @@ export default function Spend() {
                     }}
                   />
                 </View>
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
                   {d.trades === 1 ? 'one trade' : `${d.trades} trades`}
                 </Text>
               </View>

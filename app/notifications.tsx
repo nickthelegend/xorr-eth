@@ -88,7 +88,7 @@ export default function Notifications() {
                         ? 'Push is not configured in this build'
                         : 'This device could not be registered'}
                 </Text>
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   {device.detail} Nothing below will arrive until that is fixed.
                 </Text>
               </SheetCard>
@@ -106,7 +106,7 @@ export default function Notifications() {
                 }}
               />
             ))}
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s16 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s16 }}>
               {/*
                 Said out loud because it is the one people turn off first and regret. The trade that
                 did not happen is the one you need to hear about.

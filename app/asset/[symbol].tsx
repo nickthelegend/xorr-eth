@@ -253,7 +253,7 @@ export default function AssetDetail() {
             style={{ alignSelf: 'center' }}
           />
         ) : (
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             {warmingAny ? 'Loading…' : spot === undefined ? 'No price yet.' : 'No history yet.'}
           </Text>
         )}

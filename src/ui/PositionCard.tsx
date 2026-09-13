@@ -125,7 +125,7 @@ export function PositionCard({
         <Placeholder height={CHART_H} style={{ borderRadius: radius.tile }} />
       ) : series.length < 2 ? (
         <View style={{ height: CHART_H, alignItems: 'center', justifyContent: 'center' }}>
-          <Text variant="footnote" color={colors.ink28}>
+          <Text variant="footnote" color={colors.ink55}>
             No price history yet
           </Text>
         </View>

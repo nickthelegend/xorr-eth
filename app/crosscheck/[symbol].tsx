@@ -58,7 +58,7 @@ export default function Crosscheck() {
         ) : !data || !state ? null : (
           <>
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 CROSS-CHECK
               </Text>
               <Text variant="screenTitle" color={state.tone} style={{ marginTop: space.s6 }}>
@@ -81,13 +81,13 @@ export default function Crosscheck() {
             */}
             {data.compared && data.spreadPct !== null && data.spreadPct !== undefined ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   DIFFERENCE
                 </Text>
                 <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
                   {percent(Math.abs(data.spreadPct), { digits: 2, explicitSign: false })}
                 </Text>
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   The executor fills at the 1inch side. Where they diverge, that is the number that
                   decides what you actually pay.
                 </Text>
@@ -103,7 +103,7 @@ export default function Crosscheck() {
 function Source({ label, note, value }: { label: string; note: string; value: number | null }) {
   return (
     <SheetCard bordered borderRadius={radius.panel} padding={space.s14} style={{ flex: 1 }}>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         {label}
       </Text>
       {/*
@@ -116,7 +116,7 @@ function Source({ label, note, value }: { label: string; note: string; value: nu
       >
         {value === null ? '—' : fmtPrice(value)}
       </Text>
-      <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
+      <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
         {note}
       </Text>
     </SheetCard>

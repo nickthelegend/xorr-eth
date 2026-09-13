@@ -172,7 +172,7 @@ export default function Allowlist() {
         })}
 
         {removing ? (
-          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s8 }}>
+          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
             Removing is instant. Re-adding restarts the wait.
           </Text>
         ) : null}

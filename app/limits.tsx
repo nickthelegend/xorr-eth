@@ -61,7 +61,7 @@ export default function Limits() {
         ) : !data ? null : (
           <>
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 REMAINING TODAY
               </Text>
               {/*
@@ -122,10 +122,10 @@ export default function Limits() {
                   marginTop: space.s10,
                 }}
               >
-                <Text variant="secondarySm" color={colors.ink40}>
+                <Text variant="secondarySm" color={colors.ink55}>
                   {money(data.spentTodayUsd)} spent
                 </Text>
-                <Text variant="secondarySm" color={colors.ink40}>
+                <Text variant="secondarySm" color={colors.ink55}>
                   {money(data.dailyCapUsd)} cap
                 </Text>
               </View>

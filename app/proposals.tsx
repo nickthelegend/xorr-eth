@@ -127,7 +127,7 @@ export default function Proposals() {
                     </Text>
                   ) : null}
 
-                  <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s8 }}>
+                  <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
                     {new Date(p.at).toLocaleString('en-US')}
                     {p.decidedAt
                       ? ` · answered ${new Date(p.decidedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`

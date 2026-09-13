@@ -49,13 +49,13 @@ export default function Rates() {
         ) : rate.loading && !rate.data ? (
           <Placeholder height={150} />
         ) : !rate.data || apy === null ? (
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             No lending pool on this chain, so there is no rate to read.
           </Text>
         ) : (
           <>
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 USDC AT AAVE
               </Text>
               {/*
@@ -76,13 +76,13 @@ export default function Rates() {
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 YOURS
               </Text>
               <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
                 {money(supplied)} supplied · {money(cash)} idle
               </Text>
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {/*
                   What the rate would be worth on the idle balance — clearly framed as arithmetic on
                   a floating rate, not a projection of earnings.

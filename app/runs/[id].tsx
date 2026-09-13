@@ -57,7 +57,7 @@ export default function RunDetail() {
         ) : loading && !data ? (
           <Placeholder height={170} />
         ) : !run ? (
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             That run is not in the last two hundred. Older runs are still in the audit trail.
           </Text>
         ) : (
@@ -66,20 +66,20 @@ export default function RunDetail() {
             contentContainerStyle={{ paddingBottom: space.s30, gap: space.s10 }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 {run.label.toUpperCase()}
               </Text>
               <Text variant="screenTitle" color={toneFor(run.status)} style={{ marginTop: space.s6 }}>
                 {run.status.charAt(0).toUpperCase() + run.status.slice(1)}
               </Text>
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {run.symbol} · {run.kind} · {new Date(run.at).toLocaleString('en-US')}
               </Text>
             </SheetCard>
 
             {run.error ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   WHY IT DID NOT HAPPEN
                 </Text>
                 {/*
@@ -98,7 +98,7 @@ export default function RunDetail() {
 
             {run.signature ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   TRANSACTION
                 </Text>
                 {/* In full — this is the thing a reader takes to an explorer. */}
@@ -117,7 +117,7 @@ export default function RunDetail() {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         {label}
       </Text>
       <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>

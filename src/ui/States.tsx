@@ -198,7 +198,7 @@ export function EmptyState({
       testID={testID}
       style={{ paddingVertical: space.s30, alignItems: 'center', gap: space.s12 }}
     >
-      <Text variant="body" color={colors.ink38} align="center">
+      <Text variant="body" color={colors.ink55} align="center">
         {text}
       </Text>
       {actionLabel && onAction ? (

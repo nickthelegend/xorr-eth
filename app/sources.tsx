@@ -91,7 +91,7 @@ export default function Sources() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Sources</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Every number in this app comes from one of these. None of them are us.
         </Text>
       </View>
@@ -130,7 +130,7 @@ export default function Sources() {
                 <Text variant="secondary" color={colors.ink65} style={{ marginTop: space.s8 }}>
                   {s.owns}
                 </Text>
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s8 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   {s.how}
                 </Text>
               </SheetCard>

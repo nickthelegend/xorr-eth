@@ -63,7 +63,7 @@ export default function AuditChain() {
             contentContainerStyle={{ paddingBottom: space.s30, gap: space.s12 }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 HASH CHAIN
               </Text>
               {/*
@@ -90,7 +90,7 @@ export default function AuditChain() {
                 `intact` is worth showing even when the chain holds: it is the count of rows whose
                 CONTENTS still verify, which is a different question from whether the links line up.
               */}
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {data.intact} of {data.checked} rows still hash to their own contents.
               </Text>
             </SheetCard>
@@ -145,7 +145,7 @@ export default function AuditChain() {
                   e.amount ? (
                     <Text variant="rowPrimary">{e.amount}</Text>
                   ) : (
-                    <Text variant="footnote" color={colors.ink28}>
+                    <Text variant="footnote" color={colors.ink55}>
                       {e.kind}
                     </Text>
                   )

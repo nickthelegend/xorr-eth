@@ -42,7 +42,7 @@ export default function Risk() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Risk limits</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           What each agent holds itself to, on top of the cap the contract enforces.
         </Text>
       </View>
@@ -92,7 +92,7 @@ export default function Risk() {
               </SheetCard>
             ))}
 
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
               These are the agent&apos;s own rules and it can be wrong about them. The daily cap and
               the venue allowlist are enforced by the contract, which cannot.
             </Text>

@@ -49,7 +49,7 @@ export default function Earnings() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Earnings</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Filing dates from EDGAR, and what the cadence implies about the next one.
         </Text>
       </View>
@@ -71,7 +71,7 @@ export default function Earnings() {
             contentContainerStyle={{ paddingBottom: space.s30, gap: space.s10 }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 PROJECTED NEXT
               </Text>
               {/*
@@ -91,18 +91,18 @@ export default function Earnings() {
                   : 'The gaps between filings are not a cadence this recognises, so no date is offered rather than a guessed one.'}
               </Text>
               {data.medianGapDays ? (
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s8 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   Median gap {data.medianGapDays} days · CIK {data.cik}
                 </Text>
               ) : null}
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 FILED
               </Text>
               {data.reported.length === 0 ? (
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   EDGAR returned no filings.
                 </Text>
               ) : (
@@ -120,7 +120,7 @@ export default function Earnings() {
                     </Text>
                     {/* The gap that came after this filing — the evidence for the projection. */}
                     {data.gapDays[i] === undefined ? null : (
-                      <Text variant="secondarySm" color={colors.ink40}>
+                      <Text variant="secondarySm" color={colors.ink55}>
                         {data.gapDays[i]} days
                       </Text>
                     )}

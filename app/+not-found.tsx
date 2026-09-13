@@ -30,7 +30,7 @@ export default function NotFound() {
         <Text variant="onboardingTitle" align="center">
           There is nothing here
         </Text>
-        <Text variant="body" color={colors.ink40} align="center">
+        <Text variant="body" color={colors.ink55} align="center">
           {/*
             Naming the segment is useful — "no screen called /widgets" tells someone which part of
             a bookmark went stale — and it is not the same as echoing the whole address back.

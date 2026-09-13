@@ -75,7 +75,7 @@ export default function DelegationDetail() {
           </View>
         ) : !data ? (
           <View style={{ paddingHorizontal: space.gutter }}>
-            <Text variant="body" color={colors.ink40}>
+            <Text variant="body" color={colors.ink55}>
               Nothing has been granted. The bot cannot place an order.
             </Text>
           </View>
@@ -89,7 +89,7 @@ export default function DelegationDetail() {
             }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 STATE
               </Text>
               <Text variant="screenTitle" color={tone} style={{ marginTop: space.s6 }}>
@@ -124,11 +124,11 @@ export default function DelegationDetail() {
             />
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 VENUES IT MAY REACH
               </Text>
               {data.venueAllowlist.length === 0 ? (
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   None. Every route is refused.
                 </Text>
               ) : (
@@ -149,14 +149,14 @@ export default function DelegationDetail() {
 function Field({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         {label}
       </Text>
       <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
         {value}
       </Text>
       {sub ? (
-        <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
+        <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
           {sub}
         </Text>
       ) : null}

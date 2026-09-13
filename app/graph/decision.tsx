@@ -53,7 +53,7 @@ export default function GraphDecision() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Decision</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           What the router would choose for this size, from what the subgraph knows about this
           wallet.
         </Text>
@@ -71,7 +71,7 @@ export default function GraphDecision() {
         ) : loading && !data ? (
           <Placeholder height={170} />
         ) : entries.length === 0 ? (
-          <Text variant="body" color={colors.ink40}>
+          <Text variant="body" color={colors.ink55}>
             The router returned nothing for this size.
           </Text>
         ) : (
@@ -81,7 +81,7 @@ export default function GraphDecision() {
           >
             {entries.map(([key, value]) => (
               <SheetCard key={key} bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   {key}
                 </Text>
                 <Text variant="secondary" color={colors.ink65} style={{ marginTop: space.s6 }}>

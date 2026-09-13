@@ -47,7 +47,7 @@ export default function Metrics() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Metrics</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Everything this executor has done, across every wallet on it — not only yours.
         </Text>
       </View>
@@ -72,11 +72,11 @@ export default function Metrics() {
             }}
           >
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 RUNS BY OUTCOME
               </Text>
               {runs.length === 0 ? (
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   Nothing has run yet.
                 </Text>
               ) : (
@@ -97,7 +97,7 @@ export default function Metrics() {
                 ))
               )}
               {runs.length > 0 ? (
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s12 }}>
                   {percent(data.runFailureRate * 100, { digits: 1, explicitSign: false })} of
                   attempts broke rather than filled.
                 </Text>
@@ -105,11 +105,11 @@ export default function Metrics() {
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 STRATEGIES BY STATE
               </Text>
               {strategies.length === 0 ? (
-                <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   None exist.
                 </Text>
               ) : (
@@ -138,7 +138,7 @@ export default function Metrics() {
             */}
             {Object.keys(data.failuresByCause).length > 0 ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   WHY RUNS FAILED · LAST 7 DAYS
                 </Text>
                 {Object.entries(data.failuresByCause)
@@ -163,7 +163,7 @@ export default function Metrics() {
 
             {Object.keys(data.fillsByVenue).length > 0 ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   WHERE FILLS SETTLED
                 </Text>
                 {/* The claim the 1inch integration rests on, counted from the runs that filled. */}
@@ -195,7 +195,7 @@ export default function Metrics() {
             */}
             {data.fillQuality ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   HOW CLOSE TO THE MARKET PRICE
                 </Text>
                 {/*
@@ -206,7 +206,7 @@ export default function Metrics() {
                   reader to guess whether the measurement is missing or the fills are.
                 */}
                 {data.fillQuality.venues.length === 0 ? (
-                  <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                  <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                     {data.fillQuality.unmeasurable > 0
                       ? `Nothing to compare yet: ${data.fillQuality.unmeasurable} fills were recorded before the arrival price was kept alongside them, and it cannot be recovered after the fact.`
                       : 'No fills on this network to measure. 1inch has no deployment on Base Sepolia, so trades cannot settle here — the network screen says the same.'}
@@ -224,13 +224,13 @@ export default function Metrics() {
                       </Text>
                     </View>
                     {v.fills > 1 ? (
-                      <Text variant="footnote" color={colors.ink28}>
+                      <Text variant="footnote" color={colors.ink55}>
                         {`worst ${v.worstBps} · best ${v.bestBps >= 0 ? '+' : ''}${v.bestBps}`}
                       </Text>
                     ) : null}
                   </View>
                 ))}
-                <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s12 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s12 }}>
                   {data.fillQuality.venues.length === 0
                     ? ''
                     : data.fillQuality.basis === 'forked'
@@ -241,7 +241,7 @@ export default function Metrics() {
             ) : null}
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 ALERTS
               </Text>
               <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
@@ -250,13 +250,13 @@ export default function Metrics() {
             </SheetCard>
 
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 SPENT TODAY
               </Text>
               <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
                 {money(data.spentTodayUsd)}
               </Text>
-              <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 UTC day, every wallet on this executor.
               </Text>
             </SheetCard>

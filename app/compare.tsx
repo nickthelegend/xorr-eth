@@ -89,7 +89,7 @@ export default function Compare() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Compare</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Both normalised to where they started, so the shapes are comparable.
         </Text>
       </View>
@@ -123,7 +123,7 @@ export default function Compare() {
             {changeA !== undefined && changeB !== undefined ? (
               <View style={{ paddingHorizontal: space.gutter, marginTop: space.s16 }}>
                 <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                  <Text variant="footnote" color={colors.ink40}>
+                  <Text variant="footnote" color={colors.ink55}>
                     GAP
                   </Text>
                   {/*
@@ -134,7 +134,7 @@ export default function Compare() {
                   <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
                     {points(Math.abs(changeA - changeB))}
                   </Text>
-                  <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                  <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                     {changeA > changeB ? left : right} is ahead over this window.
                   </Text>
                 </SheetCard>
@@ -167,7 +167,7 @@ function Side({
   return (
     <View style={{ marginTop: space.s16 }}>
       <View style={{ paddingHorizontal: space.gutter }}>
-        <Text variant="footnote" color={colors.ink40}>
+        <Text variant="footnote" color={colors.ink55}>
           {label.toUpperCase()}
         </Text>
       </View>
@@ -182,7 +182,7 @@ function Side({
         {loading ? (
           <Placeholder height={CHART_H} />
         ) : series.length < 2 ? (
-          <Text variant="secondarySm" color={colors.ink40}>
+          <Text variant="secondarySm" color={colors.ink55}>
             No history for {symbol} over this window.
           </Text>
         ) : (

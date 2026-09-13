@@ -99,7 +99,7 @@ export default function Leaderboard() {
 
       <Text
         variant="footnote"
-        color={colors.ink28}
+        color={colors.ink55}
         align="center"
         style={{ marginTop: space.s12 }}
       >

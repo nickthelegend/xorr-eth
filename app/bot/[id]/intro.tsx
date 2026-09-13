@@ -103,7 +103,7 @@ export default function AgentIntro() {
         <Text variant="onboardingTitle" align="center">
           {agent?.name ?? (loading ? 'Loading…' : 'No such agent')}
         </Text>
-        <Text variant="body" color={colors.ink40} align="center">
+        <Text variant="body" color={colors.ink55} align="center">
           {/* Not a different agent's description. These fell back to "Stocks Trader /
               Autonomous stock trading agent" whenever the id did not resolve, so a bad
               link introduced an agent that does not exist. */}
@@ -117,7 +117,7 @@ export default function AgentIntro() {
             <BenefitGlyph kind={b.glyph} />
             <View style={{ flex: 1, gap: space.s6 }}>
               <Text variant="cardTitle">{b.title}</Text>
-              <Text variant="secondary" color={colors.ink45}>
+              <Text variant="secondary" color={colors.ink55}>
                 {b.body}
               </Text>
             </View>
@@ -128,7 +128,7 @@ export default function AgentIntro() {
       <Button label="Get Started" onPress={() => router.replace(`/bot/${id}/settings`)} />
       <Text
         variant="footnote"
-        color={colors.ink28}
+        color={colors.ink55}
         align="center"
         style={{ marginTop: space.s12 }}
       >

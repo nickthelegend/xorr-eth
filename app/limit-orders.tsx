@@ -95,7 +95,7 @@ export default function LimitOrders() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Limit orders</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Take a signed WETH price, all or nothing.
         </Text>
       </View>
@@ -170,7 +170,7 @@ function OrderCard({
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.s10 }}>
         <View style={{ flexShrink: 1 }}>
           <Price variant="priceMd">{money(order.price)}</Price>
-          <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s2 }}>
+          <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
             per {order.sells}, paid in {order.pays}
           </Text>
         </View>
@@ -202,7 +202,7 @@ function OrderCard({
       </View>
 
       {order.status !== 'open' ? (
-        <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
           {order.takenByYou ? 'You took this order.' : order.detail}
         </Text>
       ) : null}
@@ -219,7 +219,7 @@ function OrderCard({
       ) : null}
 
       {takeable && reviewing ? (
-        <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
           {`You pay ${costLabel} and receive ${sizeLabel}.`}
         </Text>
       ) : null}

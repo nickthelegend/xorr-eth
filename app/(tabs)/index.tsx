@@ -209,7 +209,7 @@ export default function Home() {
             <Text variant="rowPrimary" numberOfLines={1}>
               {title}
             </Text>
-            <Text variant="secondarySm" color={colors.ink40} numberOfLines={1} style={{ marginTop: space.s2 }}>
+            <Text variant="secondarySm" color={colors.ink55} numberOfLines={1} style={{ marginTop: space.s2 }}>
               {subtitle}
             </Text>
           </View>
@@ -365,7 +365,7 @@ export default function Home() {
                   ))}
                 </View>
               ) : roster.length === 0 ? (
-                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
                   {agents.error ? 'Couldn’t load agents.' : 'No agents yet.'}
                 </Text>
               ) : (
@@ -401,7 +401,7 @@ export default function Home() {
               classes.loading && !classes.data ? (
                 <LoadingRows count={4} height={size.rowLg} spark />
               ) : gainers.length === 0 ? (
-                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
                   {classes.error ? 'Couldn’t load prices.' : 'No gainers today.'}
                 </Text>
               ) : (
@@ -437,14 +437,14 @@ export default function Home() {
             ) : tab === 'stocks' ? (
               !stocks.data ? (
                 stocks.error ? (
-                  <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                  <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
                     Couldn’t load stocks.
                   </Text>
                 ) : (
                   <LoadingRows count={4} height={size.rowLg} />
                 )
               ) : stockRows.length === 0 ? (
-                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
                   No stocks yet.
                 </Text>
               ) : (
@@ -459,7 +459,7 @@ export default function Home() {
                       secondary={s.name}
                       value={
                         s.price === null ? (
-                          <Text variant="rowPrimary" color={colors.ink40}>
+                          <Text variant="rowPrimary" color={colors.ink55}>
                             No price
                           </Text>
                         ) : (
@@ -472,7 +472,7 @@ export default function Home() {
               )
             ) : !futures.data ? (
               futures.error ? (
-                <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
+                <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
                   Couldn’t load futures.
                 </Text>
               ) : (

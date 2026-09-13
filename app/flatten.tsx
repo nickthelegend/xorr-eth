@@ -80,7 +80,7 @@ export default function Flatten() {
         <CloseButton onPress={() => goBack()} />
       </View>
 
-      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
         Closes every position into USDC and leaves it in your own wallet. It does not touch
         your permission — the bot stays stopped or running exactly as you left it.
       </Text>
@@ -90,7 +90,7 @@ export default function Flatten() {
           {result ? (
             <Outcome result={result} />
           ) : preview.loading && !p ? (
-            <Text variant="body" color={colors.ink40}>
+            <Text variant="body" color={colors.ink55}>
               Reading your positions…
             </Text>
           ) : preview.error ? (
@@ -98,17 +98,17 @@ export default function Flatten() {
               <Text variant="rowPrimary" color={colors.down}>
                 Could not read your positions.
               </Text>
-              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 {preview.error.message}
               </Text>
-              <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s10 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                 Nothing was sold. Your funds are in your wallet and you can move them yourself.
               </Text>
             </SheetCard>
           ) : nothingToDo ? (
             <SheetCard borderRadius={radius.note} padding={space.s16}>
               <Text variant="rowPrimary">Nothing to sell.</Text>
-              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 You hold no positions above {money(p.dustBelowUsd)}. Your balance is already
                 cash.
               </Text>
@@ -137,7 +137,7 @@ export default function Flatten() {
                         grouping and the U+2212 minus are consistent everywhere — and the
                         audit test in src/qa enforces it, which is how this got caught.
                       */}
-                      <Text variant="footnote" color={colors.ink38}>
+                      <Text variant="footnote" color={colors.ink55}>
                         {quantity(l.units, 6)} {l.symbol}
                       </Text>
                     </View>
@@ -165,12 +165,12 @@ export default function Flatten() {
                 leftover $0.40 of something looks like the flatten failed.
               */}
               <View style={{ marginTop: space.s14, gap: space.s8 }}>
-                <Text variant="secondarySm" color={colors.ink45}>
+                <Text variant="secondarySm" color={colors.ink55}>
                   Market orders, up to {p.slippagePct}% slippage. That is wider than a
                   scheduled buy allows, because an exit that refuses to execute is not an exit.
                 </Text>
                 {p.skipped.length > 0 ? (
-                  <Text variant="secondarySm" color={colors.ink45}>
+                  <Text variant="secondarySm" color={colors.ink55}>
                     Leaving {p.skipped.join(', ')} alone — worth under {money(p.dustBelowUsd)},
                     and the gas would cost more than the sale returns.
                   </Text>
@@ -201,7 +201,7 @@ export default function Flatten() {
       )}
       <Text
         variant="footnote"
-        color={colors.ink28}
+        color={colors.ink55}
         align="center"
         style={{ marginTop: space.s12 }}
       >
@@ -224,7 +224,7 @@ function Outcome({ result }: { result: Result }) {
               : `${result.sold} position${result.sold === 1 ? '' : 's'} closed`}
         </Text>
         {failed.length ? (
-          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
+          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
             You are still holding the ones below. Nothing about them changed.
           </Text>
         ) : null}
@@ -248,11 +248,11 @@ function Outcome({ result }: { result: Result }) {
               tone={l.status === 'sold' ? 'up' : l.status === 'failed' ? 'down' : 'neutral'}
             />
           </View>
-          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s4 }}>
+          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s4 }}>
             {l.detail}
           </Text>
           {l.explorer ? (
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s6 }} selectable>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }} selectable>
               {l.explorer}
             </Text>
           ) : null}

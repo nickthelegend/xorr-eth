@@ -44,7 +44,7 @@ export default function SellEverything() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">What would sell</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           A preview. Nothing here sells anything.
         </Text>
       </View>
@@ -62,13 +62,13 @@ export default function SellEverything() {
             contentContainerStyle={{ paddingBottom: space.s30 }}
           >
             <View style={{ paddingBottom: space.s12 }}>
-              <Text variant="footnote" color={colors.ink40}>
+              <Text variant="footnote" color={colors.ink55}>
                 TOTAL
               </Text>
               <Price variant="screenTitle" style={{ marginTop: space.s6 }}>
                 {money(data!.totalUsd)}
               </Price>
-              <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 Across {legs.length === 1 ? 'one position' : `${legs.length} positions`}.
               </Text>
             </View>

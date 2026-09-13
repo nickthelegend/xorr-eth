@@ -127,7 +127,7 @@ export default function Proposal() {
         <Text variant="onboardingTitle" align="center">
           Your draft portfolio
         </Text>
-        <Text variant="body" color={colors.ink40} align="center">
+        <Text variant="body" color={colors.ink55} align="center">
           Adjust the weights. Nothing trades until you approve.
         </Text>
       </View>
@@ -182,7 +182,7 @@ export default function Proposal() {
                 </View>
                 {/* Indented to the dot's text column, so the rationale reads as belonging to
                     the sleeve above it rather than to the card. */}
-                <Text variant="secondarySm" color={colors.ink45} style={{ paddingLeft: space.s18 }}>
+                <Text variant="secondarySm" color={colors.ink55} style={{ paddingLeft: space.s18 }}>
                   {s.note}
                 </Text>
               </View>
@@ -210,7 +210,7 @@ export default function Proposal() {
           </Text>
         ) : null}
         {settles === false ? (
-          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
+          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s14 }}>
             Watch-only here: it shows what it would trade.
           </Text>
         ) : null}

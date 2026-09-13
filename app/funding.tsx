@@ -44,7 +44,7 @@ export default function Funding() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Funding</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Paid every hour. Positive means longs pay shorts.
         </Text>
       </View>
@@ -72,7 +72,7 @@ export default function Funding() {
                 delta={`${percent(m.fundingRate * 100 * HOURS_PER_YEAR, { digits: 1, explicitSign: true })} a year`}
               />
             ))}
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s14 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s14 }}>
               {`Rates from ${data?.venue ?? 'the venue'}. xorr does not trade futures.`}
             </Text>
           </ScrollView>

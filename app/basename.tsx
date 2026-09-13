@@ -108,7 +108,7 @@ export default function Basename() {
         />
 
         {result === null ? (
-          <Text variant="secondarySm" color={colors.ink40}>
+          <Text variant="secondarySm" color={colors.ink55}>
             An address resolves to its name, and a name resolves to the address it points at.
             Resolution runs against the chain, not a list we keep.
           </Text>
@@ -120,7 +120,7 @@ export default function Basename() {
           </SheetCard>
         ) : (
           <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-            <Text variant="footnote" color={colors.ink40}>
+            <Text variant="footnote" color={colors.ink55}>
               {result.kind === 'address' ? 'NAME' : 'ADDRESS'}
             </Text>
             {/*
@@ -138,7 +138,7 @@ export default function Basename() {
                 ? (result.name ?? 'This address has no Basename.')
                 : (result.address ?? 'That name does not resolve.')}
             </Text>
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s10 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
               {result.query}
             </Text>
           </SheetCard>

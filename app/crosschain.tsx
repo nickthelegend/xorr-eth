@@ -169,13 +169,13 @@ export default function CrosschainQuoteScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Eyebrow small>{chain ? `Arrives on ${chain.name}` : 'Arrives'}</Eyebrow>
                 {chain ? (
-                  <Text variant="footnote" color={colors.ink40}>
+                  <Text variant="footnote" color={colors.ink55}>
                     {`${token} ${shortAddress(chain.tokens[token].address)}`}
                   </Text>
                 ) : null}
               </View>
               {typed === null ? (
-                <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s8 }}>
+                <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
                   Enter an amount.
                 </Text>
               ) : pending ? (
@@ -197,7 +197,7 @@ export default function CrosschainQuoteScreen() {
         </>
       )}
 
-      <Text variant="footnote" color={colors.ink40} align="center" style={{ marginTop: space.s10 }}>
+      <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s10 }}>
         Quotes only.
       </Text>
     </Screen>

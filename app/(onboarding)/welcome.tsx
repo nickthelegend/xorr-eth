@@ -56,7 +56,7 @@ export default function Splash() {
     <Screen>
       <View style={{ alignItems: 'center', marginTop: space.s18, gap: space.s10 }}>
         <Text style={WORDMARK}>{brand.WORDMARK}</Text>
-        <Text variant="body" color={colors.ink40} align="center">
+        <Text variant="body" color={colors.ink55} align="center">
           {brand.TAGLINE}
         </Text>
       </View>
@@ -128,7 +128,7 @@ export default function Splash() {
       />
       <Text
         variant="footnote"
-        color={colors.ink28}
+        color={colors.ink55}
         align="center"
         style={{ marginTop: space.s12 }}
       >

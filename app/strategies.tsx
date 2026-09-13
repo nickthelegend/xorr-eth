@@ -79,7 +79,7 @@ export default function Strategies() {
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text variant="screenTitle">Strategies</Text>
-        <Text variant="footnote" color={colors.ink28}>
+        <Text variant="footnote" color={colors.ink55}>
           {/* "0 running" is a claim. Without an answer from the executor we do not have one
               to make — the body below already shows why. */}
           {data === undefined ? '—' : `${live.length} running`}
@@ -136,15 +136,15 @@ export default function Strategies() {
                       {entry.label}
                     </Text>
                     {entry.available ? null : (
-                      <Text variant="footnote" color={colors.ink28}>
+                      <Text variant="footnote" color={colors.ink55}>
                         Later
                       </Text>
                     )}
                   </View>
-                  <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s10 }}>
+                  <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s10 }}>
                     {entry.what}
                   </Text>
-                  <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s8 }}>
+                  <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
                     {entry.judgement}
                   </Text>
                   {entry.available ? (
@@ -260,7 +260,7 @@ function StrategyRow({ s, onChanged }: { s: Strategy; onChanged: () => void }) {
       {note ? (
         <Text
           variant="footnote"
-          color={colors.ink45}
+          color={colors.ink55}
           style={{ marginTop: -space.s6, marginBottom: space.s10 }}
         >
           {note}

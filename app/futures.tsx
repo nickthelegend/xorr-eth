@@ -65,7 +65,7 @@ export default function Futures() {
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Futures</Text>} />
         {data ? (
-          <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+          <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
             {`${data.markets.length} contracts on ${data.venue}`}
           </Text>
         ) : loading ? (
@@ -95,7 +95,7 @@ export default function Futures() {
                 deltaTone={m.change24hPct === null || m.change24hPct === 0 ? 'neutral' : m.change24hPct > 0 ? 'up' : 'down'}
               />
             ))}
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s14 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s14 }}>
               {`Market data from ${data?.venue ?? 'the venue'}. xorr does not trade futures.`}
             </Text>
           </ScrollView>

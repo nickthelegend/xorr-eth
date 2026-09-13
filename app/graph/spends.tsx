@@ -50,7 +50,7 @@ export default function GraphSpends() {
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Spend events</Text>} />
-        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+        <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
           Reconstructed from what the contract emitted, indexed by The Graph — a second record of
           the same money, kept by someone other than us.
         </Text>
@@ -78,7 +78,7 @@ export default function GraphSpends() {
           >
             {daily.length > 0 ? (
               <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   BY DAY
                 </Text>
                 {daily.slice(0, 7).map((d) => (
@@ -116,18 +116,18 @@ function SpendRow({ spend }: { spend: GraphSpend }) {
     <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <Text variant="rowPrimary">{usd(spend.amount)}</Text>
-        <Text variant="footnote" color={colors.ink40}>
+        <Text variant="footnote" color={colors.ink55}>
           {new Date(Number(spend.timestamp) * 1000).toLocaleString('en-US')}
         </Text>
       </View>
-      <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s6 }}>
+      <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
         venue {shortAddress(spend.venue)} · token {shortAddress(spend.token)}
       </Text>
       {/*
         The transaction hash, in full. This is the thing a reader takes to an explorer, and an
         ellipsis in the middle of it makes it useless for that.
       */}
-      <Text variant="footnoteSm" color={colors.ink28} style={{ marginTop: space.s6 }}>
+      <Text variant="footnoteSm" color={colors.ink55} style={{ marginTop: space.s6 }}>
         {spend.txHash}
       </Text>
     </SheetCard>

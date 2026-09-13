@@ -172,7 +172,7 @@ export default function Backtest() {
 
             {/* Provenance and the disclaimer, both from the executor. A backtest without
                 them is a sales pitch. */}
-            <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s14 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s14 }}>
               {[data.source, data.disclaimer].filter(Boolean).join(' · ')}
             </Text>
           </>

@@ -112,7 +112,7 @@ export default function Judge() {
         </Press>
       </View>
 
-      <Text variant="body" color={colors.ink40} style={{ marginTop: space.s10 }}>
+      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
         Every claim this app makes about itself, checked against the chain, the index and the
         feeds right now — not when this was written.
       </Text>
@@ -151,7 +151,7 @@ export default function Judge() {
             nothing when the server is down looks identical to one where everything passed.
           */}
           {report.loading && !d ? (
-            <Text variant="body" color={colors.ink40}>
+            <Text variant="body" color={colors.ink55}>
               Running the checks…
             </Text>
           ) : report.error ? (
@@ -159,10 +159,10 @@ export default function Judge() {
               <Text variant="rowPrimary" color={colors.down}>
                 The executor did not answer.
               </Text>
-              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
                 {report.error.message}
               </Text>
-              <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s10 }}>
+              <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                 Nothing below is stale — there is nothing below. This is the console failing,
                 not the claims.
               </Text>
@@ -175,7 +175,7 @@ export default function Judge() {
               ))}
               <Text
                 variant="footnote"
-                color={colors.ink28}
+                color={colors.ink55}
                 style={{ marginTop: space.s16, marginBottom: space.s8 }}
               >
                 Run at {new Date(d.at).toLocaleTimeString()} against {d.chain}. Every row above
@@ -206,12 +206,12 @@ function Tally({ d }: { d: Report }) {
         <Price variant="screenTitle" tone={allGood ? 'up' : 'down'}>
           {d.passed}/{d.checks.length}
         </Price>
-        <Text variant="body" color={colors.ink40}>
+        <Text variant="body" color={colors.ink55}>
           {allGood ? 'claims verified' : `verified · ${d.failed} failing`}
         </Text>
       </View>
       {d.skipped > 0 ? (
-        <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s6 }}>
+        <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
           {/*
             Do not invent a reason for the skip.
             
@@ -259,7 +259,7 @@ function CheckRow({ check }: { check: Check }) {
             {check.observed}
           </Text>
           {open ? (
-            <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s8 }}>
+            <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
               {check.how} · {check.ms}ms
             </Text>
           ) : null}

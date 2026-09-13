@@ -170,7 +170,7 @@ export default function PositionScreen() {
         <Price variant="pnlHero" tone={pnlTone(p.unrealised)}>
           {signedMoney(p.unrealised)}
         </Price>
-        <Text variant="body" color={colors.ink40}>
+        <Text variant="body" color={colors.ink55}>
           {percent(p.unrealisedPct)} on {money(p.notional)} held
         </Text>
       </View>
@@ -259,7 +259,7 @@ export default function PositionScreen() {
                 ))}
               </View>
 
-              <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
+              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s14 }}>
                 Realises{' '}
                 <Text variant="secondarySm" color={colors.ink}>
                   {signedMoney(realise)}

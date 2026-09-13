@@ -63,7 +63,7 @@ export function Progress({ step, total, onBack, style, testID }: ProgressProps) 
           ]}
         />
       </View>
-      <Text variant="footnote" color={colors.ink40}>
+      <Text variant="footnote" color={colors.ink55}>
         {step}/{total}
       </Text>
     </View>

@@ -74,7 +74,7 @@ export default function Export() {
       <Fill style={{ marginTop: space.s20, gap: space.s12 }}>
         <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
           <Text variant="rowPrimary">The audit trail</Text>
-          <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
             Every action and every non-action, hash-chained, in the order they happened. This is what
             the bot did — including what it refused to do.
           </Text>
@@ -98,7 +98,7 @@ export default function Export() {
 
         <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
           <Text variant="rowPrimary">Disposals</Text>
-          <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s8 }}>
+          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
             One row per sale with the cost it was matched against. A different document from the
             trail, and the one an accountant actually wants.
           </Text>
@@ -121,7 +121,7 @@ export default function Export() {
           </Text>
         ) : null}
 
-        <Text variant="footnote" color={colors.ink28}>
+        <Text variant="footnote" color={colors.ink55}>
           Some sales have no recorded cost, and the disposals file marks those rather than quietly
           understating the gain.
         </Text>

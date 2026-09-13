@@ -238,7 +238,7 @@ export default function Portfolio() {
               <View
                 style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.s8 }}
               >
-                <Text variant="footnote" color={colors.ink40}>
+                <Text variant="footnote" color={colors.ink55}>
                   Past week
                 </Text>
                 <Price variant="footnote" tone={pnlTone(graphDelta)}>
@@ -265,7 +265,7 @@ export default function Portfolio() {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <Text variant="cardTitle">Positions</Text>
             {positions.data ? (
-              <Text variant="secondarySm" color={colors.ink40}>
+              <Text variant="secondarySm" color={colors.ink55}>
                 {book.length === 1 ? '1 open' : `${book.length} open`}
               </Text>
             ) : null}
@@ -277,7 +277,7 @@ export default function Portfolio() {
             </>
           ) : book.length === 0 ? (
             <View style={{ padding: space.s16, gap: space.s12, borderRadius: radius.panel, backgroundColor: colors.surfaceAlt }}>
-              <Text variant="body" color={colors.ink40}>
+              <Text variant="body" color={colors.ink55}>
                 {positions.error ? 'Couldn’t load positions.' : 'No open positions yet.'}
               </Text>
               {!positions.error ? (
