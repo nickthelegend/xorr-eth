@@ -79,11 +79,11 @@ export default function Limits() {
                 style={{ marginTop: space.s6 }}
               >
                 {data.granted === false
-                  ? 'Nothing — no permission granted yet'
+                  ? 'Nothing granted yet'
                   : data.revoked
-                    ? 'Nothing — permission is off'
+                    ? 'Permission is off'
                     : expired
-                      ? 'Nothing — permission has ended'
+                      ? 'Permission has ended'
                       : money(Math.max(0, data.remainingUsd))}
               </Text>
 
@@ -138,8 +138,7 @@ export default function Limits() {
                   and the executor's own tally — and the stricter one wins, so "the cap" is not one
                   number in one place and saying so is more honest than a single figure implies.
                 */}
-                The cap resets at midnight UTC. It is enforced on the chain and again by the
-                executor before every run, and the stricter of the two is the one that binds.
+                Resets at midnight UTC.
               </Text>
             </SheetCard>
           </>

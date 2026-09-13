@@ -100,7 +100,7 @@ export default function YieldSetup() {
       await repos.strategies.create({
         kind: 'yield-rotation',
         state: 'live',
-        label: `Idle cash to Aave, ${phrase(cadence)}`,
+        label: `Idle cash to yield, ${phrase(cadence)}`,
         // The asset being swept is USDC. The venue is fixed and lives on the server, because a
         // pool address is not something a user should be asked to type.
         symbol: 'USDC',
@@ -146,14 +146,14 @@ export default function YieldSetup() {
       >
         <View style={{ flex: 1, paddingRight: space.s12 }}>
           <Eyebrow small color={colors.sheet.muted}>
-            Aave v3 · USDC supply
+            USDC supply
           </Eyebrow>
           <Text variant="secondarySm" color={colors.sheet.muted} style={{ marginTop: space.s4 }}>
             {rate.loading
-              ? 'Reading the pool…'
+              ? 'Loading…'
               : apy === undefined
-                ? 'No live rate right now, so nothing will be moved.'
-                : 'Floats with the pool. Not a promise.'}
+                ? 'No rate right now. Nothing will move.'
+                : 'Variable rate.'}
           </Text>
         </View>
         <Price color={apy === undefined ? colors.sheet.muted : colors.up}>
@@ -221,7 +221,7 @@ export default function YieldSetup() {
             {supplied > 0 ? <StatRow label="Already earning" value={money(supplied)} /> : null}
             {wouldMove !== undefined && wouldMove < MIN_MOVE_USD ? (
               <Text variant="footnote" color={colors.sheet.dim}>
-                {`Below ${money(MIN_MOVE_USD, { decimals: 0 })} it leaves the cash alone — the gas costs more than the yield.`}
+                {`Moves nothing under ${money(MIN_MOVE_USD, { decimals: 0 })}.`}
               </Text>
             ) : null}
           </Card>
@@ -304,7 +304,7 @@ export default function YieldSetup() {
         align="center"
         style={{ marginTop: space.s12 }}
       >
-        The bot can only supply. Withdrawing is yours alone, any time.
+        Only you can withdraw.
       </Text>
     </Screen>
   );

@@ -151,7 +151,7 @@ export default function CrosschainQuoteScreen() {
               <View style={{ flexShrink: 1 }}>
                 <Price variant="amountLg">{amount}</Price>
                 <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
-                  {price?.price !== undefined ? money((Number(amount) || 0) * price.price) : 'No live price'}
+                  {price?.price !== undefined ? money((Number(amount) || 0) * price.price) : 'No price'}
                 </Text>
               </View>
               <Segmented
@@ -176,7 +176,7 @@ export default function CrosschainQuoteScreen() {
               </View>
               {typed === null ? (
                 <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s8 }}>
-                  Type an amount to see what each auction preset delivers.
+                  Enter an amount.
                 </Text>
               ) : pending ? (
                 <LoadingRows count={3} height={size.row} />
@@ -198,7 +198,7 @@ export default function CrosschainQuoteScreen() {
       )}
 
       <Text variant="footnote" color={colors.ink40} align="center" style={{ marginTop: space.s10 }}>
-        Quote only. Submitting is a mainnet action that locks real funds on Base, so this app does not offer it.
+        Quotes only.
       </Text>
     </Screen>
   );

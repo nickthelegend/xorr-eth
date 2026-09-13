@@ -88,20 +88,20 @@ export default function WithdrawEverything() {
 
   const legs = preview.data?.legs ?? [];
   const sells = preview.error
-    ? `Your positions could not be read just now: ${errorText(preview.error)}`
+    ? `Couldn’t load positions: ${errorText(preview.error)}`
     : preview.loading && !preview.data
-      ? 'Reading your positions…'
+      ? 'Loading…'
       : legs.length === 0
         ? 'Nothing to sell.'
-        : `${legs.map((l) => `${quantity(l.units)} ${l.symbol}`).join(', ')} — about ${money(preview.data!.totalUsd)}, sold by the executor through your permission.`;
+        : `${legs.map((l) => `${quantity(l.units)} ${l.symbol}`).join(', ')} · about ${money(preview.data!.totalUsd)}`;
   const exits = aave.error
-    ? `Your Aave position could not be read just now: ${errorText(aave.error)}`
+    ? `Couldn’t load savings: ${errorText(aave.error)}`
     : aave.loading && !aave.data
-      ? 'Reading your Aave position…'
+      ? 'Loading…'
       : !aave.data?.available
-        ? (aave.data?.reason ?? 'There is no Aave pool on this chain, so nothing is supplied.')
+        ? (aave.data?.reason ?? 'Nothing to take out here.')
         : aave.data.suppliedUsd > 0
-          ? `${money(aave.data.suppliedUsd)} supplied. You sign the withdrawal; the bot never held the receipt token.`
+          ? `${money(aave.data.suppliedUsd)} earning. You sign this step.`
           : 'Nothing supplied.';
 
   return (
@@ -112,9 +112,7 @@ export default function WithdrawEverything() {
       </View>
 
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        Sells every position into USDC, takes your USDC out of Aave, then sends all of it to one address
-        on your allowlist. Each step waits for the one before it, and the first thing that fails stops
-        the rest.
+        Sell everything, then send it all to one saved address.
       </Text>
 
       <Fill style={{ marginTop: space.s16 }}>
@@ -135,7 +133,7 @@ export default function WithdrawEverything() {
                   </Text>
                 ) : allowlist.addresses.length === 0 ? (
                   <Text variant="secondary" color={colors.ink40}>
-                    Nothing on your allowlist yet, so there is nowhere for your funds to go.
+                    No saved addresses yet.
                   </Text>
                 ) : (
                   <>
@@ -159,7 +157,7 @@ export default function WithdrawEverything() {
                     ))}
                     {allowlist.usable.length === 0 ? (
                       <Text variant="secondarySm" color={colors.warn}>
-                        None of these is usable yet.
+                        None is unlocked yet.
                       </Text>
                     ) : null}
                   </>
@@ -171,24 +169,24 @@ export default function WithdrawEverything() {
               </Eyebrow>
               <SheetCard borderRadius={radius.note} padding={space.s16} style={{ marginTop: space.s10, gap: space.s12 }}>
                 <PlanLine n={1} title="Sell every position" detail={sells} />
-                <PlanLine n={2} title="Take your USDC out of Aave" detail={exits} />
+                <PlanLine n={2} title="Take your USDC out of savings" detail={exits} />
                 <PlanLine
                   n={3}
                   title="Send your USDC"
-                  detail={`All of it, to the unit, to ${destination ? destination.label : 'the address you choose'} — once both steps above have landed. You sign it.`}
+                  detail={`All of it, to ${destination ? destination.label : 'the address you choose'}. You sign it.`}
                 />
               </SheetCard>
 
               <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s10 }}>
                 {preview.data && preview.data.skipped.length > 0
-                  ? `${preview.data.skipped.join(', ')} ${preview.data.skipped.length === 1 ? 'stays' : 'stay'}: worth under ${money(preview.data.dustBelowUsd)}, less than the gas to sell. `
+                  ? `${preview.data.skipped.join(', ')} ${preview.data.skipped.length === 1 ? 'stays' : 'stay'}: under ${money(preview.data.dustBelowUsd)}. `
                   : ''}
-                Your ETH stays too — it pays the network fees for the two transactions you sign.
+                ETH stays, for network fees.
               </Text>
 
               {confirming && destination ? (
                 <NoteStrip kind="risk" style={{ marginTop: space.s12 }}>
-                  {`Confirming sells every position, withdraws everything from Aave and sends every USDC in this wallet to ${destination.label} (${destination.address}). A step that has landed cannot be undone.`}
+                  {`Everything goes to ${destination.label}. A finished step can’t be undone.`}
                 </NoteStrip>
               ) : null}
             </>
@@ -232,8 +230,8 @@ export default function WithdrawEverything() {
           />
         </>
       )}
-      <Text variant="footnote" color={colors.ink28} align="center" style={{ marginTop: space.s12 }}>
-        The bot can sell for you. It cannot send anything anywhere — you sign that.
+      <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s12 }}>
+        The bot sells. Only you can send.
       </Text>
     </Screen>
   );

@@ -64,7 +64,7 @@ export default function Yield() {
   return (
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="screenTitle">Earning at Aave</Text>
+        <Text variant="screenTitle">Earning</Text>
         <CloseButton onPress={() => goBack()} />
       </View>
 
@@ -77,7 +77,7 @@ export default function Yield() {
           ) : pos.error ? (
             <SheetCard borderRadius={radius.note} padding={space.s16}>
               <Text variant="rowPrimary" color={colors.down}>
-                Could not read the pool.
+                Couldn’t load the rate.
               </Text>
               <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
                 {pos.error.message}
@@ -87,12 +87,12 @@ export default function Yield() {
             <SheetCard borderRadius={radius.note} padding={space.s16}>
               <Text variant="rowPrimary">No lending pool here.</Text>
               <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s6 }}>
-                {p.reason ?? 'Aave v3 is not deployed on this network.'}
+                {p.reason ?? 'Not available on this network.'}
               </Text>
               {/* "Nothing supplied" and "nowhere to supply" are different, and the
                   difference matters — the second one is not something the user did. */}
               <Text variant="footnote" color={colors.ink32} style={{ marginTop: space.s10 }}>
-                This is about the network, not your balance.
+                Your balance is unaffected.
               </Text>
             </SheetCard>
           ) : p ? (
@@ -103,15 +103,13 @@ export default function Yield() {
                   {money(supplied)}
                 </Price>
                 <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s8 }}>
-                  Earning {percent(p.apy * 100, 2).replace('+', '')} a year. The balance itself
-                  grows — there is no claim step and nothing to harvest.
+                  {percent(p.apy * 100, 2).replace('+', '')} a year, paid into the balance.
                 </Text>
               </SheetCard>
 
               {supplied <= 0 ? (
                 <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s16 }}>
-                  Nothing supplied yet. A &ldquo;move idle cash to yield&rdquo; strategy puts
-                  spare USDC here automatically, inside your daily cap.
+                  Nothing earning yet.
                 </Text>
               ) : (
                 <>
@@ -149,7 +147,7 @@ export default function Yield() {
 
                   <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
                     {portion === 1
-                      ? 'Withdraws the whole position, including the interest earned between now and the moment it lands.'
+                      ? 'Withdraws all of it, with interest.'
                       : `Withdraws about ${money(amount)}, leaving ${money(supplied - amount)} earning.`}
                   </Text>
                 </>
@@ -202,7 +200,7 @@ export default function Yield() {
         align="center"
         style={{ marginTop: space.s12 }}
       >
-        You sign this, not the bot. It was never given the power to take this back out.
+        Only you can withdraw.
       </Text>
     </Screen>
   );

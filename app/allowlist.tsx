@@ -78,7 +78,7 @@ export default function Allowlist() {
       ? 'That address is already on the list.'
       : isValidAddress(trimmed)
         ? undefined
-        : 'That is not a Base address. It should start 0x and be 42 characters.';
+        : 'Not a valid address: it starts with 0x and has 42 characters.';
 
   // The number is the executor's. Until it has answered, the sentence does without one rather than guess.
   const wait = coolingOffHours === undefined ? 'after a cooling-off period' : `${coolingOffHours} hours after you add it`;
@@ -120,8 +120,7 @@ export default function Allowlist() {
       </View>
 
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        The only addresses funds can leave to. A new one becomes usable {wait}, by the executor&apos;s
-        clock rather than this phone&apos;s.
+        Funds can only go here. A new address unlocks {wait}.
       </Text>
 
       <Fill style={{ marginTop: space.s20 }}>
@@ -136,9 +135,7 @@ export default function Allowlist() {
             empty for every new wallet, said nothing.
           */
           <EmptyState
-            text="No addresses yet. Until you add one, funds cannot leave this wallet at all — which is the point."
-            actionLabel="Add an address"
-            onAction={() => setAdding(true)}
+            text="No addresses yet."
           />
         ) : null}
 
@@ -176,7 +173,7 @@ export default function Allowlist() {
 
         {removing ? (
           <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s8 }}>
-            Removing takes effect at once. Adding the address back starts its cooling-off again.
+            Removing is instant. Re-adding restarts the wait.
           </Text>
         ) : null}
         {removeError ? (
@@ -202,7 +199,7 @@ export default function Allowlist() {
               value={address}
               onChangeText={setAddress}
               placeholder="0x…"
-              label="Base address"
+              label="Address"
               mono
             />
             {problem || refused ? (

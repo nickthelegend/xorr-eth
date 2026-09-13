@@ -59,10 +59,11 @@ const DOT = 8;
 function ExplorerLink({ explorer }: { explorer: string }) {
   const isUrl = explorer.startsWith('http');
   if (!isUrl) {
-    const [kind, ref] = explorer.split(':');
+    // The hash alone: which network it is on is not named off the money screens (PLAN.md O3).
+    const ref = explorer.split(':')[1];
     return (
       <Text variant="footnote" color={colors.ink28}>
-        {`${kind} · ${ref?.slice(0, 10) ?? ''}…`}
+        {`${ref?.slice(0, 10) ?? ''}…`}
       </Text>
     );
   }
@@ -70,11 +71,11 @@ function ExplorerLink({ explorer }: { explorer: string }) {
     <Press
       onPress={() => void Linking.openURL(explorer)}
       accessibilityRole="link"
-      accessibilityLabel="View this transaction on BaseScan"
+      accessibilityLabel="View this transaction"
       hitHeight={24}
     >
       <Text variant="footnote" color={colors.ink55}>
-        View on BaseScan ›
+        View transaction ›
       </Text>
     </Press>
   );
@@ -142,7 +143,7 @@ export default function Activity() {
         <Text variant="screenTitle">Activity</Text>
       </View>
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        Every action an agent took, and every one it chose not to take.
+        What agents did, and didn’t.
       </Text>
 
       <PillRow style={{ marginTop: space.s18, flexGrow: 0 }}>
@@ -158,7 +159,7 @@ export default function Activity() {
           <ErrorState error={error} onRetry={reload} />
         ) : rows.length === 0 ? (
           <EmptyState
-            text="Nothing here yet. The trail fills itself the first time an agent acts — or declines to."
+            text="Nothing yet."
             actionLabel="Set up a recurring buy"
             onAction={() => router.push('/strategy/dca')}
           />
@@ -214,7 +215,7 @@ export default function Activity() {
           align="center"
           style={{ marginTop: space.s10 }}
         >
-          {`That export did not go through: ${exportError}`}
+          {`Export failed: ${exportError}`}
         </Text>
       ) : null}
 

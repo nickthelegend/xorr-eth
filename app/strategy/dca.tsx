@@ -215,7 +215,7 @@ export default function DcaSetup() {
         align="center"
         style={{ marginTop: space.s12 }}
       >
-        Runs on schedule inside your daily cap. Pause or cancel any time.
+        Within your daily cap. Pause anytime.
       </Text>
     </Screen>
   );

@@ -96,8 +96,7 @@ export default function LimitOrders() {
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Limit orders</Text>} />
         <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
-          Makers sell WETH here at a price they signed. Taking one fills the whole order through your permission, and
-          the WETH arrives in your own wallet.
+          Take a signed WETH price, all or nothing.
         </Text>
       </View>
 
@@ -111,10 +110,10 @@ export default function LimitOrders() {
             <LoadingRows count={3} height={size.rowLg} />
           </View>
         ) : data && !data.settles ? (
-          <EmptyState text={data.detail ?? `Nothing settles on ${data.chain}, so there are no limit orders to take.`} />
+          <EmptyState text={data.detail ?? 'No limit orders on this network.'} />
         ) : orders.length === 0 ? (
           <EmptyState
-            text="No maker has published a limit order on this network yet."
+            text="No limit orders yet."
             actionLabel="Look again"
             onAction={reload}
           />
@@ -221,7 +220,7 @@ function OrderCard({
 
       {takeable && reviewing ? (
         <Text variant="footnote" color={colors.ink40} style={{ marginTop: space.s8 }}>
-          {`Confirming pays ${costLabel} from your wallet through your permission, counted against today's limit, and ${sizeLabel} arrives in it. The whole order is taken, or none of it.`}
+          {`You pay ${costLabel} and receive ${sizeLabel}.`}
         </Text>
       ) : null}
 
