@@ -12,6 +12,8 @@
  * One property, platform easing, and it collapses to an instant swap under reduced motion.
  *
  * Selected is white-on-dark. Never green.
+ *
+ * Choosing a different option ticks on the phone; pressing the one already chosen does not (FEATURES.md #23).
  */
 import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
@@ -23,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Press } from './Press';
 import { Text } from './Text';
+import { selectionTick } from './haptics';
 import { duration, timing, useReducedMotion } from './motion';
 import { border, colors, size, space } from './tokens';
 
@@ -75,7 +78,10 @@ export function Segmented<T extends string | number>({
           key={String(option.value)}
           label={option.label}
           selected={option.value === value}
-          onPress={() => onChange(option.value)}
+          onPress={() => {
+            if (option.value !== value) selectionTick();
+            onChange(option.value);
+          }}
           height={height}
           borderRadius={thumbRadius}
           light={light}

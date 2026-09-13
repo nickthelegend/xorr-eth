@@ -13,6 +13,8 @@
  * §5 also says: **always paired with a caption line that changes with state.** A bare
  * label is not enough on a screen where the toggle authorises autonomous spending. That
  * is what `SwitchRow` enforces — the caption is required, and it is a function of `on`.
+ *
+ * A flip ticks on the phone (FEATURES.md #23, `haptics.ts`).
  */
 import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
@@ -24,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Press } from './Press';
 import { Text } from './Text';
+import { selectionTick } from './haptics';
 import { duration, timing, useReducedMotion } from './motion';
 import { colors, divider, radius, shadow, size, space } from './tokens';
 
@@ -78,7 +81,10 @@ export function Switch({
   return (
     <Press
       testID={testID}
-      onPress={() => onChange(!on)}
+      onPress={() => {
+        selectionTick();
+        onChange(!on);
+      }}
       disabled={disabled}
       hitHeight={trackH}
       accessibilityRole="switch"

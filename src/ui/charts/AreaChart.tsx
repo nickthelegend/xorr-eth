@@ -12,6 +12,9 @@
  * turns the r=3.2 end dot into an ellipse. This measures its box and draws in real
  * points instead, so the stroke is 2 in both axes and the dot is round. Every coordinate
  * is still derived — from the data and the measured size, never placed.
+ *
+ * To a screen reader the chart is one image with a sentence: which way the series went, and by how much
+ * (`describeSeries`, FEATURES.md #74). A screen that knows the units passes its own `accessibilityLabel`.
  */
 import React, { useEffect } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
@@ -19,6 +22,7 @@ import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-na
 import Svg, { Circle, ClipPath, Defs, G, LinearGradient, Line, Path, Rect, Stop } from 'react-native-svg';
 import { arrival, useReducedMotion } from '../motion';
 import { chart, colors, duration } from '../tokens';
+import { describeSeries } from './describeSeries';
 import { useMeasuredBox } from './useMeasuredBox';
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
@@ -44,6 +48,8 @@ export interface AreaChartProps {
    * from the first frame. Instant under reduced motion.
    */
   drawIn?: boolean;
+  /** What a screen reader hears. Defaults to the series' direction and size of move over its range. */
+  accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -57,6 +63,7 @@ export function AreaChart({
   endDot = false,
   inset,
   drawIn = false,
+  accessibilityLabel,
   style,
   testID,
 }: AreaChartProps) {
@@ -110,7 +117,14 @@ export function AreaChart({
   const lastValue = data.length > 0 ? data[data.length - 1] : undefined;
 
   return (
-    <View testID={testID} style={[{ height }, style]} onLayout={onLayout}>
+    <View
+      testID={testID}
+      style={[{ height }, style]}
+      onLayout={onLayout}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={accessibilityLabel ?? describeSeries(data)}
+    >
       {box.width > 0 && data.length > 0 && (
         <Svg width={box.width} height={height}>
           <Defs>

@@ -14,6 +14,7 @@ import React from 'react';
 import { Platform, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Press } from './Press';
 import { Text } from './Text';
+import { selectionTick } from './haptics';
 import { border, colors, radius, size, space } from './tokens';
 
 export interface PillProps {
@@ -59,7 +60,18 @@ export function Pill({
   return (
     <Press
       testID={testID}
-      onPress={onPress}
+      /*
+       * A filter pill that becomes the selection ticks on the phone (FEATURES.md #23). An action pill — `$100`, `Max`,
+       * passing no `selected` — selects nothing, so it does not; nor does pressing the one already selected.
+       */
+      onPress={
+        onPress && selected === false
+          ? () => {
+              selectionTick();
+              onPress();
+            }
+          : onPress
+      }
       disabled={disabled || !onPress}
       hitHeight={size.pillH}
       accessibilityRole="button"

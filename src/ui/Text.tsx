@@ -8,6 +8,9 @@
  * `<Value>` and `<Price>` are the numeric wrappers. They re-assert `fontVariant` *after*
  * the caller's style, so a stray `fontVariant: []` further up can't turn proportional
  * figures back on in a price column.
+ *
+ * Two accessibility defaults live here for the same reason (FEATURES.md #74, #86, PLAN.md 5.11): a screen's title is
+ * announced as a heading, and each role has a ceiling on how far the phone's text size may grow it.
  */
 import React from 'react';
 import {
@@ -21,6 +24,58 @@ import { colors } from './tokens';
 
 /** Forced tabular figures. Applied last so a caller's style cannot drop them. */
 const lockTabular: TextStyle = { fontVariant: ['tabular-nums'] };
+
+/**
+ * How far each role may grow with the phone's text size.
+ *
+ * Unbounded, a hero balance at the largest accessibility size runs off its line, and a pill's label clips inside a
+ * fixed 34pt control. So reading text grows the most, because rows wrap; titles and figures grow less, because they
+ * hold one line; and the words inside a fixed-height control grow least. A `Record` over every variant, so a new role
+ * cannot ship without a ceiling. The web ignores this and follows the browser's zoom.
+ */
+const FONT_SCALE_CAP: Readonly<Record<TypeVariant, number>> = {
+  heroAmount: 1.15,
+  heroBalance: 1.15,
+  pnlHero: 1.15,
+  priceLg: 1.15,
+  priceMd: 1.2,
+  priceSm: 1.3,
+  amountLg: 1.15,
+  amountMd: 1.2,
+  onboardingTitle: 1.3,
+  titleLg: 1.3,
+  screenTitle: 1.3,
+  sheetTitle: 1.3,
+  cardTitleLg: 1.4,
+  cardTitle: 1.4,
+  rowPrimaryLg: 1.5,
+  rowPrimary: 1.5,
+  value: 1.4,
+  bodyLg: 1.6,
+  body: 1.6,
+  bodySm: 1.6,
+  secondary: 1.6,
+  secondarySm: 1.6,
+  delta: 1.3,
+  control: 1.2,
+  button: 1.2,
+  orbName: 1.3,
+  orbStatus: 1.3,
+  chipSm: 1.2,
+  chip: 1.2,
+  chipLg: 1.2,
+  chipDelta: 1.2,
+  eyebrow: 1.3,
+  eyebrowSm: 1.3,
+  tag: 1.2,
+  tagSm: 1.2,
+  tabLabel: 1.2,
+  footnote: 1.6,
+  footnoteSm: 1.6,
+};
+
+/** The roles that title a screen or a sheet. Announced as headings, so a screen reader can move between screens' parts. */
+const HEADINGS: ReadonlySet<TypeVariant> = new Set<TypeVariant>(['onboardingTitle', 'titleLg', 'screenTitle', 'sheetTitle']);
 
 export type PriceTone = 'neutral' | 'up' | 'down';
 
@@ -41,12 +96,14 @@ export interface TextProps extends Omit<RNTextProps, 'style'> {
 }
 
 export const Text = React.forwardRef<RNText, TextProps>(function Text(
-  { variant = 'body', color, align, style, ...rest },
+  { variant = 'body', color, align, style, accessibilityRole, maxFontSizeMultiplier, ...rest },
   ref,
 ) {
   return (
     <RNText
       ref={ref}
+      accessibilityRole={accessibilityRole ?? (HEADINGS.has(variant) ? 'header' : undefined)}
+      maxFontSizeMultiplier={maxFontSizeMultiplier ?? FONT_SCALE_CAP[variant]}
       {...rest}
       style={[
         typeScale[variant],
