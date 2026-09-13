@@ -92,6 +92,8 @@ contract XorrAquaBook is AquaApp {
     error EmptyBook();
     error PriceOutsideBand(uint256 quoted, uint256 referencePrice, uint256 maxDeviationBps);
     error IdenticalTokens();
+    /// @notice A delegated fill named someone other than the owner whose capital is paying for it.
+    error RecipientNotActiveOwner(address recipient, address activeOwner);
 
     constructor(IAqua aqua_, XorrDelegation delegation_) AquaApp(aqua_) {
         DELEGATION = delegation_;
@@ -167,9 +169,24 @@ contract XorrAquaBook is AquaApp {
         uint256 amountOutMin,
         address to
     ) external returns (uint256 amountOut) {
+        // Reached through the delegation, this is the owner's capital: the output is theirs too.
+        if (msg.sender == address(DELEGATION)) _requireActiveOwner(to);
         (address tokenIn,,,) = _sides(strategy, keccak256(abi.encode(strategy)), zeroForOne);
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
         return _swap(strategy, zeroForOne, amountIn, amountOutMin, to, true);
+    }
+
+    /**
+     * @dev A fill paid for by a delegated owner pays out to that owner and nobody else.
+     *
+     * `principal` — and `to`, on the taker path — came from calldata the delegate wrote, so a leaked
+     * delegate key could spend an owner's cap here and name itself as the recipient. The delegation
+     * records whose trade is executing for exactly the length of the venue call; anything else is
+     * refused before a token moves. PLAN.md 1.4.
+     */
+    function _requireActiveOwner(address recipient) internal view {
+        address active = DELEGATION.activeOwner();
+        if (recipient != active) revert RecipientNotActiveOwner(recipient, active);
     }
 
     /// @dev The single settlement path. `payer` has already funded this contract with `amountIn`.
@@ -339,6 +356,7 @@ contract XorrAquaBook is AquaApp {
         uint256 amountOutMin
     ) external returns (uint256 amountOut) {
         if (msg.sender != address(DELEGATION)) revert NotAuthorisedOperator(msg.sender, principal);
+        _requireActiveOwner(principal);
 
         // The delegation holds the pulled tokens and has approved this app for exactly amountIn.
         // Output goes straight to the principal; neither contract keeps a balance.

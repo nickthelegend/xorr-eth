@@ -50,7 +50,7 @@ contract XorrAquaBookForkTest is Test {
         // Aqua really is deployed here — the whole test rests on it.
         assertGt(address(AQUA).code.length, 0, "Aqua not deployed on this fork");
 
-        delegation = new XorrDelegation();
+        delegation = new XorrDelegation(USDC);
         book = new XorrAquaBook(AQUA, delegation);
 
         deal(USDC, maker, SEED_USDC);
@@ -112,7 +112,10 @@ contract XorrAquaBookForkTest is Test {
             _fillArgs(principal, zeroForOne, amountIn, amountOutMin);
         vm.prank(bot);
         // spend() hands back the venue's raw return data, which for fillForDelegation is a uint256.
-        return abi.decode(delegation.spend(principal, token, venue, amount, data), (uint256));
+        return abi.decode(
+            delegation.spend(principal, token, venue, amount, _outOf(zeroForOne), _floor(amountOutMin), data),
+            (uint256)
+        );
     }
 
     /// @dev Same call, but with `vm.expectRevert` landing on `spend` rather than on the view that
@@ -122,7 +125,29 @@ contract XorrAquaBookForkTest is Test {
             _fillArgs(principal, false, amountIn, 0);
         vm.prank(bot);
         vm.expectRevert();
-        delegation.spend(principal, token, venue, amount, data);
+        delegation.spend(principal, token, venue, amount, _outOf(false), 1, data);
+    }
+
+    /// The token a fill in this direction delivers — what `spend()` measures at the principal.
+    function _outOf(bool zeroForOne) internal view returns (address) {
+        return zeroForOne ? strat.token1 : strat.token0;
+    }
+
+    /// `spend()` refuses a zero floor (PLAN.md 1.4), and several tests give the book no minimum.
+    function _floor(uint256 amountOutMin) internal pure returns (uint256) {
+        return amountOutMin > 0 ? amountOutMin : 1;
+    }
+
+    /// The taker grants the bot a permission scoped to this book, and approves the delegation.
+    function _delegateTaker() internal returns (address principal) {
+        principal = taker;
+        deal(USDC, principal, 5_000 * USD);
+        address[] memory venues = new address[](1);
+        venues[0] = address(book);
+        vm.startPrank(principal);
+        delegation.grant(bot, 5_000 * USD, uint64(block.timestamp + 1 days), venues);
+        IERC20(USDC).approve(address(delegation), type(uint256).max);
+        vm.stopPrank();
     }
 
     function _dock() internal {
@@ -290,6 +315,37 @@ contract XorrAquaBookForkTest is Test {
     function test_BotCannotTakeForSomeoneWhoDidNotDelegate() public {
         _ship();
         _botFillExpectRevert(attacker, 100 * USD);
+    }
+
+    /**
+     * The drain PLAN.md 1.4 closes. The delegate writes the fill's calldata, so it could name itself
+     * as `principal` and the book would pay it — with the principal's own capital and cap.
+     */
+    function test_DelegatedFillCannotPayAnyoneButTheOwner() public {
+        _ship();
+        address principal = _delegateTaker();
+        bytes memory data =
+            abi.encodeCall(book.fillForDelegation, (strat, attacker, false, 100 * USD, uint256(0)));
+
+        vm.prank(bot);
+        vm.expectRevert(
+            abi.encodeWithSelector(XorrAquaBook.RecipientNotActiveOwner.selector, attacker, principal)
+        );
+        delegation.spend(principal, USDC, address(book), 100 * USD, WETH, 1, data);
+        assertEq(IERC20(WETH).balanceOf(attacker), 0, "the attacker was paid");
+    }
+
+    /// The public taker path reached through the delegation is held to the same rule.
+    function test_DelegatedTakerSwapCannotPayAnyoneButTheOwner() public {
+        _ship();
+        address principal = _delegateTaker();
+        bytes memory data = abi.encodeCall(book.swapExactIn, (strat, false, 100 * USD, uint256(0), attacker));
+
+        vm.prank(bot);
+        vm.expectRevert(
+            abi.encodeWithSelector(XorrAquaBook.RecipientNotActiveOwner.selector, attacker, principal)
+        );
+        delegation.spend(principal, USDC, address(book), 100 * USD, WETH, 1, data);
     }
 
     /// @dev The app must refuse a fill that did not come through the delegation, or the cap could

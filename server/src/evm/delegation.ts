@@ -29,6 +29,12 @@ export const DELEGATION_ABI = [
     outputs: [],
   },
   { type: 'function', name: 'revoke', stateMutability: 'nonpayable', inputs: [], outputs: [] },
+  /*
+   * `tokenOut` and `minOut` bind the trade's output to the owner (PLAN.md 1.4): the contract
+   * measures the owner's `tokenOut` balance across the venue call and reverts unless it rose by at
+   * least `minOut`. Before this, the router's receiver was whatever the calldata said, and the
+   * delegate wrote the calldata.
+   */
   {
     type: 'function',
     name: 'spend',
@@ -38,6 +44,8 @@ export const DELEGATION_ABI = [
       { name: 'token', type: 'address' },
       { name: 'venue', type: 'address' },
       { name: 'amount', type: 'uint256' },
+      { name: 'tokenOut', type: 'address' },
+      { name: 'minOut', type: 'uint256' },
       { name: 'data', type: 'bytes' },
     ],
     outputs: [{ name: 'result', type: 'bytes' }],
@@ -51,9 +59,18 @@ export const DELEGATION_ABI = [
       { name: 'token', type: 'address' },
       { name: 'venue', type: 'address' },
       { name: 'amount', type: 'uint256' },
+      { name: 'tokenOut', type: 'address' },
+      { name: 'minOut', type: 'uint256' },
       { name: 'data', type: 'bytes' },
     ],
     outputs: [{ name: 'result', type: 'bytes' }],
+  },
+  {
+    type: 'function',
+    name: 'SETTLEMENT_TOKEN',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
   },
   {
     type: 'function',
@@ -125,6 +142,26 @@ export const DELEGATION_ABI = [
   },
   { type: 'error', name: 'ZeroAmount', inputs: [] },
   { type: 'error', name: 'VenueCallFailed', inputs: [] },
+  { type: 'error', name: 'InvalidTokenOut', inputs: [] },
+  { type: 'error', name: 'ZeroMinOut', inputs: [] },
+  {
+    type: 'error',
+    name: 'OutputNotReceived',
+    inputs: [
+      { name: 'received', type: 'uint256' },
+      { name: 'minOut', type: 'uint256' },
+    ],
+  },
+  { type: 'error', name: 'SettlementTokenNotClosable', inputs: [] },
+  /** Our books' refusal of a delegated fill that names anyone but the owner, bubbled through `spend`. */
+  {
+    type: 'error',
+    name: 'RecipientNotActiveOwner',
+    inputs: [
+      { name: 'recipient', type: 'address' },
+      { name: 'activeOwner', type: 'address' },
+    ],
+  },
   /*
    * The VENUE's errors, so viem can decode what `spend` bubbles up.
    *
@@ -232,13 +269,18 @@ function withHeadroom(estimate: bigint): bigint {
   return (estimate * (100n + GAS_HEADROOM_PCT)) / 100n;
 }
 
-export async function spendAsDelegate(params: {
-  owner: Address;
-  token?: Address;
-  venue?: Address;
-  usd: number;
-  data: Hex;
-}): Promise<Hex> {
+/** What a trade must deliver to the owner: the token, and the least of it, in raw units. */
+export type OutputFloor = { tokenOut: Address; minOut: bigint };
+
+export async function spendAsDelegate(
+  params: {
+    owner: Address;
+    token?: Address;
+    venue?: Address;
+    usd: number;
+    data: Hex;
+  } & OutputFloor,
+): Promise<Hex> {
   const call = {
     account: delegateAccount,
     address: DELEGATION_ADDRESS,
@@ -249,6 +291,8 @@ export async function spendAsDelegate(params: {
       params.token ?? ADDRESSES.usdcBase,
       params.venue ?? ADDRESSES.oneInchRouter,
       usdToUnits(params.usd),
+      params.tokenOut,
+      params.minOut,
       params.data,
     ],
   } as const;
@@ -329,19 +373,21 @@ export async function waitForTx(hash: Hex, timeoutMs = 30_000): Promise<boolean 
  * `amount` is in the SOLD token's own units, not dollars, which is why this cannot share a
  * signature with the spend path.
  */
-export async function closeAsDelegate(params: {
-  owner: Address;
-  token: Address;
-  venue: Address;
-  amount: bigint;
-  data: Hex;
-}): Promise<Hex> {
+export async function closeAsDelegate(
+  params: {
+    owner: Address;
+    token: Address;
+    venue: Address;
+    amount: bigint;
+    data: Hex;
+  } & OutputFloor,
+): Promise<Hex> {
   const call = {
     account: delegateAccount,
     address: DELEGATION_ADDRESS,
     abi: DELEGATION_ABI,
     functionName: 'closePosition',
-    args: [params.owner, params.token, params.venue, params.amount, params.data],
+    args: [params.owner, params.token, params.venue, params.amount, params.tokenOut, params.minOut, params.data],
   } as const;
   const { request } = await publicClient.simulateContract(call);
   const gas = withHeadroom(await publicClient.estimateContractGas(call));

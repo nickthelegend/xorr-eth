@@ -554,7 +554,8 @@ async function main() {
   const makerWethBefore = await bal(WETH, filled);
 
   const delegate = createWalletClient({ account: delegatePublicKey, chain, transport: http(RPC) });
-  const spendArgs = [OWNER, token, venue, amount, data] as const;
+  // What the fill must deliver to the owner, and the floor the plan was built with (PLAN.md 1.4).
+  const spendArgs = [OWNER, token, venue, amount, fillPlan.tokenOut, fillPlan.minOut, data] as const;
   let fill: Hex;
   try {
     fill = await delegate.writeContract({
@@ -628,7 +629,7 @@ async function main() {
     address: BOOK, abi: BOOK_ABI, functionName: 'delegatedFillArgs',
     args: [fillPlan.order, OWNER, USDC, WETH, amountIn, (impossible * 995n) / 1000n],
   });
-  const badArgs = [OWNER, token, badVenue, badAmount, badData] as const;
+  const badArgs = [OWNER, token, badVenue, badAmount, WETH, (impossible * 995n) / 1000n, badData] as const;
   let refused = false;
   try {
     await pub.simulateContract({

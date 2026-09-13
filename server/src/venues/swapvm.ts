@@ -172,6 +172,8 @@ export type SwapVmFill = {
   venue: Address;
   amount: bigint;
   data: Hex;
+  /** What the owner receives; `minOut` below is the floor `spend()` holds their balance to. */
+  tokenOut: Address;
   order: SwapVmOrder;
   hash: Hex;
   /**
@@ -265,13 +267,13 @@ export async function buildSwapVmFill(params: {
         address: DELEGATION_ADDRESS,
         abi: DELEGATION_ABI,
         functionName: 'spend',
-        args: [params.owner, token, venue, amount, data],
+        args: [params.owner, token, venue, amount, params.tokenOut, minOut, data],
       })
       .then(() => true)
       .catch(() => false);
     if (!fillable) continue;
 
-    return { token, venue, amount, data, order: p.order, hash: p.hash, minOut };
+    return { token, venue, amount, data, tokenOut: params.tokenOut, order: p.order, hash: p.hash, minOut };
   }
   return undefined;
 }

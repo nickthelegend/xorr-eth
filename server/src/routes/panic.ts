@@ -30,7 +30,7 @@ import { holdings } from '../evm/balances.js';
 import { closeAsDelegate, readPolicy, waitForTx } from '../evm/delegation.js';
 import { buildSwap, SLIPPAGE, TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { DELEGATION_ADDRESS } from '../evm/delegation.js';
-import { explorerTx } from '../evm/chains.js';
+import { ADDRESSES, explorerTx } from '../evm/chains.js';
 import { applyFill } from '../positions/index.js';
 import { send } from '../notifications/push.js';
 import { humanFailure } from '../executor/failure.js';
@@ -147,6 +147,9 @@ panic.post('/panic/flatten', async (c) => {
         // The chain's own number, not a float round-trip. See `Holding.raw`.
         amount: h.raw,
         data: swap.data,
+        // The proceeds are the owner's cash, at no less than the router's own floor (PLAN.md 1.4).
+        tokenOut: ADDRESSES.usdcBase,
+        minOut: swap.minOut,
       });
 
     /*
@@ -353,6 +356,8 @@ export async function closeHolding(params: {
       venue: swap.to as Address,
       amount: raw,
       data: swap.data,
+      tokenOut: ADDRESSES.usdcBase,
+      minOut: swap.minOut,
     });
 
     /*

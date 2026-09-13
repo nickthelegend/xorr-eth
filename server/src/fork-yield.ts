@@ -55,16 +55,20 @@ function must(label: string, cond: boolean, detail = '') {
 }
 
 const DELEGATION_ABI = [
+  { type: 'constructor', stateMutability: 'nonpayable', inputs: [{ name: 'settlementToken', type: 'address' }] },
   { type: 'function', name: 'grant', stateMutability: 'nonpayable',
     inputs: [{ name: 'delegate', type: 'address' }, { name: 'dailyCap', type: 'uint256' },
              { name: 'expiresAt', type: 'uint64' }, { name: 'venues', type: 'address[]' }], outputs: [] },
+  // `tokenOut`/`minOut`: the owner's balance of what the call produces must rise by the floor (PLAN.md 1.4).
   { type: 'function', name: 'spend', stateMutability: 'nonpayable',
     inputs: [{ name: 'owner', type: 'address' }, { name: 'token', type: 'address' },
              { name: 'venue', type: 'address' }, { name: 'amount', type: 'uint256' },
+             { name: 'tokenOut', type: 'address' }, { name: 'minOut', type: 'uint256' },
              { name: 'data', type: 'bytes' }], outputs: [{ type: 'bytes' }] },
   { type: 'function', name: 'closePosition', stateMutability: 'nonpayable',
     inputs: [{ name: 'owner', type: 'address' }, { name: 'token', type: 'address' },
              { name: 'venue', type: 'address' }, { name: 'amount', type: 'uint256' },
+             { name: 'tokenOut', type: 'address' }, { name: 'minOut', type: 'uint256' },
              { name: 'data', type: 'bytes' }], outputs: [{ type: 'bytes' }] },
   { type: 'function', name: 'remainingToday', stateMutability: 'view',
     inputs: [{ name: 'owner', type: 'address' }], outputs: [{ type: 'uint256' }] },
@@ -113,7 +117,7 @@ async function main() {
   ) as { bytecode: { object: Hex } };
   const deployWallet = createWalletClient({ account: deployer, chain, transport: http(RPC) });
   const { contractAddress } = await pub.waitForTransactionReceipt({
-    hash: await deployWallet.deployContract({ abi: DELEGATION_ABI, bytecode: artifact.bytecode.object, args: [] }),
+    hash: await deployWallet.deployContract({ abi: DELEGATION_ABI, bytecode: artifact.bytecode.object, args: [USDC] }),
   });
   const delegation = contractAddress as Address;
   must('XorrDelegation deployed to the fork', !!delegation, delegation);
@@ -166,7 +170,8 @@ async function main() {
   const receipt = await pub.waitForTransactionReceipt({
     hash: await delegateWallet.writeContract({
       address: delegation, abi: DELEGATION_ABI, functionName: 'spend',
-      args: [owner.address, USDC, AAVE_POOL, amountRaw, data],
+      // The aToken is what a supply produces; a basis point of room for Aave's ray rounding.
+      args: [owner.address, USDC, AAVE_POOL, amountRaw, aToken, (amountRaw * 9_999n) / 10_000n, data],
     }),
   });
   must('delegate supplied through spend()', receipt.status === 'success', `${receipt.transactionHash} gas ${receipt.gasUsed}`);
@@ -230,7 +235,7 @@ async function main() {
   try {
     await pub.simulateContract({
       account: delegate, address: delegation, abi: DELEGATION_ABI, functionName: 'spend',
-      args: [owner.address, USDC, AAVE_POOL, need, supplyCalldata({ asset: USDC, amountRaw: need, owner: owner.address })],
+      args: [owner.address, USDC, AAVE_POOL, need, aToken, (need * 9_999n) / 10_000n, supplyCalldata({ asset: USDC, amountRaw: need, owner: owner.address })],
     });
   } catch { capped = true; }
   must('a supply past the daily cap reverts', capped);
@@ -242,7 +247,7 @@ async function main() {
   try {
     await pub.simulateContract({
       account: delegate, address: delegation, abi: DELEGATION_ABI, functionName: 'spend',
-      args: [owner.address, USDC, ROUTER, parseUnits('1', 6), data],
+      args: [owner.address, USDC, ROUTER, parseUnits('1', 6), aToken, 1n, data],
     });
   } catch { refused = true; }
   must('the same supply to an ungranted venue is refused', refused, 'VenueNotAllowed');
@@ -291,7 +296,7 @@ async function main() {
   try {
     await pub.simulateContract({
       account: delegate, address: delegation, abi: DELEGATION_ABI, functionName: 'closePosition',
-      args: [owner.address, aToken, AAVE_POOL, withdrawRaw, withdrawCalldata({ asset: USDC, amountRaw: withdrawRaw, owner: owner.address })],
+      args: [owner.address, aToken, AAVE_POOL, withdrawRaw, USDC, (withdrawRaw * 9_999n) / 10_000n, withdrawCalldata({ asset: USDC, amountRaw: withdrawRaw, owner: owner.address })],
     });
   } catch { botCannotWithdraw = true; }
   must('the bot cannot pull the position out on its own', botCannotWithdraw, 'no aToken approval was ever granted');

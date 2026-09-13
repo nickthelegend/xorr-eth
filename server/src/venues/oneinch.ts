@@ -347,7 +347,17 @@ async function priceImpact(
   return Number.isFinite(impact) ? Math.max(0, impact) : null;
 }
 
-export type SwapCalldata = { to: Address; data: Hex; value: string };
+export type SwapCalldata = {
+  to: Address;
+  data: Hex;
+  value: string;
+  /**
+   * The least this route may deliver, in raw OUT units: 1inch's own `dstAmount` less the slippage
+   * the calldata was built with. `XorrDelegation` holds the owner's balance to it across the call
+   * (PLAN.md 1.4), so it is derived from the router's answer rather than estimated a second time.
+   */
+  minOut: bigint;
+};
 
 /**
  * On a fork, ask 1inch for a plain AMM route.
@@ -455,13 +465,25 @@ export async function buildSwap(params: {
   if (!src || !dst) throw new Error(`No route for ${params.inSymbol} -> ${params.outSymbol}`);
 
   const raw = params.amountRaw ?? scale(params.amount, src.decimals);
-  const res = await getJson<{ tx: { to: Address; data: Hex; value: string } }>(
+  const slippagePct = params.slippagePct ?? DEFAULT_SLIPPAGE_PCT;
+  const res = await getJson<{ dstAmount?: string; tx: { to: Address; data: Hex; value: string } }>(
     `${BASE}/${ONEINCH_CHAIN_ID}/swap?src=${src.address}&dst=${dst.address}&amount=${raw}` +
       `&from=${params.from}&origin=${params.from}&receiver=${params.receiver}` +
-      `&slippage=${params.slippagePct ?? DEFAULT_SLIPPAGE_PCT}&disableEstimate=true${AMM_ONLY}`,
+      `&slippage=${slippagePct}&disableEstimate=true${AMM_ONLY}`,
     15_000,
     15_000,
     { Authorization: `Bearer ${API_KEY}` },
   );
-  return res.tx;
+
+  // No amount, no floor — and the contract refuses a trade without one, so say it here, before
+  // anything is signed, rather than as a revert afterwards.
+  if (!res.dstAmount || !/^\d+$/.test(res.dstAmount)) {
+    throw new Error(`1inch returned no dstAmount for ${params.inSymbol} -> ${params.outSymbol}`);
+  }
+  const minOut =
+    (BigInt(res.dstAmount) * BigInt(Math.floor((1 - slippagePct / 100) * 1_000_000))) / 1_000_000n;
+  if (minOut <= 0n) {
+    throw new Error(`The ${params.inSymbol} -> ${params.outSymbol} route delivers nothing at this size`);
+  }
+  return { ...res.tx, minOut };
 }

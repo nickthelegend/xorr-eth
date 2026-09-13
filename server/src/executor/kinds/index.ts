@@ -64,7 +64,18 @@ export type TradeIntent = {
    * `unitPriceUsd` as the price rather than looking one up. Leaving it undefined is the swap path,
    * unchanged.
    */
-  direct?: { venue: Address; data: Hex; unitPriceUsd: number };
+  direct?: {
+    venue: Address;
+    data: Hex;
+    unitPriceUsd: number;
+    /**
+     * What the owner receives from the call and the least of it, raw — the receipt token for a
+     * supply. The delegation holds the owner's balance to this across the call (PLAN.md 1.4), so a
+     * direct leg names its output like any swap does.
+     */
+    tokenOut: Address;
+    minOut: bigint;
+  };
 };
 
 export type PlanContext = {
@@ -363,6 +374,10 @@ export async function planYieldRotation(ctx: PlanContext): Promise<TradeIntent |
       // A dollar of USDC supplied is a dollar of aUSDC. The receipt is 1:1 at supply; the yield
       // arrives as the balance growing, not as the price moving.
       unitPriceUsd: 1,
+      // The aToken, read from the reserve. Aave's ray arithmetic can land a supply a wei short, so
+      // the floor leaves a basis point — nowhere near enough to hide a supply credited elsewhere.
+      tokenOut: reserve.aToken,
+      minOut: (amountRaw * 9_999n) / 10_000n,
     },
   };
 }

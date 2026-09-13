@@ -175,7 +175,7 @@ export async function compareVenues(params: {
             address: DELEGATION_ADDRESS,
             abi: DELEGATION_ABI,
             functionName: 'spend',
-            args: [owner, aqua.token, aqua.venue, aqua.amount, aqua.data],
+            args: [owner, aqua.token, aqua.venue, aqua.amount, aqua.tokenOut, aqua.minOut, aqua.data],
           }),
         )
       : Promise.resolve(undefined),
@@ -186,7 +186,7 @@ export async function compareVenues(params: {
             address: DELEGATION_ADDRESS,
             abi: DELEGATION_ABI,
             functionName: 'spend',
-            args: [owner, swapVm.token, swapVm.venue, swapVm.amount, swapVm.data],
+            args: [owner, swapVm.token, swapVm.venue, swapVm.amount, swapVm.tokenOut, swapVm.minOut, swapVm.data],
           }),
         )
       : Promise.resolve(undefined),

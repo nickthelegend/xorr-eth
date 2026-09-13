@@ -95,7 +95,8 @@ async function main() {
   const delegationHash = await wallet.deployContract({
     abi: delegationArt.abi as never,
     bytecode: delegationArt.bytecode,
-    args: [],
+    // The settlement token: what the daily cap is counted in, and what a close may not sell.
+    args: [USDC] as never,
   });
   const delegation = (await pub.waitForTransactionReceipt({ hash: delegationHash }))
     .contractAddress as Address;

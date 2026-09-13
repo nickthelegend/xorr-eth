@@ -77,12 +77,15 @@ function must(label: string, cond: boolean, detail = '') {
 }
 
 const DELEGATION_ABI = [
+  { type: 'constructor', stateMutability: 'nonpayable', inputs: [{ name: 'settlementToken', type: 'address' }] },
   { type: 'function', name: 'grant', stateMutability: 'nonpayable',
     inputs: [{ name: 'delegate', type: 'address' }, { name: 'dailyCap', type: 'uint256' },
              { name: 'expiresAt', type: 'uint64' }, { name: 'venues', type: 'address[]' }], outputs: [] },
+  // `tokenOut`/`minOut`: the owner's balance of what the trade buys must rise by the floor (PLAN.md 1.4).
   { type: 'function', name: 'spend', stateMutability: 'nonpayable',
     inputs: [{ name: 'owner', type: 'address' }, { name: 'token', type: 'address' },
              { name: 'venue', type: 'address' }, { name: 'amount', type: 'uint256' },
+             { name: 'tokenOut', type: 'address' }, { name: 'minOut', type: 'uint256' },
              { name: 'data', type: 'bytes' }], outputs: [{ type: 'bytes' }] },
   { type: 'function', name: 'remainingToday', stateMutability: 'view',
     inputs: [{ name: 'owner', type: 'address' }], outputs: [{ type: 'uint256' }] },
@@ -136,7 +139,7 @@ async function main() {
   ) as { bytecode: { object: Hex } };
   const deployWallet = createWalletClient({ account: deployer, chain, transport: http(RPC) });
   const deployHash = await deployWallet.deployContract({
-    abi: DELEGATION_ABI, bytecode: artifact.bytecode.object, args: [],
+    abi: DELEGATION_ABI, bytecode: artifact.bytecode.object, args: [USDC],
   });
   const { contractAddress } = await pub.waitForTransactionReceipt({ hash: deployHash });
   const delegation = contractAddress as Address;
@@ -176,7 +179,7 @@ async function main() {
   const delegateWallet = createWalletClient({ account: delegate, chain, transport: http(RPC) });
   const spendHash = await delegateWallet.writeContract({
     address: delegation, abi: DELEGATION_ABI, functionName: 'spend',
-    args: [owner.address, USDC, swap.to, spend, swap.data],
+    args: [owner.address, USDC, swap.to, spend, tokenAddress, swap.minOut, swap.data],
   });
   const receipt = await pub.waitForTransactionReceipt({ hash: spendHash });
   must('delegate executed spend() on chain', receipt.status === 'success', `${spendHash} gas ${receipt.gasUsed}`);
@@ -202,7 +205,7 @@ async function main() {
   try {
     await pub.simulateContract({
       account: delegate, address: delegation, abi: DELEGATION_ABI, functionName: 'spend',
-      args: [owner.address, USDC, over.to, parseUnits(String(CAP_USD), 6), over.data],
+      args: [owner.address, USDC, over.to, parseUnits(String(CAP_USD), 6), tokenAddress, over.minOut, over.data],
     });
   } catch { blocked = true; }
   must('a spend past the daily cap reverts', blocked);

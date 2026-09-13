@@ -31,21 +31,32 @@ contract MockUSDC {
     }
 }
 
-/// @dev Stands in for a DEX router: takes the token it was approved for.
+/**
+ * @dev Stands in for a DEX router: takes the token it was approved for, and pays the output to
+ *      whoever the calldata names — exactly the freedom a real router gives the one who writes its
+ *      calldata, which here is the delegate.
+ */
 contract MockVenue {
     MockUSDC public token;
+    MockUSDC public output;
+    XorrDelegation public del;
     uint256 public received;
+    /// Whose trade the delegation said this was, as seen from inside the call.
+    address public sawActiveOwner;
 
-    constructor(MockUSDC t) {
+    constructor(MockUSDC t, MockUSDC out, XorrDelegation d) {
         token = t;
+        output = out;
+        del = d;
     }
 
-    function swap(uint256 amount) external {
+    function swap(uint256 amount, address to, uint256 amountOut) external {
         token.transferFrom(msg.sender, address(this), amount);
         received += amount;
+        sawActiveOwner = del.activeOwner();
+        output.mint(to, amountOut);
     }
 }
-
 
 /**
  * A venue that fails the way a real router fails: with its own custom error carrying the number
@@ -73,8 +84,9 @@ contract XorrDelegationTest is Test {
     MockUSDC internal usdc;
     /// A non-settlement asset, so a close can be tested for what it is: selling a holding.
     MockUSDC internal asset;
+    /// Takes USDC, pays `asset` — a buy.
     MockVenue internal venue;
-    /// A venue that trades the non-settlement asset, so a close has somewhere real to sell into.
+    /// Takes `asset`, pays USDC — somewhere real for a close to sell into.
     MockVenue internal assetVenue;
     MockVenue internal unlistedVenue;
 
@@ -86,11 +98,12 @@ contract XorrDelegationTest is Test {
     uint256 internal constant DAILY_CAP = 400 * USD;
 
     function setUp() public {
-        del = new XorrDelegation();
         usdc = new MockUSDC();
         asset = new MockUSDC();
-        venue = new MockVenue(usdc);
-        unlistedVenue = new MockVenue(usdc);
+        del = new XorrDelegation(address(usdc));
+        venue = new MockVenue(usdc, asset, del);
+        unlistedVenue = new MockVenue(usdc, asset, del);
+        assetVenue = new MockVenue(asset, usdc, del);
 
         usdc.mint(owner, 10_000 * USD);
 
@@ -101,10 +114,31 @@ contract XorrDelegationTest is Test {
         // The owner approves the delegation contract to pull, and grants the policy.
         usdc.approve(address(del), type(uint256).max);
         del.grant(bot, DAILY_CAP, uint64(block.timestamp + 3 days), venues);
-        // The close tests sell `asset`, which needs a venue that can actually take it.
-        assetVenue = new MockVenue(asset);
         del.setVenue(address(assetVenue), true);
         vm.stopPrank();
+    }
+
+    /// Calldata for a venue that takes `amountIn` and pays `amountOut` to `to`.
+    function _pay(uint256 amountIn, address to, uint256 amountOut) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(MockVenue.swap.selector, amountIn, to, amountOut);
+    }
+
+    /// An honest buy: USDC in, the same number of `asset` units delivered to the owner.
+    function _buy(address at, uint256 amount) internal returns (bytes memory) {
+        return del.spend(owner, address(usdc), at, amount, address(asset), amount, _pay(amount, owner, amount));
+    }
+
+    /// An honest close: `asset` in, the same number of USDC units delivered to the owner.
+    function _close(address at, uint256 amount) internal returns (bytes memory) {
+        return del.closePosition(
+            owner, address(asset), at, amount, address(usdc), amount, _pay(amount, owner, amount)
+        );
+    }
+
+    function _holdAsset(uint256 amount) internal {
+        asset.mint(owner, amount);
+        vm.prank(owner);
+        asset.approve(address(del), type(uint256).max);
     }
 
     // ── The grant ────────────────────────────────────────────────────────────
@@ -116,41 +150,135 @@ contract XorrDelegationTest is Test {
         assertGt(expiresAt, block.timestamp);
         assertFalse(revoked);
         assertEq(del.remainingToday(owner), DAILY_CAP);
+        assertEq(del.SETTLEMENT_TOKEN(), address(usdc));
+    }
+
+    function test_ASettlementTokenIsRequired() public {
+        vm.expectRevert(bytes("settlement token required"));
+        new XorrDelegation(address(0));
+    }
+
+    /**
+     * A re-grant replaces the venue list; it does not add to it.
+     *
+     * The allowlist mapping cannot be enumerated, so a venue dropped from the app's list used to stay
+     * allowed on chain forever — the user saw it gone and the contract still accepted it.
+     */
+    function test_ReGrantReplacesTheVenueList() public {
+        assertTrue(del.isVenueAllowed(owner, address(venue)));
+        assertTrue(del.isVenueAllowed(owner, address(assetVenue)));
+
+        address[] memory only = new address[](1);
+        only[0] = address(assetVenue);
+        vm.prank(owner);
+        del.grant(bot, DAILY_CAP, uint64(block.timestamp + 3 days), only);
+
+        assertFalse(del.isVenueAllowed(owner, address(venue)), "a venue left off the new grant is still allowed");
+        assertTrue(del.isVenueAllowed(owner, address(assetVenue)));
+
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(XorrDelegation.VenueNotAllowed.selector, address(venue)));
+        _buy(address(venue), 10 * USD);
+    }
+
+    function test_ReGrantClearsAVenueToggledOffAndOnAgain() public {
+        vm.startPrank(owner);
+        del.setVenue(address(venue), false);
+        del.setVenue(address(venue), true);
+        del.grant(bot, DAILY_CAP, uint64(block.timestamp + 3 days), new address[](0));
+        vm.stopPrank();
+
+        assertFalse(del.isVenueAllowed(owner, address(venue)));
+        assertFalse(del.isVenueAllowed(owner, address(assetVenue)));
     }
 
     // ── The bot can trade inside the cap ─────────────────────────────────────
 
     function test_BotCanSpendInsideTheCap() public {
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), 100 * USD, _swapCall(100 * USD));
+        _buy(address(venue), 100 * USD);
 
         assertEq(venue.received(), 100 * USD);
         assertEq(del.spentToday(owner), 100 * USD);
         assertEq(del.remainingToday(owner), 300 * USD);
         assertEq(usdc.balanceOf(owner), 9_900 * USD);
+        assertEq(asset.balanceOf(owner), 100 * USD, "the output did not reach the owner");
     }
 
     function test_SeveralTradesAccumulateAgainstTheCap() public {
         vm.startPrank(bot);
-        del.spend(owner, address(usdc), address(venue), 150 * USD, _swapCall(150 * USD));
-        del.spend(owner, address(usdc), address(venue), 150 * USD, _swapCall(150 * USD));
+        _buy(address(venue), 150 * USD);
+        _buy(address(venue), 150 * USD);
         vm.stopPrank();
         assertEq(del.spentToday(owner), 300 * USD);
         assertEq(del.remainingToday(owner), 100 * USD);
+    }
+
+    // ── Where the output goes ────────────────────────────────────────────────
+
+    /**
+     * The drain this closes: the router pays whoever the calldata names, and the delegate writes the
+     * calldata. A leaked delegate key used to be able to spend the day's cap and be paid for it.
+     */
+    function test_OutputMustReachTheOwner() public {
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(XorrDelegation.OutputNotReceived.selector, 0, 100 * USD));
+        del.spend(
+            owner, address(usdc), address(venue), 100 * USD, address(asset), 100 * USD, _pay(100 * USD, attacker, 100 * USD)
+        );
+
+        assertEq(asset.balanceOf(attacker), 0, "the attacker was paid");
+        assertEq(usdc.balanceOf(owner), 10_000 * USD, "the owner paid for it");
+        assertEq(del.spentToday(owner), 0, "a trade that reverted still counted against the cap");
+    }
+
+    function test_CloseProceedsMustReachTheOwner() public {
+        _holdAsset(1e18);
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(XorrDelegation.OutputNotReceived.selector, 0, 1e18));
+        del.closePosition(owner, address(asset), address(assetVenue), 1e18, address(usdc), 1e18, _pay(1e18, attacker, 1e18));
+        assertEq(asset.balanceOf(owner), 1e18, "the holding left without its proceeds");
+    }
+
+    function test_AShortChangedTradeReverts() public {
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(XorrDelegation.OutputNotReceived.selector, 60 * USD, 100 * USD));
+        del.spend(owner, address(usdc), address(venue), 100 * USD, address(asset), 100 * USD, _pay(100 * USD, owner, 60 * USD));
+    }
+
+    function test_ATradeMustNameItsOutputAndAFloor() public {
+        bytes memory honest = _pay(10 * USD, owner, 10 * USD);
+        vm.startPrank(bot);
+        vm.expectRevert(XorrDelegation.ZeroMinOut.selector);
+        del.spend(owner, address(usdc), address(venue), 10 * USD, address(asset), 0, honest);
+        vm.expectRevert(XorrDelegation.InvalidTokenOut.selector);
+        del.spend(owner, address(usdc), address(venue), 10 * USD, address(usdc), 1, honest);
+        vm.expectRevert(XorrDelegation.InvalidTokenOut.selector);
+        del.spend(owner, address(usdc), address(venue), 10 * USD, address(0), 1, honest);
+        vm.stopPrank();
+    }
+
+    /// The owner a venue call is for is visible to the venue during the call, and to nobody after it.
+    function test_TheVenueSeesTheOwnerOnlyDuringTheCall() public {
+        assertEq(del.activeOwner(), address(0));
+        vm.prank(bot);
+        _buy(address(venue), 10 * USD);
+        assertEq(venue.sawActiveOwner(), owner, "the venue could not tell whose trade it was");
+        assertEq(del.activeOwner(), address(0), "the active owner outlived the call");
     }
 
     // ── THE DAILY CAP IS ENFORCED BY THIS CONTRACT ───────────────────────────
 
     function test_SpendOverTheDailyCapReverts() public {
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), 350 * USD, _swapCall(350 * USD));
+        _buy(address(venue), 350 * USD);
 
         // 50 left. Asking for 51 must fail.
         vm.prank(bot);
         vm.expectRevert(
             abi.encodeWithSelector(XorrDelegation.DailyCapExceeded.selector, 51 * USD, 50 * USD)
         );
-        del.spend(owner, address(usdc), address(venue), 51 * USD, _swapCall(51 * USD));
+        _buy(address(venue), 51 * USD);
 
         // And nothing moved.
         assertEq(del.spentToday(owner), 350 * USD);
@@ -161,7 +289,7 @@ contract XorrDelegationTest is Test {
     ///         on-chain, rather than being tracked by the executor.
     function test_TheCapResetsTheNextDay() public {
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), DAILY_CAP, _swapCall(DAILY_CAP));
+        _buy(address(venue), DAILY_CAP);
         assertEq(del.remainingToday(owner), 0);
 
         vm.warp(block.timestamp + 1 days);
@@ -169,7 +297,7 @@ contract XorrDelegationTest is Test {
         assertEq(del.spentToday(owner), 0);
 
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), 10 * USD, _swapCall(10 * USD));
+        _buy(address(venue), 10 * USD);
         assertEq(del.spentToday(owner), 10 * USD);
     }
 
@@ -180,7 +308,7 @@ contract XorrDelegationTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(XorrDelegation.VenueNotAllowed.selector, address(unlistedVenue))
         );
-        del.spend(owner, address(usdc), address(unlistedVenue), 10 * USD, _swapCall(10 * USD));
+        _buy(address(unlistedVenue), 10 * USD);
         assertEq(usdc.balanceOf(owner), 10_000 * USD);
     }
 
@@ -188,10 +316,8 @@ contract XorrDelegationTest is Test {
     function test_TheBotCannotSendFundsToAnAddressItChooses() public {
         // An EOA the bot controls is not an allowlisted venue, so there is no path to it.
         vm.prank(bot);
-        vm.expectRevert(
-            abi.encodeWithSelector(XorrDelegation.VenueNotAllowed.selector, attacker)
-        );
-        del.spend(owner, address(usdc), attacker, 10 * USD, "");
+        vm.expectRevert(abi.encodeWithSelector(XorrDelegation.VenueNotAllowed.selector, attacker));
+        del.spend(owner, address(usdc), attacker, 10 * USD, address(asset), 1, "");
         assertEq(usdc.balanceOf(attacker), 0);
     }
 
@@ -200,7 +326,7 @@ contract XorrDelegationTest is Test {
     function test_OnlyTheDelegateCanSpend() public {
         vm.prank(attacker);
         vm.expectRevert(XorrDelegation.NotDelegate.selector);
-        del.spend(owner, address(usdc), address(venue), 10 * USD, _swapCall(10 * USD));
+        _buy(address(venue), 10 * USD);
     }
 
     // ── Expiry — screen 4's "Run For" is a real deadline ─────────────────────
@@ -209,7 +335,7 @@ contract XorrDelegationTest is Test {
         vm.warp(block.timestamp + 4 days);
         vm.prank(bot);
         vm.expectRevert(XorrDelegation.PolicyExpired.selector);
-        del.spend(owner, address(usdc), address(venue), 10 * USD, _swapCall(10 * USD));
+        _buy(address(venue), 10 * USD);
         assertEq(del.remainingToday(owner), 0);
     }
 
@@ -221,13 +347,13 @@ contract XorrDelegationTest is Test {
 
         vm.prank(bot);
         vm.expectRevert(XorrDelegation.PolicyRevoked.selector);
-        del.spend(owner, address(usdc), address(venue), 1 * USD, _swapCall(1 * USD));
+        _buy(address(venue), 1 * USD);
     }
 
     /// @notice Screen 20 promises the funds are untouched when you stop the agents.
     function test_RevokeDoesNotTouchTheBalance() public {
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), 100 * USD, _swapCall(100 * USD));
+        _buy(address(venue), 100 * USD);
         uint256 before = usdc.balanceOf(owner);
 
         vm.prank(owner);
@@ -246,7 +372,7 @@ contract XorrDelegationTest is Test {
         assertFalse(revoked);
 
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), 1 * USD, _swapCall(1 * USD));
+        _buy(address(venue), 1 * USD);
         assertEq(venue.received(), 1 * USD);
     }
 
@@ -254,7 +380,7 @@ contract XorrDelegationTest is Test {
 
     function test_NoApprovalIsLeftBehindAfterATrade() public {
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), 100 * USD, _swapCall(100 * USD));
+        _buy(address(venue), 100 * USD);
         assertEq(usdc.allowance(address(del), address(venue)), 0);
         // And the contract custodies nothing between trades.
         assertEq(usdc.balanceOf(address(del)), 0);
@@ -267,16 +393,12 @@ contract XorrDelegationTest is Test {
         vm.prank(bot);
         if (amount > DAILY_CAP) {
             vm.expectRevert();
-            del.spend(owner, address(usdc), address(venue), amount, _swapCall(amount));
+            _buy(address(venue), amount);
             assertEq(del.spentToday(owner), 0);
         } else {
-            del.spend(owner, address(usdc), address(venue), amount, _swapCall(amount));
+            _buy(address(venue), amount);
             assertLe(del.spentToday(owner), DAILY_CAP);
         }
-    }
-
-    function _swapCall(uint256 amount) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(MockVenue.swap.selector, amount);
     }
 
     // ── Closing is separately authorised, and separately bounded ────────────
@@ -285,60 +407,59 @@ contract XorrDelegationTest is Test {
         // A stop that a spending limit can silence is not a stop. Use the cap up first, then
         // close: the close must still work.
         vm.prank(bot);
-        del.spend(owner, address(usdc), address(venue), DAILY_CAP, _swapCall(DAILY_CAP));
+        _buy(address(venue), DAILY_CAP);
         assertEq(del.remainingToday(owner), 0, "cap should be exhausted");
 
-        asset.mint(owner, 1e18);
-        vm.prank(owner);
-        asset.approve(address(del), type(uint256).max);
+        _holdAsset(1e18);
+        uint256 usdcBefore = usdc.balanceOf(owner);
 
         vm.prank(bot);
-        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+        _close(address(assetVenue), 1e18);
 
-        assertEq(asset.balanceOf(owner), 0, "the asset was not sold");
+        assertEq(asset.balanceOf(owner), DAILY_CAP, "the asset was not sold");
+        assertEq(usdc.balanceOf(owner), usdcBefore + 1e18, "the proceeds did not reach the owner");
         // Still zero, not negative and not reset: closing is not spending.
         assertEq(del.remainingToday(owner), 0, "closing moved the spend cap");
     }
 
-    function test_CloseObeysTheVenueAllowlist() public {
-        asset.mint(owner, 1e18);
-        vm.prank(owner);
-        asset.approve(address(del), type(uint256).max);
+    /// Closing is uncapped, so it may not sell the asset the cap is there to limit.
+    function test_CloseRefusesTheSettlementToken() public {
+        vm.prank(bot);
+        vm.expectRevert(XorrDelegation.SettlementTokenNotClosable.selector);
+        del.closePosition(
+            owner, address(usdc), address(venue), 100 * USD, address(asset), 100 * USD, _pay(100 * USD, owner, 100 * USD)
+        );
+        assertEq(usdc.balanceOf(owner), 10_000 * USD);
+    }
 
+    function test_CloseObeysTheVenueAllowlist() public {
+        _holdAsset(1e18);
         vm.prank(bot);
         vm.expectRevert(abi.encodeWithSelector(XorrDelegation.VenueNotAllowed.selector, address(0xBAD)));
-        del.closePosition(owner, address(asset), address(0xBAD), 1e18, "");
+        del.closePosition(owner, address(asset), address(0xBAD), 1e18, address(usdc), 1, "");
     }
 
     function test_CloseStopsWhenRevoked() public {
-        asset.mint(owner, 1e18);
-        vm.startPrank(owner);
-        asset.approve(address(del), type(uint256).max);
+        _holdAsset(1e18);
+        vm.prank(owner);
         del.revoke();
-        vm.stopPrank();
 
         vm.prank(bot);
         vm.expectRevert(XorrDelegation.PolicyRevoked.selector);
-        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+        _close(address(assetVenue), 1e18);
     }
 
     function test_OnlyTheDelegateCanClose() public {
-        asset.mint(owner, 1e18);
-        vm.prank(owner);
-        asset.approve(address(del), type(uint256).max);
-
+        _holdAsset(1e18);
         vm.prank(address(0xC0FFEE));
         vm.expectRevert(XorrDelegation.NotDelegate.selector);
-        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+        _close(address(assetVenue), 1e18);
     }
 
     function test_CloseLeavesNoStandingApproval() public {
-        asset.mint(owner, 1e18);
-        vm.prank(owner);
-        asset.approve(address(del), type(uint256).max);
-
+        _holdAsset(1e18);
         vm.prank(bot);
-        del.closePosition(owner, address(asset), address(assetVenue), 1e18, _swapCall(1e18));
+        _close(address(assetVenue), 1e18);
         assertEq(asset.allowance(address(del), address(assetVenue)), 0, "approval left behind");
     }
 
@@ -358,18 +479,19 @@ contract XorrDelegationTest is Test {
         bytes memory data = abi.encodeWithSignature("swap(uint256)", uint256(1));
         vm.prank(bot);
         vm.expectRevert(abi.encodeWithSelector(PickyVenue.ReturnAmountIsNotEnough.selector, 24_768_044));
-        del.spend(owner, address(usdc), address(picky), 10e6, data);
+        del.spend(owner, address(usdc), address(picky), 10e6, address(asset), 1, data);
     }
 
     function test_VenueRevertReasonSurvivesClose() public {
         PickyVenue picky = new PickyVenue();
         vm.prank(owner);
         del.setVenue(address(picky), true);
+        _holdAsset(10e6);
 
         bytes memory data = abi.encodeWithSignature("swap(uint256)", uint256(1));
         vm.prank(bot);
         vm.expectRevert(abi.encodeWithSelector(PickyVenue.ReturnAmountIsNotEnough.selector, 24_768_044));
-        del.closePosition(owner, address(usdc), address(picky), 10e6, data);
+        del.closePosition(owner, address(asset), address(picky), 10e6, address(usdc), 1, data);
     }
 
     /** With nothing to bubble, the named error is still the honest answer. */
@@ -381,6 +503,6 @@ contract XorrDelegationTest is Test {
         bytes memory data = abi.encodeWithSignature("swap(uint256)", uint256(1));
         vm.prank(bot);
         vm.expectRevert(XorrDelegation.VenueCallFailed.selector);
-        del.spend(owner, address(usdc), address(silent), 10e6, data);
+        del.spend(owner, address(usdc), address(silent), 10e6, address(asset), 1, data);
     }
 }

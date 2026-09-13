@@ -236,7 +236,11 @@ describe('building the fill', () => {
     // Simulating anything else would prove a different transaction than the one we send.
     expect(sim.functionName).toBe('spend');
     expect(sim.account.address).toBe('0xC38f38f45463f77bD823FebE16b15714Eb98c8A5');
-    expect(sim.args[4]).toBe('0xcafe');
+    // The output the owner must receive and its floor ride with the call (PLAN.md 1.4), so the dry
+    // run is held to the same rule as the transaction.
+    expect(sim.args[4]).toBe(params.tokenOut);
+    expect(sim.args[5]).toBe(997_000_000_000_000_000n);
+    expect(sim.args[6]).toBe('0xcafe');
   });
 
   it('refuses a zero minimum rather than filling at any price', async () => {

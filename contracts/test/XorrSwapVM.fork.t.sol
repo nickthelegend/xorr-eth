@@ -55,7 +55,7 @@ contract XorrSwapVMForkTest is Test {
         // unrelated protocols that merely both exist.
         assertEq(_aquaOf(address(SWAP_VM)), address(AQUA), "router points at a different Aqua");
 
-        delegation = new XorrDelegation();
+        delegation = new XorrDelegation(USDC);
         book = new XorrSwapVMBook(AQUA, SWAP_VM, delegation);
         deadline = uint40(block.timestamp + 7 days);
 
@@ -144,7 +144,7 @@ contract XorrSwapVMForkTest is Test {
             book.delegatedFillArgs(order, user, USDC, WETH, spend, 0);
 
         vm.prank(bot);
-        bytes memory ret = delegation.spend(user, token, venue, amount, data);
+        bytes memory ret = delegation.spend(user, token, venue, amount, WETH, 1, data);
         uint256 out = abi.decode(ret, (uint256));
 
         assertGt(out, 0, "SwapVM returned no output");
@@ -168,12 +168,12 @@ contract XorrSwapVMForkTest is Test {
         (address t, address v, uint256 a, bytes memory d) =
             book.delegatedFillArgs(order, user, USDC, WETH, 4_000 * USD, 0);
         vm.prank(bot);
-        delegation.spend(user, t, v, a, d);
+        delegation.spend(user, t, v, a, WETH, 1, d);
 
         (t, v, a, d) = book.delegatedFillArgs(order, user, USDC, WETH, 4_000 * USD, 0);
         vm.prank(bot);
         vm.expectRevert();
-        delegation.spend(user, t, v, a, d);
+        delegation.spend(user, t, v, a, WETH, 1, d);
     }
 
     function test_RevokeStopsTheSwapVMPath() public {
@@ -186,7 +186,7 @@ contract XorrSwapVMForkTest is Test {
             book.delegatedFillArgs(order, user, USDC, WETH, 100 * USD, 0);
         vm.prank(bot);
         vm.expectRevert();
-        delegation.spend(user, t, v, a, d);
+        delegation.spend(user, t, v, a, WETH, 1, d);
     }
 
     function test_AppRefusesAFillNotRoutedThroughTheDelegation() public {
@@ -197,6 +197,24 @@ contract XorrSwapVMForkTest is Test {
             abi.encodeWithSelector(XorrSwapVMBook.NotAuthorisedOperator.selector, bot, user)
         );
         book.fillForDelegation(order, user, USDC, WETH, 100 * USD, 0);
+    }
+
+    /**
+     * The drain PLAN.md 1.4 closes. The delegate writes the fill's calldata, so it could name itself
+     * as `principal` and SwapVM would deliver the output there — paid for with the user's cap.
+     */
+    function test_DelegatedFillCannotPayAnyoneButTheOwner() public {
+        ISwapVM.Order memory order = _ship();
+        address attacker = makeAddr("attacker");
+        bytes memory data =
+            abi.encodeCall(book.fillForDelegation, (order, attacker, USDC, WETH, 100 * USD, uint256(0)));
+
+        vm.prank(bot);
+        vm.expectRevert(
+            abi.encodeWithSelector(XorrSwapVMBook.RecipientNotActiveOwner.selector, attacker, user)
+        );
+        delegation.spend(user, USDC, address(book), 100 * USD, WETH, 1, data);
+        assertEq(IERC20(WETH).balanceOf(attacker), 0, "the attacker was paid");
     }
 
     // ── The opcode constants are guarded by behaviour, not by faith ─────────
@@ -223,14 +241,14 @@ contract XorrSwapVMForkTest is Test {
         (address t, address v, uint256 a, bytes memory d) =
             book.delegatedFillArgs(order, user, USDC, WETH, 100 * USD, 0);
         vm.prank(bot);
-        delegation.spend(user, t, v, a, d);
+        delegation.spend(user, t, v, a, WETH, 1, d);
 
         // Past it, the program itself refuses.
         vm.warp(block.timestamp + 2 hours);
         (t, v, a, d) = book.delegatedFillArgs(order, user, USDC, WETH, 100 * USD, 0);
         vm.prank(bot);
         vm.expectRevert();
-        delegation.spend(user, t, v, a, d);
+        delegation.spend(user, t, v, a, WETH, 1, d);
     }
 
     function test_FeeOpcodeActuallyCosts() public {
@@ -261,7 +279,7 @@ contract XorrSwapVMForkTest is Test {
             book.delegatedFillArgs(order, user, USDC, WETH, 200 * USD, 0);
         uint256 before = IERC20(WETH).balanceOf(user);
         vm.prank(bot);
-        delegation.spend(user, t, v, a, d);
+        delegation.spend(user, t, v, a, WETH, 1, d);
         return IERC20(WETH).balanceOf(user) - before;
     }
 
@@ -272,6 +290,6 @@ contract XorrSwapVMForkTest is Test {
             book.delegatedFillArgs(order, user, USDC, WETH, 500 * USD, 1_000 ether);
         vm.prank(bot);
         vm.expectRevert();
-        delegation.spend(user, t, v, a, d);
+        delegation.spend(user, t, v, a, WETH, 1, d);
     }
 }

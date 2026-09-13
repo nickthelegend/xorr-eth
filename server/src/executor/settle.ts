@@ -20,6 +20,7 @@
  * enough to buy into may not be deep enough to sell out of.
  */
 import type { Address } from 'viem';
+import type { OutputFloor } from '../evm/delegation.js';
 import { buildSwap, quote, slippageFor, SLIPPAGE, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { buildAquaFill } from '../venues/aqua.js';
 import { buildSwapVmFill } from '../venues/swapvm.js';
@@ -41,6 +42,13 @@ export type Settlement = {
   /** The call `spend()` (or `closePosition()`) forwards. */
   swap: { to: Address; data: `0x${string}` };
   venue: SettlementVenue;
+  /**
+   * What the owner must receive for the trade to stand. Enforced by the contract against the owner's
+   * own balance (PLAN.md 1.4) — each venue supplies its own honest floor: the book's quote less
+   * slippage, the program's compiled minimum, the router's `dstAmount` less slippage, or the pool's
+   * receipt token.
+   */
+  floor: OutputFloor;
 };
 
 /**
@@ -134,13 +142,11 @@ export async function chooseSettlement(params: {
           ),
         }).catch(() => undefined);
 
-  const swap = aqua
-    ? { to: aqua.venue, data: aqua.data }
-    : swapVm
-    ? { to: swapVm.venue, data: swapVm.data }
-    : intent.direct
-    ? { to: intent.direct.venue, data: intent.direct.data }
-    : await buildSwap({
+  const outToken = VENUE_TOKENS[intent.outSymbol]?.address as Address | undefined;
+  const aggregator =
+    aqua || swapVm || intent.direct
+      ? undefined
+      : await buildSwap({
         inSymbol: intent.inSymbol,
         outSymbol: intent.outSymbol,
         // In the INPUT token's units. Passing dollars here scaled a position into wei and the
@@ -166,9 +172,36 @@ export async function chooseSettlement(params: {
           quoted?.priceImpactPct ?? null,
         ),
       });
+
+  if (aqua) {
+    return {
+      payToken,
+      swap: { to: aqua.venue, data: aqua.data },
+      venue: 'aqua',
+      floor: { tokenOut: aqua.tokenOut, minOut: aqua.minOut },
+    };
+  }
+  if (swapVm) {
+    return {
+      payToken,
+      swap: { to: swapVm.venue, data: swapVm.data },
+      venue: 'swapvm',
+      floor: { tokenOut: swapVm.tokenOut, minOut: swapVm.minOut },
+    };
+  }
+  if (intent.direct) {
+    return {
+      payToken,
+      swap: { to: intent.direct.venue, data: intent.direct.data },
+      venue: 'aave',
+      floor: { tokenOut: intent.direct.tokenOut, minOut: intent.direct.minOut },
+    };
+  }
+  if (!aggregator || !outToken) throw new Error(`No token registry entry for ${intent.outSymbol}`);
   return {
     payToken,
-    swap,
-    venue: aqua ? 'aqua' : swapVm ? 'swapvm' : intent.direct ? 'aave' : '1inch',
+    swap: { to: aggregator.to, data: aggregator.data },
+    venue: '1inch',
+    floor: { tokenOut: outToken, minOut: aggregator.minOut },
   };
 }

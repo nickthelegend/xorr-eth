@@ -280,6 +280,9 @@ export type AquaFill = {
   data: Hex;
   /** What the book says the taker receives, before the minimum is applied. */
   quotedOut: bigint;
+  /** What the owner receives, and the floor `spend()` holds their balance to (PLAN.md 1.4). */
+  tokenOut: Address;
+  minOut: bigint;
   strategy: AquaStrategy;
   hash: Hex;
 };
@@ -355,6 +358,8 @@ export async function buildAquaFill(params: {
       amount: args[2],
       data: args[3],
       quotedOut,
+      tokenOut: params.tokenOut,
+      minOut,
       strategy: b.strategy,
       hash: b.hash,
     });

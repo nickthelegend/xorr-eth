@@ -598,7 +598,7 @@ async function runStrategyInner(
      * middle of this function, between the gate checks and the transaction bookkeeping, and they
      * are the part that grows every time a venue is added.
      */
-    const { payToken, swap, venue } = await chooseSettlement({
+    const { payToken, swap, venue, floor } = await chooseSettlement({
       intent,
       owner,
       preferred,
@@ -637,6 +637,7 @@ async function runStrategyInner(
            */
           amount: intent.amountInRaw ?? BigInt(Math.floor(intent.amountIn * 10 ** payToken.decimals)),
           data: swap.data,
+          ...floor,
         })
       : await spendAsDelegate({
           owner,
@@ -644,6 +645,7 @@ async function runStrategyInner(
           venue: swap.to,
           usd: intent.usd,
           data: swap.data,
+          ...floor,
         });
 
     /*

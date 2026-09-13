@@ -86,7 +86,7 @@ contract XorrStocksForkTest is Test {
         // execution path needs re-proving rather than silently degrading.
         assertGt(BNVDA.code.length, 1, "bNVDA is not EVM bytecode on this fork");
 
-        delegation = new XorrDelegation();
+        delegation = new XorrDelegation(USDC);
         book = new XorrAquaBook(AQUA, delegation);
 
         _mintShares(maker, SEED_SHARES);
@@ -159,7 +159,10 @@ contract XorrStocksForkTest is Test {
             _fillArgs(principal, zeroForOne, amountIn, amountOutMin);
         vm.prank(bot);
         // spend() hands back the venue's raw return data, which for fillForDelegation is a uint256.
-        return abi.decode(delegation.spend(principal, token, venue, amount, data), (uint256));
+        return abi.decode(
+            delegation.spend(principal, token, venue, amount, _outOf(zeroForOne), _floor(amountOutMin), data),
+            (uint256)
+        );
     }
 
     /// @dev Same call, but with `vm.expectRevert` landing on `spend` rather than on the view that
@@ -169,7 +172,22 @@ contract XorrStocksForkTest is Test {
             _fillArgs(principal, false, amountIn, 0);
         vm.prank(bot);
         vm.expectRevert();
-        delegation.spend(principal, token, venue, amount, data);
+        delegation.spend(principal, token, venue, amount, _outOf(false), 1, data);
+    }
+
+    /// The token a fill in this direction delivers — what `spend()` measures at the principal.
+    function _outOf(bool zeroForOne) internal view returns (address) {
+        return zeroForOne ? strat.token1 : strat.token0;
+    }
+
+    /**
+     * The floor `spend()` holds the principal's balance to (PLAN.md 1.4), never zero.
+     *
+     * Two wei under the book's own minimum, because bNVDA accounts in shares and a transfer can land a
+     * wei or two short of the amount sent — the same tolerance the assertions below already allow.
+     */
+    function _floor(uint256 amountOutMin) internal pure returns (uint256) {
+        return amountOutMin > 2 ? amountOutMin - 2 : 1;
     }
 
     function _ship() internal {
@@ -295,7 +313,7 @@ contract XorrStocksForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(XorrDelegation.VenueNotAllowed.selector, address(rogue))
         );
-        delegation.spend(user, USDC, address(rogue), 100 * USD, data);
+        delegation.spend(user, USDC, address(rogue), 100 * USD, BNVDA, 1, data);
     }
 
     function test_PriceBandRejectsAnAbsurdFill() public {

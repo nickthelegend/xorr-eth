@@ -54,6 +54,16 @@ export function humanFailure(error: string): string {
     '0x064a4ec6': 'The price moved more than your slippage limit while this was in flight. Nothing was placed.', // ReturnAmountIsNotEnough(uint256,uint256)
     '0xf4059071': 'The venue could not collect the token — the approval was short or withdrawn.', // SafeTransferFromFailed()
     '0x28ebf247': 'The route came back with nothing, so there was no trade to make.', // ZeroReturnAmount()
+    /*
+     * The output binding (PLAN.md 1.4): a trade whose proceeds would not have reached the owner is
+     * refused on chain. Which rule refused it is worth saying — the first is a price or routing
+     * problem, the second is a fill aimed at somebody else.
+     */
+    '0xbab03309': 'The trade would have delivered less to your wallet than its floor, so it was refused. Nothing was placed.', // OutputNotReceived(uint256,uint256)
+    '0xcd8f6b48': 'The fill named a recipient other than your wallet, so it was refused. Nothing was placed.', // RecipientNotActiveOwner(address,address)
+    '0x1b6d1fa0': 'The order did not say what your wallet should receive, so nothing was placed.', // InvalidTokenOut()
+    '0x2870c094': 'The order had no minimum for your wallet to receive, so nothing was placed.', // ZeroMinOut()
+    '0xa156bd0a': 'Cash cannot leave through the close path — the daily cap governs it. Nothing was placed.', // SettlementTokenNotClosable()
   };
   const selector = /(?:custom error|reverted with|signature)[^0-9a-fx]*(0x[0-9a-f]{8})\b/.exec(e)?.[1];
   if (selector && BY_SELECTOR[selector]) return BY_SELECTOR[selector];

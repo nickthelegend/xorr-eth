@@ -78,6 +78,8 @@ contract XorrSwapVMBook {
     error NotAuthorisedOperator(address caller, address principal);
     error FeeTooHigh(uint256 feeBps);
     error DeadlineInPast(uint256 deadline);
+    /// @notice A delegated fill named someone other than the owner whose capital is paying for it.
+    error RecipientNotActiveOwner(address recipient, address activeOwner);
 
     /// @dev 10% is already absurd for a maker spread; past that it is a mistake, not a strategy.
     uint256 internal constant MAX_FEE_BPS = 1_000;
@@ -258,6 +260,16 @@ contract XorrSwapVMBook {
         uint256 amountOutMin
     ) external returns (uint256 amountOut) {
         if (msg.sender != address(DELEGATION)) revert NotAuthorisedOperator(msg.sender, principal);
+        /*
+         * The output goes to the owner whose capital is paying, and nobody else.
+         *
+         * `principal` came from calldata the delegate wrote, so a leaked delegate key could spend an
+         * owner's cap here and name itself — `to: principal` below would then deliver the proceeds
+         * to the thief. The delegation records whose trade is executing for exactly the length of
+         * the venue call. PLAN.md 1.4.
+         */
+        address active = DELEGATION.activeOwner();
+        if (principal != active) revert RecipientNotActiveOwner(principal, active);
 
         IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
         IERC20(tokenIn).approve(address(SWAP_VM), amountIn);
