@@ -19,7 +19,6 @@ import {
   Fill,
   HeaderBar,
   LoadingRows,
-  NoteStrip,
   Screen,
   SheetCard,
   Text,
@@ -29,7 +28,6 @@ import {
   space,
 } from '@/ui';
 import { shortAddress } from '@/format';
-import { userSigningNote, userSigningWorks } from '@/chain';
 import { useApprovals, type ApprovalSpender, type TokenApproval } from '@/wallet/useApprovals';
 
 export default function Approvals() {
@@ -68,8 +66,6 @@ export default function Approvals() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: space.s30, gap: space.s10 }}
           >
-            {/* Said before a button is pressed, not by a revert afterwards. See src/chain.ts. */}
-            {userSigningWorks ? null : <NoteStrip kind="blocked">{userSigningNote}</NoteStrip>}
             {error ? (
               <Text variant="secondary" color={colors.down}>
                 {error}
@@ -144,7 +140,7 @@ function ApprovalRow({
   const tone = token.unread || token.none ? colors.ink40 : token.unlimited ? colors.warn : colors.up;
   const state = token.unread ? 'Could not be read' : token.none ? 'None' : token.unlimited ? 'Unlimited' : 'Limited';
   const busy = spender !== null && revoking === `${spender}:${token.symbol}`;
-  const canTakeBack = !token.none && !token.unread && spender !== null && userSigningWorks;
+  const canTakeBack = !token.none && !token.unread && spender !== null;
   return (
     <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>

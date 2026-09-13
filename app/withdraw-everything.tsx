@@ -44,7 +44,6 @@ import { withdrawals } from '@/data/withdrawals';
 import { useAllowlist, usableFromText, usableIn } from '@/wallet/allowlist';
 import { useWithdrawEverything } from '@/wallet/useWithdrawEverything';
 import type { Step } from '@/wallet/withdrawEverything';
-import { userSigningNote, userSigningWorks } from '@/chain';
 
 const STATUS: Readonly<Record<Step['status'], { label: string; tone: TagTone }>> = {
   waiting: { label: 'Not started', tone: 'neutral' },
@@ -195,13 +194,6 @@ export default function WithdrawEverything() {
             </>
           )}
 
-          {/* Said before the button is pressed, not by a revert afterwards. See src/chain.ts. */}
-          {userSigningWorks ? null : (
-            <NoteStrip kind="blocked" style={{ marginTop: space.s12 }}>
-              {userSigningNote}
-            </NoteStrip>
-          )}
-
           {error ? (
             <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s12 }}>
               {error}
@@ -234,7 +226,7 @@ export default function WithdrawEverything() {
             }
             variant="destructive"
             height={size.buttonLg}
-            disabled={!userSigningWorks || !destination}
+            disabled={!destination}
             loading={running}
             onPress={press}
           />

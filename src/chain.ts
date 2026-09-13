@@ -61,7 +61,6 @@ export const chainLabel =
       ? 'Base Sepolia'
       : 'Base (local fork)';
 
-
 /**
  * Where a transaction the USER signs is broadcast (PLAN.md 4.1).
  *
@@ -85,17 +84,6 @@ export const chainLabel =
  * RPC it is given. This is only the transactions a PERSON signs — the grant, the approvals, a withdrawal.
  */
 export const walletSignsOnly = CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet';
-
-/**
- * Can the USER's wallet sign on this chain? On every chain this app builds for, now that a fork
- * build signs through `walletSignsOnly`. The screens that asked still read it, and stop asking once
- * the withdrawal work (PLAN.md 4.9) that also edits them has landed.
- */
-export const userSigningWorks = true;
-
-export const userSigningNote =
-  `This build settles on ${chainLabel}. Your wallet signs and this app sends the transaction to that ` +
-  `network, because Privy's own network for this chain id is public Base.`;
 
 /**
  * Can a deposit code name the chain this build is on?

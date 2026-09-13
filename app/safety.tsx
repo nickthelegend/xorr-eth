@@ -42,7 +42,6 @@ import {
   killExplanation,
   killTitle,
 } from '@/state/derived';
-import { userSigningNote, userSigningWorks } from '@/chain';
 import { useStore } from '@/state/store';
 import { useAllowlist } from '@/wallet/allowlist';
 import { useApprovals, type ApprovalsView } from '@/wallet/useApprovals';
@@ -625,26 +624,6 @@ export default function Safety() {
         </ScrollView>
       </Fill>
 
-      {/*
-        The kill switch has to tell the truth about itself before it is pressed.
-
-        On a fork build the user's wallet signs through Privy against real Base, where it holds
-        nothing — so `revoke()` cannot land. The grant screen has said so up front since it was
-        written; this screen did not, and the result was the worst version of it: tapping
-        "Stop all agents" changed nothing, showed nothing, and left "Agents are live · 5 agents can
-        place orders" on screen. The failure WAS reported — at the bottom of a scroll area several
-        screens long, as five lines of viem containing the RPC URL, the Privy app id and the entire
-        signed transaction.
-
-        So the note is here, the error is here, and the button is disabled rather than pretending.
-        An emergency stop that silently does nothing is worse than one that says it cannot.
-      */}
-      {userSigningWorks ? null : (
-        <NoteStrip kind="blocked" style={{ marginBottom: space.s10 }}>
-          {userSigningNote}
-        </NoteStrip>
-      )}
-
       {error ? (
         <Text
           variant="secondarySm"
@@ -675,7 +654,6 @@ export default function Safety() {
             variant={killed || unusable || expired ? 'primary' : 'destructive'}
             height={size.buttonLg}
             loading={busy}
-            disabled={!userSigningWorks}
             onPress={toggle}
           />
           <Text

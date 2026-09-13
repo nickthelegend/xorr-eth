@@ -49,7 +49,6 @@ import { transferCall } from '@/wallet/transfer';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { formatEther, type Address } from 'viem';
 import { MINUS, shortAddress } from '@/format';
-import { userSigningNote, userSigningWorks } from '@/chain';
 
 const FIELD_H = 52;
 
@@ -109,7 +108,7 @@ export default function Send() {
   const { estimateFee } = useGrantDelegation();
   const settledAmount = useDebounced(amount);
   const feeFor =
-    userSigningWorks && token && entry && Number(settledAmount) > 0
+    token && entry && Number(settledAmount) > 0
       ? `${token.address}:${entry.address}:${settledAmount}`
       : '';
   const fee = useAsync(async () => {
@@ -128,7 +127,7 @@ export default function Send() {
       ? Number(formatEther(fee.data.gas * fee.data.gasPrice)) * ethPrice.price
       : undefined;
 
-  const ready = userSigningWorks && Boolean(entry) && typed > 0 && !overBalance && Boolean(token);
+  const ready = Boolean(entry) && typed > 0 && !overBalance && Boolean(token);
 
   return (
     <Screen>
@@ -258,13 +257,6 @@ export default function Send() {
           A new address takes effect after a cooling-off period, counted by the executor. Adding one
           now does not let you send to it today.
         </NoteStrip>
-
-        {/* Said before the button is pressed, not by a revert afterwards. See src/chain.ts. */}
-        {userSigningWorks ? null : (
-          <NoteStrip kind="blocked" style={{ marginTop: space.s10 }}>
-            {userSigningNote}
-          </NoteStrip>
-        )}
 
         {problem ? (
           <Text variant="secondary" color={colors.down} style={{ marginTop: space.s12 }}>
