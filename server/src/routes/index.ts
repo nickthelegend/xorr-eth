@@ -671,7 +671,7 @@ routes.post('/delegation/revoke', async (c) => {
 routes.get('/positions', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json([]);
-  return c.json(await listPositions(w.id));
+  return c.json(await listPositions(w));
 });
 
 /**
@@ -819,7 +819,7 @@ routes.get('/disposals', async (c) => {
 
 routes.get('/positions/:id', async (c) => {
   const w = await requireWallet(c);
-  const position = await getPosition(w.id, c.req.param('id'));
+  const position = await getPosition(w, c.req.param('id'));
   // An id that is not in this wallet's book is not found — see `getPosition`, which used to answer
   // it with the first position it had.
   if (!position) return c.json({ error: 'not_found', message: 'No position with that id in this wallet.' }, 404);

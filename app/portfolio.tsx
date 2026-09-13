@@ -34,6 +34,7 @@ import {
   size,
   space,
   toCandles,
+  NoteStrip,
 } from '@/ui';
 import { PositionCard, PositionCardSkeleton, type PositionLevel } from '@/ui/PositionCard';
 import { Rise } from '@/ui/Rise';
@@ -44,6 +45,7 @@ import { repos } from '@/data';
 import { system } from '@/data/system';
 import { useAsync } from '@/data/useAsync';
 import type { Strategy } from '@/data/types';
+import { driftSentence, holdingDrift } from '@/state/derived';
 
 const GRAPH_H = 150;
 /** A week of four-hour closes for the graph; two days of hourly closes on each card. */
@@ -305,6 +307,15 @@ export default function Portfolio() {
               />
             ))
           )}
+          {/* Where the ledger and the wallet disagree, said beside the cards it changes (PLAN.md 2.7). */}
+          {book.map((p) => {
+            const drift = holdingDrift(p);
+            return drift ? (
+              <NoteStrip key={`drift-${p.id}`} kind="risk" style={{ marginTop: space.s10 }}>
+                {driftSentence(p.symbol, drift)}
+              </NoteStrip>
+            ) : null;
+          })}
         </Rise>
 
         <Rise index={4} style={card}>

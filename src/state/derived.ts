@@ -5,7 +5,7 @@
  * several were corrected during review." Every function here is pure and unit-tested against the
  * handoff's own stated outputs in derived.test.ts.
  */
-import { MINUS, money, percent, price, signedMoney } from '../format';
+import { MINUS, money, percent, price, quantity, signedMoney } from '../format';
 import type { Bar } from '../data/types';
 import { DEFAULT_BUY } from '@/data/tradable';
 
@@ -575,4 +575,26 @@ export function expiryNote(expiresAt: number | undefined, now = Date.now()): str
   }
   const hours = Math.max(1, Math.round((expiresAt! - now) / 3_600_000));
   return `Your permission runs out in ${hours === 1 ? 'an hour' : `${hours} hours`}. The bot stops on its own when it does; granting again takes a minute.`;
+}
+
+/**
+ * Where a position's recorded units and the wallet's own balance disagree (PLAN.md 2.7).
+ *
+ * `missing` — the ledger records more than the wallet holds. The executor already caps the size at
+ * the balance, so this explains a size smaller than the trade history suggests.
+ * `unrecorded` — the wallet holds more than was bought here. That extra has no recorded cost, so it
+ * is not counted. Null when the two agree to within a millionth of a unit (the server's dust line),
+ * or when the chain could not be asked.
+ */
+export function holdingDrift(p: { driftUnits?: number | null }): { kind: 'missing' | 'unrecorded'; units: number } | null {
+  const d = p.driftUnits;
+  if (d === null || d === undefined || !Number.isFinite(d) || Math.abs(d) <= 0.000001) return null;
+  return d > 0 ? { kind: 'missing', units: d } : { kind: 'unrecorded', units: -d };
+}
+
+/** The drift, said plainly beside the numbers it changes. */
+export function driftSentence(symbol: string, drift: { kind: 'missing' | 'unrecorded'; units: number }): string {
+  return drift.kind === 'missing'
+    ? `${quantity(drift.units)} ${symbol} on record is not in your wallet, so size and value show what the wallet holds.`
+    : `${quantity(drift.units)} ${symbol} in your wallet was not bought here, so it has no recorded cost and is not counted.`;
 }

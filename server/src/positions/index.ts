@@ -13,6 +13,9 @@ import type { PoolClient } from 'pg';
 import { one, query } from '../db/index.js';
 import { THIS_CHAIN } from '../db/chain-scope.js';
 import { priceOf } from '../market/prices.js';
+import { chainUnitsOf } from '../evm/balances.js';
+import { readChain } from '../http/chain-read.js';
+import type { Address } from 'viem';
 
 export type PositionRow = {
   id: string;
@@ -50,6 +53,12 @@ export type Position = {
    */
   realised: number;
   unitsSold: number;
+  /** What the executor's ledger records, before the chain check. */
+  ledgerUnits: number;
+  /** What the wallet holds on this chain, or `null` where the token cannot be asked about here. */
+  chainUnits: number | null;
+  /** `ledgerUnits − chainUnits`: positive when the ledger records more than the wallet holds. */
+  driftUnits: number | null;
 };
 
 /**
@@ -196,10 +205,17 @@ export async function applyFill(
 }
 
 /**
- * Read the book, valued at the live mark.
+ * Read the book, valued at the live mark and held to what the wallet actually has.
  * A symbol with no feed comes back `feed: 'unavailable'` rather than with a guessed mark.
+ *
+ * The ledger is what the executor recorded; the chain is what the wallet holds (PLAN.md 2.7). They part
+ * ways — a fork rebuilt under the book, a token sent out of the wallet directly — and the Portfolio
+ * listed the ledger's WETH beside a balance with none in it. Units are capped at the chain balance, the
+ * cost basis scaled with them so the entry price is unchanged, and the difference is returned as
+ * `driftUnits` for the screen to show. A token this chain cannot be asked about is listed as recorded
+ * with `chainUnits: null`; a balance read that fails is a 502, never an empty or unchecked book.
  */
-export async function listPositions(walletId: string): Promise<Position[]> {
+export async function listPositions(wallet: { id: string; address: string }): Promise<Position[]> {
   const rows = await query<PositionRow>(
     /*
      * Dust is not a holding.
@@ -210,11 +226,15 @@ export async function listPositions(walletId: string): Promise<Position[]> {
      * deliberately tiny: anything at or below a millionth of a unit cannot be worth a row.
      */
     `SELECT * FROM positions WHERE wallet_id=$1 AND chain = ${THIS_CHAIN} AND units > 0.000001 ORDER BY updated_at DESC`,
-    [walletId],
+    [wallet.id],
   );
 
-  const marks = await marksFor(rows.map((r) => r.symbol));
-  return rows.map((r) => toPosition(r, marks.get(r.symbol)));
+  const symbols = rows.map((r) => r.symbol);
+  const [marks, held] = await Promise.all([
+    marksFor(symbols),
+    readChain('your holdings', () => chainUnitsOf(wallet.address as Address, symbols)),
+  ]);
+  return rows.map((r) => toPosition(r, marks.get(r.symbol), held.get(r.symbol) ?? null));
 }
 
 /**
@@ -243,11 +263,19 @@ async function marksFor(symbols: string[]): Promise<Map<string, number>> {
   return marks;
 }
 
-/** A ledger row valued at `mark`, or reported unpriced when there is no mark. */
-function toPosition(r: PositionRow, mark: number | undefined): Position {
-  const units = Number(r.units);
-  const cost = Number(r.cost_usd);
-  const entry = units > 0 ? cost / units : 0;
+/**
+ * A ledger row valued at `mark` (reported unpriced without one) and capped at `chainUnits`, what the
+ * wallet holds — `null` where that could not be asked.
+ */
+function toPosition(r: PositionRow, mark: number | undefined, chainUnits: number | null): Position {
+  const ledgerUnits = Number(r.units);
+  const ledgerCost = Number(r.cost_usd);
+  // A balance can confirm a long spot holding. It says nothing about a short.
+  const onChain = r.side === 'long' ? chainUnits : null;
+  const units = onChain === null ? ledgerUnits : Math.min(ledgerUnits, onChain);
+  // Scaled with the units: the entry stays what was paid, and nothing is valued that is not held.
+  const cost = ledgerUnits > 0 ? ledgerCost * (units / ledgerUnits) : 0;
+  const entry = ledgerUnits > 0 ? ledgerCost / ledgerUnits : 0;
   const leverage = Number(r.leverage);
   const feed: 'live' | 'unavailable' = mark === undefined ? 'unavailable' : 'live';
   const value = units * (mark ?? 0);
@@ -267,6 +295,9 @@ function toPosition(r: PositionRow, mark: number | undefined): Position {
     unrealised,
     unrealisedPct: cost > 0 && feed === 'live' ? (unrealised / cost) * 100 : 0,
     units,
+    ledgerUnits,
+    chainUnits: onChain,
+    driftUnits: onChain === null ? null : Number((ledgerUnits - onChain).toFixed(9)),
     // Spot carries no funding. A perp position would accrue it; there are none yet.
     fundingPaid: 0,
     feed,
@@ -282,14 +313,21 @@ function toPosition(r: PositionRow, mark: number | undefined): Position {
  * mistyped route — opened the wallet's first position instead, and the screen showed WETH under a
  * tap on something else. PLAN.md 1.7.
  */
-export async function getPosition(walletId: string, id: string): Promise<Position | null> {
+export async function getPosition(
+  wallet: { id: string; address: string },
+  id: string,
+): Promise<Position | null> {
   // One row, priced once. It priced the whole book to keep one entry of it (PLAN.md 2.3).
   const row = await one<PositionRow>(
     `SELECT * FROM positions WHERE wallet_id=$1 AND id=$2 AND chain = ${THIS_CHAIN} AND units > 0.000001`,
-    [walletId, id],
+    [wallet.id, id],
   );
   if (!row) return null;
-  return toPosition(row, (await marksFor([row.symbol])).get(row.symbol));
+  const [marks, held] = await Promise.all([
+    marksFor([row.symbol]),
+    readChain('your holdings', () => chainUnitsOf(wallet.address as Address, [row.symbol])),
+  ]);
+  return toPosition(row, marks.get(row.symbol), held.get(row.symbol) ?? null);
 }
 
 /**

@@ -27,14 +27,16 @@ import {
   radius,
   size,
   space,
-  ErrorState,} from '@/ui';
+  ErrorState,
+  NoteStrip,
+} from '@/ui';
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { logoProps, useLogos } from '@/data/useLogos';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
-import { weightBarPct } from '@/state/derived';
+import { driftSentence, holdingDrift, weightBarPct } from '@/state/derived';
 
 const BAR_H = 8;
 
@@ -171,6 +173,15 @@ export default function Assets() {
             />
           ))
         )}
+        {/* Where the ledger and the wallet disagree, said beside the numbers it changes (PLAN.md 2.7). */}
+        {holdings.map((h) => {
+          const drift = holdingDrift(h);
+          return drift ? (
+            <NoteStrip key={`drift-${h.id}`} kind="risk" style={{ marginTop: space.s10 }}>
+              {driftSentence(h.symbol, drift)}
+            </NoteStrip>
+          ) : null;
+        })}
 
         {/*
           Money actually taken, kept apart from money on paper.

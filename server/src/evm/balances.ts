@@ -12,7 +12,7 @@
 import { erc20Abi, formatUnits, type Address } from 'viem';
 import { publicClient } from './client.js';
 import { ADDRESSES } from './chains.js';
-import { TOKENS } from '../venues/oneinch.js';
+import { TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { priceOf } from '../market/prices.js';
 import { aavePoolIsDeployedHere, usdcReserve } from '../market/yield.js';
 
@@ -111,6 +111,49 @@ export async function holdings(owner: Address): Promise<Holding[]> {
       return { symbol, units, usd: units * price, raw };
     }),
   );
+}
+
+/**
+ * How many units of each symbol this wallet holds on the chain — for holding a ledger to it (PLAN.md 2.7).
+ *
+ * `null` for a symbol this chain cannot be asked about: not in the registry, the settlement token, or
+ * one whose code cannot be called here (see `readableTokens`). That means "not checked", never "holds
+ * none". One multicall, and a read that fails throws, so a failure cannot come back as a zero.
+ */
+export async function chainUnitsOf(owner: Address, symbols: string[]): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>(symbols.map((s) => [s, null]));
+  /*
+   * Asked under the registry's name, answered under the ledger's.
+   *
+   * Ledger rows can predate the registry's spelling — `CBBTC` for `cbBTC` — and looked up as written
+   * they were never checked at all. Two rows spelling one token differently would each be held to the
+   * whole balance; the book has none, and the unique index is per spelling, so it is said here.
+   */
+  const spellings = new Map<string, string[]>();
+  for (const s of new Set(symbols)) {
+    const name = canonicalSymbol(s);
+    if (!TOKENS[name] || name === 'ETH' || name === 'USDC') continue;
+    spellings.set(name, [...(spellings.get(name) ?? []), s]);
+  }
+  // Nothing in the registry means nothing to ask, and no code checks either.
+  if (spellings.size === 0) return out;
+  const readable = new Map(await readableTokens());
+  const asked = [...spellings.keys()].filter((name) => readable.has(name));
+  if (asked.length === 0) return out;
+  const balances = await publicClient.multicall({
+    allowFailure: false,
+    contracts: asked.map((name) => ({
+      address: readable.get(name)!.address,
+      abi: erc20Abi,
+      functionName: 'balanceOf' as const,
+      args: [owner] as const,
+    })),
+  });
+  asked.forEach((name, i) => {
+    const units = Number(formatUnits(balances[i] as bigint, readable.get(name)!.decimals));
+    for (const s of spellings.get(name)!) out.set(s, units);
+  });
+  return out;
 }
 
 /**

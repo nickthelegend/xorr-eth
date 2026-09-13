@@ -559,3 +559,25 @@ describe('permission expiry — the deadline nothing read', () => {
     expect(d.expiryNote(undefined, now)).toBeUndefined();
   });
 });
+
+describe('a position the wallet does not match — PLAN.md 2.7', () => {
+  it('a ledger over the wallet is missing units; a wallet over the ledger has unrecorded ones', () => {
+    expect(d.holdingDrift({ driftUnits: 0.802587 })).toEqual({ kind: 'missing', units: 0.802587 });
+    expect(d.holdingDrift({ driftUnits: -0.2 })).toEqual({ kind: 'unrecorded', units: 0.2 });
+  });
+
+  it('agreement, dust and an unasked chain are not drift', () => {
+    expect(d.holdingDrift({ driftUnits: 0 })).toBeNull();
+    expect(d.holdingDrift({ driftUnits: 0.0000004 })).toBeNull();
+    expect(d.holdingDrift({ driftUnits: null })).toBeNull();
+    expect(d.holdingDrift({})).toBeNull();
+  });
+
+  it('says which way it runs, in units of the asset', () => {
+    const missing = d.driftSentence('WETH', { kind: 'missing', units: 0.802587 });
+    expect(missing).toContain('WETH on record is not in your wallet');
+    expect(missing).toMatch(/^0\.8026 /);
+    expect(d.driftSentence('WETH', { kind: 'unrecorded', units: 0.2 })).toContain('WETH in your wallet was not bought here');
+  });
+});
+

@@ -23,9 +23,13 @@ vi.mock('../db/index.js', () => ({
   }),
 }));
 vi.mock('../market/prices.js', () => ({ priceOf: vi.fn() }));
+vi.mock('../evm/balances.js', () => ({ chainUnitsOf: vi.fn() }));
 
 const { priceOf } = await import('../market/prices.js');
+const { chainUnitsOf } = await import('../evm/balances.js');
 const { listPositions, getPosition } = await import('./index.js');
+
+const WALLET = { id: 'wallet-1', address: '0x95A0b368588713011a15f4b1041423f31B08e615' };
 
 const position = (over: Record<string, unknown>) => ({
   id: 'p1',
@@ -45,6 +49,9 @@ beforeEach(() => {
   h.one = undefined;
   h.sql.length = 0;
   vi.mocked(priceOf).mockReset();
+  // Unchecked against the chain unless a test says otherwise: these are about pricing (see drift.test.ts).
+  vi.mocked(chainUnitsOf).mockReset();
+  vi.mocked(chainUnitsOf).mockImplementation(async (_owner, symbols) => new Map<string, number | null>(symbols.map((s) => [s, null])));
 });
 
 describe('the book', () => {
@@ -64,7 +71,7 @@ describe('the book', () => {
       position({ id: 'p3', side: 'short' }),
     ];
 
-    const book = await listPositions('wallet-1');
+    const book = await listPositions(WALLET);
     expect(vi.mocked(priceOf)).toHaveBeenCalledTimes(2);
     expect(peak).toBe(2);
     for (const call of vi.mocked(priceOf).mock.calls) expect(typeof call[1]).toBe('number');
@@ -80,7 +87,7 @@ describe('the book', () => {
     });
     h.rows = [position({ id: 'p1' }), position({ id: 'p9', symbol: 'NVDAc', units: '2', cost_usd: '360' })];
 
-    const [weth, nvda] = await listPositions('wallet-1');
+    const [weth, nvda] = await listPositions(WALLET);
     expect(weth).toMatchObject({ feed: 'live', unrealised: 50 });
     expect(nvda).toMatchObject({ feed: 'unavailable', mark: 0, notional: 0, unrealised: 0, unrealisedPct: 0 });
   });
@@ -91,7 +98,7 @@ describe('one position', () => {
     vi.mocked(priceOf).mockResolvedValue(60_000);
     h.one = position({ id: 'p2', symbol: 'cbBTC', units: '0.002', cost_usd: '100' });
 
-    const p = await getPosition('wallet-1', 'p2');
+    const p = await getPosition(WALLET, 'p2');
     expect(p).toMatchObject({ id: 'p2', symbol: 'cbBTC', mark: 60_000, unrealised: 20 });
     expect(h.sql).toHaveLength(1);
     expect(h.sql[0]).toMatchObject({ fn: 'one', params: ['wallet-1', 'p2'] });
@@ -99,7 +106,7 @@ describe('one position', () => {
   });
 
   it('an id not in this book is null, and nothing is priced', async () => {
-    expect(await getPosition('wallet-1', 'someone-elses')).toBeNull();
+    expect(await getPosition(WALLET, 'someone-elses')).toBeNull();
     expect(priceOf).not.toHaveBeenCalled();
   });
 });

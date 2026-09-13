@@ -176,6 +176,12 @@ export type Position = {
   units: number;
   fundingPaid: number;
   feed: 'live' | 'unavailable';
+  /** What the executor's ledger records. `units` is capped at what the wallet holds (PLAN.md 2.7). */
+  ledgerUnits?: number;
+  /** What the wallet holds on this chain; `null` where the token cannot be asked about here. */
+  chainUnits?: number | null;
+  /** `ledgerUnits − chainUnits`: positive when the ledger records more than the wallet holds. */
+  driftUnits?: number | null;
 };
 
 export type Proposal = {

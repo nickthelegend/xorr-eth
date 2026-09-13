@@ -53,6 +53,7 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useLogo } from '@/data/useLogos';
 import { errorText } from '@/data/apiError';
+import { driftSentence, holdingDrift } from '@/state/derived';
 
 /** The close bar. 6pt — a readout, not a control; the pills below it do the setting. */
 const BAR_H = 6;
@@ -159,6 +160,7 @@ export default function PositionScreen() {
   }
 
   const flat = p.units <= 0;
+  const drift = holdingDrift(p);
 
   return (
     <Screen>
@@ -198,6 +200,12 @@ export default function PositionScreen() {
               divider={false}
             />
           </SheetCard>
+
+          {drift ? (
+            <NoteStrip kind="risk" style={{ marginTop: space.s14 }}>
+              {driftSentence(p.symbol, drift)}
+            </NoteStrip>
+          ) : null}
 
           {closed ? (
             <NoteStrip kind="acted" style={{ marginTop: space.s14 }}>

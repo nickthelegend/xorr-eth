@@ -17,9 +17,9 @@ const walletId = randomUUID();
 const OTHER = 'chain-scope-probe';
 // No price feed, so nothing in this file reaches the network.
 const SYMBOL = 'CHAINPROBE';
+const address = `0x${(randomUUID() + randomUUID()).replace(/-/g, '').slice(0, 40)}`;
 
 beforeAll(async () => {
-  const address = `0x${(randomUUID() + randomUUID()).replace(/-/g, '').slice(0, 40)}`;
   await query(`INSERT INTO wallets (id, user_id, address, kind, cluster) VALUES ($1, $2, $3, 'connected', $4)`, [
     walletId,
     `did:privy:chain-scope-${walletId}`,
@@ -65,7 +65,7 @@ describe('the book', () => {
     await tx((c) => applyFill(c, { walletId, symbol: SYMBOL, units: 1, usd: 10 }));
     await tx((c) => applyFill(c, { walletId, symbol: SYMBOL, units: 1, usd: 10 }));
 
-    const book = await listPositions(walletId);
+    const book = await listPositions({ id: walletId, address });
     expect(book).toHaveLength(1);
     expect(book[0]).toMatchObject({ symbol: SYMBOL, units: 2, feed: 'unavailable' });
 
