@@ -244,16 +244,21 @@ export async function compareVenues(params: {
       ? {
           venue: 'swapvm',
           /*
-           * A SwapVM program commits to a floor, not a quote: the fill is whatever the router
-           * computes at execution, bounded below by the minimum compiled into the bytecode. So the
-           * honest number here is that floor, and it is labelled as one rather than presented as a
-           * price the maker promised.
+           * What the program delivers for this fill, not its floor (PLAN.md 3.20).
+           *
+           * The floor is the aggregator's own quote less the scheduled slippage, so reporting it ranked SwapVM
+           * exactly 30 bps under the aggregator at every size, by construction. The dry run of `spend()` runs the
+           * router and returns its answer. The floor is still what the bytecode enforces, and is named as such;
+           * it stands in only when the dry run returned nothing to read.
            */
-          outAmount: outUnits(swapVm.minOut),
-          detail: 'shipped program, floor enforced in bytecode',
+          outAmount: outUnits(swapVm.expectedOut ?? swapVm.minOut),
+          detail:
+            swapVm.expectedOut === undefined
+              ? 'shipped program, floor enforced in bytecode'
+              : `maker program, at least ${Number(outUnits(swapVm.minOut).toPrecision(6))} enforced in bytecode`,
           served: true,
           gasUsd: swapVmGas,
-          netUsd: net(outUnits(swapVm.minOut), swapVmGas),
+          netUsd: net(outUnits(swapVm.expectedOut ?? swapVm.minOut), swapVmGas),
         }
       : {
           venue: 'swapvm',

@@ -42,6 +42,8 @@ export async function placeOrder(
   rawSymbol: string,
   usd: number,
   label?: string,
+  /** Carried into the one-shot row's params: a swap's own slippage tolerance (PLAN.md 3.9). */
+  extra: Record<string, unknown> = {},
 ): Promise<OrderResult> {
   // Equities are `NVDAc`/`TSLAc`; uppercasing loses the suffix and the venue lookup misses.
   const symbol = canonicalSymbol(rawSymbol);
@@ -73,7 +75,7 @@ export async function placeOrder(
       w.id,
       label ?? `${money(usd)} of ${symbol}`,
       symbol,
-      JSON.stringify({ usd, manual: true }),
+      JSON.stringify({ ...extra, usd, manual: true }),
       usd,
     ],
   );

@@ -21,7 +21,7 @@ const getLogs = vi.fn();
 const readContract = vi.fn();
 const getBlockNumber = vi.fn(async () => 1_000_000n);
 /** The dry run of `spend()` that decides whether a discovered program can actually fill. */
-const simulateContract = vi.fn(async (..._a: unknown[]) => ({ request: {} }));
+const simulateContract = vi.fn(async (..._a: unknown[]): Promise<{ request: object; result?: unknown }> => ({ request: {} }));
 
 vi.mock('../evm/client.js', () => ({
   publicClient: {
@@ -202,6 +202,29 @@ describe('building the fill', () => {
     // Encoding the calldata in TypeScript would be a second implementation free to drift from the
     // contract that has to accept it.
     expect(call.args[1]).toBe(params.owner);
+  });
+
+  it('keeps what the dry run says the program delivers, beside the floor (PLAN.md 3.20)', async () => {
+    byEvent([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)], []);
+    readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
+    // `spend()` returns the venue's own return data: `fillForDelegation`'s amount out.
+    simulateContract.mockResolvedValueOnce({
+      request: {},
+      result: encodeAbiParameters(parseAbiParameters('uint256'), [1_004_000_000_000_000_000n]),
+    });
+
+    const fill = await buildSwapVmFill(params);
+    expect(fill?.expectedOut).toBe(1_004_000_000_000_000_000n);
+    expect(fill?.minOut).toBe(997_000_000_000_000_000n);
+  });
+
+  it('leaves the delivered amount unknown when the dry run returns nothing to read', async () => {
+    byEvent([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)], []);
+    readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);
+
+    const fill = await buildSwapVmFill(params);
+    expect(fill).toBeDefined();
+    expect(fill?.expectedOut).toBeUndefined();
   });
 
   it('returns undefined when nothing is shipped — the ordinary case, not an error', async () => {

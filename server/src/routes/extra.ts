@@ -523,6 +523,12 @@ extra.post('/notify/test', async (c) => {
 
 extra.get('/swap/quote', async (c) => {
   requireUser(c);
+  // The tolerance the screen shows is the one it quotes at, and the one a swap is then sent with (PLAN.md 3.9).
+  const slippage = c.req.query('slippage');
+  const slippagePct = slippage === undefined ? undefined : Number(slippage);
+  if (slippagePct !== undefined && !(slippagePct >= 0.05 && slippagePct <= 3)) {
+    return c.json({ error: 'slippage must be between 0.05 and 3 percent' }, 400);
+  }
   try {
     const q = await quote({
       // Not `.toUpperCase()`: tokenized equities are `NVDAc`, `TSLAc`, and uppercasing them
@@ -530,6 +536,7 @@ extra.get('/swap/quote', async (c) => {
       inSymbol: canonicalSymbol(c.req.query('in') ?? 'ETH'),
       outSymbol: canonicalSymbol(c.req.query('out') ?? 'USDC'),
       amount: Number(c.req.query('amount') ?? 1),
+      slippagePct,
     });
     return c.json(q);
   } catch (e) {

@@ -11,7 +11,7 @@
  * `uint256` as a string it stays a string — parsing it to a number here would round MAX_UINT256 to
  * 1.15e77 and every screen comparing it would be comparing a lie.
  */
-import { api } from './api';
+import { api, ApiError } from './api';
 import type { AnchorReport, RouteComparison } from './types';
 
 /* ─────────────────────────────────────────────────────────── trust and proof */
@@ -199,6 +199,25 @@ export type CrossCheck = {
 };
 
 export type TradableToken = { symbol: string; address: string; decimals: number };
+
+/** The body `POST /swap` takes: the pair, the amount as typed, and the tolerance (PLAN.md 3.9). */
+export type SwapBody = { from: string; to: string; amount: string; slippagePct?: number };
+
+/** What a swap came back as: what arrived and where it settled, or why nothing moved. */
+export type SwapOutcome =
+  | {
+      status: 'filled';
+      from: string;
+      to: string;
+      sold: number;
+      received: number | null;
+      usd: number;
+      venue: string | null;
+      measured?: boolean;
+      txHash: string;
+    }
+  | { status: 'blocked'; reason: string; detail: string }
+  | { status: 'failed'; error: string };
 
 /* ──────────────────────────────────────────────────────────── strategy runs */
 
@@ -437,6 +456,20 @@ export const system = {
   tradable: () => api.get<TradableToken[]>('/market/tradable'),
   /** What a strategy can follow here, settleable or not — where nothing settles, a portfolio is watched over these. */
   watchable: () => api.get<TradableToken[]>('/market/watchable'),
+  /**
+   * One swap, placed now (PLAN.md 3.9). A refusal (409) or a failure (502, 503) carries the executor's own
+   * sentence in its body, so it is returned for the screen to show rather than thrown as a status code.
+   */
+  swap: async (body: SwapBody): Promise<SwapOutcome> => {
+    try {
+      return await api.post<SwapOutcome>('/swap', body);
+    } catch (e) {
+      if (e instanceof ApiError && e.body && typeof e.body === 'object' && 'status' in e.body) {
+        return e.body as SwapOutcome;
+      }
+      throw e;
+    }
+  },
 
   /* identity */
   basenameOf: (address: string) =>

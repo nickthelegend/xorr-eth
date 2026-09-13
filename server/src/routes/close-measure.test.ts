@@ -66,13 +66,15 @@ describe('a close', () => {
     expect(vi.mocked(applyFill).mock.calls[0]![1]).toEqual({ walletId: 'wallet-1', symbol: 'WETH', units: -0.5, usd: -1240.5 });
 
     const strategy = inserted('strategies')!;
-    expect(strategy.text).toMatch(/'close', 'ended'/);
-    expect(strategy.params.slice(1, 4)).toEqual(['wallet-1', 'Sold all WETH', 'WETH']);
+    expect(strategy.text).toMatch(/\$3, 'ended'/);
+    expect(strategy.params[2]).toBe('close');
+    expect([strategy.params[1], strategy.params[3], strategy.params[4]]).toEqual(['wallet-1', 'Sold all WETH', 'WETH']);
     const run = inserted('strategy_runs')!;
-    expect(run.text).toMatch(/'filled', \$4, \$5, \$6, \$7, '1inch', 'sell'/);
+    expect(run.text).toMatch(/'filled', \$4, \$5, \$6, \$7, \$8, 'sell'/);
+    expect(run.params[7]).toBe('1inch');
     expect(run.params[1]).toBe(strategy.params[0]);
-    // usd, units, price, signature, quoted_usd, asset_class
-    expect(run.params.slice(3)).toEqual([1240.5, 0.5, 2481, `0x${'ab'.repeat(32)}`, 1250, 'crypto']);
+    // usd, units, price, signature, venue, quoted_usd, asset_class
+    expect(run.params.slice(3)).toEqual([1240.5, 0.5, 2481, `0x${'ab'.repeat(32)}`, '1inch', 1250, 'crypto']);
 
     const trail = vi.mocked(append).mock.calls[0]![0] as { detail: string; payload: Record<string, unknown> };
     expect(trail.detail).toBe('0.500000 WETH for $1,240.50 USDC.');
@@ -84,7 +86,7 @@ describe('a close', () => {
     const out = await closeHolding({ wallet, symbol: 'WETH', fraction: 1, actor: 'You' });
 
     expect(out.body).toMatchObject({ usd: 1250, measured: false });
-    expect(inserted('strategy_runs')!.params[7]).toBeNull();
+    expect(inserted('strategy_runs')!.params[8]).toBeNull();
     const trail = vi.mocked(append).mock.calls[0]![0] as { detail: string };
     expect(trail.detail).toBe('0.500000 WETH for about $1,250.00 USDC (the balance could not be read back).');
   });
@@ -94,8 +96,8 @@ describe('a close', () => {
     const out = await closeHolding({ wallet, symbol: 'WETH', fraction: 0.25, actor: 'You' });
 
     expect(out.body).toMatchObject({ units: 0.125, usd: 311 });
-    expect(inserted('strategies')!.params[2]).toBe('Sold 25% of WETH');
+    expect(inserted('strategies')!.params[3]).toBe('Sold 25% of WETH');
     // The arrival value of a quarter of the holding.
-    expect(inserted('strategy_runs')!.params[7]).toBe(312.5);
+    expect(inserted('strategy_runs')!.params[8]).toBe(312.5);
   });
 });

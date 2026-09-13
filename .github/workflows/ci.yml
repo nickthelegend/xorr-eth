@@ -108,7 +108,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
 
       - uses: foundry-rs/foundry-toolchain@v1
 
@@ -117,9 +119,13 @@ jobs:
           test -n "$ONEINCH_API_KEY" || { echo "::error::ONEINCH_API_KEY is not set as a repository secret"; exit 1; }
           test -n "$BASE_RPC" || { echo "::error::BASE_RPC is not set as a repository secret"; exit 1; }
 
-      - name: Install the executor
-        run: npm ci --ignore-scripts
-        working-directory: server
+      # Both installs, not just the executor's: its suite loads `tools/wait-for-warm.ts`, which esbuild compiles
+      # against the repo-root tsconfig — and that extends `expo/tsconfig.base`, which only the root install provides.
+      # With the executor's install alone the run died before collecting a file.
+      - name: Install
+        run: |
+          npm ci --ignore-scripts
+          (cd server && npm ci --ignore-scripts)
 
       - name: Fork Base
         run: |

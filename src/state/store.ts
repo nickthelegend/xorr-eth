@@ -18,9 +18,6 @@ import {
   CAP_STEP,
   SL_MAX,
   SL_MIN,
-  SWAP_MAX,
-  SWAP_MIN,
-  SWAP_STEP,
   TPSL_STEP,
   TP_MAX,
   TP_MIN,
@@ -65,7 +62,6 @@ type OrderSlice = {
   side: 'buy' | 'sell';
   lev: number;
   closePct: number;
-  swapAmt: number;
   bumpTp: (dir: 1 | -1) => void;
   setTp: (v: number) => void;
   setSl: (v: number) => void;
@@ -75,7 +71,6 @@ type OrderSlice = {
   setSide: (s: 'buy' | 'sell') => void;
   setLev: (l: number) => void;
   setClosePct: (p: number) => void;
-  bumpSwap: (dir: 1 | -1) => void;
 };
 
 // ── Onboarding profile (server-persisted) ──
@@ -183,7 +178,6 @@ export const useStore = create<Store>()(
       side: 'buy',
       lev: 5,
       closePct: 50,
-      swapAmt: 0.1,
       bumpTp: (dir) => set((s) => ({ tp: round1(clamp(s.tp + dir * TPSL_STEP, TP_MIN, TP_MAX)) })),
       bumpSl: (dir) => set((s) => ({ sl: round1(clamp(s.sl + dir * TPSL_STEP, SL_MIN, SL_MAX)) })),
 
@@ -201,8 +195,6 @@ export const useStore = create<Store>()(
       setSide: (side) => set({ side }),
       setLev: (lev) => set({ lev }),
       setClosePct: (closePct) => set({ closePct }),
-      bumpSwap: (dir) =>
-        set((s) => ({ swapAmt: clamp(s.swapAmt + dir * SWAP_STEP, SWAP_MIN, SWAP_MAX) })),
 
       // ── onboarding ──
       goals: ['Grow long term'],

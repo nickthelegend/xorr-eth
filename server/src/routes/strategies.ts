@@ -36,6 +36,7 @@ import { equitiesFunctional, isStock } from '../venues/stocks.js';
 import { readPolicy } from '../evm/delegation.js';
 import type { Address } from 'viem';
 import { placeOrder } from '../executor/order.js';
+import { placeSwap } from '../executor/swap.js';
 import { currentWallet, requireWallet, type WalletRow } from './wallet-context.js';
 
 export const strategyRoutes = new Hono();
@@ -465,6 +466,27 @@ strategyRoutes.post('/orders', async (c) => {
   const order = await placeOrder(w, body.symbol, body.usd);
   if (!order.placed) return c.json(order.refusal, 409);
   return c.json({ ...order.outcome, orderId: order.orderId }, httpStatusFor(order.outcome));
+});
+
+/**
+ * One swap, placed now — the request the Swap screen sends (PLAN.md 3.9). `placeSwap` says how each pair settles.
+ */
+const SwapInput = z.object({
+  from: z.string().min(1).max(12),
+  to: z.string().min(1).max(12),
+  // The decimal as typed, parsed into the token's own base units exactly — never through a float.
+  amount: z
+    .string()
+    .regex(/^\d{1,12}(\.\d{1,18})?$/, 'a plain decimal amount')
+    .refine((a) => Number(a) > 0, 'an amount above zero'),
+  slippagePct: z.number().min(0.05).max(3).optional(),
+});
+
+strategyRoutes.post('/swap', async (c) => {
+  const w = await requireWallet(c);
+  const body = SwapInput.parse(await c.req.json());
+  const swap = await placeSwap(w, body);
+  return c.json(swap.body, swap.status as 200 | 400 | 409 | 502 | 503);
 });
 
 /**

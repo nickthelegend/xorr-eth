@@ -154,22 +154,33 @@ describe('position close — screen 22 (unrealised $318.40, margin $3800)', () =
   });
 });
 
-describe('swap — screen 19', () => {
-  it('out = amt * 88.32 * 0.9975 and fee is 0.25%', () => {
-    expect(d.swapOut(12, 88.32)).toBeCloseTo(12 * 88.32 * 0.9975, 10);
-    expect(d.swapFee(12, 88.32)).toBeCloseTo(12 * 88.32 * 0.0025, 10);
+describe('swap — screen 19 (PLAN.md 3.9)', () => {
+  it('sends the amount as typed, with the pair and the tolerance chosen', () => {
+    expect(d.swapRequest({ pay: 'WETH', receive: 'CBBTC', amount: '0.1', slippagePct: 0.5 })).toEqual({
+      from: 'WETH',
+      to: 'CBBTC',
+      amount: '0.1',
+      slippagePct: 0.5,
+    });
   });
 
-  it('the fill percentage tracks the 1..1750 range', () => {
-    // Bounds are in units of the pay token (WETH on Base), not the prototype's SOL amounts.
-    expect(d.swapPct(d.SWAP_MAX)).toBe(100);
-    expect(d.swapPct(d.SWAP_MAX / 2)).toBe(50);
+  it('builds nothing the executor would only refuse: no amount, a zero, a bare point, or one token twice', () => {
+    expect(d.swapRequest({ pay: 'USDC', receive: 'WETH', amount: '0', slippagePct: 0.3 })).toBeNull();
+    expect(d.swapRequest({ pay: 'USDC', receive: 'WETH', amount: '0.', slippagePct: 0.3 })).toBeNull();
+    expect(d.swapRequest({ pay: 'USDC', receive: 'WETH', amount: '', slippagePct: 0.3 })).toBeNull();
+    expect(d.swapRequest({ pay: 'WETH', receive: 'weth', amount: '1', slippagePct: 0.3 })).toBeNull();
   });
 
-  it('a 4-figure swap keeps its thousands separator (the review finding)', () => {
-    // 1750 SOL x $88.32 = $154,560, less the 0.25% fee.
-    expect(money(d.swapOut(1750, 88.32))).toBe('$154,173.60');
-    expect(money(d.swapOut(1750, 88.32))).toContain(',');
+  it('pays USDC from cash and anything else from the holding, and knows unknown from none', () => {
+    const balance = { cash: 120.5, holdings: [{ symbol: 'WETH', units: 0.25 }] };
+    expect(d.swapSpendable(balance, 'USDC')).toBe(120.5);
+    expect(d.swapSpendable(balance, 'WETH')).toBe(0.25);
+    expect(d.swapSpendable(balance, 'CBBTC')).toBe(0);
+    expect(d.swapSpendable(undefined, 'WETH')).toBeUndefined();
+  });
+
+  it('offers only tolerances the executor accepts', () => {
+    for (const pct of d.SWAP_SLIPPAGES) expect(pct >= 0.05 && pct <= 3).toBe(true);
   });
 });
 

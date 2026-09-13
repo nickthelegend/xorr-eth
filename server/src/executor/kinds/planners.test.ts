@@ -48,6 +48,14 @@ describe('tier 1 — recurring buy', () => {
       'WETH',
     );
   });
+
+  it('a one-shot order a person placed says so, and carries the tolerance it was placed with (PLAN.md 3.9)', () => {
+    const placed = planDca({ owner: OWNER, budgetUsd: 20, params: { usd: 20, manual: true, slippagePct: 0.5 }, symbol: 'WETH' });
+    expect(placed).toMatchObject({ because: 'Placed by you.', slippagePct: 0.5 });
+    const scheduled = planDca({ owner: OWNER, budgetUsd: 20, params: {}, symbol: 'WETH' });
+    expect(scheduled.because).toBe('Scheduled recurring buy.');
+    expect(scheduled).not.toHaveProperty('slippagePct');
+  });
 });
 
 describe('tier 2 — rebalance', () => {

@@ -73,6 +73,7 @@ const GROUPS: Group[] = [
     title: 'Markets',
     blurb: 'The instruments, and where their numbers come from.',
     items: [
+      { route: '/swap', title: 'Swap', detail: 'Any token you hold for another, through your permission' },
       { route: '/movers', title: 'Movers', detail: "Today's largest moves, both directions" },
       { route: '/tokens', title: 'Tokens', detail: 'What settles on this chain, with addresses' },
       { route: '/compare', title: 'Compare', detail: 'Two instruments over the same range' },

@@ -56,6 +56,12 @@ export type TradeIntent = {
    */
   amountInRaw?: bigint;
   /**
+   * The slippage tolerance a person chose for this trade, in percent (PLAN.md 3.9).
+   *
+   * Set only for a trade someone placed with one — a swap — and then it is the tolerance every venue gets.
+   */
+  slippagePct?: number;
+  /**
    * Not every leg is a swap.
    *
    * Supplying to a lending pool moves the same capital under the same daily cap, but there is no
@@ -213,7 +219,9 @@ export function planDca(ctx: PlanContext): TradeIntent {
     outSymbol: ctx.symbol === 'ETH' ? 'WETH' : ctx.symbol,
     amountIn: ctx.budgetUsd,
     usd: ctx.budgetUsd,
-    because: 'Scheduled recurring buy.',
+    because: ctx.params.manual === true ? 'Placed by you.' : 'Scheduled recurring buy.',
+    // A one-shot order placed with a tolerance of its own — a swap — carries it to settlement (PLAN.md 3.9).
+    ...(typeof ctx.params.slippagePct === 'number' ? { slippagePct: ctx.params.slippagePct } : {}),
   };
 }
 

@@ -43,7 +43,7 @@ import { snapshotWallet } from '../portfolio/snapshots.js';
 export const panic = new Hono();
 
 /** Below this a sale costs more in gas than it returns. Selling it anyway is a disservice. */
-const DUST_USD = 1;
+export const DUST_USD = 1;
 
 type Leg = {
   symbol: string;
@@ -63,7 +63,7 @@ type Leg = {
  * One `close` strategy per sale — already ended, so nothing schedules it — and its filled run, in the
  * same transaction as the position change.
  */
-async function recordSale(
+export async function recordSale(
   client: PoolClient,
   sale: {
     walletId: string;
@@ -74,19 +74,23 @@ async function recordSale(
     /** The arrival value, when the proceeds were measured. Null leaves the sale unmeasured. */
     quotedUsd: number | null;
     signature: string;
+    /** A sale into the settlement token is a `close`; one into any other token is a `swap` (PLAN.md 3.9). */
+    kind?: 'close' | 'swap';
+    /** Where it settled. A close goes to the aggregator; a swap names the venue its settlement chose. */
+    venue?: string;
   },
 ): Promise<string> {
   const strategyId = randomUUID();
   await client.query(
     `INSERT INTO strategies (id, wallet_id, kind, state, label, symbol, params, daily_allocation_usd)
-     VALUES ($1, $2, 'close', 'ended', $3, $4, $5, 0)`,
-    [strategyId, sale.walletId, sale.label, sale.symbol, JSON.stringify({ manual: true })],
+     VALUES ($1, $2, $3, 'ended', $4, $5, $6, 0)`,
+    [strategyId, sale.walletId, sale.kind ?? 'close', sale.label, sale.symbol, JSON.stringify({ manual: true })],
   );
   const runId = randomUUID();
   await client.query(
     `INSERT INTO strategy_runs
        (id, strategy_id, period_key, status, usd, units, price, signature, venue, side, quoted_usd, asset_class, finished_at)
-     VALUES ($1, $2, $3, 'filled', $4, $5, $6, $7, '1inch', 'sell', $8, $9, now())`,
+     VALUES ($1, $2, $3, 'filled', $4, $5, $6, $7, $8, 'sell', $9, $10, now())`,
     [
       runId,
       strategyId,
@@ -95,6 +99,7 @@ async function recordSale(
       sale.units,
       sale.units > 0 ? sale.proceedsUsd / sale.units : null,
       sale.signature,
+      sale.venue ?? '1inch',
       sale.quotedUsd,
       isStock(sale.symbol) ? 'equity' : 'crypto',
     ],

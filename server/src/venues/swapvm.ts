@@ -179,7 +179,23 @@ export type SwapVmFill = {
    * risking a second, drifting implementation of it.
    */
   minOut: bigint;
+  /**
+   * What the program delivers for exactly this fill (PLAN.md 3.20). The dry run of `spend()` executes the fill,
+   * and `spend()` returns the venue's own return data — `fillForDelegation`'s amount out. Undefined when that
+   * came back empty or undecodable; the floor is then all that is known.
+   */
+  expectedOut?: bigint;
 };
+
+/** The amount out a venue call returned through `spend()`, or undefined when there is none to read. */
+function deliveredBy(result: Hex | undefined): bigint | undefined {
+  if (!result || result === '0x') return undefined;
+  try {
+    return decodeAbiParameters([{ type: 'uint256' }], result)[0];
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Build a fill against a shipped program.
@@ -254,7 +270,7 @@ export async function buildSwapVmFill(params: {
      * cannot fill is skipped and the loop moves on; if none can, the caller routes to 1inch, which
      * is the correct outcome rather than a failure.
      */
-    const fillable = await publicClient
+    const dryRun = await publicClient
       .simulateContract({
         account: delegateAccount,
         address: DELEGATION_ADDRESS,
@@ -262,11 +278,21 @@ export async function buildSwapVmFill(params: {
         functionName: 'spend',
         args: [params.owner, token, venue, amount, params.tokenOut, minOut, data],
       })
-      .then(() => true)
-      .catch(() => false);
-    if (!fillable) continue;
+      .then((r) => ({ fillable: true as const, result: r.result as Hex | undefined }))
+      .catch(() => ({ fillable: false as const, result: undefined }));
+    if (!dryRun.fillable) continue;
 
-    return { token, venue, amount, data, tokenOut: params.tokenOut, order: p.order, hash: p.hash, minOut };
+    return {
+      token,
+      venue,
+      amount,
+      data,
+      tokenOut: params.tokenOut,
+      order: p.order,
+      hash: p.hash,
+      minOut,
+      expectedOut: deliveredBy(dryRun.result),
+    };
   }
   return undefined;
 }

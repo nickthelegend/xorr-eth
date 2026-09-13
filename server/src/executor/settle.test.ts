@@ -1,10 +1,11 @@
 /**
- * Where a leg settles, with every venue stood in for (PLAN.md 3.8, and the test half of 3.4).
+ * Where a leg settles, with every venue stood in for (PLAN.md 3.8 and 3.20, and the test half of 3.4).
  *
- * `chooseSettlement` is the ordering rule: Aqua when a book serves the size, then a maker's SwapVM program, then the
- * aggregator — a direct leg to its own venue, and never a book on a close. These cases prove which builder is asked,
- * with what, and which floor the leg is held to, including that "route to 1inch" skips the books only when an Aqua
- * index gave that answer.
+ * `chooseSettlement` is best execution: every venue that can serve the leg says what it would deliver, and the leg
+ * settles where the owner receives the most — a book when it pays at least the aggregator's quote, Aqua over SwapVM
+ * on a tie — a direct leg to its own venue, and never a book on a close. These cases prove which builder is asked,
+ * with what, which venue wins, and which floor the leg is held to, including that "route to 1inch" skips the books
+ * only when an Aqua index gave that answer.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeFunctionData, parseAbi } from 'viem';
@@ -86,15 +87,15 @@ const QUOTE: SwapQuote = {
   estimatedGas: 184_000,
 };
 
-/** A maker's book serving the whole size: its quote, 0.03995 WETH, less 0.3%. */
+/** A maker's book that pays more than the aggregator quotes: 0.0401 WETH, held to that less 0.3%. */
 const AQUA_FILL: AquaFill = {
   token: USDC,
   venue: AQUA_BOOK,
   amount: 100_000_000n,
   data: '0xaaaa',
-  quotedOut: 39_950_000_000_000_000n,
+  quotedOut: 40_100_000_000_000_000n,
   tokenOut: WETH,
-  minOut: 39_830_150_000_000_000n,
+  minOut: 39_979_700_000_000_000n,
   strategy: {
     maker: MAKER,
     token0: WETH,
@@ -107,7 +108,10 @@ const AQUA_FILL: AquaFill = {
   hash: `0x${'a1'.repeat(32)}`,
 };
 
-/** A maker's SwapVM program: the quote less 0.3%, compiled into the order. */
+/** The same book, shallow: it can serve the size, but pays 0.03995 WETH — less than the aggregator's 0.04. */
+const AQUA_SHORT: AquaFill = { ...AQUA_FILL, quotedOut: 39_950_000_000_000_000n, minOut: 39_830_150_000_000_000n };
+
+/** A maker's SwapVM program: its dry run delivers 0.0402 WETH; its compiled floor is the quote less 0.3%. */
 const SWAPVM_FILL: SwapVmFill = {
   token: USDC,
   venue: SWAPVM_BOOK,
@@ -117,6 +121,7 @@ const SWAPVM_FILL: SwapVmFill = {
   order: { maker: MAKER, traits: 1n, data: '0xdeadbeef' },
   hash: `0x${'b2'.repeat(32)}`,
   minOut: 39_880_000_000_000_000n,
+  expectedOut: 40_200_000_000_000_000n,
 };
 
 /** A recognisable tolerance: whatever the spy answers is what must reach the router. */
@@ -134,15 +139,15 @@ beforeEach(() => {
   vi.mocked(aquaIndexConfigured).mockReset().mockReturnValue(false);
 });
 
-describe('the venue order', () => {
-  it("fills against an Aqua book that serves the size, at the book's own floor, and asks nothing after it", async () => {
+describe('best execution across venues (PLAN.md 3.20)', () => {
+  it("settles through an Aqua book that delivers more than the aggregator quotes, held to the book's floor", async () => {
     vi.mocked(buildAquaFill).mockResolvedValue(AQUA_FILL);
 
     expect(await settle(buy())).toEqual({
       payToken: { address: USDC, decimals: 6 },
       swap: { to: AQUA_BOOK, data: '0xaaaa' },
       venue: 'aqua',
-      floor: { tokenOut: WETH, minOut: 39_830_150_000_000_000n },
+      floor: { tokenOut: WETH, minOut: 39_979_700_000_000_000n },
     });
     // $100 in USDC's six decimals, and the scheduled 0.3% as a fraction.
     expect(buildAquaFill).toHaveBeenCalledWith({
@@ -152,12 +157,26 @@ describe('the venue order', () => {
       amountIn: 100_000_000n,
       slippage: 0.003,
     });
-    expect(quote).not.toHaveBeenCalled();
-    expect(buildSwapVmFill).not.toHaveBeenCalled();
+    // The price it had to beat.
+    expect(quote).toHaveBeenCalledWith({ inSymbol: 'USDC', outSymbol: 'WETH', amount: 100 });
     expect(buildSwap).not.toHaveBeenCalled();
   });
 
-  it("with no book deep enough, fills a SwapVM program priced from the quote in the output token's own units", async () => {
+  it("takes the aggregator when a book can serve the size but delivers less than the aggregator's quote", async () => {
+    vi.mocked(buildAquaFill).mockResolvedValue(AQUA_SHORT);
+
+    expect(await settle(buy())).toEqual({
+      payToken: { address: USDC, decimals: 6 },
+      swap: { to: ROUTER, data: '0x1111' },
+      venue: '1inch',
+      floor: { tokenOut: WETH, minOut: 39_820_000_000_000_000n },
+    });
+    expect(slippageFor).toHaveBeenCalledWith(0.3, 0.42);
+    expect(buildSwap).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles through a SwapVM program whose dry run delivers the most, its floor priced from the quote in the output token's units", async () => {
+    vi.mocked(buildAquaFill).mockResolvedValue(AQUA_FILL);
     vi.mocked(buildSwapVmFill).mockResolvedValue(SWAPVM_FILL);
 
     expect(await settle(buy())).toEqual({
@@ -166,8 +185,6 @@ describe('the venue order', () => {
       venue: 'swapvm',
       floor: { tokenOut: WETH, minOut: 39_880_000_000_000_000n },
     });
-    expect(buildAquaFill).toHaveBeenCalledTimes(1);
-    expect(quote).toHaveBeenCalledWith({ inSymbol: 'USDC', outSymbol: 'WETH', amount: 100 });
     // The 0.04 WETH quoted, in WETH's eighteen decimals — not USDC's six.
     expect(buildSwapVmFill).toHaveBeenCalledWith({
       owner: OWNER,
@@ -180,6 +197,24 @@ describe('the venue order', () => {
     expect(buildSwap).not.toHaveBeenCalled();
   });
 
+  it('lets a book keep a tie with the aggregator, and Aqua keep a tie with SwapVM', async () => {
+    vi.mocked(buildAquaFill).mockResolvedValue({ ...AQUA_FILL, quotedOut: 40_000_000_000_000_000n });
+    expect((await settle(buy())).venue).toBe('aqua');
+
+    vi.mocked(buildAquaFill).mockResolvedValue(AQUA_FILL);
+    vi.mocked(buildSwapVmFill).mockResolvedValue({ ...SWAPVM_FILL, expectedOut: AQUA_FILL.quotedOut });
+    expect((await settle(buy())).venue).toBe('aqua');
+    expect(buildSwap).not.toHaveBeenCalled();
+  });
+
+  it('holds a program whose dry run returned nothing to read to its floor, which the aggregator beats', async () => {
+    vi.mocked(buildSwapVmFill).mockResolvedValue({ ...SWAPVM_FILL, expectedOut: undefined });
+
+    expect((await settle(buy())).venue).toBe('1inch');
+  });
+});
+
+describe('the legs around it', () => {
   it("with neither book serving, the aggregator fills from the delegation to the owner, at the router's floor", async () => {
     expect(await settle(buy())).toEqual({
       payToken: { address: USDC, decimals: 6 },
@@ -198,18 +233,25 @@ describe('the venue order', () => {
       receiver: OWNER,
       slippagePct: WIDENED,
     });
-    // Aqua first, then the quote SwapVM needs, then SwapVM, then the aggregator.
-    const asked = [
-      vi.mocked(buildAquaFill).mock.invocationCallOrder[0],
-      vi.mocked(quote).mock.invocationCallOrder[0],
-      vi.mocked(buildSwapVmFill).mock.invocationCallOrder[0],
-      vi.mocked(buildSwap).mock.invocationCallOrder[0],
-    ];
-    expect(asked.every((n) => typeof n === 'number')).toBe(true);
-    expect(asked).toEqual([...asked].sort((a, b) => a! - b!));
+    // Both books were asked, after the quote they are held against; the router is built only once neither wins.
+    expect(buildAquaFill).toHaveBeenCalledTimes(1);
+    expect(buildSwapVmFill).toHaveBeenCalledTimes(1);
+    const [quoted] = vi.mocked(quote).mock.invocationCallOrder;
+    const [built] = vi.mocked(buildSwap).mock.invocationCallOrder;
+    expect(quoted).toBeLessThan(vi.mocked(buildSwapVmFill).mock.invocationCallOrder[0]!);
+    expect(built).toBeGreaterThan(vi.mocked(buildAquaFill).mock.invocationCallOrder[0]!);
   });
 
-  it('does not try SwapVM when the quote failed, and the aggregator falls back to the urgency ceiling', async () => {
+  it('without a quote, takes a book that serves — its own quote is real — and never asks SwapVM', async () => {
+    vi.mocked(quote).mockRejectedValue(new Error('429 after 5 attempts'));
+    vi.mocked(buildAquaFill).mockResolvedValue(AQUA_SHORT);
+
+    expect((await settle(buy())).venue).toBe('aqua');
+    expect(buildSwapVmFill).not.toHaveBeenCalled();
+    expect(buildSwap).not.toHaveBeenCalled();
+  });
+
+  it('without a quote or a book, the aggregator falls back to the urgency ceiling', async () => {
     vi.mocked(quote).mockRejectedValue(new Error('429 after 5 attempts'));
 
     const s = await settle(buy());
@@ -219,21 +261,17 @@ describe('the venue order', () => {
     expect(s.venue).toBe('1inch');
   });
 
-  it('treats an Aqua builder that throws as "not served", and moves on to SwapVM', async () => {
+  it('treats a book whose builder throws as not served', async () => {
     vi.mocked(buildAquaFill).mockRejectedValue(new Error('execution reverted: EmptyBook()'));
     vi.mocked(buildSwapVmFill).mockResolvedValue(SWAPVM_FILL);
-
     expect((await settle(buy())).venue).toBe('swapvm');
-  });
 
-  it('treats a SwapVM builder that throws as "not served", and moves on to the aggregator', async () => {
     vi.mocked(buildSwapVmFill).mockRejectedValue(new Error('fetch failed'));
-
     expect((await settle(buy())).venue).toBe('1inch');
     expect(buildSwap).toHaveBeenCalledTimes(1);
   });
 
-  it('sends a direct leg to its own venue at its own floor, and asks no book and no aggregator', async () => {
+  it('sends a direct leg to its own venue at its own floor, and asks no quote, no book and no aggregator', async () => {
     // Supplying $100 of idle USDC to Aave: the calldata is the whole trade, and the aToken is what the owner receives.
     const direct: NonNullable<TradeIntent['direct']> = {
       venue: AAVE_POOL,
@@ -255,13 +293,14 @@ describe('the venue order', () => {
       venue: 'aave',
       floor: { tokenOut: A_USDC, minOut: 99_990_000n },
     });
+    expect(quote).not.toHaveBeenCalled();
     expect(buildAquaFill).not.toHaveBeenCalled();
     expect(buildSwapVmFill).not.toHaveBeenCalled();
     expect(buildSwap).not.toHaveBeenCalled();
   });
 
   it('never tries a book on a close, and gives the aggregator the stop ceiling widened by the quote', async () => {
-    // Books that WOULD serve, and an index recommending one: a close still does not ask them.
+    // Books that WOULD win, and an index recommending one: a close still does not ask them.
     vi.mocked(buildAquaFill).mockResolvedValue(AQUA_FILL);
     vi.mocked(buildSwapVmFill).mockResolvedValue(SWAPVM_FILL);
     vi.mocked(quote).mockResolvedValue({
@@ -309,6 +348,15 @@ describe('the venue order', () => {
     });
   });
 
+  it("gives every venue the tolerance a person chose, in place of the executor's own (PLAN.md 3.9)", async () => {
+    await settle(buy({ slippagePct: 0.5 }));
+
+    expect(vi.mocked(buildAquaFill).mock.calls[0]![0]).toMatchObject({ slippage: 0.005 });
+    expect(vi.mocked(buildSwapVmFill).mock.calls[0]![0]).toMatchObject({ slippage: 0.005 });
+    expect(slippageFor).not.toHaveBeenCalled();
+    expect(vi.mocked(buildSwap).mock.calls[0]![0]).toMatchObject({ slippagePct: 0.5 });
+  });
+
   it('throws on an input token with no registry entry, before any venue is asked', async () => {
     await expect(settle(buy({ inSymbol: 'DOGE' }))).rejects.toThrow('No token registry entry for DOGE');
     expect(buildAquaFill).not.toHaveBeenCalled();
@@ -342,12 +390,12 @@ describe('"route to 1inch" skips the books only when an Aqua index gave that ans
     expect(buildSwap).not.toHaveBeenCalled();
   });
 
-  it('still asks SwapVM when no Aqua index is configured and Aqua cannot serve', async () => {
+  it('still asks SwapVM when no Aqua index is configured, and a program there wins', async () => {
     vi.mocked(buildSwapVmFill).mockResolvedValue(SWAPVM_FILL);
 
     const s = await settle(buy(), { preferred: '1inch' });
 
-    expect(buildAquaFill).toHaveBeenCalledTimes(1);
+    expect(buildSwapVmFill).toHaveBeenCalledTimes(1);
     expect(s.venue).toBe('swapvm');
     expect(buildSwap).not.toHaveBeenCalled();
   });

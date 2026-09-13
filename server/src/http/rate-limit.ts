@@ -69,7 +69,7 @@ const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000);
  * and leave the expensive one open.
  */
 const UPSTREAM_PATHS = [
-  '/swap/quote',
+  '/swap', // the quote, and the swap itself
   '/orders',
   '/strategies/', // …/:id/run
   '/agent/strategies/',

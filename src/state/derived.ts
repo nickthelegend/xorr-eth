@@ -183,23 +183,40 @@ export function closeCta(pct: number): string {
 // ── Swap (screen 19) ─────────────────────────────────────────────────────────
 
 /**
- * Swap slider bounds, in units of the PAY token.
+ * The swap a person composed, as the executor takes it — the body `POST /swap` receives (PLAN.md 3.9).
  *
- * The design's 1 / 1750 / 4 were "1750.30 SOL" from the prototype. The pay side on Base is WETH,
- * where 12 units is ~$30,000 — a default nobody means to type. Sized for the asset instead.
+ * The amount stays the decimal they typed: the executor parses it into the token's own base units, so no float
+ * stands between "0.1 WETH" and the wei the delegation pulls. `null` when there is nothing to send — no amount, or
+ * the same token on both sides — so the screen cannot build a request the executor would only refuse.
+ *
+ * It replaced `swapOut`, `swapFee` and the slider bounds: the prototype's arithmetic, with a 0.25% fee nobody charges.
  */
-export const SWAP_MIN = 0.01;
-export const SWAP_MAX = 10;
-export const SWAP_STEP = 0.05;
+export function swapRequest(input: {
+  pay: string;
+  receive: string;
+  amount: string;
+  slippagePct: number;
+}): { from: string; to: string; amount: string; slippagePct: number } | null {
+  const amount = input.amount.trim();
+  if (!/^\d+(\.\d+)?$/.test(amount) || !(Number(amount) > 0)) return null;
+  if (input.pay.toUpperCase() === input.receive.toUpperCase()) return null;
+  return { from: input.pay, to: input.receive, amount, slippagePct: input.slippagePct };
+}
 
-export function swapOut(amount: number, unitPrice: number): number {
-  return amount * unitPrice * 0.9975;
-}
-export function swapFee(amount: number, unitPrice: number): number {
-  return amount * unitPrice * 0.0025;
-}
-export function swapPct(amount: number): number {
-  return (amount / SWAP_MAX) * 100;
+/** The tolerances the swap screen offers, in percent. The executor accepts 0.05 to 3. */
+export const SWAP_SLIPPAGES = [0.1, 0.3, 0.5, 1] as const;
+
+/**
+ * How much of `symbol` a balance can pay: the settlement token is cash, anything else is the holding the chain
+ * reports. `undefined` while the balance is unknown — never a zero standing in for "not loaded yet".
+ */
+export function swapSpendable(
+  balance: { cash: number; holdings: readonly { symbol: string; units: number }[] } | null | undefined,
+  symbol: string,
+): number | undefined {
+  if (!balance) return undefined;
+  if (symbol === 'USDC') return balance.cash;
+  return balance.holdings.find((h) => h.symbol === symbol)?.units ?? 0;
 }
 
 // ── Portfolio proposal (screen 10) ───────────────────────────────────────────

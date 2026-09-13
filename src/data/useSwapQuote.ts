@@ -24,8 +24,8 @@ export type SwapQuoteResult = {
   route: string;
 };
 
-export function useSwapQuote(inSymbol: string, outSymbol: string, amount: number) {
-  const key = `${inSymbol}:${outSymbol}:${amount}`;
+export function useSwapQuote(inSymbol: string, outSymbol: string, amount: number, slippagePct?: number) {
+  const key = `${inSymbol}:${outSymbol}:${amount}:${slippagePct ?? ''}`;
   // `loading` is DERIVED by comparing the settled key against the current one, the same way
   // useAsync does it. Setting a loading flag in the effect body cascades a render on every tap
   // of the amount stepper.
@@ -40,7 +40,10 @@ export function useSwapQuote(inSymbol: string, outSymbol: string, amount: number
     let alive = true;
     const t = setTimeout(() => {
       api
-        .get<SwapQuoteResult>(`/swap/quote?in=${inSymbol}&out=${outSymbol}&amount=${amount}`)
+        // At the tolerance the screen shows, so the floor it prints is the one a swap would be held to.
+        .get<SwapQuoteResult>(
+          `/swap/quote?in=${inSymbol}&out=${outSymbol}&amount=${amount}${slippagePct === undefined ? '' : `&slippage=${slippagePct}`}`,
+        )
         .then((q) => {
           if (alive) setSettled({ key, data: q });
         })
@@ -53,7 +56,7 @@ export function useSwapQuote(inSymbol: string, outSymbol: string, amount: number
       alive = false;
       clearTimeout(t);
     };
-  }, [key, inSymbol, outSymbol, amount]);
+  }, [key, inSymbol, outSymbol, amount, slippagePct]);
 
   if (!(amount > 0)) return { data: undefined, loading: false, error: undefined };
   return {
