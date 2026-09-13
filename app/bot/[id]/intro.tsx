@@ -16,6 +16,7 @@ import {
   Button,
   CloseButton,
   EmptyState,
+  ErrorState,
   Fill,
   Screen,
   Text,
@@ -52,8 +53,22 @@ export default function AgentIntro() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const goBack = useGoBack();
-  const { data, loading } = useAsync(() => repos.bot.listAgents(), []);
+  const { data, loading, error, reload } = useAsync(() => repos.bot.listAgents(), []);
   const agent = (data ?? []).find((a) => a.id === id);
+
+  // A roster that could not be read is not a roster without this agent, so it is not "no such agent" either.
+  if (!loading && error && !data) {
+    return (
+      <Screen style={{ backgroundColor: colors.surface, borderRadius: radius.sheetLg }}>
+        <View style={{ alignItems: 'flex-end' }}>
+          <CloseButton onPress={() => goBack()} />
+        </View>
+        <Fill>
+          <ErrorState error={error} onRetry={reload} />
+        </Fill>
+      </Screen>
+    );
+  }
 
   /*
    * A roster miss ends the screen; it does not decorate it.

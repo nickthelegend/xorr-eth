@@ -10,7 +10,6 @@
  * PLAN.md §1.3 item 8: "Never present synthetic data as live."
  */
 import { assetClasses } from './fixtures/markets';
-import { agentFixtures } from './fixtures/agents';
 import { sleeveFixtures } from './fixtures/sleeves';
 import {
   StillWarming,
@@ -187,17 +186,11 @@ export const LocalRepositories: Repositories = {
       // The persisted roster: who is hired, how they are configured, and their real metrics. The
       // roster used to read hired-ness from browser state and metrics from a fixture, so the same
       // fact had two answers and one of them was invented.
-      const remote = await api.get<Agent[]>('/agents').catch(() => undefined);
-      if (remote && remote.length > 0) return remote;
-      // With no server, show the roster WITHOUT performance claims rather than fabricated ones.
-      return agentFixtures.map((a) => ({
-        ...a,
-        metric: 'No record yet',
-        pnl30d: 0,
-        win: 0,
-        trades: 0,
-        hired: false,
-      }));
+      //
+      // No stand-in roster when the server cannot answer. This fell back to the fixture personas "without performance
+      // claims", which was still four agents, a hire count and a row of zeros the server never gave. A failed read is
+      // said by the screen that asked — and a signed-out one asks for a sign-in.
+      return api.get<Agent[]>('/agents');
     },
     async hire(personaId: string): Promise<Agent> {
       return api.post<Agent>('/agents', { personaId });

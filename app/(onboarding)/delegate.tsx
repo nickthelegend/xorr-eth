@@ -28,7 +28,9 @@ import {
   radius,
   size,
   space,
+  SignInButton,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { useAsync } from '@/data/useAsync';
 import { api } from '@/data/api';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
@@ -40,6 +42,7 @@ import { errorText } from '@/data/apiError';
 
 export default function GrantDelegation() {
   const router = useRouter();
+  const signedOut = useSignedOut();
   const cap = useStore((s) => s.cap);
   const bumpCap = useStore((s) => s.bumpCap);
   const runFor = useStore((s) => s.runFor);
@@ -186,11 +189,15 @@ export default function GrantDelegation() {
         </ScrollView>
       </Fill>
 
-      <Button
-        label="Sign this permission"
-        loading={busy}
-        onPress={grant}
-      />
+      {signedOut ? (
+        <SignInButton label="Sign in first" />
+      ) : (
+        <Button
+          label="Sign this permission"
+          loading={busy}
+          onPress={grant}
+        />
+      )}
       <Button
         label="Not yet — look around first"
         variant="ghost"

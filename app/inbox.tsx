@@ -19,7 +19,10 @@ import {
   noteDotColor,
   radius,
   space,
+  ErrorState,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { activityDot } from '@/state/derived';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -40,8 +43,9 @@ function kindFor(action: string, kind: string): AlertKind {
 export default function Inbox() {
   const router = useRouter();
   const goBack = useGoBack();
-  const { data, loading, reload } = useAsync(() => repos.activity.list(), []);
+  const { data, loading, error, reload } = useAsync(() => repos.activity.list(), []);
   const refresh = useRefreshControl(reload);
+  const signedOut = useSignedOut();
 
   return (
     <Screen>
@@ -50,17 +54,21 @@ export default function Inbox() {
         <Text variant="screenTitle">Inbox</Text>
       </View>
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        Everything the bot would have interrupted you for, whether or not it reached your
-        phone.
+        Everything the bot flagged for you.
       </Text>
 
       <Fill style={{ marginTop: space.s14 }}>
-        {loading && !data ? (
+        {signedOut ? (
+          <SignInPrompt />
+        ) : loading && !data ? (
           <LoadingRows count={5} />
+        ) : error && !data ? (
+          /* An inbox that could not be read is not an empty one. It used to say "Nothing to catch up on". */
+          <ErrorState error={error} onRetry={reload} />
         ) : (data ?? []).length === 0 ? (
           <EmptyState
-            text="Nothing to catch up on. The bot only writes here when something needs you."
-            actionLabel="See what it is allowed to do"
+            text="Nothing needs you."
+            actionLabel="What the bot can do"
             onAction={() => router.push('/safety')}
           />
         ) : (

@@ -470,19 +470,43 @@ market.get('/yield/supply', async (c) => {
 const STOCK_PROBE_USD = 1_000;
 
 /**
- * One cached snapshot for everyone.
+ * One cached snapshot for everyone, answered at once and refreshed behind the answer.
  *
  * Eight 1inch quotes take several seconds even in parallel, because the outbound queue in
  * `http/get.ts` spaces requests to stay inside the rate limit. Without this the markets screen
  * blocks on every mount and renders its empty state first. The prices are identical for every
  * user, so caching them is not a shortcut — it is the correct shape.
+ *
+ * A 30-second snapshot that then made its next caller wait out the whole probe still made someone
+ * wait: 8.1 s for Markets and Search on the hosted app (2026-09-14), whenever nobody had asked in
+ * the last half minute. So a snapshot past its TTL is still served — for at most STOCK_STALE_MS —
+ * while one probe refreshes it; only a process with no snapshot, or one too old to stand behind,
+ * makes its caller wait.
  */
 let stockCache: { at: number; rows: unknown[] } | null = null;
+let stockProbe: Promise<unknown[]> | null = null;
 const STOCK_TTL_MS = 30_000;
+const STOCK_STALE_MS = 5 * 60_000;
 
 market.get('/market/stocks', async (c) => {
-  if (stockCache && Date.now() - stockCache.at < STOCK_TTL_MS) return c.json(stockCache.rows);
+  const age = stockCache ? Date.now() - stockCache.at : Infinity;
+  if (stockCache && age < STOCK_TTL_MS) return c.json(stockCache.rows);
+  if (stockCache && age < STOCK_STALE_MS) {
+    void refreshStocks().catch(() => undefined);
+    return c.json(stockCache.rows);
+  }
+  return c.json(await refreshStocks());
+});
 
+/** One probe at a time: callers arriving while it runs share it instead of queueing eight more quotes. */
+function refreshStocks(): Promise<unknown[]> {
+  stockProbe ??= probeStocks().finally(() => {
+    stockProbe = null;
+  });
+  return stockProbe;
+}
+
+async function probeStocks(): Promise<unknown[]> {
   const rows = await Promise.all(
     Object.values(STOCKS).map(async (s) => {
       try {
@@ -509,8 +533,8 @@ market.get('/market/stocks', async (c) => {
     }),
   );
   stockCache = { at: Date.now(), rows };
-  return c.json(rows);
-});
+  return rows;
+}
 
 /**
  * Warm the windows every screen opens on.
@@ -523,6 +547,9 @@ market.get('/market/stocks', async (c) => {
  * refuse to start, and the request path already handles a cold cache.
  */
 export function warmMarketCache(): void {
+  // The equities first: the slowest answer the Markets screen waits on, and one probe serves everyone.
+  void refreshStocks().catch(() => undefined);
+
   // Ordered by what a cold user hits first: the market list, then the default 1D chart, then the
   // rest of the timeframe pills. The upstream serves these one at a time behind a rate limit, so
   // the order is the difference between a fast first screen and a fast last one.

@@ -28,8 +28,10 @@ import {
   radius,
   size,
   space,
+  SignInPrompt,
 } from '@/ui';
 import { AddressQR } from '@/ui/AddressQR';
+import { useAuth } from '@/auth/useAuth';
 import { shortAddress } from '@/format';
 import { activeChain, chainLabel, depositQrNote, depositQrWorks, networkChip } from '@/chain';
 import { useStore } from '@/state/store';
@@ -45,7 +47,10 @@ const QR_SIZE = 168;
 
 export default function Deposit() {
   const goBack = useGoBack();
-  const address = useStore((s) => s.wallet)?.address;
+  const auth = useAuth();
+  const signedOut = auth.ready && !auth.authenticated;
+  // The store's wallet is set by onboarding. A session that never ran it still has Privy's embedded wallet.
+  const address = useStore((s) => s.wallet)?.address ?? auth.address;
   const funds = usePoll(walletFunds, POLL_MS);
   const faucet = useAsync(() => faucetStatus(), []);
   const [copied, setCopied] = useState(false);
@@ -77,15 +82,31 @@ export default function Deposit() {
 
   const status = faucet.data;
 
+  const header = (
+    <View style={{ paddingHorizontal: space.gutter }}>
+      <HeaderBar
+        onBack={goBack}
+        title={<Text variant="screenTitle">Deposit</Text>}
+        right={<Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />}
+      />
+    </View>
+  );
+
+  // Signed out there is no address to show, so no balance or test funds to read for it: one way in.
+  if (signedOut) {
+    return (
+      <Screen gutter="none">
+        {header}
+        <View style={{ paddingHorizontal: space.gutter }}>
+          <SignInPrompt text="Sign in to see your address." />
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen gutter="none">
-      <View style={{ paddingHorizontal: space.gutter }}>
-        <HeaderBar
-          onBack={goBack}
-          title={<Text variant="screenTitle">Deposit</Text>}
-          right={<Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />}
-        />
-      </View>
+      {header}
 
       <Fill style={{ marginTop: space.s16 }}>
         <ScrollView
@@ -100,7 +121,7 @@ export default function Deposit() {
             ) : null}
             {/* In full and selectable rather than shortened: it is going to be pasted somewhere. */}
             <Text variant="body" selectable>
-              {address ?? 'Sign in to see your address.'}
+              {address ?? 'Setting up your wallet…'}
             </Text>
             {address ? (
               <Button

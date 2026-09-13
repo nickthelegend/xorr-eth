@@ -18,17 +18,20 @@ import { agentGradient } from '@/design/gradients';
 import {
   AgentOrb,
   BackButton,
+  ErrorState,
   Fill,
   LoadingRows,
   Press,
   Screen,
   SheetCard,
+  SignInPrompt,
   Text,
   colors,
   radius,
   size,
   space,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { useRefreshControl } from '@/ui/useRefreshControl';
@@ -40,7 +43,8 @@ const HIRE_H = 40;
 export default function Roster() {
   const router = useRouter();
   const goBack = useGoBack();
-  const { data, loading, reload } = useAsync(() => repos.bot.listAgents(), []);
+  const { data, loading, error: readError, reload } = useAsync(() => repos.bot.listAgents(), []);
+  const signedOut = useSignedOut();
   // Pulling down is the gesture people already try on a list of things that keep changing.
   const refresh = useRefreshControl(reload);
   // Which card is mid-flight. Hiring is a write, and a button that does nothing visible
@@ -72,9 +76,12 @@ export default function Roster() {
           <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Agents</Text>
         </View>
-        <Text variant="footnote" color={colors.ink55}>
-          {hiredCount} of {agents.length || 4} hired
-        </Text>
+        {/* Counted from the roster the server gave. "0 of 4" before it answered was a count of nothing. */}
+        {data ? (
+          <Text variant="footnote" color={colors.ink55}>
+            {hiredCount} of {agents.length} hired
+          </Text>
+        ) : null}
       </View>
 
       {error ? (
@@ -84,8 +91,12 @@ export default function Roster() {
       ) : null}
 
       <Fill style={{ marginTop: space.s20 }}>
-        {loading && !data ? (
+        {signedOut ? (
+          <SignInPrompt />
+        ) : loading && !data ? (
           <LoadingRows count={4} height={92} />
+        ) : readError && !data ? (
+          <ErrorState error={readError} onRetry={reload} />
         ) : (
           <ScrollView refreshControl={refresh}
             showsVerticalScrollIndicator={false}

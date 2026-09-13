@@ -1,6 +1,9 @@
 /**
  * Settings — PLAN.md 10.3 [G14]. The Home gear had no destination.
  * Wallet, delegation status + revoke, security, notifications, the TONE DIAL, legal.
+ *
+ * Signed out, the rows that describe a wallet are left out rather than answered with "Unavailable" and
+ * "Not granted", and the session row signs in.
  */
 import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -21,6 +24,7 @@ import {
   radius,
   size,
   space,
+  signIn,
 } from '@/ui';
 import { capLabel } from '@/state/derived';
 import { useStore } from '@/state/store';
@@ -67,7 +71,8 @@ export default function Settings() {
    * signing out changes none of that, and the on-chain permission is untouched by it, which the
    * row says out loud so nobody reads this as a kill switch.
    */
-  const { logout } = useAuth();
+  const { logout, ready, authenticated } = useAuth();
+  const signedOut = ready && !authenticated;
   const setWallet = useStore((s) => s.setWallet);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string>();
@@ -99,30 +104,34 @@ export default function Settings() {
 
       <Fill style={{ marginTop: space.s20 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Eyebrow small>Wallet</Eyebrow>
-          <Row
-            title="Address"
-            value={
-              <Price color={colors.ink55}>
-                {wallet
-                  ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
-                  : unreachable
-                    ? 'Unavailable'
-                    : 'None'}
-              </Price>
-            }
-            height={SETTING_ROW}
-          />
-          <Row
-            title="Recovery"
-            value={
-              <Text variant="rowPrimary" color={recoveryBackedUp ? colors.ink55 : colors.warn}>
-                {recoveryBackedUp ? 'Done' : 'Review'}
-              </Text>
-            }
-            height={SETTING_ROW}
-            onPress={() => router.push('/recovery')}
-          />
+          {signedOut ? null : (
+            <>
+              <Eyebrow small>Wallet</Eyebrow>
+              <Row
+                title="Address"
+                value={
+                  <Price color={colors.ink55}>
+                    {wallet
+                      ? `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`
+                      : unreachable
+                        ? 'Unavailable'
+                        : 'None'}
+                  </Price>
+                }
+                height={SETTING_ROW}
+              />
+              <Row
+                title="Recovery"
+                value={
+                  <Text variant="rowPrimary" color={recoveryBackedUp ? colors.ink55 : colors.warn}>
+                    {recoveryBackedUp ? 'Done' : 'Review'}
+                  </Text>
+                }
+                height={SETTING_ROW}
+                onPress={() => router.push('/recovery')}
+              />
+            </>
+          )}
 
           {/*
             One door to everything the app can show about itself — the verification report, the
@@ -140,88 +149,92 @@ export default function Settings() {
             onPress={() => router.push('/explore')}
           />
 
-          <Eyebrow small style={{ marginTop: space.s26 }}>
-            Permission
-          </Eyebrow>
-          {/*
-            "Live · $1,600/day" for a wallet that has granted nothing.
+          {signedOut ? null : (
+            <>
+              <Eyebrow small style={{ marginTop: space.s26 }}>
+                Permission
+              </Eyebrow>
+              {/*
+                "Live · $1,600/day" for a wallet that has granted nothing.
 
-            `cap` is the value the SLIDER is sitting on — a preference the user has not signed —
-            and `stopped` is only true once a delegation exists and is revoked. So before any
-            grant this section read "Status Live, Daily cap $1,600/day" under a heading that says
-            "What the bot may do". The bot may do nothing; there is no permission. Same mistake as
-            the two dashes on Safety, in the opposite direction: there it said too little, here it
-            claimed something that was not true.
-          */}
-          <Row
-            title="Status"
-            value={
-              <Text
-                variant="rowPrimary"
-                color={!delegation ? colors.ink55 : stopped ? colors.ink55 : colors.up}
+                `cap` is the value the SLIDER is sitting on — a preference the user has not signed —
+                and `stopped` is only true once a delegation exists and is revoked. So before any
+                grant this section read "Status Live, Daily cap $1,600/day" under a heading that says
+                "What the bot may do". The bot may do nothing; there is no permission. Same mistake as
+                the two dashes on Safety, in the opposite direction: there it said too little, here it
+                claimed something that was not true.
+              */}
+              <Row
+                title="Status"
+                value={
+                  <Text
+                    variant="rowPrimary"
+                    color={!delegation ? colors.ink55 : stopped ? colors.ink55 : colors.up}
+                  >
+                    {!delegation ? 'Not granted' : stopped ? 'Stopped' : 'Live'}
+                  </Text>
+                }
+                height={SETTING_ROW}
+                onPress={() => router.push('/safety')}
+              />
+              <Row
+                title="Daily cap"
+                value={
+                  delegation ? (
+                    /*
+                      The cap that was SIGNED, not the one the slider is sitting on.
+
+                      `cap` is a local preference the user can move without granting anything, so this
+                      row reported a number the chain had never seen — on the row whose whole job is to
+                      say how much the bot may spend. `dailyCapUsd` comes off the delegation itself.
+                    */
+                    <Price color={colors.ink55}>{capLabel(delegation.dailyCapUsd)}</Price>
+                  ) : (
+                    <Text variant="rowPrimary" color={colors.ink55}>
+                      —
+                    </Text>
+                  )
+                }
+                height={SETTING_ROW}
+              />
+              <Row
+                title="Allowlist"
+                value={
+                  <Text variant="rowPrimary" color={colors.ink55}>
+                    {/* The executor holds the list: a count it has not given is not zero addresses. */}
+                    {allowlistError
+                      ? '—'
+                      : allowlistLoading
+                        ? '· · ·'
+                        : addresses.length === 1
+                          ? '1 address'
+                          : `${addresses.length} addresses`}
+                  </Text>
+                }
+                height={SETTING_ROW}
+                onPress={() => router.push('/allowlist')}
+              />
+
+              <Eyebrow small style={{ marginTop: space.s26 }}>
+                Voice
+              </Eyebrow>
+              <SheetCard
+                borderRadius={radius.panel}
+                padding={space.s16}
+                style={{ marginTop: space.s10 }}
               >
-                {!delegation ? 'Not granted' : stopped ? 'Stopped' : 'Live'}
-              </Text>
-            }
-            height={SETTING_ROW}
-            onPress={() => router.push('/safety')}
-          />
-          <Row
-            title="Daily cap"
-            value={
-              delegation ? (
-                /*
-                  The cap that was SIGNED, not the one the slider is sitting on.
-
-                  `cap` is a local preference the user can move without granting anything, so this
-                  row reported a number the chain had never seen — on the row whose whole job is to
-                  say how much the bot may spend. `dailyCapUsd` comes off the delegation itself.
-                */
-                <Price color={colors.ink55}>{capLabel(delegation.dailyCapUsd)}</Price>
-              ) : (
-                <Text variant="rowPrimary" color={colors.ink55}>
-                  —
+                <Segmented
+                  options={TONE_OPTIONS}
+                  value={tone}
+                  onChange={setTone}
+                  height={size.segThumbSm}
+                />
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s12 }}>
+                  {TONES.find((t) => t.id === tone)?.description}
                 </Text>
-              )
-            }
-            height={SETTING_ROW}
-          />
-          <Row
-            title="Allowlist"
-            value={
-              <Text variant="rowPrimary" color={colors.ink55}>
-                {/* The executor holds the list: a count it has not given is not zero addresses. */}
-                {allowlistError
-                  ? '—'
-                  : allowlistLoading
-                    ? '· · ·'
-                    : addresses.length === 1
-                      ? '1 address'
-                      : `${addresses.length} addresses`}
-              </Text>
-            }
-            height={SETTING_ROW}
-            onPress={() => router.push('/allowlist')}
-          />
-
-          <Eyebrow small style={{ marginTop: space.s26 }}>
-            Voice
-          </Eyebrow>
-          <SheetCard
-            borderRadius={radius.panel}
-            padding={space.s16}
-            style={{ marginTop: space.s10 }}
-          >
-            <Segmented
-              options={TONE_OPTIONS}
-              value={tone}
-              onChange={setTone}
-              height={size.segThumbSm}
-            />
-            <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s12 }}>
-              {TONES.find((t) => t.id === tone)?.description}
-            </Text>
-          </SheetCard>
+              </SheetCard>
+            </>
+          )}
 
           <Eyebrow small style={{ marginTop: space.s26 }}>
             Alerts
@@ -252,25 +265,29 @@ export default function Settings() {
           <Eyebrow small style={{ marginTop: space.s26 }}>
             Session
           </Eyebrow>
-          <Row
-            title={
-              confirmingSignOut ? (
-                <Text variant="rowPrimary" color={colors.down}>
-                  Tap again to sign out
-                </Text>
-              ) : (
-                'Sign out'
-              )
-            }
-            secondary={
-              confirmingSignOut
-                ? 'You’ll need an email code to sign back in.'
-                : 'Your permission stays on. Stop it in Safety.'
-            }
-            height={SETTING_ROW}
-            divider={false}
-            onPress={() => void signOut()}
-          />
+          {signedOut ? (
+            <Row title="Sign in" height={SETTING_ROW} divider={false} onPress={signIn} />
+          ) : (
+            <Row
+              title={
+                confirmingSignOut ? (
+                  <Text variant="rowPrimary" color={colors.down}>
+                    Tap again to sign out
+                  </Text>
+                ) : (
+                  'Sign out'
+                )
+              }
+              secondary={
+                confirmingSignOut
+                  ? 'You’ll need an email code to sign back in.'
+                  : 'Your permission stays on. Stop it in Safety.'
+              }
+              height={SETTING_ROW}
+              divider={false}
+              onPress={() => void signOut()}
+            />
+          )}
           {signOutError ? (
             <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s10 }}>
               {signOutError}

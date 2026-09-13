@@ -26,7 +26,9 @@ import {
   radius,
   size,
   space,
+  SignInButton,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { keypadPress } from '@/state/derived';
 import { repos } from '@/data';
 import { nextRuns } from '@/strategies/schedule';
@@ -71,6 +73,7 @@ export default function DcaSetup() {
   const [symbol, setSymbol] = useState<Symbol>('WETH');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const signedOut = useSignedOut();
 
   const usd = parseFloat(amount || '0') || 0;
   const runs = useMemo(() => nextRuns(cadence, 3), [cadence]);
@@ -201,14 +204,18 @@ export default function DcaSetup() {
         </Text>
       ) : null}
 
-      <Button
-        label={`Buy ${sentence}`}
-        backgroundColor={colors.candleUp}
-        color={colors.ink}
-        disabled={usd <= 0}
-        loading={busy}
-        onPress={create}
-      />
+      {signedOut ? (
+        <SignInButton label="Sign in to start" backgroundColor={colors.candleUp} color={colors.ink} />
+      ) : (
+        <Button
+          label={`Buy ${sentence}`}
+          backgroundColor={colors.candleUp}
+          color={colors.ink}
+          disabled={usd <= 0}
+          loading={busy}
+          onPress={create}
+        />
+      )}
       <Text
         variant="footnote"
         color={colors.sheet.dim}

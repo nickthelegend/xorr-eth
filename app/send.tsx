@@ -38,7 +38,9 @@ import {
   radius,
   space,
   typeScale,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { useAllowlist, usableFromText, usableIn } from '@/wallet/allowlist';
 import { useWithdraw } from '@/wallet/useWithdraw';
 import { repos } from '@/data';
@@ -94,7 +96,8 @@ export default function Send() {
 
   const problem = useMemo(() => {
     if (listLoading) return undefined;
-    if (listError && addresses.length === 0) return 'Couldn’t load your allowlist.';
+    // A list that could not be read says so once, where the list goes. Saying it here as well printed it twice.
+    if (listError && addresses.length === 0) return undefined;
     if (addresses.length === 0) return 'Add an address first.';
     if (usable.length === 0) return 'No address is unlocked yet.';
     if (!entry) return 'Choose a destination.';
@@ -131,16 +134,31 @@ export default function Send() {
       : undefined;
 
   const ready = Boolean(entry) && typed > 0 && !overBalance && Boolean(token);
+  const signedOut = useSignedOut();
+
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+      <BackButton onPress={() => goBack()} />
+      <Text variant="screenTitle" style={{ flex: 1 }}>
+        Send
+      </Text>
+      <Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />
+    </View>
+  );
+
+  // Signed out there is no allowlist, balance or wallet to send from: one way in, not three dashes and an error.
+  if (signedOut) {
+    return (
+      <Screen>
+        {header}
+        <SignInPrompt text="Sign in to send." />
+      </Screen>
+    );
+  }
 
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <BackButton onPress={() => goBack()} />
-        <Text variant="screenTitle" style={{ flex: 1 }}>
-          Send
-        </Text>
-        <Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />
-      </View>
+      {header}
 
       <Fill style={{ marginTop: space.s22 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -265,8 +283,8 @@ export default function Send() {
           New addresses unlock after a cooling-off period.
         </Text>
 
-        {/* A problem is said once there is something to say it about: an amount typed, or a list that failed. */}
-        {problem && (amount || listError) ? (
+        {/* A problem is said once there is an amount to say it about. A list that failed says so in the list. */}
+        {problem && amount ? (
           <Text variant="secondary" color={colors.down} style={{ marginTop: space.s12 }}>
             {problem}
           </Text>

@@ -13,6 +13,8 @@
  * `Share.share` on both, and Chrome rejects that outright — the screen said "Permission denied" and
  * produced nothing, which on a screen whose whole purpose is producing a file is a total failure
  * wearing a handled error's clothes.
+ *
+ * Distilled 2026-09-14 (PLAN.md O3). Signed out there is no trail to export, so the buttons give way to a sign-in.
  */
 import React, { useState } from 'react';
 import { View } from 'react-native';
@@ -27,7 +29,9 @@ import {
   colors,
   radius,
   space,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { repos } from '@/data';
 import { deliverFile } from '@/export/deliver';
 import { errorText } from '@/data/apiError';
@@ -40,6 +44,7 @@ export default function Export() {
   const [problem, setProblem] = useState<string | null>(null);
   /* What actually left, so a silent download is not indistinguishable from a dead button. */
   const [done, setDone] = useState<string | null>(null);
+  const signedOut = useSignedOut();
 
   const run = async (job: Exclude<Job, null>, filename: string, get: () => Promise<string>) => {
     setBusy(job);
@@ -54,7 +59,7 @@ export default function Export() {
        */
       const rows = Math.max(0, body.trim().split('\n').length - 1);
       if (rows === 0) {
-        setProblem('That file came back empty — there is nothing to export yet.');
+        setProblem('Nothing to export yet.');
         return;
       }
       const out = await deliverFile(filename, body, filename.endsWith('.json') ? 'application/json' : 'text/csv');
@@ -71,61 +76,62 @@ export default function Export() {
     <Screen>
       <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Export</Text>} />
 
-      <Fill style={{ marginTop: space.s20, gap: space.s12 }}>
-        <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-          <Text variant="rowPrimary">The audit trail</Text>
-          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
-            Every action and every non-action, hash-chained, in the order they happened. This is what
-            the bot did — including what it refused to do.
-          </Text>
-          <View style={{ flexDirection: 'row', gap: space.s10, marginTop: space.s14 }}>
+      {signedOut ? (
+        <SignInPrompt />
+      ) : (
+        <Fill style={{ marginTop: space.s20, gap: space.s12 }}>
+          <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+            <Text variant="rowPrimary">The audit trail</Text>
+            <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
+              Everything the bot did and refused, in order.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: space.s10, marginTop: space.s14 }}>
+              <Button
+                label={busy === 'trail-csv' ? 'Preparing…' : 'CSV'}
+                variant="ghost"
+                disabled={busy !== null}
+                style={{ flex: 1 }}
+                onPress={() => run('trail-csv', 'xorr-audit.csv', () => repos.activity.exportTrail('csv'))}
+              />
+              <Button
+                label={busy === 'trail-json' ? 'Preparing…' : 'JSON'}
+                variant="ghost"
+                disabled={busy !== null}
+                style={{ flex: 1 }}
+                onPress={() => run('trail-json', 'xorr-audit.json', () => repos.activity.exportTrail('json'))}
+              />
+            </View>
+          </SheetCard>
+
+          <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+            <Text variant="rowPrimary">Disposals</Text>
+            <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
+              Each sale with the cost it was matched against.
+            </Text>
             <Button
-              label={busy === 'trail-csv' ? 'Preparing…' : 'CSV'}
+              label={busy === 'disposals' ? 'Preparing…' : 'CSV'}
               variant="ghost"
               disabled={busy !== null}
-              style={{ flex: 1 }}
-              onPress={() => run('trail-csv', 'xorr-audit.csv', () => repos.activity.exportTrail('csv'))}
+              style={{ marginTop: space.s14 }}
+              onPress={() => run('disposals', 'xorr-disposals.csv', () => repos.activity.exportDisposals())}
             />
-            <Button
-              label={busy === 'trail-json' ? 'Preparing…' : 'JSON'}
-              variant="ghost"
-              disabled={busy !== null}
-              style={{ flex: 1 }}
-              onPress={() => run('trail-json', 'xorr-audit.json', () => repos.activity.exportTrail('json'))}
-            />
-          </View>
-        </SheetCard>
+          </SheetCard>
 
-        <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-          <Text variant="rowPrimary">Disposals</Text>
-          <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
-            One row per sale with the cost it was matched against. A different document from the
-            trail, and the one an accountant actually wants.
-          </Text>
-          <Button
-            label={busy === 'disposals' ? 'Preparing…' : 'CSV'}
-            variant="ghost"
-            disabled={busy !== null}
-            style={{ marginTop: space.s14 }}
-            onPress={() => run('disposals', 'xorr-disposals.csv', () => repos.activity.exportDisposals())}
-          />
-        </SheetCard>
+          {problem ? (
+            <Text variant="secondarySm" color={colors.warn}>
+              {problem}
+            </Text>
+          ) : done ? (
+            <Text variant="secondarySm" color={colors.up}>
+              {done}
+            </Text>
+          ) : null}
 
-        {problem ? (
-          <Text variant="secondarySm" color={colors.warn}>
-            {problem}
+          <Text variant="footnote" color={colors.ink55}>
+            A sale with no recorded cost is marked, not guessed.
           </Text>
-        ) : done ? (
-          <Text variant="secondarySm" color={colors.up}>
-            {done}
-          </Text>
-        ) : null}
-
-        <Text variant="footnote" color={colors.ink55}>
-          Some sales have no recorded cost, and the disposals file marks those rather than quietly
-          understating the gain.
-        </Text>
-      </Fill>
+        </Fill>
+      )}
     </Screen>
   );
 }

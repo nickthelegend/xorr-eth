@@ -25,9 +25,10 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } fr
  * this is a couple of string functions, not the data layer's fetching machinery. The alternative
  * was resolving the text at all 51 call sites.
  */
-import { errorText, isRetryable } from '@/data/apiError';
+import { NotSignedIn, errorText, isRetryable } from '@/data/apiError';
 import { Button } from './Button';
 import { Press } from './Press';
+import { SignInPrompt } from './SignIn';
 import { Text } from './Text';
 import { duration, timing, useReducedMotion } from './motion';
 import { chart, colors, divider, radius, size, space } from './tokens';
@@ -148,6 +149,8 @@ export function ErrorState({
   onRetry?: () => void;
   testID?: string;
 }) {
+  // Signed out is not a failure — nothing was asked — so it gets a way in, not a retry. See SignIn.tsx.
+  if (error instanceof NotSignedIn) return <SignInPrompt testID={testID} />;
   return (
     <View testID={testID} style={{ paddingVertical: space.s30, gap: space.s14, alignItems: 'center' }}>
       <Text variant="rowPrimary">That did not load.</Text>

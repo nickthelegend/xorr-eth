@@ -29,7 +29,9 @@ import {
   space,
   ErrorState,
   NoteStrip,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -98,6 +100,17 @@ export default function Assets() {
     () => Object.fromEntries(tokenRows.map((t) => [t.address, t.logo])),
     [tokenRows],
   );
+
+  // Signed out, every section below is a question nobody asked: one way in, not a dash, two errors and "No wallet".
+  const signedOut = useSignedOut();
+  if (signedOut) {
+    return (
+      <Screen tabBar>
+        <Text variant="screenTitle">Assets</Text>
+        <SignInPrompt />
+      </Screen>
+    );
+  }
 
   return (
     <Screen tabBar>

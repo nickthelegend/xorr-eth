@@ -35,7 +35,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "crypto",
     "label": "Crypto",
-    "note": "9 markets · spot, settled on Base through 1inch",
+    "note": "Spot, settled on-chain",
     "more": "These nine are what this build prices",
     "instruments": [
       {
@@ -271,7 +271,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "commodities",
     "label": "Commodities",
-    "note": "Only gold has a price feed — no tokenized commodity routes on Base yet",
+    "note": "Only gold has a price feed. None trade here yet.",
     "more": "Not tradable here",
     "instruments": [
       {
@@ -387,7 +387,7 @@ export const assetClasses: AssetClass[] = [
   {
     "id": "indices",
     "label": "Indices",
-    "note": "No price feed — no index token has liquidity on Base yet",
+    "note": "No price feed. None trade here yet.",
     "more": "Not tradable here",
     "instruments": [
       {

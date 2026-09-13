@@ -35,7 +35,9 @@ import {
   space,
   toCandles,
   NoteStrip,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { PositionCard, PositionCardSkeleton, type PositionLevel } from '@/ui/PositionCard';
 import { Rise } from '@/ui/Rise';
 import { RollingNumber } from '@/ui/RollingNumber';
@@ -185,17 +187,32 @@ export default function Portfolio() {
   const cost = book.reduce((sum, p) => sum + (p.notional - p.unrealised), 0);
   const unrealisedPct = cost > 0 ? (unrealised / cost) * 100 : undefined;
   const total = balance.data?.total ?? null;
+  const signedOut = useSignedOut();
+
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.gutter }}>
+      <BackButton onPress={goBack} />
+      <Text variant="cardTitle" align="center" style={{ flex: 1 }}>
+        Portfolio
+      </Text>
+      {/* Balances the back button, so the title sits in the true centre. */}
+      <View style={{ width: size.hit }} />
+    </View>
+  );
+
+  // Signed out, a dash for the balance and "Couldn’t load positions" describe a wallet nobody has named.
+  if (signedOut) {
+    return (
+      <Screen gutter="none" sheet>
+        {header}
+        <SignInPrompt />
+      </Screen>
+    );
+  }
 
   return (
     <Screen gutter="none" sheet>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.gutter }}>
-        <BackButton onPress={goBack} />
-        <Text variant="cardTitle" align="center" style={{ flex: 1 }}>
-          Portfolio
-        </Text>
-        {/* Balances the back button, so the title sits in the true centre. */}
-        <View style={{ width: size.hit }} />
-      </View>
+      {header}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: space.s30 }}>
         <Rise index={0} style={{ alignItems: 'center', marginTop: space.s14 }}>

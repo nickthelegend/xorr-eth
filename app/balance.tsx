@@ -8,6 +8,9 @@
  *
  * The bar is proportional and drawn from the same numbers as the rows beneath it, so it cannot
  * disagree with them.
+ *
+ * Distilled 2026-09-14 (PLAN.md O3). Signed out it asks for a sign-in: `balance()` answers null for a signed-out read
+ * as for a failed one, and "could not be read" was a claim about a request nobody made.
  */
 import React from 'react';
 import { View } from 'react-native';
@@ -24,11 +27,13 @@ import {
   SheetCard,
   Text,
   colors,
-  percent as pct,
   radius,
   space,
+  SignInPrompt,
 } from '@/ui';
-import { money } from '@/format';
+import { useSignedOut } from '@/auth/useSignedOut';
+// Unsigned: a share of the whole is not a move, and "+62.4%" read as a gain.
+import { money, percent as pct } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { repos } from '@/data';
 
@@ -38,6 +43,7 @@ export default function Balance() {
   const goBack = useGoBack();
   const router = useRouter();
   const { data, loading, error, reload } = useAsync(() => repos.portfolio.balance(), []);
+  const signedOut = useSignedOut();
 
   const total = data?.total ?? 0;
   const held = data ? Math.max(0, data.total - data.cash - data.supplied) : 0;
@@ -48,13 +54,15 @@ export default function Balance() {
       <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Balance</Text>} />
 
       <Fill style={{ marginTop: space.s20, gap: space.s12 }}>
-        {error ? (
+        {signedOut ? (
+          <SignInPrompt />
+        ) : error ? (
           <ErrorState error={error} onRetry={reload} />
         ) : loading && !data ? (
           <Placeholder height={160} />
         ) : !data ? (
           <Text variant="body" color={colors.ink55}>
-            The balance could not be read from the chain.
+            The balance could not be read.
           </Text>
         ) : (
           <>
@@ -85,24 +93,9 @@ export default function Balance() {
               </View>
             </SheetCard>
 
-            <Slice
-              label="Cash"
-              note="Spendable today. This is what the cap draws from."
-              usd={data.cash}
-              share={share(data.cash)}
-            />
-            <Slice
-              label="Held"
-              note="Marked at the price a sale would actually get, not a feed."
-              usd={held}
-              share={share(held)}
-            />
-            <Slice
-              label="Supplied"
-              note="Earning. Withdraw it before spending."
-              usd={data.supplied}
-              share={share(data.supplied)}
-            />
+            <Slice label="Cash" note="Spendable now. The cap draws from this." usd={data.cash} share={share(data.cash)} />
+            <Slice label="Held" note="Marked at what a sale would get." usd={held} share={share(held)} />
+            <Slice label="Supplied" note="Earning. Withdraw it to spend it." usd={data.supplied} share={share(data.supplied)} />
 
             <Button label="Where it sits" variant="ghost" onPress={() => router.push('/allocation')} />
           </>
@@ -130,7 +123,7 @@ function Slice({
         <Price variant="rowPrimary">{money(usd)}</Price>
       </View>
       <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
-        {pct(share * 100)}
+        {pct(share * 100, { digits: 1, explicitSign: false })}
       </Text>
       <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
         {note}

@@ -61,9 +61,11 @@ export default function Coverage() {
 
     /* A settleable token nothing prices, and nothing routes to it as a settlement target either. */
     const reachable = new Set([...priced].map((p) => settlementSymbol(p).toUpperCase()));
+    /* A ticker with a feed of its own is priced, whatever it settles as: native ETH has one, and was listed here too. */
+    const pricedTickers = new Set([...priced].map((p) => p.toUpperCase()));
     const settlesOnly = (tradable.data ?? [])
       .map((t) => t.symbol)
-      .filter((s) => !reachable.has(s.toUpperCase()));
+      .filter((s) => !reachable.has(s.toUpperCase()) && !pricedTickers.has(s.toUpperCase()));
 
     return {
       both: both.sort((a, b) => a.symbol.localeCompare(b.symbol)),
@@ -88,7 +90,7 @@ export default function Coverage() {
             {/* Named, because "BTC settles" is only true through a token with another ticker. */}
             {r.via ? (
               <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s2 }}>
-                settles as {r.via}
+                trades as {r.via}
               </Text>
             ) : null}
           </View>
@@ -112,19 +114,15 @@ export default function Coverage() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: space.s30 }}
           >
-            {section(
-              'Priced and settleable',
-              'A chart you can read and an order that can fill.',
-              groups.both,
-            )}
+            {section('Priced and tradable', 'A chart and an order.', groups.both)}
             {section(
               'Priced only',
-              'A real market with a real price, which this chain cannot settle. Chart, not order.',
+              'A chart, not an order. Not tradable here.',
               groups.pricedOnly.map((symbol) => ({ symbol })),
             )}
             {section(
-              'Settleable only',
-              'The executor can route these, and no feed on this build prices them.',
+              'Tradable only',
+              'An order with no price feed.',
               groups.settlesOnly.map((symbol) => ({ symbol })),
             )}
           </ScrollView>

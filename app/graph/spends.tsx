@@ -49,10 +49,9 @@ export default function GraphSpends() {
   return (
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
-        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Spend events</Text>} />
+        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Indexed spends</Text>} />
         <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
-          Reconstructed from what the contract emitted, indexed by The Graph — a second record of
-          the same money, kept by someone other than us.
+          The same money, recorded by an independent index.
         </Text>
       </View>
 

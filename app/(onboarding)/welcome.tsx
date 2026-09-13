@@ -22,7 +22,6 @@ import { agentGradients } from '@/design/gradients';
 import {
   AgentOrb,
   Button,
-  Eyebrow,
   Fill,
   Screen,
   SheetCard,
@@ -73,19 +72,16 @@ export default function Splash() {
             or it is labelled" does not have a marketing exemption, and the app's own route sweep
             asserts this string is gone.
 
-            What the card is actually for is showing what the product does, so it says that.
+            What the card is actually for is showing what the product does, so it shows it: the
+            three things, and the agents that do them. It no longer repeats the tagline printed
+            directly above it under a "What it does" eyebrow (2026-09-14, PLAN.md O3).
           */}
-          <Eyebrow small>What it does</Eyebrow>
-          <Text variant="titleLg" style={{ marginTop: space.s8 }}>
-            {brand.TAGLINE}
-          </Text>
-
           <View
             style={{
               flexDirection: 'row',
               gap: space.s6,
-              marginTop: space.s18,
               flexWrap: 'wrap',
+              justifyContent: 'center',
             }}
           >
             {PREVIEW.map((p) => (

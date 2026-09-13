@@ -11,6 +11,8 @@
  *
  * Cash is included. A portfolio that is eighty percent cash is a fact about the portfolio, and
  * omitting it would make every other slice look larger than it is.
+ *
+ * Signed out it asks for a sign-in: "nothing is held" was being said about a wallet nobody had named.
  */
 import React, { useMemo } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -26,12 +28,14 @@ import {
   Screen,
   Text,
   colors,
-  percent as pct,
   size,
   space,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { assetGradient } from '@/design/gradients';
-import { money } from '@/format';
+// Unsigned: a share of the whole is not a move, and "+62.4%" read as a gain.
+import { money, percent as pct } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { logoProps, useLogos } from '@/data/useLogos';
 import { repos } from '@/data';
@@ -41,6 +45,7 @@ const BAR_H = 6;
 export default function Allocation() {
   const goBack = useGoBack();
   const balance = useAsync(() => repos.portfolio.balance(), []);
+  const signedOut = useSignedOut();
 
   /*
    * From the chain, not from the position ledger.
@@ -80,7 +85,9 @@ export default function Allocation() {
       </View>
 
       <Fill style={{ marginTop: space.s16, paddingHorizontal: space.gutter }}>
-        {error ? (
+        {signedOut ? (
+          <SignInPrompt />
+        ) : error ? (
           <ErrorState error={error} onRetry={balance.reload} />
         ) : loading ? (
           <View style={{ gap: space.s12 }}>
@@ -88,8 +95,11 @@ export default function Allocation() {
             <Placeholder height={70} />
             <Placeholder height={70} />
           </View>
+        ) : !balance.data ? (
+          /* `balance()` answers null when the chain could not be read: that is not an empty wallet. */
+          <EmptyState text="The balance could not be read." actionLabel="Try again" onAction={balance.reload} />
         ) : rows.length === 0 || total === 0 ? (
-          <EmptyState text="Nothing is held and there is no cash, so there is nothing to divide." />
+          <EmptyState text="Nothing held yet." />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -148,7 +158,7 @@ export default function Allocation() {
                     </View>
 
                     <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s6 }}>
-                      {pct(share * 100)}
+                      {pct(share * 100, { digits: 1, explicitSign: false })}
                     </Text>
                   </View>
                 );

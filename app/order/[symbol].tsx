@@ -28,7 +28,9 @@ import {
   quantity,
   size,
   space,
+  SignInButton,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { orderCta } from '@/state/derived';
 import { api } from '@/data/api';
 import { unitsFor, usePrice } from '@/data/usePrices';
@@ -99,6 +101,7 @@ export default function OrderTicket() {
    * actually be spent, and it is the one the home screen's "Available to trade" row already uses.
    */
   const { data: bal } = useAsync(() => repos.portfolio.balance(), []);
+  const signedOut = useSignedOut();
   const availableUsd = bal?.cash;
 
   // A SELL is not a spend. It reduces a position the user already holds, so what caps it is
@@ -296,7 +299,13 @@ export default function OrderTicket() {
         </Price>
       </View>
 
-      {tradable ? (
+      {signedOut ? (
+        <SignInButton
+          label="Sign in to trade"
+          backgroundColor={side === 'buy' ? colors.candleUp : colors.candleDown}
+          color={colors.ink}
+        />
+      ) : tradable ? (
         <Button
           label={
             filled

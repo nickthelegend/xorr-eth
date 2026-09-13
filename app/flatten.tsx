@@ -13,6 +13,8 @@
  *     not tell you what it is about to destroy is not a confirmation, it is a dare.
  *   - It reports each position separately afterwards. A flatten that sold three of four and
  *     said "done" would be lying about the fourth, and the fourth is the one still exposed.
+ *
+ * Distilled 2026-09-14 (PLAN.md O3): the same facts, a line each.
  */
 import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -34,7 +36,9 @@ import {
   radius,
   size,
   space,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
 import { errorText } from '@/data/apiError';
@@ -57,6 +61,7 @@ export default function Flatten() {
   const [error, setError] = useState<string>();
 
   const preview = useAsync(() => api.get<Preview>('/panic/preview'), []);
+  const signedOut = useSignedOut();
 
   const flatten = useCallback(async () => {
     setBusy(true);
@@ -73,16 +78,29 @@ export default function Flatten() {
   const p = preview.data;
   const nothingToDo = !!p && p.legs.length === 0;
 
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text variant="screenTitle">Sell everything</Text>
+      <CloseButton onPress={() => goBack()} />
+    </View>
+  );
+
+  // Signed out there are no positions to preview and nothing a button could sell.
+  if (signedOut) {
+    return (
+      <Screen>
+        {header}
+        <SignInPrompt text="Sign in to sell." />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="screenTitle">Sell everything</Text>
-        <CloseButton onPress={() => goBack()} />
-      </View>
+      {header}
 
       <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
-        Closes every position into USDC and leaves it in your own wallet. It does not touch
-        your permission — the bot stays stopped or running exactly as you left it.
+        Every position to USDC, in your own wallet. Your permission is untouched.
       </Text>
 
       <Fill style={{ marginTop: space.s16 }}>
@@ -99,18 +117,17 @@ export default function Flatten() {
                 Could not read your positions.
               </Text>
               <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
-                {preview.error.message}
+                {errorText(preview.error)}
               </Text>
               <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
-                Nothing was sold. Your funds are in your wallet and you can move them yourself.
+                Nothing was sold.
               </Text>
             </SheetCard>
           ) : nothingToDo ? (
             <SheetCard borderRadius={radius.note} padding={space.s16}>
               <Text variant="rowPrimary">Nothing to sell.</Text>
               <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
-                You hold no positions above {money(p.dustBelowUsd)}. Your balance is already
-                cash.
+                No positions above {money(p.dustBelowUsd)}. It is already cash.
               </Text>
             </SheetCard>
           ) : p ? (
@@ -166,13 +183,11 @@ export default function Flatten() {
               */}
               <View style={{ marginTop: space.s14, gap: space.s8 }}>
                 <Text variant="secondarySm" color={colors.ink55}>
-                  Market orders, up to {p.slippagePct}% slippage. That is wider than a
-                  scheduled buy allows, because an exit that refuses to execute is not an exit.
+                  Market orders, up to {p.slippagePct}% slippage, so the exit fills.
                 </Text>
                 {p.skipped.length > 0 ? (
                   <Text variant="secondarySm" color={colors.ink55}>
-                    Leaving {p.skipped.join(', ')} alone — worth under {money(p.dustBelowUsd)},
-                    and the gas would cost more than the sale returns.
+                    Leaving {p.skipped.join(', ')}: under {money(p.dustBelowUsd)}, not worth the gas.
                   </Text>
                 ) : null}
               </View>
@@ -194,7 +209,8 @@ export default function Flatten() {
           label={p && p.legs.length > 0 ? `Sell ${money(p.totalUsd)} into USDC` : 'Sell everything'}
           variant="destructive"
           height={size.buttonLg}
-          disabled={nothingToDo || preview.loading}
+          // Not on a failed preview: a sale nobody could show you first is the dare this screen exists to refuse.
+          disabled={nothingToDo || preview.loading || Boolean(preview.error)}
           loading={busy}
           onPress={flatten}
         />
@@ -205,7 +221,7 @@ export default function Flatten() {
         align="center"
         style={{ marginTop: space.s12 }}
       >
-        The cash lands in your wallet, not ours. This does not use your daily cap.
+        Lands in your wallet. Doesn’t use your daily cap.
       </Text>
     </Screen>
   );
@@ -225,7 +241,7 @@ function Outcome({ result }: { result: Result }) {
         </Text>
         {failed.length ? (
           <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
-            You are still holding the ones below. Nothing about them changed.
+            You still hold the ones below, unchanged.
           </Text>
         ) : null}
       </SheetCard>

@@ -28,7 +28,9 @@ import {
   size,
   space,
   typeScale,
+  SignInButton,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { repos } from '@/data';
 import { usePrices } from '@/data/usePrices';
 import { useAsync } from '@/data/useAsync';
@@ -77,6 +79,7 @@ export default function GridSetup() {
   const [cadence, setCadence] = useState<Cadence>('daily');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const signedOut = useSignedOut();
 
   const lo = parseFloat(lower) || 0;
   const hi = parseFloat(upper) || 0;
@@ -363,14 +366,18 @@ export default function GridSetup() {
         </Text>
       ) : null}
 
-      <Button
-        label={valid ? `Run this range on ${symbol}` : 'Set a range and a rung size'}
-        backgroundColor={colors.candleUp}
-        color={colors.ink}
-        disabled={!valid}
-        loading={busy}
-        onPress={create}
-      />
+      {signedOut ? (
+        <SignInButton label="Sign in to start" backgroundColor={colors.candleUp} color={colors.ink} />
+      ) : (
+        <Button
+          label={valid ? `Run this range on ${symbol}` : 'Set a range and a rung size'}
+          backgroundColor={colors.candleUp}
+          color={colors.ink}
+          disabled={!valid}
+          loading={busy}
+          onPress={create}
+        />
+      )}
       <Text
         variant="footnote"
         color={colors.sheet.dim}

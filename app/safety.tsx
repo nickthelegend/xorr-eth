@@ -442,7 +442,8 @@ export default function Safety() {
           <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s12 }}>
             {killed || unusable || expired
               ? 'You’ll sign to confirm.'
-              : 'Stops new orders. Positions and stop-losses stay.'}
+              : /* A revoked policy refuses closePosition too (XorrDelegation.sol), so no stop-loss can fire after this. */
+                'Stops all trading, stop-losses too. Your funds stay in your wallet.'}
           </Text>
         </>
       ) : null}

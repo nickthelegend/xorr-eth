@@ -37,8 +37,10 @@ import {
   radius,
   size,
   space,
+  SignInButton,
   type KeypadKey,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { MINUS, percent } from '@/format';
 import { SWAP_SLIPPAGES, keypadPress, swapRequest, swapSpendable } from '@/state/derived';
 import { usePrice } from '@/data/usePrices';
@@ -83,6 +85,7 @@ export default function Swap() {
 
   // The chain's balance, not the ledger's: what can be paid is what the wallet holds.
   const balance = useAsync(() => repos.portfolio.balance(), []);
+  const signedOut = useSignedOut();
   const spendable = swapSpendable(balance.data, pay);
   const balanceUnread = balance.data === undefined && balance.error !== undefined;
 
@@ -324,7 +327,9 @@ export default function Swap() {
         </Fill>
       )}
 
-      {!nothingSettles ? (
+      {signedOut ? (
+        <SignInButton label="Sign in to swap" style={{ marginTop: space.s14 }} />
+      ) : !nothingSettles ? (
         <Button
           label={cta}
           variant={outcome?.status === 'filled' ? 'success' : 'primary'}

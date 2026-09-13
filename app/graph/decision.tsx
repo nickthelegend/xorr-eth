@@ -52,10 +52,9 @@ export default function GraphDecision() {
   return (
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
-        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Decision</Text>} />
+        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Routing</Text>} />
         <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
-          What the router would choose for this size, from what the subgraph knows about this
-          wallet.
+          Where a trade of this size would go.
         </Text>
       </View>
 

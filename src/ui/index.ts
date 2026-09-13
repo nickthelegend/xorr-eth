@@ -77,6 +77,7 @@ export { Eyebrow, type EyebrowProps } from './Eyebrow';
 export { BackButton, CloseButton, IconButton, HeaderBar, type IconButtonProps } from './IconButton';
 export { Progress, type ProgressProps } from './Progress';
 export { Placeholder, LoadingRows, ErrorState, EmptyState } from './States';
+export { SignInPrompt, SignInButton, signIn } from './SignIn';
 export { RadioCard, type RadioCardProps } from './RadioCard';
 export { Keypad, KEYPAD_KEYS, type KeypadProps, type KeypadKey } from './Keypad';
 export { Tag, DeltaChip, type TagProps, type TagTone } from './Tag';

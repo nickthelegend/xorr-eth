@@ -30,7 +30,9 @@ import {
   radius,
   size,
   space,
+  SignInButton,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { keypadPress } from '@/state/derived';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
@@ -67,6 +69,7 @@ export default function YieldSetup() {
 
   const rate = useAsync(() => repos.yield.staking(), []);
   const balance = useAsync(() => repos.portfolio.balance(), []);
+  const signedOut = useSignedOut();
 
   const usd = parseFloat(amount || '0') || 0;
   const runs = useMemo(() => nextRuns(cadence, 3), [cadence]);
@@ -279,18 +282,22 @@ export default function YieldSetup() {
         </Text>
       ) : null}
 
-      <Button
-        label={
-          unavailable
-            ? 'Not available on this network'
-            : `Sweep up to ${money(usd, { decimals: 0 })} ${phrase(cadence)}`
-        }
-        backgroundColor={colors.candleUp}
-        color={colors.ink}
-        disabled={usd <= 0 || unavailable}
-        loading={busy}
-        onPress={create}
-      />
+      {signedOut ? (
+        <SignInButton label="Sign in to start" backgroundColor={colors.candleUp} color={colors.ink} />
+      ) : (
+        <Button
+          label={
+            unavailable
+              ? 'Not available on this network'
+              : `Sweep up to ${money(usd, { decimals: 0 })} ${phrase(cadence)}`
+          }
+          backgroundColor={colors.candleUp}
+          color={colors.ink}
+          disabled={usd <= 0 || unavailable}
+          loading={busy}
+          onPress={create}
+        />
+      )}
       {/*
         The exit, said up front.
 

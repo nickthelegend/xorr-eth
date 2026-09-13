@@ -43,7 +43,7 @@ export default function GraphHealth() {
 
   return (
     <Screen>
-      <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Subgraph</Text>} />
+      <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Index</Text>} />
 
       <Fill style={{ marginTop: space.s20, gap: space.s12 }}>
         {graph.error ? (

@@ -4,6 +4,9 @@
  * "{n} of {m} on". 70pt switch rows for the alerts YOU set, then a second group for what
  * the BOT interrupts you for. Note strip: "Circuit breakers stay on even when notifications
  * are muted. They stop trading, not just your phone." Ghost "Add custom alert".
+ *
+ * Distilled 2026-09-14 (PLAN.md O3): a line per section. Signed out it asks for a sign-in, rather than counting
+ * "0 of 0 on" and saying a wallet nobody named has no alerts.
  */
 import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -20,7 +23,10 @@ import {
   Text,
   colors,
   space,
+  ErrorState,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { repos } from '@/data';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
@@ -64,12 +70,13 @@ export default function Alerts() {
   const router = useRouter();
   const alerts = useStore((s) => s.alerts);
   const toggleAlert = useStore((s) => s.toggleAlert);
-  const { data, loading, reload } = useAsync(() => repos.alerts.list(), []);
+  const { data, loading, error, reload } = useAsync(() => repos.alerts.list(), []);
   const prefs = useAsync(() => api.get<Pref[]>('/notifications/prefs'), []);
   // Both halves of this screen come from the server, so both are refreshed by the gesture.
   const refresh = useRefreshControl(() => Promise.all([reload(), prefs.reload()]));
   /** Optimistic local state, reverted if the server disagrees. */
   const [pushOn, setPushOn] = useState<Record<string, boolean>>({});
+  const signedOut = useSignedOut();
 
   /*
    * Count the alerts that EXIST, not the toggle map.
@@ -94,18 +101,26 @@ export default function Alerts() {
           <BackButton onPress={() => goBack()} />
           <Text variant="screenTitle">Alerts</Text>
         </View>
-        <Text variant="footnote" color={colors.ink55}>
-          {onCount} of {data?.length ?? 0} on
-        </Text>
+        {/* A count of the list the server gave. Before it answers there is nothing to count. */}
+        {data ? (
+          <Text variant="footnote" color={colors.ink55}>
+            {onCount} of {data.length} on
+          </Text>
+        ) : null}
       </View>
 
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        The agents watch everything. These are the moments they interrupt you for.
+        The moments worth interrupting you for.
       </Text>
 
       <Fill style={{ marginTop: space.s14 }}>
-        {loading && !data ? (
+        {signedOut ? (
+          <SignInPrompt />
+        ) : loading && !data ? (
           <LoadingRows count={5} height={ROW_H} />
+        ) : error && !data ? (
+          /* A list that could not be read is not an empty one, and must not look like one. */
+          <ErrorState error={error} onRetry={reload} />
         ) : (
           <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
             {/*
@@ -113,15 +128,9 @@ export default function Alerts() {
 
               This used to fall through to fixtures — five sample alerts, two of them on things
               this app cannot trade, counted in the header as though the user had set them. An
-              empty list now says it is empty and points at the button that fixes that.
+              empty list now says it is empty; the button that fixes that is below the list.
             */}
-            {(data ?? []).length === 0 ? (
-              <EmptyState
-                text="You have not set any alerts yet. The switches below still control what the bot tells you about its own trades."
-                actionLabel="Add custom alert"
-                onAction={() => router.push('/alerts/new')}
-              />
-            ) : null}
+            {(data ?? []).length === 0 ? <EmptyState text="No alerts yet." /> : null}
             {(data ?? []).map((a) => {
               const on = alerts[a.name] ?? a.default;
               return (
@@ -129,7 +138,7 @@ export default function Alerts() {
                   key={a.id}
                   label={a.name}
                   // The caption changes with state, as design.md §5 requires.
-                  caption={(v) => (v ? firedCaption(a) : 'Off — you will not be interrupted for this')}
+                  caption={(v) => (v ? firedCaption(a) : 'Off')}
                   on={on}
                   onChange={() => {
                     toggleAlert(a.name);
@@ -151,6 +160,7 @@ export default function Alerts() {
             <Text variant="cardTitle" style={{ marginTop: space.s26, marginBottom: space.s4 }}>
               What the bot tells you
             </Text>
+            {prefs.error && !prefs.data ? <ErrorState error={prefs.error} onRetry={prefs.reload} /> : null}
             {(prefs.data ?? []).map((p) => (
               <SwitchRow
                 key={p.kind}
@@ -174,19 +184,20 @@ export default function Alerts() {
             ))}
 
             <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
-              Circuit breakers stay on even when notifications are muted. They stop trading,
-              not just your phone.
+              Muting never turns off the circuit breakers.
             </NoteStrip>
           </ScrollView>
         )}
       </Fill>
 
-      <Button
-        label="Add custom alert"
-        variant="ghost"
-        onPress={() => router.push('/alerts/new')}
-        style={{ marginTop: space.s14 }}
-      />
+      {signedOut ? null : (
+        <Button
+          label="Add custom alert"
+          variant="ghost"
+          onPress={() => router.push('/alerts/new')}
+          style={{ marginTop: space.s14 }}
+        />
+      )}
     </Screen>
   );
 }

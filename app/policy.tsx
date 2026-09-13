@@ -25,7 +25,10 @@ import {
   colors,
   radius,
   space,
+  EmptyState,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { shortAddress } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { repos } from '@/data';
@@ -33,6 +36,7 @@ import { repos } from '@/data';
 export default function Policy() {
   const goBack = useGoBack();
   const { data, loading, error, reload } = useAsync(() => repos.wallet.privyPolicy(), []);
+  const signedOut = useSignedOut();
 
   /*
    * Attached destinations if there are any, otherwise what the policy WOULD allow. Showing an
@@ -48,7 +52,11 @@ export default function Policy() {
       </View>
 
       <Fill style={{ marginTop: space.s16 }}>
-        {error ? (
+        {signedOut ? (
+          <View style={{ paddingHorizontal: space.gutter }}>
+            <SignInPrompt />
+          </View>
+        ) : error ? (
           <View style={{ paddingHorizontal: space.gutter }}>
             <ErrorState error={error} onRetry={reload} />
           </View>
@@ -56,7 +64,12 @@ export default function Policy() {
           <View style={{ paddingHorizontal: space.gutter }}>
             <Placeholder height={150} />
           </View>
-        ) : !data ? null : (
+        ) : !data ? (
+          /* `privyPolicy` answers null when the policy could not be read, and a blank screen said nothing at all. */
+          <View style={{ paddingHorizontal: space.gutter }}>
+            <EmptyState text="The wallet policy could not be read." actionLabel="Try again" onAction={reload} />
+          </View>
+        ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{

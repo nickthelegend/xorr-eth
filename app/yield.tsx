@@ -28,9 +28,12 @@ import {
   radius,
   size,
   space,
+  SignInPrompt,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
+import { errorText } from '@/data/apiError';
 import { useAaveWithdraw, type YieldPosition } from '@/defi/useAaveWithdraw';
 
 /** Quick fractions of the position, plus everything. */
@@ -45,6 +48,7 @@ export default function Yield() {
   const { withdraw, busy, error } = useAaveWithdraw();
 
   const pos = useAsync(() => api.get<YieldPosition>('/yield/position'), [nonce]);
+  const signedOut = useSignedOut();
   const p = pos.data;
   const supplied = p?.suppliedUsd ?? 0;
   const amount = supplied * portion;
@@ -61,26 +65,40 @@ export default function Yield() {
     }
   }, [withdraw, portion, amount]);
 
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text variant="screenTitle">Earning</Text>
+      <CloseButton onPress={() => goBack()} />
+    </View>
+  );
+
+  // Signed out there is no position to read, and a withdraw button with nothing behind it.
+  if (signedOut) {
+    return (
+      <Screen>
+        {header}
+        <SignInPrompt />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="screenTitle">Earning</Text>
-        <CloseButton onPress={() => goBack()} />
-      </View>
+      {header}
 
       <Fill style={{ marginTop: space.s16 }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {pos.loading && !p ? (
             <Text variant="body" color={colors.ink55}>
-              Reading the pool…
+              Loading…
             </Text>
           ) : pos.error ? (
             <SheetCard borderRadius={radius.note} padding={space.s16}>
               <Text variant="rowPrimary" color={colors.down}>
-                Couldn’t load the rate.
+                Couldn’t load what is earning.
               </Text>
               <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
-                {pos.error.message}
+                {errorText(pos.error)}
               </Text>
             </SheetCard>
           ) : p && !p.available ? (

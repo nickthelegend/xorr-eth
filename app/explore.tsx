@@ -41,7 +41,7 @@ const GROUPS: Group[] = [
       { route: '/limit-orders', title: 'Limit orders', detail: 'Take a signed price' },
       { route: '/crosschain', title: 'Cross-chain', detail: 'Quotes to other chains' },
       { route: '/movers', title: 'Movers', detail: 'Biggest moves today' },
-      { route: '/stocks', title: 'Equities', detail: 'Tokenized stocks' },
+      { route: '/stocks', title: 'Stocks', detail: 'Priced by a real buy' },
       { route: '/earnings', title: 'Earnings', detail: 'Filing dates' },
       { route: '/funding', title: 'Funding', detail: 'Perpetual funding rates' },
       { route: '/compare', title: 'Compare', detail: 'Two instruments, one range' },

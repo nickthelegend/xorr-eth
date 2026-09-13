@@ -9,6 +9,8 @@
  * `feed: 'unavailable'` is a real row, not an omission. On a chain where the equities do not
  * function the probe fails, and a screen that quietly dropped those would hide the fact that the
  * app cannot trade them here.
+ *
+ * Distilled 2026-09-14 (PLAN.md O3): no venue on the rows and no network in the notes — How it works names them.
  */
 import React, { useMemo } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -50,7 +52,7 @@ export default function Stocks() {
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Stocks</Text>} />
         <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
-          Tokenized stocks, priced by what a real 1inch buy would cost.
+          Priced by what a real buy would cost.
         </Text>
       </View>
 
@@ -60,7 +62,7 @@ export default function Stocks() {
         ) : loading && !data ? (
           <LoadingRows count={8} height={size.rowLg} />
         ) : rows.length === 0 ? (
-          <EmptyState text="No tokenized equities on this build." />
+          <EmptyState text="No tokenized stocks here." />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -74,8 +76,8 @@ export default function Stocks() {
                   them here.
                 */}
                 {unavailable === rows.length
-                  ? 'None of these route on this chain. They are listed, and they cannot be bought here.'
-                  : `${unavailable} of these do not route on this chain right now.`}
+                  ? 'None of these can be bought here right now.'
+                  : `${unavailable} of these can’t be bought here right now.`}
               </Text>
             ) : null}
 
@@ -99,9 +101,7 @@ export default function Stocks() {
                   />
                 }
                 title={s.symbol}
-                secondary={
-                  s.venues.length > 0 ? `${s.name} · ${s.venues.join(', ')}` : s.name
-                }
+                secondary={s.name}
                 value={
                   s.price === null ? (
                     <Text variant="rowPrimary" color={colors.ink55}>

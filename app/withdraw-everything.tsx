@@ -35,8 +35,10 @@ import {
   radius,
   size,
   space,
+  SignInPrompt,
   type TagTone,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { shortAddress } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { errorText } from '@/data/apiError';
@@ -62,6 +64,7 @@ export default function WithdrawEverything() {
   const [chosen, setChosen] = useState<string>();
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string>();
+  const signedOut = useSignedOut();
 
   const destination = allowlist.usable.find((a) => a.address === chosen);
   const started = running || finished !== undefined;
@@ -104,12 +107,26 @@ export default function WithdrawEverything() {
           ? `${money(aave.data.suppliedUsd)} earning. You sign this step.`
           : 'Nothing supplied.';
 
+  const header = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
+      <BackButton onPress={() => goBack()} />
+      <Text variant="screenTitle">Withdraw everything</Text>
+    </View>
+  );
+
+  // Signed out, each of the three steps would print its own "not signed in". There is one thing to do first.
+  if (signedOut) {
+    return (
+      <Screen>
+        {header}
+        <SignInPrompt text="Sign in to withdraw." />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <BackButton onPress={() => goBack()} />
-        <Text variant="screenTitle">Withdraw everything</Text>
-      </View>
+      {header}
 
       <Text variant="secondary" style={{ marginTop: space.s10 }}>
         Sell everything, then send it all to one saved address.

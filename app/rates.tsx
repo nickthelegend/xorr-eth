@@ -8,6 +8,9 @@
  *
  * `feed` is rendered. A simulated rate and a live one must never look the same, and on a chain
  * where the pool is not deployed the honest answer is that there is no rate here.
+ *
+ * Distilled 2026-09-14 (PLAN.md O3): no venue or network on the card — Sources names them. Signed out, the rate is
+ * public and shown; "yours" is not, and a "$0.00 supplied · $0.00 idle" for a wallet nobody named is left out.
  */
 import React from 'react';
 import { useRouter } from 'expo-router';
@@ -25,6 +28,7 @@ import {
   radius,
   space,
 } from '@/ui';
+import { useSignedOut } from '@/auth/useSignedOut';
 import { money, percent } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { repos } from '@/data';
@@ -34,6 +38,7 @@ export default function Rates() {
   const router = useRouter();
   const rate = useAsync(() => repos.yield.staking(), []);
   const balance = useAsync(() => repos.portfolio.balance(), []);
+  const signedOut = useSignedOut();
 
   const apy = rate.data?.estimatedApy ?? null;
   const cash = balance.data?.cash ?? 0;
@@ -50,13 +55,13 @@ export default function Rates() {
           <Placeholder height={150} />
         ) : !rate.data || apy === null ? (
           <Text variant="body" color={colors.ink55}>
-            No lending pool on this chain, so there is no rate to read.
+            No lending pool here, so there is no rate.
           </Text>
         ) : (
           <>
             <SheetCard bordered borderRadius={radius.panel} padding={space.s18}>
               <Text variant="footnote" color={colors.ink55}>
-                USDC AT AAVE
+                USDC SUPPLY RATE
               </Text>
               {/*
                 `estimatedApy` is a FRACTION, not percentage points — 0.0412 is 4.12%. Getting that
@@ -66,31 +71,32 @@ export default function Rates() {
                 {percent(apy * 100, { digits: 2, explicitSign: false })}
               </Text>
               <Text variant="secondary" color={colors.ink65} style={{ marginTop: space.s10 }}>
-                {rate.data.note}
+                It floats. It is not a promise.
               </Text>
               {rate.data.feed === 'unavailable' ? (
                 <Text variant="secondarySm" color={colors.warn} style={{ marginTop: space.s8 }}>
-                  This figure is simulated on this chain. It is not what a supply would earn.
+                  Simulated here. Not what a supply would earn.
                 </Text>
               ) : null}
             </SheetCard>
 
-            <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
-              <Text variant="footnote" color={colors.ink55}>
-                YOURS
-              </Text>
-              <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
-                {money(supplied)} supplied · {money(cash)} idle
-              </Text>
-              <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
-                {/*
-                  What the rate would be worth on the idle balance — clearly framed as arithmetic on
-                  a floating rate, not a projection of earnings.
-                */}
-                At today&apos;s rate, the idle balance would earn about {money(cash * apy)} over a
-                year — if the rate held, which it will not.
-              </Text>
-            </SheetCard>
+            {signedOut || !balance.data ? null : (
+              <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+                <Text variant="footnote" color={colors.ink55}>
+                  YOURS
+                </Text>
+                <Text variant="rowPrimary" style={{ marginTop: space.s6 }}>
+                  {money(supplied)} supplied · {money(cash)} idle
+                </Text>
+                <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
+                  {/*
+                    What the rate would be worth on the idle balance — clearly framed as arithmetic on
+                    a floating rate, not a projection of earnings.
+                  */}
+                  Idle cash would earn about {money(cash * apy)} a year, if today&apos;s rate held.
+                </Text>
+              </SheetCard>
+            )}
 
             <Button label="Supply or withdraw" variant="ghost" onPress={() => router.push('/yield')} />
           </>
