@@ -19,7 +19,7 @@
  * name in the same `.env`.
  */
 import { base, baseSepolia } from 'viem/chains';
-import type { Chain } from 'viem';
+import { isAddress, type Address, type Chain } from 'viem';
 
 export type ChainKey = 'base' | 'base-sepolia' | 'base-fork' | 'localnet';
 
@@ -103,3 +103,14 @@ export const depositQrWorks = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-sepoli
 
 /** Said where the code would be. A fork build has no code, and its money is test funds. */
 export const depositQrNote = 'Test network. Use test funds.';
+
+/**
+ * The delegation contract this build trusts, when the build pinned one (FEATURES.md #24).
+ *
+ * `scripts/build-web.mjs` writes it only after the executor it builds for, the deployment's own record and the chain all
+ * agree on it. A grant refuses any other contract, and a stop can go there without asking the executor
+ * (`src/wallet/delegationChain.ts`). A build that did not pin one — a developer's Metro, whose `.env` may name another
+ * deployment's contract — pins nothing, and grants and stops still check the chain before they are signed.
+ */
+const PINNED = process.env.EXPO_PUBLIC_PINNED_DELEGATION;
+export const pinnedDelegation: Address | undefined = PINNED && isAddress(PINNED) ? PINNED : undefined;

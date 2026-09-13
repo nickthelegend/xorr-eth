@@ -7,6 +7,9 @@
  *
  * The same applies to revoking. The kill switch is a transaction the user signs, which is why
  * "takes effect in under a second across every device" is true without any server being reachable.
+ * It was not quite true until 2026-09-14: the stop asked the executor which contract to revoke
+ * before it signed anything. Where a grant and a stop may go is now checked on the chain and
+ * against the build's pinned contract (`src/wallet/delegationChain.ts`, FEATURES.md #1 and #24).
  *
  * How a signature reaches the chain — the wallet put on this build's network and asked where it is,
  * then either sending itself or, on a fork build, only signing while the app broadcasts to the fork —
@@ -17,10 +20,11 @@ import { useWallets } from '@privy-io/react-auth';
 import { pickEmbedded } from './embeddedWallet';
 import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
 import { api } from '@/data/api';
-import { activeChain, walletSignsOnly } from '@/chain';
+import { activeChain, pinnedDelegation, walletSignsOnly } from '@/chain';
 import { humanWalletError } from '@/wallet/walletError';
 import { SETTLEMENT_APPROVAL_DAYS, type GrantOptions } from '@/wallet/grantPlan';
 import { chainAccess } from '@/wallet/chainAccess';
+import { assertGrantDestination, confirmStopped, contractToStop } from '@/wallet/delegationChain';
 import { estimateUserFee, sendAsUser, type UserSigner } from '@/wallet/userSigning';
 
 const DELEGATION_ABI = [
@@ -89,19 +93,24 @@ export function useGrantDelegation() {
     };
   }, [wallets]);
 
+  /** Why nothing can be signed on this session. */
+  const noWallet = useCallback(
+    () =>
+      new Error(
+        wallets?.length
+          ? 'This needs your xorr wallet, not a browser extension. Sign out and back in to use it.'
+          : 'No wallet yet. Finish sign-in first.',
+      ),
+    [wallets],
+  );
+
   const send = useCallback(
     async (to: Address, data: Hex) => {
       const s = await signer();
-      if (!s) {
-        throw new Error(
-          wallets?.length
-            ? 'This needs your xorr wallet, not a browser extension. Sign out and back in to use it.'
-            : 'No wallet yet. Finish sign-in first.',
-        );
-      }
+      if (!s) throw noWallet();
       return sendAsUser(s, to, data);
     },
-    [signer, wallets],
+    [signer, noWallet],
   );
 
   /**
@@ -122,6 +131,12 @@ export function useGrantDelegation() {
       setError(undefined);
       try {
         const params = await api.get<DelegationParams>('/delegation/params');
+        /*
+         * Every approval below, and the grant, goes to an address the executor named. It has to be a contract on this
+         * chain, and the one this build pinned — or a server that named another address would have had this wallet
+         * approve its tokens there. Checked before the first prompt.
+         */
+        await assertGrantDestination(chainAccess, params.contract, pinnedDelegation);
         const cap = parseUnits(dailyCapUsd.toFixed(USDC_DECIMALS), USDC_DECIMALS);
         const expiresAt = BigInt(Math.floor((Date.now() + durationMs) / 1000));
 
@@ -199,12 +214,40 @@ export function useGrantDelegation() {
     setBusy(true);
     setError(undefined);
     try {
-      const params = await api.get<DelegationParams>('/delegation/params');
-      const txHash = await send(
-        params.contract,
+      const s = await signer();
+      if (!s) throw noWallet();
+      /*
+       * Where the stop goes, decided on the chain.
+       *
+       * This asked the executor for the contract first, so with the executor down the kill switch could not be pressed
+       * at all. Now the build's pinned contract is tried first and the executor is asked only if that holds no live
+       * permission for this wallet; either way `policyOf` is read before anything is signed, so the stop goes where the
+       * permission actually is and never to an address where it would land and do nothing.
+       */
+      let contract = pinnedDelegation ? await contractToStop(chainAccess, s.from, [pinnedDelegation]) : undefined;
+      if (!contract) {
+        const named = await api.get<DelegationParams>('/delegation/params').then(
+          (p) => p.contract,
+          () => undefined,
+        );
+        if (!named && !pinnedDelegation) {
+          throw new Error('The server did not answer, and this app has no contract of its own to stop. Try again in a moment.');
+        }
+        contract = await contractToStop(chainAccess, s.from, [named]);
+      }
+      if (!contract) throw new Error('The chain shows no live permission for this wallet, so there is nothing to stop.');
+
+      const txHash = await sendAsUser(
+        s,
+        contract,
         encodeFunctionData({ abi: DELEGATION_ABI, functionName: 'revoke', args: [] }),
       );
-      await api.post('/delegation/revoke', { txHash });
+      await confirmStopped(chainAccess, contract, s.from, txHash);
+      /*
+       * Then the executor's record, if it answers. The chain already says revoked, and every trade is refused on that; a
+       * server that is down must not turn a stop that happened into an error on the screen that asked for it.
+       */
+      await api.post('/delegation/revoke', { txHash }).catch(() => undefined);
       return txHash;
     } catch (e) {
       // viem's message is a five-line dump with the RPC URL and the whole signed
@@ -215,7 +258,7 @@ export function useGrantDelegation() {
     } finally {
       setBusy(false);
     }
-  }, [send]);
+  }, [signer, noWallet]);
 
   /*
    * `send` is exported too.

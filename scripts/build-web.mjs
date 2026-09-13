@@ -19,6 +19,9 @@
  * `server/.env.fork` — what `npm run rebuild:fork` wrote — and is refused unless it answers, from
  * here, as anvil on chain 8453.
  *
+ * Every build also pins the delegation contract it was built against (`EXPO_PUBLIC_PINNED_DELEGATION`,
+ * FEATURES.md #24): see the check below for how it is chosen.
+ *
  * WHY THIS REWRITES .env RATHER THAN SETTING A VARIABLE
  *
  * Two things were tried first and both produced a flawless build log and a bundle still wired to
@@ -63,11 +66,11 @@ function envValue(file, name) {
   return line?.slice(name.length + 1).trim().replace(/^["']|["']$/g, '') || undefined;
 }
 
-async function rpc(url, method) {
+async function rpc(url, method, params = []) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: [] }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   });
   const body = await res.json();
   if (body.error) throw new Error(`${method}: ${body.error.message}`);
@@ -87,6 +90,33 @@ if (FORK) {
   console.log(`  fork RPC ${CHAIN_RPC} answers as ${client} on chain ${Number(chainId)}`);
 }
 
+/*
+ * The delegation contract this build pins (FEATURES.md #24).
+ *
+ * A grant approves the wallet's tokens to the contract the executor names, and a stop revokes one. The app refuses a
+ * grant to any contract but the one it was built against, and tries that one first when stopping, so a stop does not
+ * wait on the executor — which means the address baked in here has to be right, three ways, before anything is built:
+ *   - the executor this build talks to reports it (`/health` → `delegation`);
+ *   - the deployment's own record agrees, where there is one: `XORR_WEB_DELEGATION`, else `server/.env.fork` on a fork;
+ *   - and the chain has a contract at that address.
+ * The developer's `.env` is not asked. Its `EXPO_PUBLIC_DELEGATION_ADDRESS` named neither the fork's contract nor
+ * Sepolia's when this was written (2026-09-14), and a pin taken from it would have refused every grant.
+ */
+const PUBLIC_RPC = { base: 'https://mainnet.base.org', 'base-sepolia': 'https://sepolia.base.org' };
+const PIN = String(health.delegation ?? '').toLowerCase();
+if (!/^0x[0-9a-f]{40}$/.test(PIN)) refuse(`${API} does not report its delegation contract, so there is nothing to pin.`);
+const RECORD = (
+  process.env.XORR_WEB_DELEGATION ?? (FORK ? envValue(FORK_ENV_FILE, 'EXPO_PUBLIC_DELEGATION_ADDRESS') : undefined)
+)?.toLowerCase();
+if (RECORD && RECORD !== PIN) refuse(`${API} names the delegation contract ${PIN}, and the deployment record names ${RECORD}.`);
+const CODE_RPC = CHAIN_RPC ?? PUBLIC_RPC[health.chain];
+if (!CODE_RPC) refuse(`there is no RPC to confirm the delegation contract on ${health.chain}.`);
+const code = await rpc(CODE_RPC, 'eth_getCode', [PIN, 'latest']);
+if (!code || code === '0x') refuse(`there is no contract at ${PIN} on ${health.chain}.`);
+console.log(
+  `  delegation contract ${PIN} pinned: ${RECORD ? 'the executor and the deployment record agree' : 'as the executor reports it (no deployment record to compare)'}, and the chain holds its code`,
+);
+
 if (!existsSync(ENV_FILE)) refuse(`there is no ${ENV_FILE} to build from. Copy .env.example and fill it in.`);
 
 /* The developer's own file, restored verbatim below whatever happens. */
@@ -95,11 +125,12 @@ const original = readFileSync(ENV_FILE, 'utf8');
 try {
   const patched = original
     .split('\n')
-    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN|CHAIN_RPC)=/.test(l))
+    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN|CHAIN_RPC|PINNED_DELEGATION)=/.test(l))
     .concat([
       `EXPO_PUBLIC_API_URL=${API}`,
       `EXPO_PUBLIC_XORR_CHAIN=${health.chain}`,
       ...(CHAIN_RPC ? [`EXPO_PUBLIC_CHAIN_RPC=${CHAIN_RPC}`] : []),
+      `EXPO_PUBLIC_PINNED_DELEGATION=${PIN}`,
       '',
     ])
     .join('\n');
@@ -141,6 +172,7 @@ const js = readFileSync(bundle, 'utf8');
 const problems = [];
 if (!js.includes(API)) problems.push(`the bundle does not contain ${API}`);
 if (CHAIN_RPC && !js.includes(CHAIN_RPC)) problems.push(`the bundle does not contain the fork RPC ${CHAIN_RPC}`);
+if (!js.includes(PIN)) problems.push(`the bundle does not contain the pinned delegation contract ${PIN}`);
 
 if (problems.length) {
   console.error(`\n  Build produced the wrong artifact:\n${problems.map((p) => `    - ${p}`).join('\n')}\n`);
@@ -162,6 +194,11 @@ if (problems.length) {
  * which then renders its own not-found screen for a route that really does not exist.
  *
  * Hashed assets are immutable; index.html must not be cached, or a deploy never reaches anyone.
+ *
+ * And the headers any money app should send (FEATURES.md #76): no framing of this app by another site (Privy's own
+ * iframes are framed BY this app, which these do not touch), no MIME sniffing, no referrer beyond the origin, HTTPS
+ * only, and no camera or location. No content-security policy yet: Privy, its RPCs and the executor need a list that
+ * has to be proven in a browser before it is enforced, and a wrong one fails sign-in silently.
  */
 writeFileSync(
   join(OUT, 'vercel.json'),
@@ -169,6 +206,16 @@ writeFileSync(
     {
       rewrites: [{ source: '/(.*)', destination: '/index.html' }],
       headers: [
+        {
+          source: '/(.*)',
+          headers: [
+            { key: 'X-Frame-Options', value: 'DENY' },
+            { key: 'X-Content-Type-Options', value: 'nosniff' },
+            { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+            { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+            { key: 'Permissions-Policy', value: 'camera=(), geolocation=()' },
+          ],
+        },
         {
           source: '/_expo/static/(.*)',
           headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
@@ -183,5 +230,5 @@ writeFileSync(
 );
 
 console.log(
-  `\n  ${bundle}\n  points at ${API}${CHAIN_RPC ? ` and ${CHAIN_RPC}` : ''} — verified in the bundle, not assumed.\n`,
+  `\n  ${bundle}\n  points at ${API}${CHAIN_RPC ? ` and ${CHAIN_RPC}` : ''}, pins ${PIN} — verified in the bundle, not assumed.\n`,
 );
