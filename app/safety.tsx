@@ -298,7 +298,10 @@ export default function Safety() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: space.s16, gap: space.s12 }}
         >
-          {delegation ? (
+          {/* Signed out, nobody's permission has been read: a sign-in, not a claim about a wallet nobody named. */}
+          {signedOut ? (
+            <Button label="Sign in" onPress={() => router.push('/welcome')} />
+          ) : delegation ? (
             <SheetCard borderRadius={radius.panel} padding={space.s16}>
               <Row
                 title="Your wallet"
@@ -373,48 +376,50 @@ export default function Safety() {
             </SheetCard>
           ) : null}
 
-          <SheetCard borderRadius={radius.panel} padding={space.s16}>
-            {privy.data ? (
+          {signedOut ? null : (
+            <SheetCard borderRadius={radius.panel} padding={space.s16}>
+              {privy.data ? (
+                <Row
+                  title="Wallet policy"
+                  value={
+                    <Text variant="rowPrimary" color={colors.ink55}>
+                      {privy.data.enforced ? 'On' : 'Off'}
+                    </Text>
+                  }
+                  height={SETTING_ROW}
+                  onPress={() => router.push('/policy')}
+                />
+              ) : null}
               <Row
-                title="Wallet policy"
+                title="Allowlist"
                 value={
                   <Text variant="rowPrimary" color={colors.ink55}>
-                    {privy.data.enforced ? 'On' : 'Off'}
+                    {/* A count the executor has not given is not zero addresses. */}
+                    {allowlistError
+                      ? '—'
+                      : allowlistLoading
+                        ? '· · ·'
+                        : addresses.length === 1
+                          ? '1 address'
+                          : `${addresses.length} addresses`}
                   </Text>
                 }
                 height={SETTING_ROW}
-                onPress={() => router.push('/policy')}
+                onPress={() => router.push('/allowlist')}
               />
-            ) : null}
-            <Row
-              title="Allowlist"
-              value={
-                <Text variant="rowPrimary" color={colors.ink55}>
-                  {/* A count the executor has not given is not zero addresses. */}
-                  {allowlistError
-                    ? '—'
-                    : allowlistLoading
-                      ? '· · ·'
-                      : addresses.length === 1
-                        ? '1 address'
-                        : `${addresses.length} addresses`}
-                </Text>
-              }
-              height={SETTING_ROW}
-              onPress={() => router.push('/allowlist')}
-            />
-            <Row
-              title="Recovery"
-              value={
-                <Text variant="rowPrimary" color={recoveryBackedUp ? colors.ink55 : colors.warn}>
-                  {recoveryBackedUp ? 'Done' : 'Review'}
-                </Text>
-              }
-              height={SETTING_ROW}
-              divider={false}
-              onPress={() => router.push('/recovery')}
-            />
-          </SheetCard>
+              <Row
+                title="Recovery"
+                value={
+                  <Text variant="rowPrimary" color={recoveryBackedUp ? colors.ink55 : colors.warn}>
+                    {recoveryBackedUp ? 'Done' : 'Review'}
+                  </Text>
+                }
+                height={SETTING_ROW}
+                divider={false}
+                onPress={() => router.push('/recovery')}
+              />
+            </SheetCard>
+          )}
         </ScrollView>
       </Fill>
 
@@ -442,17 +447,19 @@ export default function Safety() {
         </>
       ) : null}
       {/* Stopping and exiting are different needs: exiting is a quiet link, never a second red button. */}
-      <Press
-        onPress={() => router.push('/flatten')}
-        accessibilityRole="button"
-        accessibilityLabel="Sell every position into USDC"
-        hitHeight={size.hit}
-        style={{ marginTop: space.s14, alignItems: 'center' }}
-      >
-        <Text variant="footnote" color={colors.ink55}>
-          Sell everything to cash ›
-        </Text>
-      </Press>
+      {signedOut ? null : (
+        <Press
+          onPress={() => router.push('/flatten')}
+          accessibilityRole="button"
+          accessibilityLabel="Sell every position into USDC"
+          hitHeight={size.hit}
+          style={{ marginTop: space.s14, alignItems: 'center' }}
+        >
+          <Text variant="footnote" color={colors.ink55}>
+            Sell everything to cash ›
+          </Text>
+        </Press>
+      )}
     </Screen>
   );
 }

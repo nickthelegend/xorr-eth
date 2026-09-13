@@ -31,6 +31,15 @@ export const easing = Easing.inOut(Easing.ease);
 export const easeOut = Easing.out(Easing.cubic);
 
 /**
+ * The same curve as a cubic bezier, for the entrance builders.
+ *
+ * Reanimated draws layout animations on the web with CSS, which takes a named easing or a bezier and
+ * nothing composed — `Easing.out(Easing.cubic)` logged "Selected easing is not currently supported on
+ * web" on every screen and arrived linearly. easeOutCubic is `cubic-bezier(0.33, 1, 0.68, 1)`.
+ */
+const arrivalCurve = Easing.bezier(0.33, 1, 0.68, 1);
+
+/**
  * A timing config. Pass `reduced` from `useReducedMotion()` and the transition collapses to an
  * instant state change — the colour or position alone still carries the meaning.
  *
@@ -60,7 +69,7 @@ export function enterAt(index: number, reduced: boolean) {
   if (reduced) return undefined;
   return FadeInDown.duration(duration.enter)
     .delay(index * STAGGER)
-    .easing(easeOut)
+    .easing(arrivalCurve)
     .reduceMotion(ReduceMotion.System);
 }
 
