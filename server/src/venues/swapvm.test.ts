@@ -267,6 +267,27 @@ describe('building the fill', () => {
     expect(fill?.hash).toBe('0xbb');
   });
 
+  it('takes the program whose dry run delivers the most, not the first that can fill (PLAN.md 3.20)', async () => {
+    byEvent(
+      [
+        evt(SWAP_VM, '0xaa', encodeOrder(order('0xaaaa')), 10n, 0),
+        evt(SWAP_VM, '0xbb', encodeOrder(order('0xbbbb')), 11n, 0),
+      ],
+      [],
+    );
+    readContract
+      .mockResolvedValueOnce([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xf1'])
+      .mockResolvedValueOnce([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xb2']);
+    simulateContract
+      .mockResolvedValueOnce({ request: {}, result: encodeAbiParameters(parseAbiParameters('uint256'), [998_000_000_000_000_000n]) })
+      .mockResolvedValueOnce({ request: {}, result: encodeAbiParameters(parseAbiParameters('uint256'), [1_004_000_000_000_000_000n]) });
+
+    const fill = await buildSwapVmFill(params);
+    expect(fill?.data).toBe('0xb2');
+    expect(fill?.hash).toBe('0xbb');
+    expect(fill?.expectedOut).toBe(1_004_000_000_000_000_000n);
+  });
+
   it('returns undefined when no discovered program can fill, so the caller routes to 1inch', async () => {
     byEvent([evt(SWAP_VM, '0xaa', encodeOrder(order()), 10n, 0)], []);
     readContract.mockResolvedValue([params.tokenIn, swapVmBookAddress(), params.amountIn, '0xcafe']);

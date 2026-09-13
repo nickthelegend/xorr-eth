@@ -494,7 +494,7 @@ export default function Safety() {
           Only rendered when something is actually approved: four zero rows on a fresh wallet is
           noise on a screen that has to be scannable in a second.
         */}
-        {approvals && approvals.tokens.some((t) => !t.none) ? (
+        {approvals && approvals.tokens.some((t) => !t.none && !t.unread) ? (
           <SheetCard borderRadius={radius.panel} padding={space.s16} style={{ marginTop: space.s10 }}>
             <View style={{ gap: space.s6 }}>
               <Eyebrow small>Token approvals</Eyebrow>
@@ -507,7 +507,7 @@ export default function Safety() {
             </View>
             <View style={{ gap: space.s10, marginTop: space.s12 }}>
               {approvals.tokens
-                .filter((t) => !t.none)
+                .filter((t) => !t.none && !t.unread)
                 .map((t) => (
                   <View
                     key={t.address}
@@ -533,9 +533,9 @@ export default function Safety() {
                       </Text>
                     </View>
                     <Button
-                      label={revoking === t.symbol ? 'Taking it back…' : 'Take it back'}
+                      label={revoking === `${approvals.spender}:${t.symbol}` ? 'Taking it back…' : 'Take it back'}
                       variant="ghost"
-                      loading={revoking === t.symbol}
+                      loading={revoking === `${approvals.spender}:${t.symbol}`}
                       onPress={() => revokeApproval(t, approvals.spender)}
                     />
                   </View>

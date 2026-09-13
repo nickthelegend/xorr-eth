@@ -199,6 +199,16 @@ function authed(url: string) {
   });
 }
 
+/**
+ * Any other 1inch API, with the same key, request lane and breaker as the swap API (PLAN.md 3.10–3.16).
+ *
+ * `path` starts at the API root — `/gas-price/v1.6/8453`, `/balance/v1.2/8453/balances/0x…` — so every call names
+ * the product and the version it depends on.
+ */
+export function oneinchApi<T>(path: string, ttlMs = 15_000): Promise<T> {
+  return getJson<T>(`https://api.1inch.dev${path}`, ttlMs, 15_000, { Authorization: `Bearer ${API_KEY}` });
+}
+
 /** Flatten 1inch's nested protocol matrix into the venue names a person would recognise. */
 export function venuesFrom(protocols: QuoteResponse['protocols']): string[] {
   const names = new Set<string>();

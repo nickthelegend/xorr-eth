@@ -34,18 +34,43 @@ import { signedMoney } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { logoProps, useLogos } from '@/data/useLogos';
+import { walletTokens } from '@/data/walletTokens';
 import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 import { driftSentence, holdingDrift, weightBarPct } from '@/state/derived';
 
 const BAR_H = 8;
 
+/*
+ * A balance too small for four places, or a value under a cent, is still held (PLAN.md 3.10). `quantity` prints dust as
+ * "0.0000" and `money` as "$0.00", both of which read as holding nothing, so these say how small instead.
+ */
+const SMALLEST_UNITS = 0.0001;
+const CENT = 0.01;
+
+function tokenUnits(units: number): string {
+  return units > 0 && units < SMALLEST_UNITS ? `< ${quantity(SMALLEST_UNITS)}` : quantity(units);
+}
+
+function tokenUsd(usd: number): string {
+  return usd > 0 && usd < CENT ? `< ${money(CENT)}` : money(usd);
+}
+
+/** Said rather than left out, because a list that silently omits a held token reads as the whole wallet. */
+function undescribedNote(count: number): string {
+  return count === 1
+    ? 'One more token is held here but not listed: 1inch would not say what it is.'
+    : `${count} more tokens are held here but not listed: 1inch would not say what they are.`;
+}
+
 export default function Assets() {
   const router = useRouter();
   const wallet = useStore((s) => s.wallet);
   const balance = useAsync(() => repos.portfolio.balanceUsd(), []);
   const sleeves = useAsync(() => repos.portfolio.sleeves(), []);
-  const refresh = useRefreshControl(() => Promise.all([balance.reload(), sleeves.reload()]));
+  // The chain's word on this wallet (PLAN.md 3.10). Refreshed with the balance, because a trade changes both at once.
+  const tokens = useAsync(() => walletTokens(), []);
+  const refresh = useRefreshControl(() => Promise.all([balance.reload(), sleeves.reload(), tokens.reload()]));
   const positions = useAsync(() => repos.portfolio.positions(), []);
   const realised = useAsync(() => repos.portfolio.realised(), []);
 
@@ -62,6 +87,16 @@ export default function Assets() {
   // showed assets the user did not own at prices that never moved.
   const holdings = useMemo(() => positions.data ?? [], [positions.data]);
   const logos = useLogos(useMemo(() => holdings.map((h) => h.symbol), [holdings]));
+  const tokenRows = useMemo(() => tokens.data?.tokens ?? [], [tokens.data]);
+  /*
+   * The marks use the logo the executor sent with each token instead of asking `/market/logos` by symbol, which knows
+   * only the registry, and a ticker is a label two tokens can share. Keyed by address for the same reason. Every entry
+   * is a settled answer, so no mark is left waiting.
+   */
+  const tokenLogos = useMemo(
+    () => Object.fromEntries(tokenRows.map((t) => [t.address, t.logo])),
+    [tokenRows],
+  );
 
   return (
     <Screen tabBar>
@@ -182,6 +217,46 @@ export default function Assets() {
             </NoteStrip>
           ) : null;
         })}
+
+        {/*
+          The chain's word, beside the ledger's (PLAN.md 3.10).
+
+          Holdings above are the book the executor keeps from its own fills. A wallet holds more than that — the ETH
+          that pays for gas, a deposit, a token sent in — so this lists what is actually at the address: 1inch's
+          Balance API on Base, the chain itself on a fork or a testnet. Where the two disagree, this one is the wallet.
+        */}
+        <Text variant="cardTitle" style={{ marginTop: space.s26, marginBottom: space.s6 }}>
+          Tokens
+        </Text>
+        <Text variant="secondarySm" color={colors.ink40} style={{ marginBottom: space.s6 }}>
+          {tokens.data?.source === '1inch'
+            ? 'Read from the chain through 1inch, not from the ledger above.'
+            : 'Read from the chain, not from the ledger above.'}
+        </Text>
+        {tokens.error ? (
+          /* A failed read says so. An empty list here would be a claim that the wallet holds nothing. */
+          <ErrorState error={tokens.error} onRetry={tokens.reload} />
+        ) : tokens.loading && !tokens.data ? (
+          <LoadingRows count={2} height={size.rowLg} />
+        ) : tokenRows.length === 0 ? (
+          <EmptyState text="The chain shows no tokens in this wallet." />
+        ) : (
+          tokenRows.map((t) => (
+            <Row
+              key={t.address}
+              left={<AssetMark gradient={assetGradient(t.symbol)} {...logoProps(tokenLogos, t.address)} size={32} />}
+              title={t.symbol}
+              secondary={t.name ? `${tokenUnits(t.units)} · ${t.name}` : tokenUnits(t.units)}
+              value={<Price>{t.usd === null ? '—' : tokenUsd(t.usd)}</Price>}
+              height={size.rowLg}
+            />
+          ))
+        )}
+        {tokens.data && tokens.data.undescribed.length > 0 ? (
+          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s10 }}>
+            {undescribedNote(tokens.data.undescribed.length)}
+          </Text>
+        ) : null}
 
         {/*
           Money actually taken, kept apart from money on paper.

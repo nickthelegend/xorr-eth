@@ -3,6 +3,9 @@
  *
  * Skipping would lose whatever was shipped inside it and lose it silently, which is the exact
  * failure this module exists to end rather than relocate.
+ *
+ * And a topic filter, when one is given, is asked of every window — a window asked without it would
+ * return other owners' events as this owner's (PLAN.md 3.14).
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -75,5 +78,68 @@ describe('paging eth_getLogs', () => {
     expect(isRangeRefusal(new Error('eth_getLogs is limited to a 2,000 range'))).toBe(true);
     expect(isRangeRefusal(new Error('exceeds max block range'))).toBe(true);
     expect(isRangeRefusal(new Error('execution reverted'))).toBe(false);
+  });
+});
+
+/** An event that indexes its owner, as `XorrDelegation`'s `Spent` does — so a node can match the topic itself. */
+const OWNED = {
+  type: 'event',
+  name: 'Spent',
+  inputs: [
+    { name: 'owner', type: 'address', indexed: true },
+    { name: 'amount', type: 'uint256', indexed: false },
+  ],
+} as const;
+const OWNER = '0x95A0b368588713011a15f4b1041423f31B08e615' as const;
+
+type Asked = { address: string; event: unknown; args?: unknown; fromBlock: bigint; toBlock: bigint };
+const asked = () => getLogs.mock.calls.map(([q]) => q as Asked);
+
+describe('an indexed-topic filter (PLAN.md 3.14)', () => {
+  it('is handed to every window unchanged, and the range is still covered without a gap', async () => {
+    getLogs.mockImplementation(async ({ fromBlock }: { fromBlock: bigint }) => [{ blockNumber: fromBlock }]);
+
+    const logs = await getLogsPaged({ address: ADDRESS, event: OWNED, args: { owner: OWNER }, fromBlock: 0n, toBlock: 2_499n });
+
+    expect(logs).toHaveLength(3);
+    expect(asked().map((q) => [q.fromBlock, q.toBlock])).toEqual([
+      [0n, 999n],
+      [1_000n, 1_999n],
+      [2_000n, 2_499n],
+    ]);
+    for (const q of asked()) {
+      expect(q.event).toBe(OWNED);
+      expect(q.args).toEqual({ owner: OWNER });
+    }
+  });
+
+  it('rides the retry of a refused window, so a smaller window never widens to every owner', async () => {
+    let refused = false;
+    getLogs.mockImplementation(async () => {
+      if (!refused) {
+        refused = true;
+        throw new Error('eth_getLogs is limited to a 500 range');
+      }
+      return [];
+    });
+
+    await getLogsPaged({ address: ADDRESS, event: OWNED, args: { owner: OWNER }, fromBlock: 0n, toBlock: 999n });
+
+    // The refused 0–999, then the same blocks again at the provider's number — each still asking for this owner.
+    expect(asked().map((q) => [q.fromBlock, q.toBlock])).toEqual([
+      [0n, 999n],
+      [0n, 499n],
+      [500n, 999n],
+    ]);
+    expect(asked().map((q) => q.args)).toEqual([{ owner: OWNER }, { owner: OWNER }, { owner: OWNER }]);
+  });
+
+  it('is left out of the request when none is given, so the book scans ask exactly what they always asked', async () => {
+    getLogs.mockResolvedValue([]);
+
+    await getLogsPaged({ address: ADDRESS, event: EVENT, fromBlock: 0n, toBlock: 1_500n });
+
+    expect(getLogs).toHaveBeenCalledTimes(2);
+    for (const q of asked()) expect(Object.keys(q).sort()).toEqual(['address', 'event', 'fromBlock', 'toBlock']);
   });
 });

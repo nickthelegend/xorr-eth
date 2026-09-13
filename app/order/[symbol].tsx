@@ -41,6 +41,7 @@ import { useStore } from '@/state/store';
 import { DEFAULT_BUY } from '@/data/tradable';
 import { useSettleable } from '@/data/useSettleable';
 import { errorText } from '@/data/apiError';
+import type { SwapQuoteResult } from '@/data/useSwapQuote';
 
 type Side = 'buy' | 'sell';
 
@@ -136,7 +137,7 @@ export default function OrderTicket() {
   const routeQuote = useAsync(
     () =>
       quoted > 0 && (side === 'buy' || (held?.mark ?? 0) > 0)
-        ? api.get<{ minimumOut: number; venues: string[]; slippagePct: number }>(
+        ? api.get<{ minimumOut: number; venues: string[]; slippagePct: number; gas?: SwapQuoteResult['gas'] }>(
             side === 'buy'
               ? `/swap/quote?in=USDC&out=${encodeURIComponent(symbol)}&amount=${quoted}`
               : // A sell is entered in dollars; the route is quoted in units, so it needs the
@@ -284,6 +285,19 @@ export default function OrderTicket() {
             ? '…'
             : routeQuote.data
               ? `${quantity(routeQuote.data.minimumOut)} ${side === 'buy' ? symbol : 'USDC'}`
+              : '—'}
+        </Price>
+      </View>
+      {/* What sending it costs, and who pays it: the executor, which sends every order (PLAN.md 3.13). */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingBottom: space.s12 }}>
+        <Text variant="secondary" color={colors.sheet.muted}>
+          Network fee
+        </Text>
+        <Price variant="secondary" color={colors.sheet.ink}>
+          {routeQuote.loading
+            ? '…'
+            : typeof routeQuote.data?.gas?.feeUsd === 'number'
+              ? `≈ ${money(routeQuote.data.gas.feeUsd)} · paid by xorr`
               : '—'}
         </Price>
       </View>

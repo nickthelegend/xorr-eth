@@ -67,19 +67,6 @@ export type ChainVerification = {
   kind?: 'link' | 'content';
 };
 
-export type TokenApproval = {
-  symbol: string;
-  address: string;
-  /** Raw uint256, as a string. See the module note. */
-  allowance: string;
-  /** The same value in the token's own units. */
-  display: string;
-  decimals: number;
-  unlimited: boolean;
-  none: boolean;
-};
-
-export type Approvals = { spender: string; tokens: TokenApproval[] };
 
 export type Limits = {
   dailyCapUsd: number;
@@ -428,7 +415,6 @@ export const system = {
       | { anchored: true; txHash: string; head: string; entryCount: number }
       | { anchored: false; reason: string; detail: string }
     >('/audit/anchor', {}),
-  approvals: () => api.get<Approvals>('/approvals'),
   /*
    * There is deliberately no `agentKeys()` here.
    *

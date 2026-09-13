@@ -186,7 +186,12 @@ async function attempt<T>(
         await sleep(backoff);
         continue;
       }
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
+      if (!res.ok) {
+        // What the upstream said, when it said it in words: 1inch answers a refusal with a JSON `description`, and a
+        // bare status told a screen only that it had been refused, never why (PLAN.md 3.16).
+        const said = await reasonFrom(res);
+        throw new Error(`${res.status} ${res.statusText} for ${url}${said ? ` — ${said}` : ''}`);
+      }
       // Any success closes the breaker. The lane's minimum spacing means the first request after a
       // cooldown is already the probe, so there is nothing to add here.
       lane.failures = 0;
@@ -210,6 +215,26 @@ async function attempt<T>(
   }
   if (lastError) throw lastError;
   throw new Error(`${lastStatus} after ${attempts} attempts: ${url}`);
+}
+
+/**
+ * A short reason from an error response: its `description`, `message` or `error`, when the body is JSON that has one.
+ *
+ * Only a named field, and never the raw body — an HTML error page or a stack trace is not a sentence anyone should be
+ * shown — cut to 200 characters on one line.
+ */
+async function reasonFrom(res: Response): Promise<string | undefined> {
+  const text = await res.text().catch(() => '');
+  if (!text) return undefined;
+  try {
+    const body = JSON.parse(text) as Record<string, unknown>;
+    const said = [body.description, body.message, body.error].find(
+      (v): v is string => typeof v === 'string' && v.trim().length > 0,
+    );
+    return said?.replace(/\s+/g, ' ').trim().slice(0, 200);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The cache and in-flight bookkeeping both reads share, keyed by what was asked. */

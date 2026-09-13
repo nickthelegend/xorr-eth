@@ -16,26 +16,12 @@
  * refused before anything is signed.
  */
 import { useCallback, useState } from 'react';
-import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
+import type { Address, Hex } from 'viem';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { isUsable, type AllowlistEntry } from './allowlist';
+import { transferCall } from './transfer';
 import { humanWalletError } from './walletError';
 import { api } from '@/data/api';
-
-const ERC20_TRANSFER = [
-  {
-    type: 'function',
-    name: 'transfer',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'to', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'bool' }],
-  },
-] as const;
-
-const USDC_DECIMALS = 6;
 
 export class NotAllowlisted extends Error {
   constructor() {
@@ -58,37 +44,32 @@ export function useWithdraw() {
   const [txHash, setTxHash] = useState<Hex>();
 
   /**
-   * Send USDC to an allowlisted destination.
+   * Send a token to an allowlisted destination (PLAN.md 3.11).
    *
-   * @param token   The USDC contract on the chain the app is pointed at, from `/delegation/params`.
+   * @param token   The token as this chain lists it — its own address and decimals, from `/market/watchable`.
    * @param entry   The chosen destination. Must be on the list and past its cooling-off.
-   * @param amount  A dollar figure, as the screen shows it.
+   * @param amount  The amount as typed, in the token's own units.
    */
   const withdraw = useCallback(
     async (params: {
-      token: Address;
+      token: { symbol: string; address: string; decimals: number };
       entry: AllowlistEntry | undefined;
       allowlist: AllowlistEntry[];
-      amountUsd: number;
+      amount: string;
     }) => {
       setBusy(true);
       setError(undefined);
       setTxHash(undefined);
       try {
-        const { entry, allowlist, amountUsd, token } = params;
+        const { entry, allowlist, amount, token } = params;
         // Checked against the list itself, not against which card the screen had highlighted.
         if (!entry || !allowlist.some((a) => a.address === entry.address)) throw new NotAllowlisted();
         if (!isUsable(entry)) throw new StillCoolingOff();
-        if (!(amountUsd > 0)) throw new Error('Enter an amount above zero.');
+        if (!(Number(amount) > 0)) throw new Error('Enter an amount above zero.');
 
-        const hash = await sendTransaction(
-          token,
-          encodeFunctionData({
-            abi: ERC20_TRANSFER,
-            functionName: 'transfer',
-            args: [entry.address as Address, parseUnits(amountUsd.toFixed(USDC_DECIMALS), USDC_DECIMALS)],
-          }),
-        );
+        // In the token's own decimals, from the typed string — never through a float.
+        const call = transferCall(token, entry.address as Address, amount);
+        const hash = await sendTransaction(call.to, call.data);
         setTxHash(hash);
         // The portfolio history records the wallet once this send lands (PLAN.md 2.10). Not awaited: the
         // executor waits for the transaction itself, and a snapshot that fails is not the send failing.

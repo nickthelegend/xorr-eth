@@ -27,6 +27,7 @@ import {
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { ADDRESSES, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
+import { allowanceView, chainAllowance, routerAllowance, routerSpender } from '../evm/allowances.js';
 import { delegateAccount } from '../evm/client.js';
 import { basenameOf } from '../evm/basename.js';
 import { dripGasIfNeeded } from '../evm/gasDrip.js';
@@ -499,44 +500,37 @@ function decimalsFor(symbol: string): number {
 routes.get('/approvals', async (c) => {
   const w = await requireWallet(c);
   const owner = w.address as Address;
-  const tokens = await approvableTokens();
-  const allowances = await Promise.all(
-    tokens.map((t) =>
-      publicClient
-        .readContract({
-          address: t.address,
-          abi: erc20Abi,
-          functionName: 'allowance',
-          args: [owner, DELEGATION_ADDRESS],
-        })
-        .catch(() => 0n),
-    ),
-  );
-  const MAX = (1n << 256n) - 1n;
+  const tokens = (await approvableTokens()).map((t) => ({ ...t, decimals: decimalsFor(t.symbol) }));
+  /*
+   * Two spenders (PLAN.md 3.12): the delegation, which the app asks for, and the 1inch router, which the app never
+   * needs — the delegation approves it for one trade and resets it — so an allowance to it came from somewhere else
+   * and is worth taking back. A read that fails is `unread`, never shown as "None": it had been `.catch(() => 0n)`,
+   * which told a wallet it had approved nothing when nobody had been able to look.
+   */
+  const router = await routerSpender().catch(() => undefined);
+  const [toDelegation, toRouter] = await Promise.all([
+    Promise.all(tokens.map((t) => chainAllowance(t.address, owner, DELEGATION_ADDRESS))),
+    router
+      ? Promise.all(tokens.map((t) => routerAllowance(t.address, owner, router.source, router.address)))
+      : Promise.resolve(undefined),
+  ]);
+  const delegationTokens = tokens.map((t, i) => allowanceView(t, toDelegation[i]));
   return c.json({
+    // The delegation's allowances, in the shape the Safety screen has always read.
     spender: DELEGATION_ADDRESS,
-    tokens: tokens.map((t, i) => ({
-      symbol: t.symbol,
-      address: t.address,
-      /*
-       * A string, because this is a uint256 and JSON has no such thing.
-       *
-       * Sending it as a number silently rounds MAX_UINT256 to 1.157920892373162e+77, and a
-       * screen comparing that to anything is comparing a lie.
-       */
-      allowance: (allowances[i] ?? 0n).toString(),
-      /*
-       * And in the token's own units, because "48000000000" is not a quantity anyone reads.
-       *
-       * The raw value stays alongside it: it is what the chain holds and what a reader would
-       * check against an explorer, and rounding it away would make this screen unverifiable in
-       * exactly the way the rest of the product refuses to be.
-       */
-      display: formatUnits(allowances[i] ?? 0n, decimalsFor(t.symbol)),
-      decimals: decimalsFor(t.symbol),
-      unlimited: (allowances[i] ?? 0n) === MAX,
-      none: (allowances[i] ?? 0n) === 0n,
-    })),
+    tokens: delegationTokens,
+    spenders: [
+      { role: 'delegation', name: 'xorr delegation', address: DELEGATION_ADDRESS, source: 'chain', tokens: delegationTokens },
+      router && toRouter
+        ? {
+            role: 'router',
+            name: '1inch router',
+            address: router.address,
+            source: router.source,
+            tokens: tokens.map((t, i) => allowanceView(t, toRouter[i])),
+          }
+        : { role: 'router', name: '1inch router', address: null, source: null, tokens: null, unread: true },
+    ],
   });
 });
 

@@ -44,6 +44,7 @@ const GROUPS: Group[] = [
     title: 'Money',
     blurb: 'What was made, what was spent, and what is left.',
     items: [
+      { route: '/history', title: 'History', detail: 'What settled on chain: every spend and close, each with its transaction' },
       { route: '/pnl', title: 'Realised', detail: 'Profit on positions that are actually closed' },
       { route: '/limits', title: "Today's limit", detail: 'The cap, what it has spent, what remains' },
       { route: '/allocation', title: 'Allocation', detail: 'Where the money sits, by class' },
@@ -74,6 +75,8 @@ const GROUPS: Group[] = [
     blurb: 'The instruments, and where their numbers come from.',
     items: [
       { route: '/swap', title: 'Swap', detail: 'Any token you hold for another, through your permission' },
+      { route: '/crosschain', title: 'Cross-chain', detail: 'What USDC or WETH from Base would arrive as on another chain, quoted by 1inch Fusion+' },
+      { route: '/limit-orders', title: 'Limit orders', detail: 'WETH makers signed a price for, taken whole through your permission' },
       { route: '/movers', title: 'Movers', detail: "Today's largest moves, both directions" },
       { route: '/tokens', title: 'Tokens', detail: 'What settles on this chain, with addresses' },
       { route: '/compare', title: 'Compare', detail: 'Two instruments over the same range' },

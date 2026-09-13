@@ -1,97 +1,195 @@
 /**
- * Transaction history — PLAN.md 10.7 [G14].
+ * Transaction history — PLAN.md 3.14 (first built as 10.7 [G14]).
  *
- * Deliberately DISTINCT from Activity (screen 15). Activity answers "what did the bot
- * decide"; this answers "what settled on chain". They differ: a blocked proposal is an
- * activity event with no transaction, and a fee is a transaction with no decision behind it.
+ * Deliberately DISTINCT from Activity (screen 15). Activity answers "what did the bot decide"; this answers "what
+ * settled on chain". They differ: a blocked proposal is an activity event with no transaction, and a fee is a
+ * transaction with no decision behind it.
  *
- * The rows come from **The Graph**, not from our own database. A settlement history the user
- * cannot verify independently is not a settlement history — it is our word for it.
+ * The rows are the delegation contract's own `Spent` and `Closed` events for this wallet, read from the chain this
+ * build settles on by `GET /history` — and on Base mainnet, 1inch's history of the wallet beside them. A settlement
+ * history the user cannot verify independently is not a settlement history, so every row carries its transaction.
+ *
+ * Until 3.14 it read spends alone, from The Graph, on the client. The subgraph indexes the Sepolia contract, so on the
+ * fork — 33 filled runs, every one of them on chain — it said nothing had settled; and closes, half of what a
+ * permission does, were never shown at all.
  */
 import React from 'react';
-import { ScrollView, View } from 'react-native';
+import { Linking, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
-  BackButton,
   EmptyState,
   ErrorState,
   Fill,
+  HeaderBar,
   LoadingRows,
+  Press,
   Price,
-  Row,
   Screen,
   Text,
   colors,
-  money,
+  divider,
   size,
   space,
 } from '@/ui';
+import { money, quantity, shortAddress } from '@/format';
 import { useAsync } from '@/data/useAsync';
-import { system } from '@/data/system';
+import { history, unitsOf, type HistoryItem } from '@/data/history';
 import { useRefreshControl } from '@/ui/useRefreshControl';
-import { spendsFor, unitsToUsd } from '@/data/subgraph';
-import { useStore } from '@/state/store';
 
-export default function History() {
-  const router = useRouter();
-  const goBack = useGoBack();
-  const wallet = useStore((s) => s.wallet);
-  const { data, loading, error, reload } = useAsync(
-    () => (wallet?.address ? spendsFor(wallet.address) : Promise.resolve([])),
-    [wallet?.address],
+/** The executor's venue names, as a person writes them. Anything else arrives as an address. */
+const VENUE_NAMES: Record<string, string> = { '1inch': '1inch', aqua: 'Aqua', swapvm: 'SwapVM', aave: 'Aave' };
+
+function venueLabel(venue: string | null): string | undefined {
+  if (!venue) return undefined;
+  return VENUE_NAMES[venue] ?? shortAddress(venue);
+}
+
+/** `SwapExactInput` reads as "Swap exact input". */
+function eventWords(type: string): string {
+  const words = type.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** What happened, in the chain's word for it — and, for a spend a run sent, what it bought. */
+function titleOf(item: HistoryItem): string {
+  const symbol = item.token?.symbol ?? 'an unlisted token';
+  if (item.kind === 'spent') {
+    const bought = item.run && item.run.symbol !== item.token?.symbol ? ` for ${item.run.symbol}` : '';
+    return `Spent ${symbol}${bought}`;
+  }
+  if (item.kind === 'closed') return `Closed ${symbol}`;
+  return item.oneinch ? eventWords(item.oneinch.type) : '1inch';
+}
+
+/** Cents where the amount is dollars; more digits for an asset, where 0.0001 of it is a real amount. */
+function amountOf(item: HistoryItem): string {
+  const units = unitsOf(item);
+  if (units === null || !item.token) return item.amount === null ? 'No token moved' : 'Unlisted token';
+  const digits = item.usd !== null ? 2 : units !== 0 && Math.abs(units) < 1 ? 6 : 4;
+  return `${quantity(units, digits)} ${item.token.symbol}`;
+}
+
+/**
+ * The receipt: a tappable link on a public chain, a plain label on a fork or a local node — a link to an explorer that
+ * has never seen the transaction reads as the transaction not being real. The same rule Activity follows.
+ */
+function Receipt({ explorer }: { explorer: string }) {
+  if (!explorer.startsWith('http')) {
+    const [kind, ref] = explorer.split(':');
+    return (
+      <Text variant="footnote" color={colors.ink28}>
+        {`${kind} · ${ref?.slice(0, 10) ?? ''}…`}
+      </Text>
+    );
+  }
+  return (
+    <Press
+      onPress={() => void Linking.openURL(explorer)}
+      accessibilityRole="link"
+      accessibilityLabel="View this transaction on BaseScan"
+      hitHeight={24}
+    >
+      <Text variant="footnote" color={colors.ink55}>
+        View on BaseScan ›
+      </Text>
+    </Press>
   );
+}
+
+function HistoryRow({ item }: { item: HistoryItem }) {
   /*
-   * Whether the index this screen reads covers the contract this build trades through.
-   *
-   * Without it, an empty answer has two very different causes and one sentence. On the fork
-   * deployment — 33 filled runs, every one of them on chain — this screen said "Nothing has
-   * settled on chain yet", because the subgraph indexes the Sepolia contract and the fork trades
-   * chain 8453. The index was not wrong; the question was never about it.
+   * The chain's dollars where the amount is dollars. A close's worth is not on chain, so where a run sent it the
+   * executor's measurement stands in — and says it is one, rather than passing for the chain's.
    */
-  const index = useAsync(() => system.graphHealth().catch(() => null), []);
-  const covers = index.data?.indexesThisDeployment !== false;
-  // Pulling down is the gesture people already try on a list of things that keep changing.
-  const refresh = useRefreshControl(reload);
-  const onChain = data ?? [];
+  const usd = item.usd ?? item.run?.usd ?? null;
+  const measured = item.usd === null && usd !== null;
+  const context = [venueLabel(item.venue), item.at ? new Date(item.at).toLocaleString('en-US') : 'Time not read']
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <Screen>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-        <BackButton onPress={() => goBack()} />
-        <Text variant="screenTitle">History</Text>
+    <View style={[{ flexDirection: 'row', gap: space.s12, paddingVertical: space.s14 }, divider]}>
+      <View style={{ flex: 1, gap: space.s2 }}>
+        <Text variant="rowPrimary" numberOfLines={1}>
+          {titleOf(item)}
+        </Text>
+        <Text variant="secondarySm" numberOfLines={1}>
+          {context}
+        </Text>
+        <Receipt explorer={item.explorer} />
       </View>
-      <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        Everything that settled on chain, read from The Graph. Each row has a transaction you
-        can check yourself.
-      </Text>
+      <View style={{ alignItems: 'flex-end', gap: space.s2 }}>
+        <Price variant="rowPrimary">{amountOf(item)}</Price>
+        {usd !== null ? (
+          <Price variant="delta" color={colors.ink55}>
+            {measured ? `${money(usd)} measured` : money(usd)}
+          </Price>
+        ) : null}
+      </View>
+    </View>
+  );
+}
 
-      <Fill style={{ marginTop: space.s14 }}>
-        {loading && !data ? (
-          <LoadingRows count={5} />
-        ) : error ? (
+export default function History() {
+  const goBack = useGoBack();
+  const router = useRouter();
+  const { data, loading, error, reload } = useAsync(() => history(), []);
+  // Pulling down is the gesture people already try on a list of things that keep changing.
+  const refresh = useRefreshControl(reload);
+  const items = data?.items ?? [];
+
+  /*
+   * The window, said out loud. The executor reads a bounded stretch of the chain, so "nothing here" only ever means
+   * "nothing since then" — and a list that did not say so would claim more than it looked at.
+   */
+  const scope = data
+    ? data.window.since
+      ? `since ${new Date(data.window.since).toLocaleString('en-US')}`
+      : `from block ${data.window.fromBlock.toLocaleString('en-US')}`
+    : '';
+
+  return (
+    <Screen gutter="none">
+      <View style={{ paddingHorizontal: space.gutter }}>
+        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">History</Text>} />
+        <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
+          What settled on chain for this wallet: every spend and close the delegation contract recorded, each with its
+          transaction. Activity is what the bot decided; this is what the chain says happened.
+        </Text>
+        {data ? (
+          <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s8 }}>
+            {data.source === 'chain+1inch'
+              ? `The contract's events ${scope}, and 1inch's latest for this wallet on Base.`
+              : `The contract's events ${scope}.`}
+          </Text>
+        ) : null}
+        {data?.unavailable ? (
+          <Text variant="footnote" color={colors.warn} style={{ marginTop: space.s4 }}>
+            {`1inch's history could not be read (${data.unavailable.reason}), so only the contract's own events are shown.`}
+          </Text>
+        ) : null}
+      </View>
+
+      <Fill style={{ marginTop: space.s14, paddingHorizontal: space.gutter }}>
+        {error ? (
           <ErrorState error={error} onRetry={reload} />
-        ) : onChain.length === 0 ? (
+        ) : loading && !data ? (
+          <LoadingRows count={6} height={size.rowLg} />
+        ) : items.length === 0 ? (
           <EmptyState
-            text={
-              covers
-                ? 'Nothing has settled on chain yet. This reads from the index, not from us.'
-                : 'The subgraph does not index the contract this build trades through, so it has nothing to say about this wallet — settled or not. Activity is read from the executor and is unaffected.'
-            }
-            actionLabel={covers ? 'Check every claim yourself' : 'See what the index does cover'}
-            onAction={() => router.push(covers ? '/judge' : '/graph')}
+            text={`Nothing settled on chain for this wallet ${scope}. This reads the contract's own events, not our records.`}
+            actionLabel="See what the bot decided"
+            onAction={() => router.push('/activity')}
           />
         ) : (
-          <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
-            {onChain.map((r) => (
-              <Row
-                key={r.id}
-                title={`Spent ${money(unitsToUsd(r.amount))}`}
-                secondary={`${r.txHash.slice(0, 10)}…${r.txHash.slice(-6)} · block ${r.blockNumber}`}
-                value={<Price color={colors.ink55}>{money(unitsToUsd(r.spentToday))}</Price>}
-                delta="today"
-                height={size.rowLg}
-              />
+          <ScrollView
+            refreshControl={refresh}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: space.s30 }}
+          >
+            {items.map((item, i) => (
+              <HistoryRow key={`${item.kind}:${item.txHash}:${i}`} item={item} />
             ))}
           </ScrollView>
         )}

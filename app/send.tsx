@@ -23,6 +23,7 @@ import {
   Eyebrow,
   Fill,
   NoteStrip,
+  Pill,
   Price,
   RadioCard,
   Screen,
@@ -30,6 +31,7 @@ import {
   border,
   colors,
   money,
+  quantity,
   radius,
   space,
   typeScale,
@@ -38,8 +40,14 @@ import { useAllowlist } from '@/wallet/allowlist';
 import { useWithdraw } from '@/wallet/useWithdraw';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { api } from '@/data/api';
-import type { Address } from 'viem';
+import { useDebounced } from '@/data/useDebounced';
+import { usePrice } from '@/data/usePrices';
+import { system } from '@/data/system';
+import { swapSpendable } from '@/state/derived';
+import { transferCall } from '@/wallet/transfer';
+import { useGrantDelegation } from '@/auth/useGrantDelegation';
+import { formatEther, type Address } from 'viem';
+import { MINUS } from '@/format';
 import { userSigningNote, userSigningWorks } from '@/chain';
 
 const FIELD_H = 52;
@@ -53,29 +61,60 @@ export default function Send() {
   const { withdraw, busy, error, txHash } = useWithdraw();
 
   const balance = useAsync(() => repos.portfolio.balance(), []);
-  // The settlement token for whichever chain this deployment settles on — asked, never assumed.
-  const params = useAsync(
-    () => api.get<{ token: Address; chain: string }>('/delegation/params'),
-    [],
-  );
+  /*
+   * What can be sent (PLAN.md 3.11): the tokens this chain knows, at this chain's own addresses and decimals — asked,
+   * never assumed. Send moved only USDC, with six decimals written into the hook. Native ETH is left out: this sends
+   * ERC-20 transfers.
+   */
+  const listed = useAsync(() => system.watchable(), []);
+  const [symbol, setSymbol] = useState('USDC');
+  const sendable = (listed.data ?? []).filter((t) => t.symbol !== 'ETH');
+  const token = sendable.find((t) => t.symbol === symbol);
 
-  const cash = balance.data?.cash ?? null;
+  // Cash for USDC and the chain's holding for anything else; undefined while it is unknown, never a zero.
+  const held = swapSpendable(balance.data, symbol);
   const entry = addresses[selected];
-  const amountUsd = Number(amount);
-  const overBalance = cash !== null && amountUsd > cash;
+  const typed = Number(amount);
+  const overBalance = held !== undefined && typed > held;
 
   const problem = useMemo(() => {
     if (addresses.length === 0) return 'Add a destination to your allowlist first.';
     if (!entry) return 'Choose a destination.';
     if (pendingFor(entry)) return 'That address is still cooling off.';
     if (!amount) return undefined;
-    if (!(amountUsd > 0)) return 'Enter an amount above zero.';
-    if (overBalance) return 'That is more than your spendable cash.';
+    if (!(typed > 0)) return 'Enter an amount above zero.';
+    if (overBalance) return `That is more ${symbol} than you hold.`;
     return undefined;
-  }, [addresses.length, entry, pendingFor, amount, amountUsd, overBalance]);
+  }, [addresses.length, entry, pendingFor, amount, typed, overBalance, symbol]);
+
+  /*
+   * What the send costs you in gas (PLAN.md 3.13), asked of your own wallet, which pays it — nothing here goes
+   * through the executor. Estimated for the transfer as built, once typing settles.
+   */
+  const { estimateFee } = useGrantDelegation();
+  const settledAmount = useDebounced(amount);
+  const feeFor =
+    userSigningWorks && token && entry && Number(settledAmount) > 0
+      ? `${token.address}:${entry.address}:${settledAmount}`
+      : '';
+  const fee = useAsync(async () => {
+    if (!feeFor || !token || !entry) return undefined;
+    let call: ReturnType<typeof transferCall>;
+    try {
+      call = transferCall(token, entry.address as Address, settledAmount);
+    } catch {
+      return undefined;
+    }
+    return estimateFee(call.to, call.data);
+  }, [feeFor]);
+  const { quote: ethPrice } = usePrice('WETH');
+  const feeUsd =
+    fee.data && ethPrice?.price !== undefined
+      ? Number(formatEther(fee.data.gas * fee.data.gasPrice)) * ethPrice.price
+      : undefined;
 
   const ready =
-    userSigningWorks && Boolean(entry) && !pendingFor(entry!) && amountUsd > 0 && !overBalance && !!params.data;
+    userSigningWorks && Boolean(entry) && !pendingFor(entry!) && typed > 0 && !overBalance && Boolean(token);
 
   return (
     <Screen>
@@ -112,6 +151,24 @@ export default function Send() {
         </View>
 
         <View style={{ marginTop: space.s22 }}>
+          <Eyebrow small>Asset</Eyebrow>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s8, marginTop: space.s10 }}>
+            {sendable.map((t) => (
+              <Pill
+                key={t.symbol}
+                label={t.symbol}
+                selected={t.symbol === symbol}
+                onPress={() => {
+                  setSymbol(t.symbol);
+                  // An amount of one token is not an amount of another.
+                  setAmount('');
+                }}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={{ marginTop: space.s22 }}>
           <Eyebrow small>Amount</Eyebrow>
           <View
             style={{
@@ -131,7 +188,7 @@ export default function Send() {
               placeholderTextColor={colors.ink30}
               keyboardType="decimal-pad"
               inputMode="decimal"
-              accessibilityLabel="Amount in USDC"
+              accessibilityLabel={`Amount in ${symbol}`}
               style={[typeScale.amountMd, { color: colors.ink, padding: 0 }]}
             />
           </View>
@@ -143,7 +200,7 @@ export default function Send() {
             }}
           >
             <Text variant="footnote" color={colors.ink40}>
-              Spendable cash
+              You hold
             </Text>
             {/*
               A dash, never a confident $0.00, when the balance could not be read — and never a
@@ -153,7 +210,15 @@ export default function Send() {
               appeared where a dash had been.
             */}
             <Price variant="footnote">
-              {cash !== null ? money(cash) : balance.loading ? '· · ·' : '—'}
+              {held !== undefined ? `${quantity(held)} ${symbol}` : balance.loading ? '· · ·' : '—'}
+            </Price>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.s6 }}>
+            <Text variant="footnote" color={colors.ink40}>
+              Network fee, paid from your ETH
+            </Text>
+            <Price variant="footnote">
+              {feeUsd !== undefined ? `≈ ${money(feeUsd)}` : fee.loading ? '· · ·' : MINUS}
             </Price>
           </View>
         </View>
@@ -197,12 +262,8 @@ export default function Send() {
         label={busy ? 'Signing…' : 'Send'}
         disabled={!ready || busy}
         onPress={() => {
-          void withdraw({
-            token: params.data!.token,
-            entry,
-            allowlist: addresses,
-            amountUsd,
-          }).catch(() => undefined);
+          if (!token) return;
+          void withdraw({ token, entry, allowlist: addresses, amount }).catch(() => undefined);
         }}
       />
       <Text

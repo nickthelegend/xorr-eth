@@ -232,6 +232,7 @@ export async function buildSwapVmFill(params: {
   const minOut = (params.quotedOut * BigInt(Math.round((1 - params.slippage) * 1_000_000))) / 1_000_000n;
   if (minOut <= 0n) return undefined;
 
+  const candidates: SwapVmFill[] = [];
   for (const p of programs) {
     /*
      * Ask the BOOK to compute the call, rather than encoding it here.
@@ -282,7 +283,7 @@ export async function buildSwapVmFill(params: {
       .catch(() => ({ fillable: false as const, result: undefined }));
     if (!dryRun.fillable) continue;
 
-    return {
+    candidates.push({
       token,
       venue,
       amount,
@@ -292,7 +293,16 @@ export async function buildSwapVmFill(params: {
       hash: p.hash,
       minOut,
       expectedOut: deliveredBy(dryRun.result),
-    };
+    });
   }
-  return undefined;
+
+  /*
+   * The program that delivers the most, not the first one that can fill (PLAN.md 3.20) — the rule `buildAquaFill`
+   * already applies to books. Several programs can be open at once and discovery order says nothing about price: a
+   * program's price moves with every fill against its curve, so the first one shipped is often the one most traded
+   * against. A program whose dry run returned nothing to read is ranked by its floor, the least it can deliver.
+   */
+  const delivers = (f: SwapVmFill) => f.expectedOut ?? f.minOut;
+  candidates.sort((a, b) => (delivers(b) > delivers(a) ? 1 : delivers(b) < delivers(a) ? -1 : 0));
+  return candidates[0];
 }

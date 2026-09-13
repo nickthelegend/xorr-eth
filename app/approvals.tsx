@@ -1,28 +1,25 @@
 /**
- * What the delegation is allowed to pull, per token, read from the chain.
+ * Approvals — what may pull tokens from this wallet, read from the chain (PLAN.md 3.12).
  *
- * This is the single most consequential number in the product and it had no screen. An ERC-20
- * allowance is what actually lets the contract move money: the daily cap, the venue allowlist and
- * the expiry are all enforced on top of it, but none of them exist if the allowance is zero, and
- * none of them constrain the *token* if the allowance is unlimited and something else gets the
- * spender key.
+ * Two spenders, not one. The delegation contract is what the app asks you to approve, so the executor can trade
+ * inside your cap. The 1inch router is what the app never needs approved — the delegation approves it for a single
+ * trade and resets it to zero — so an allowance to it was granted somewhere else, and is worth taking back.
  *
- * Both forms of the number are shown. `display` is what a person reads; the raw uint256 is what the
- * chain holds and what a reader would compare against an explorer, and rounding it away would make
- * this screen unverifiable in exactly the way the rest of the app refuses to be.
- *
- * "Unlimited" is called unlimited rather than shown as 115792089237316195423570985008687907853…
- * The number is not information; the fact that it is the maximum is.
+ * Every allowance above zero has a button that takes it back: an `approve(spender, 0)` you sign yourself. An allowance
+ * nobody could read says so, rather than passing for "None".
  */
 import React from 'react';
 import { ScrollView, View } from 'react-native';
+import type { Address } from 'viem';
 import { useGoBack } from '@/nav/useGoBack';
 import {
+  Button,
   EmptyState,
   ErrorState,
   Fill,
   HeaderBar,
   LoadingRows,
+  NoteStrip,
   Screen,
   SheetCard,
   Text,
@@ -31,69 +28,55 @@ import {
   size,
   space,
 } from '@/ui';
-import { useAsync } from '@/data/useAsync';
-import { system, type TokenApproval } from '@/data/system';
 import { shortAddress } from '@/format';
+import { userSigningNote, userSigningWorks } from '@/chain';
+import { useApprovals, type ApprovalSpender, type TokenApproval } from '@/wallet/useApprovals';
 
 export default function Approvals() {
   const goBack = useGoBack();
-  const { data, loading, error, reload } = useAsync(() => system.approvals(), []);
-
-  const tokens = data?.tokens ?? [];
-  const unlimited = tokens.filter((t) => t.unlimited).length;
+  const { approvals, loading, loadError, reload, revoke, revoking, error } = useApprovals();
+  // An executor older than `spenders` still answers with the delegation's allowances, shown as they always were.
+  const spenders: ApprovalSpender[] =
+    approvals?.spenders ??
+    (approvals
+      ? [{ role: 'delegation', name: 'xorr delegation', address: approvals.spender, source: 'chain', tokens: approvals.tokens }]
+      : []);
 
   return (
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Approvals</Text>} />
         <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
-          What the delegation contract may take from this wallet, token by token, read from the
+          What may take tokens from this wallet — the delegation contract and the 1inch router — read from the
           chain rather than from our record of it.
         </Text>
       </View>
 
       <Fill style={{ marginTop: space.s16 }}>
-        {error ? (
+        {loadError && !approvals ? (
           <View style={{ paddingHorizontal: space.gutter }}>
-            <ErrorState error={error} onRetry={reload} />
+            <ErrorState error={loadError} onRetry={reload} />
           </View>
-        ) : loading && !data ? (
+        ) : loading && !approvals ? (
           <View style={{ paddingHorizontal: space.gutter }}>
             <LoadingRows count={5} height={size.rowLg} />
           </View>
-        ) : tokens.length === 0 ? (
+        ) : !approvals || approvals.tokens.length === 0 ? (
           <EmptyState text="No approvable tokens on this chain." />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingHorizontal: space.gutter,
-              paddingBottom: space.s30,
-              gap: space.s10,
-            }}
+            contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: space.s30, gap: space.s10 }}
           >
-            <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-              <Text variant="footnote" color={colors.ink40}>
-                Spender
+            {/* Said before a button is pressed, not by a revert afterwards. See src/chain.ts. */}
+            {userSigningWorks ? null : <NoteStrip kind="blocked">{userSigningNote}</NoteStrip>}
+            {error ? (
+              <Text variant="secondary" color={colors.down}>
+                {error}
               </Text>
-              <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
-                {shortAddress(data!.spender)}
-              </Text>
-              {/*
-                Counted rather than asserted. "You have three unlimited approvals" is a fact this
-                screen can check; "your approvals are safe" is not.
-              */}
-              <Text variant="secondarySm" color={unlimited > 0 ? colors.warn : colors.ink40} style={{ marginTop: space.s8 }}>
-                {unlimited === 0
-                  ? 'No unlimited approvals.'
-                  : unlimited === 1
-                    ? 'One token is approved without a limit.'
-                    : `${unlimited} tokens are approved without a limit.`}
-              </Text>
-            </SheetCard>
-
-            {tokens.map((t) => (
-              <ApprovalRow key={t.address} token={t} />
+            ) : null}
+            {spenders.map((spender) => (
+              <SpenderSection key={spender.role} spender={spender} revoke={revoke} revoking={revoking} />
             ))}
           </ScrollView>
         )}
@@ -102,10 +85,66 @@ export default function Approvals() {
   );
 }
 
-function ApprovalRow({ token }: { token: TokenApproval }) {
-  const tone = token.none ? colors.ink40 : token.unlimited ? colors.warn : colors.up;
-  const state = token.none ? 'None' : token.unlimited ? 'Unlimited' : 'Limited';
+function SpenderSection({
+  spender,
+  revoke,
+  revoking,
+}: {
+  spender: ApprovalSpender;
+  revoke: (token: TokenApproval, spender: Address) => Promise<unknown>;
+  revoking: string | undefined;
+}) {
+  const tokens = spender.tokens ?? [];
+  const unlimited = tokens.filter((t) => t.unlimited).length;
+  return (
+    <View style={{ gap: space.s10 }}>
+      <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
+        <Text variant="footnote" color={colors.ink40}>
+          {spender.role === 'router' ? 'Spender · the 1inch router' : 'Spender · the delegation contract'}
+        </Text>
+        <Text variant="rowPrimary" style={{ marginTop: space.s4 }}>
+          {spender.address ? shortAddress(spender.address) : 'Could not be read'}
+        </Text>
+        {/*
+          Counted rather than asserted. "You have three unlimited approvals" is a fact this screen can check;
+          "your approvals are safe" is not.
+        */}
+        <Text
+          variant="secondarySm"
+          color={spender.tokens === null ? colors.ink40 : unlimited > 0 ? colors.warn : colors.ink40}
+          style={{ marginTop: space.s8 }}
+        >
+          {spender.tokens === null
+            ? 'Its allowances could not be read just now.'
+            : unlimited === 0
+              ? 'No unlimited approvals.'
+              : unlimited === 1
+                ? 'One token is approved without a limit.'
+                : `${unlimited} tokens are approved without a limit.`}
+        </Text>
+      </SheetCard>
+      {tokens.map((t) => (
+        <ApprovalRow key={`${spender.role}:${t.address}`} token={t} spender={spender.address} revoke={revoke} revoking={revoking} />
+      ))}
+    </View>
+  );
+}
 
+function ApprovalRow({
+  token,
+  spender,
+  revoke,
+  revoking,
+}: {
+  token: TokenApproval;
+  spender: Address | null;
+  revoke: (token: TokenApproval, spender: Address) => Promise<unknown>;
+  revoking: string | undefined;
+}) {
+  const tone = token.unread || token.none ? colors.ink40 : token.unlimited ? colors.warn : colors.up;
+  const state = token.unread ? 'Could not be read' : token.none ? 'None' : token.unlimited ? 'Unlimited' : 'Limited';
+  const busy = spender !== null && revoking === `${spender}:${token.symbol}`;
+  const canTakeBack = !token.none && !token.unread && spender !== null && userSigningWorks;
   return (
     <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -117,20 +156,29 @@ function ApprovalRow({ token }: { token: TokenApproval }) {
       <Text variant="footnote" color={colors.ink35} style={{ marginTop: space.s4 }}>
         {shortAddress(token.address)}
       </Text>
-      {token.none || token.unlimited ? null : (
+      {token.none || token.unlimited || token.unread ? null : (
         <Text variant="secondarySm" color={colors.ink65} style={{ marginTop: space.s8 }}>
           {token.display} {token.symbol}
         </Text>
       )}
       {/*
-        The raw value, for the reader who wants to check it against an explorer. Wrapped rather
-        than truncated: a uint256 with an ellipsis in the middle cannot be compared to anything.
+        The raw value, for the reader who wants to check it against an explorer. Wrapped rather than truncated: a
+        uint256 with an ellipsis in the middle cannot be compared to anything.
       */}
-      {token.none ? null : (
+      {token.none || token.unread ? null : (
         <Text variant="footnoteSm" color={colors.ink28} style={{ marginTop: space.s6 }}>
           {token.allowance}
         </Text>
       )}
+      {canTakeBack ? (
+        <Button
+          label={busy ? 'Taking it back…' : 'Take it back'}
+          variant="ghost"
+          loading={busy}
+          onPress={() => void revoke(token, spender)}
+          style={{ marginTop: space.s10 }}
+        />
+      ) : null}
     </SheetCard>
   );
 }

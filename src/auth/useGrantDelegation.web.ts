@@ -128,6 +128,31 @@ export function useGrantDelegation() {
     [wallets],
   );
 
+  /**
+   * What sending `data` to `to` would cost in gas (PLAN.md 3.13), asked of the user's own wallet provider — the node
+   * the send itself goes through. Undefined when the provider cannot say; never a zero.
+   */
+  const estimateFee = useCallback(
+    async (to: Address, data: Hex): Promise<{ gas: bigint; gasPrice: bigint } | undefined> => {
+      const wallet = pickEmbedded(wallets);
+      if (!wallet) return undefined;
+      const provider = await wallet.getEthereumProvider();
+      await provider
+        .request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${activeChain.id.toString(16)}` }] })
+        .catch(() => undefined);
+      try {
+        const [gas, gasPrice] = await Promise.all([
+          provider.request({ method: 'eth_estimateGas', params: [{ from: wallet.address, to, data }] }),
+          provider.request({ method: 'eth_gasPrice', params: [] }),
+        ]);
+        return { gas: BigInt(gas as string), gasPrice: BigInt(gasPrice as string) };
+      } catch {
+        return undefined;
+      }
+    },
+    [wallets],
+  );
+
   const grant = useCallback(
     async (dailyCapUsd: number, durationMs: number) => {
       setBusy(true);
@@ -232,5 +257,5 @@ export function useGrantDelegation() {
    * plumbing (which differs between web and native, and is the only part that does), the caller
    * gets the primitive.
    */
-  return { grant, revoke, sendTransaction: send, busy, error };
+  return { grant, revoke, sendTransaction: send, estimateFee, busy, error };
 }

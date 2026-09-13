@@ -16,7 +16,7 @@
  * Windows are fetched sequentially on purpose. These providers rate-limit as well as range-limit,
  * and firing thirty parallel windows at a free endpoint trades one refusal for another.
  */
-import type { AbiEvent, Address, GetLogsReturnType } from 'viem';
+import type { AbiEvent, Address, GetLogsParameters, GetLogsReturnType } from 'viem';
 import { publicClient } from './client.js';
 
 /** Conservative first guess: under every Base limit seen so far (2,000), with room to spare. */
@@ -40,6 +40,15 @@ export function isRangeRefusal(e: unknown): boolean {
 export async function getLogsPaged<const TEvent extends AbiEvent>(params: {
   address: Address;
   event: TEvent;
+  /**
+   * An indexed-topic filter — `{ owner }` on an event that indexes `owner` — handed to viem's `getLogs` unchanged.
+   *
+   * Added for the transaction history (PLAN.md 3.14). A contract's events are every owner's, so without a topic
+   * filter one wallet's history would download everybody's, window by window, to keep its own handful — when the
+   * node can match an indexed topic itself. Left out of the request entirely when absent, so the book scans in
+   * `venues/aqua.ts` and `venues/swapvm.ts`, whose events index nothing, ask exactly what they always asked.
+   */
+  args?: GetLogsParameters<TEvent>['args'];
   fromBlock: bigint;
   toBlock: bigint;
 }): Promise<GetLogsReturnType<TEvent>> {
@@ -54,6 +63,8 @@ export async function getLogsPaged<const TEvent extends AbiEvent>(params: {
       const logs = await publicClient.getLogs({
         address: params.address,
         event: params.event,
+        // On every window, retries included: a shrunken window asked without it would widen to every owner.
+        ...(params.args === undefined ? {} : { args: params.args }),
         fromBlock: cursor,
         toBlock: end,
       });

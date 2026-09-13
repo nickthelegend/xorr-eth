@@ -70,6 +70,10 @@ const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000);
  */
 const UPSTREAM_PATHS = [
   '/swap', // the quote, and the swap itself
+  '/crosschain/quote', // the Fusion+ quoter — one metered 1inch call per question (PLAN.md 3.16)
+  '/wallet/tokens', // 1inch's Balance and Token APIs on Base (PLAN.md 3.10)
+  '/history', // a paged eth_getLogs scan, and 1inch's History API on Base (PLAN.md 3.14)
+  '/limit-orders', // the list reads the chain on every call; …/:hash/fill simulates and sends through spend() (PLAN.md 3.15)
   '/orders',
   '/strategies/', // …/:id/run
   '/agent/strategies/',

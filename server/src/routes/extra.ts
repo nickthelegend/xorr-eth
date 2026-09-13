@@ -15,6 +15,7 @@ import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
 import { quote, canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { ADDRESSES } from '../evm/chains.js';
+import { networkCost } from '../evm/gas-price.js';
 import { estimateOutUnits } from '../executor/fill-measure.js';
 import { compareVenues } from '../venues/compare.js';
 import { requireUser } from '../auth/middleware.js';
@@ -538,7 +539,14 @@ extra.get('/swap/quote', async (c) => {
       amount: Number(c.req.query('amount') ?? 1),
       slippagePct,
     });
-    return c.json(q);
+    /*
+     * What the route costs to send, and who pays it (PLAN.md 3.13): the gas price — 1inch's Gas Price API on Base,
+     * the chain's own anywhere else — times 1inch's estimate for the route. The executor's delegate sends every
+     * swap and order, so this is information rather than a charge: the user pays no gas for either. Null when it
+     * cannot be read, never a zero.
+     */
+    const gas = await networkCost(q.estimatedGas).catch(() => null);
+    return c.json({ ...q, gas: gas && { ...gas, paidBy: 'executor' as const } });
   } catch (e) {
     // No route is a real answer. The screen says so rather than showing a computed guess.
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);

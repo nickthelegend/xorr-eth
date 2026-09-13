@@ -47,7 +47,7 @@ import { useAsync } from '@/data/useAsync';
 import { apiReason } from '@/data/api';
 import { errorText } from '@/data/apiError';
 import { logoProps, useLogos } from '@/data/useLogos';
-import { useSwapQuote } from '@/data/useSwapQuote';
+import { useSwapQuote, type SwapQuoteResult } from '@/data/useSwapQuote';
 import { system, type SwapOutcome } from '@/data/system';
 
 const CARD_PAD = space.s18;
@@ -310,6 +310,12 @@ export default function Swap() {
                   height={46}
                 />
                 <Row
+                  title="Network fee"
+                  // What sending it costs, and who pays: the executor that sends the swap does (PLAN.md 3.13).
+                  value={<Price>{networkFee(q?.gas)}</Price>}
+                  height={46}
+                />
+                <Row
                   title="Max slippage"
                   value={<Price>{percent(slippagePct, { digits: 1, explicitSign: false })}</Price>}
                   height={46}
@@ -348,6 +354,13 @@ export default function Swap() {
       />
     </Screen>
   );
+}
+
+/** The route's gas in dollars, said as paid by the executor — or the gas price alone when ETH has no price. */
+function networkFee(gas: SwapQuoteResult['gas']): string {
+  if (!gas) return MINUS;
+  if (gas.feeUsd !== null) return `≈ ${money(gas.feeUsd)} · paid by xorr`;
+  return `${Number(gas.priceGwei.toPrecision(3))} gwei · paid by xorr`;
 }
 
 /** The one sentence under the button: what happened, what is wrong, or what confirming will do. */

@@ -22,6 +22,18 @@ export type SwapQuoteResult = {
   slippagePct: number;
   venues: string[];
   route: string;
+  /**
+   * What the route costs to send (PLAN.md 3.13): the gas price, and 1inch's estimate for the route in dollars where
+   * ETH can be priced. The executor's delegate sends every swap and order, so none of it is charged to the user.
+   * Null when the executor could not read a gas price; absent from an executor older than the field.
+   */
+  gas?: {
+    priceGwei: number;
+    source: '1inch' | 'chain';
+    units: number | null;
+    feeUsd: number | null;
+    paidBy: 'executor';
+  } | null;
 };
 
 export function useSwapQuote(inSymbol: string, outSymbol: string, amount: number, slippagePct?: number) {

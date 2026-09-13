@@ -23,8 +23,8 @@ import { errorText } from '@/data/apiError';
 export type TokenApproval = {
   symbol: string;
   address: Address;
-  /** A uint256 as a decimal string — JSON has no integer wide enough. */
-  allowance: string;
+  /** A uint256 as a decimal string — JSON has no integer wide enough. Null when it could not be read (PLAN.md 3.12). */
+  allowance: string | null;
   /**
    * The same value in the token's own units, because a raw uint256 is not a quantity.
    *
@@ -32,26 +32,38 @@ export type TokenApproval = {
    * — which rendered as "Up to NaN USDC" on the permission screen for the few minutes the two
    * halves were out of step. Absent has to be a state the screen can show.
    */
-  display?: string;
+  display?: string | null;
   decimals?: number;
   unlimited: boolean;
   none: boolean;
+  /** The read failed. Said so, never passed off as "None": an allowance nobody could read is not no allowance. */
+  unread?: boolean;
 };
 
-export type ApprovalsView = { spender: Address; tokens: TokenApproval[] };
+/** One spender and what the wallet lets it pull (PLAN.md 3.12). `tokens` is null when the spender could not be read. */
+export type ApprovalSpender = {
+  role: 'delegation' | 'router';
+  name: string;
+  address: Address | null;
+  source: '1inch' | 'chain' | null;
+  tokens: TokenApproval[] | null;
+  unread?: boolean;
+};
+
+/** `spender` and `tokens` are the delegation's, as they always were; `spenders` adds the 1inch router. */
+export type ApprovalsView = { spender: Address; tokens: TokenApproval[]; spenders?: ApprovalSpender[] };
 
 export function useApprovals() {
   const { sendTransaction } = useGrantDelegation();
   const [revoking, setRevoking] = useState<string>();
   const [error, setError] = useState<string>();
-  const { data, loading, reload } = useAsync(
-    () => api.get<ApprovalsView>('/approvals').catch(() => undefined),
-    [],
-  );
+  // A failed read is kept for the Approvals screen, which has to say so; Safety simply shows no card without data.
+  const { data, loading, error: loadError, reload } = useAsync(() => api.get<ApprovalsView>('/approvals'), []);
 
   const revoke = useCallback(
     async (token: TokenApproval, spender: Address) => {
-      setRevoking(token.symbol);
+      // Keyed by spender as well: one token can be approved to both, and only one allowance is being taken back.
+      setRevoking(`${spender}:${token.symbol}`);
       setError(undefined);
       try {
         /*
@@ -82,5 +94,5 @@ export function useApprovals() {
     [sendTransaction, reload],
   );
 
-  return { approvals: data, loading, reload, revoke, revoking, error };
+  return { approvals: data, loading, loadError, reload, revoke, revoking, error };
 }
