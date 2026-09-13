@@ -140,9 +140,9 @@ published to Base, so the history you check is not a history we hold.
 | | |
 |---|---|
 | **The app** | **[`app.xorr.finance`](https://app.xorr.finance)** — open it, sign in, it is the real thing against the Sepolia executor below. Frontend on Vercel; executors, fork and Postgres on Railway |
-| `XorrDelegation` | [`0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e`](https://sepolia.basescan.org/address/0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e) on Base Sepolia |
+| `XorrDelegation` | [`0x6c5528Fd8E74a047A85bAb413856A9239E73540e`](https://sepolia.basescan.org/address/0x6c5528Fd8E74a047A85bAb413856A9239E73540e) on Base Sepolia — source verified on [Sourcify](https://repo.sourcify.dev/84532/0x6c5528Fd8E74a047A85bAb413856A9239E73540e) (exact match), deployed from `47b1296` ([record](contracts/deployments/base-sepolia.json)). Swap output is bound to the owner on chain; it supersedes `0xb14C…0a4e`, which predated `closePosition` |
 | `XorrAuditAnchor` | [`0xB58cB717867988582DcCB7f3155DeD3fC7A76caf`](https://sepolia.basescan.org/address/0xB58cB717867988582DcCB7f3155DeD3fC7A76caf) on Base Sepolia — holds the audit trail's head, published hourly |
-| Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.2`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.2) — synced, no indexing errors |
+| Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.3`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.3) — indexes the contract above, closes as well as spends; synced, no indexing errors |
 | Aqua venue subgraph | built + pinned `QmctadHCDBprb9Q1Pq4oyMXjB6KcnUDHRheDRNyBA59tAJ` |
 | Bot delegate key | `0xC38f38f45463f77bD823FebE16b15714Eb98c8A5` — the key the deployed executor signs with, funded for its own gas |
 | Executor (Base Sepolia) | [`api.xorr.finance`](https://api.xorr.finance/verify), which is [`executor-production-1659.up.railway.app`](https://executor-production-1659.up.railway.app/verify) — the public, explorer-checkable deployment |
@@ -157,8 +157,9 @@ and history read from The Graph. Fills are the half that is not, because 1inch h
 there — the network screen says so rather than pretending, and the fork below is where they settle.
 
 A real grant signed by a real Privy embedded wallet is queryable right now:
-[`0xf7181211…`](https://sepolia.basescan.org/tx/0xf718121116ef61452ee398fe744cbe9cca3a6607a5460b68a4feade02a335c88)
-— $1,600/day cap for 30 days, sent from the user's own wallet to `XorrDelegation`.
+[`0xce90642d…`](https://sepolia.basescan.org/tx/0xce90642d65cd970bd17984a06b51791ceaf51997b1ace72cb4c25a6bec6b6a1f)
+— $1,600/day cap for 30 days, sent from the user's own wallet to `XorrDelegation`, signed through
+the hosted app's permission screen on 2026-09-13.
 
 ## Two environments, and why there are two
 

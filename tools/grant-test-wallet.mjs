@@ -91,16 +91,28 @@ console.log(`duration: ${WANT}`);
 await page.getByText('Sign this permission', { exact: true }).click();
 const CONTROL = /^(approve|confirm|all done)$/i;
 let pressed = 0;
+/**
+ * What was on screen when nothing could be pressed.
+ *
+ * On 2026-09-13 this script approved both token approvals, pressed Approve on the grant and then
+ * waited out its four minutes with no grant ever broadcast — and all it could say was "NOT
+ * RENEWED". The dialog or error that stopped it was on screen the whole time. So a stall now
+ * records the buttons and the text it could see, once, and the end of a failed run prints them.
+ */
+let idle = 0;
+let stalledOn = '';
 for (let t = 0; t < 120 && pressed < 20; t += 1) {
   await page.waitForTimeout(2000);
   // The app moves on to the proposal screen only after the grant is recorded.
   if (/\/proposal/.test(page.url())) break;
+  let clicked = false;
+  const seen = [];
   for (const frame of page.frames()) {
     const buttons = frame.locator('button:visible');
     const n = await buttons.count().catch(() => 0);
-    let clicked = false;
     for (let i = 0; i < n; i += 1) {
       const label = ((await buttons.nth(i).innerText().catch(() => '')) || '').trim();
+      if (label) seen.push(label);
       if (CONTROL.test(label)) {
         await buttons.nth(i).click({ timeout: 5000 }).catch(() => {});
         pressed += 1;
@@ -111,10 +123,25 @@ for (let t = 0; t < 120 && pressed < 20; t += 1) {
     }
     if (clicked) break;
   }
+  idle = clicked ? 0 : idle + 1;
+  if (idle === 10 && !stalledOn) {
+    const texts = [];
+    for (const frame of page.frames()) {
+      const text = await frame.locator('body').innerText().catch(() => '');
+      if (text.trim()) texts.push(text.replace(/\s+/g, ' ').trim().slice(0, 400));
+    }
+    stalledOn = `buttons: [${[...new Set(seen)].join(' | ')}] · text: ${texts.join(' ‖ ')}`;
+    console.log(`  stalled 20s with nothing to press — ${stalledOn.slice(0, 900)}`);
+  }
 }
 
 // ── Read it back — from the executor, which reads the chain ─────────────────
 const after = await limits();
+const finalUrl = page.url();
+const finalText = (await page.innerText('body').catch(() => '')).replace(/\s+/g, ' ').trim();
+if (process.env.SHOT_DIR) {
+  await page.screenshot({ path: `${process.env.SHOT_DIR}/grant-test-wallet.png`, fullPage: true }).catch(() => {});
+}
 await browser.close();
 
 const renewed = after.expiresAt && after.expiresAt > Date.now() && !after.revoked;
@@ -123,6 +150,11 @@ const bad = errors.filter((e) => !/isActive|balanceOf|styled-components/i.test(e
 if (bad.length) console.log(`console errors: ${bad.length} — ${bad[0]}`);
 if (!renewed) {
   console.log('NOT RENEWED — the chain does not show a live permission. Nothing above should be read as success.');
+  console.log(`  ended on ${finalUrl}`);
+  if (stalledOn) console.log(`  last stall: ${stalledOn.slice(0, 900)}`);
+  // The app's own sentence, when it wrote one — the error line sits near the Sign button.
+  const said = /(?:could not|couldn't|failed|error|rejected|insufficient|reverted|not confirmed)[^.]{0,160}\.?/i.exec(finalText)?.[0];
+  if (said) console.log(`  the app said: ${said}`);
   process.exit(1);
 }
 console.log('renewed.');

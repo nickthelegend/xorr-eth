@@ -22,6 +22,7 @@ type Policy @entity(immutable: false) {
   revokedTx: Bytes
   venues: [Venue!]! @derivedFrom(field: "policy")
   spends: [Spend!]! @derivedFrom(field: "policy")
+  closes: [Close!]! @derivedFrom(field: "policy")
 }
 
 type Venue @entity(immutable: false) {
@@ -44,6 +45,24 @@ type Spend @entity(immutable: true) {
   amount: BigInt!
   "Running total for the UTC day the trade landed in — what the cap is checked against."
   spentToday: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  txHash: Bytes!
+}
+
+"""
+Every position the bot closed. Indexed apart from spends because the contract emits it apart: a
+spend commits the owner's money and counts against the cap; a close takes risk off and does not.
+"""
+type Close @entity(immutable: true) {
+  id: ID!
+  policy: Policy!
+  owner: Bytes!
+  delegate: Bytes!
+  venue: Bytes!
+  "The asset sold, in its own units — never the settlement token, which the contract refuses to close."
+  token: Bytes!
+  amount: BigInt!
   blockNumber: BigInt!
   timestamp: BigInt!
   txHash: Bytes!

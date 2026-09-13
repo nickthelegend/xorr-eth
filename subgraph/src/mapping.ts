@@ -10,8 +10,9 @@ import {
   Revoked,
   VenueAllowed,
   Spent,
+  Closed,
 } from '../generated/XorrDelegation/XorrDelegation';
-import { Policy, Venue, Spend, DailySpend } from '../generated/schema';
+import { Policy, Venue, Spend, DailySpend, Close } from '../generated/schema';
 
 const SECONDS_PER_DAY = BigInt.fromI32(86400);
 
@@ -109,4 +110,28 @@ export function handleSpent(event: Spent): void {
   daily.total = daily.total.plus(event.params.amount);
   daily.tradeCount = daily.tradeCount + 1;
   daily.save();
+}
+
+/**
+ * A position closed. Kept out of `totalSpent` and the daily rollup, exactly as the contract keeps it
+ * out of the cap: taking risk off is not spending, and a stop the cap could silence is not a stop.
+ *
+ * The contract has always emitted `Closed`; this index never listened for it, so a stop-loss that
+ * fired left no trace in the history the app tells users they can check without trusting us.
+ */
+export function handleClosed(event: Closed): void {
+  let policy = loadOrCreatePolicy(event.params.owner, event.block.timestamp, event.transaction.hash);
+  policy.save();
+
+  let close = new Close(event.transaction.hash.toHexString() + '-' + event.logIndex.toString());
+  close.policy = policy.id;
+  close.owner = event.params.owner;
+  close.delegate = event.params.delegate;
+  close.venue = event.params.venue;
+  close.token = event.params.token;
+  close.amount = event.params.amount;
+  close.blockNumber = event.block.number;
+  close.timestamp = event.block.timestamp;
+  close.txHash = event.transaction.hash;
+  close.save();
 }

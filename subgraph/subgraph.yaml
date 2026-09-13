@@ -9,8 +9,8 @@ dataSources:
     network: base-sepolia
     source:
       abi: XorrDelegation
-      address: "0xb14CF3D0b5269aCDE52322218adb6d5C1daE0a4e"
-      startBlock: 46436481
+      address: "0x6c5528Fd8E74a047A85bAb413856A9239E73540e"
+      startBlock: 46746780
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -20,6 +20,7 @@ dataSources:
         - Venue
         - Spend
         - DailySpend
+        - Close
       abis:
         - name: XorrDelegation
           file: ./abis/XorrDelegation.json
@@ -32,4 +33,6 @@ dataSources:
           handler: handleVenueAllowed
         - event: Spent(indexed address,indexed address,indexed address,address,uint256,uint256)
           handler: handleSpent
+        - event: Closed(indexed address,indexed address,indexed address,address,uint256)
+          handler: handleClosed
       file: ./src/mapping.ts
