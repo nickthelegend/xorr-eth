@@ -14,8 +14,11 @@ const address = getAddress(`0x${randomBytes(20).toString('hex')}`);
 const alice = `did:privy:live-test-${randomUUID()}`;
 const mallory = `did:privy:live-test-${randomUUID()}`;
 
+/** Addresses the race test creates, deleted with the rest. */
+const raced: string[] = [];
+
 afterAll(async () => {
-  await query(`DELETE FROM wallets WHERE address = $1`, [address]);
+  await query(`DELETE FROM wallets WHERE address = ANY($1)`, [[address, ...raced]]);
   await pool.end();
 });
 
@@ -39,5 +42,23 @@ describe('bindWallet', () => {
       address,
     ]);
     expect(rows).toEqual([{ user_id: alice, kind: 'embedded' }]);
+  });
+
+  /*
+   * The race the gas drip depends on (PLAN.md 1.8).
+   *
+   * The drip fires when `inserted` is true, so "once per wallet" is exactly "one insert wins". Eight
+   * first connects at once, as an app retrying on a slow network would send them.
+   */
+  it('lets exactly one of eight simultaneous first connects insert — so the drip fires once', async () => {
+    const fresh = getAddress(`0x${randomBytes(20).toString('hex')}`);
+    raced.push(fresh);
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        bindWallet({ id: randomUUID(), userId: alice, address: fresh, kind: 'embedded', cluster: 'live-test' }),
+      ),
+    );
+    expect(results.every((r) => r.status === 'bound')).toBe(true);
+    expect(results.filter((r) => r.status === 'bound' && r.inserted)).toHaveLength(1);
   });
 });
