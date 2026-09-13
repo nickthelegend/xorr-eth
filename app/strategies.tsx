@@ -222,7 +222,8 @@ function StrategyRow({ s, onChanged }: { s: Strategy; onChanged: () => void }) {
               : 'Filled.'
             : r.status === 'skipped'
               ? skipped
-              : (r.reason ?? r.status),
+              : // The executor's sentence before its identifier: "agent_trade_limit" is not something to show a person.
+                (r.detail ?? r.reason ?? r.status),
         );
       }
       onChanged();

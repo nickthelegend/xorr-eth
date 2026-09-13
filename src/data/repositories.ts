@@ -86,7 +86,8 @@ export interface StrategyRepository {
   /** Pause or resume. A paused strategy stops running and frees its share of the daily cap. */
   setState(id: string, state: 'live' | 'paused' | 'ended'): Promise<Strategy>;
   /** Run one now, through the same period claim the scheduler uses. */
-  runNow(id: string): Promise<{ status: string; reason?: string; units?: number; price?: number }>;
+  /** `reason` is an identifier; `detail`, when the executor sends one, is the sentence for a person. */
+  runNow(id: string): Promise<{ status: string; reason?: string; detail?: string; units?: number; price?: number }>;
   list(): Promise<Strategy[]>;
   create(s: Omit<Strategy, 'id' | 'createdAt'>): Promise<Strategy>;
   pause(id: string): Promise<Strategy>;
@@ -120,14 +121,17 @@ export interface PortfolioRepository {
   positions(): Promise<Position[]>;
   position(id: string): Promise<Position | null>;
   sleeves(): Promise<Sleeve[]>;
-  /** `null` means the balance could not be read — never render that as zero. */
+  /**
+   * Throws when the balance could not be read, so a screen can say so and offer a retry. It used to answer `null`,
+   * which kept a zero off the screen and also hid every failure behind a dash no screen could explain.
+   */
   balanceUsd(): Promise<number | null>;
   /**
    * The same total, broken into what it is made of.
    *
    * Cash and supplied are different money: one can be spent today, the other is earning and has to
    * be withdrawn first. A screen that sweeps idle cash has to know which is which, and a single
-   * total cannot tell it. `null` for the same reason as above.
+   * total cannot tell it. A failed read throws, for the same reason as above.
    */
   /**
    * What the CHAIN says this wallet holds, split three ways.
@@ -158,7 +162,7 @@ export interface PortfolioRepository {
       realised: number;
       unitsSold: number;
       proceeds: number;
-      /** Some of what was sold had no recorded cost, so the figure understates the outcome. */
+      /** Some of what was sold had no recorded cost. The executor counts that part as no gain or loss, so the true outcome could be either way. */
       basisIncomplete: boolean;
     }[];
   }>;

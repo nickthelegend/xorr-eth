@@ -121,8 +121,11 @@ export function shortAddress(address: string | null | undefined, lead = 6, tail 
    * render, its callers are screens, and the blast radius of a throw is everything they were about
    * to draw. Formatting nothing is a dash; deciding whether nothing is acceptable belongs to the
    * screen, which can say so in words.
+   *
+   * An em dash, the app's mark for "not known". It was U+2212, the minus sign, which beside an
+   * address reads as a negative number where there is no number at all.
    */
-  if (!address) return MINUS;
+  if (!address) return '—';
   const a = address.trim();
   if (a.length <= lead + tail + 1) return a;
   return `${a.slice(0, lead)}…${a.slice(-tail)}`;

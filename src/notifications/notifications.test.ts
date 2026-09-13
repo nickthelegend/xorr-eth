@@ -12,6 +12,10 @@ describe('12.19 notification routing [G30]', () => {
       'proposal-awaiting',
       'dca-executed',
       'strategy-blocked',
+      // The push kinds the executor also sends (server/src/notifications), added when the inbox began routing them.
+      'alert-fired',
+      'panic-flatten',
+      'allowlist-changed',
     ];
     for (const k of kinds) {
       expect(routeFor(k), k).toMatch(/^\//);

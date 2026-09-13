@@ -33,21 +33,26 @@ import { money, quantity } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system, type StrategyRunRow } from '@/data/system';
 
-const FILTERS = ['All', 'Filled', 'Refused', 'Failed'] as const;
+const FILTERS = ['All', 'Filled', 'Refused', 'Skipped', 'Failed'] as const;
 
-/** Green filled, red failed, amber refused — refused is neither a success nor an error. */
+/**
+ * Green filled, red failed, amber refused — refused is neither a success nor an error. A skip is none of the three: the
+ * period had already run, there was nothing to do, or it waits on a yes. It is quiet, not amber.
+ */
 function toneFor(status: StrategyRunRow['status']): string {
   if (status === 'filled') return colors.up;
   if (status === 'failed') return colors.down;
-  if (status === 'pending') return colors.ink40;
+  if (status === 'pending' || status === 'skipped') return colors.ink40;
   return colors.warn;
 }
 
+/** "Refused" is a limit saying no. Skips had their own place under it, which made a quiet day look like a blocked one. */
 function matches(run: StrategyRunRow, filter: (typeof FILTERS)[number]): boolean {
   if (filter === 'All') return true;
   if (filter === 'Filled') return run.status === 'filled';
   if (filter === 'Failed') return run.status === 'failed';
-  return run.status === 'blocked' || run.status === 'skipped';
+  if (filter === 'Skipped') return run.status === 'skipped';
+  return run.status === 'blocked';
 }
 
 export default function Runs() {

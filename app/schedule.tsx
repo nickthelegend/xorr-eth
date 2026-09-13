@@ -37,6 +37,8 @@ function when(at: number, now: number): { label: string; overdue: boolean } {
   const overdue = ms < 0;
   const abs = Math.abs(ms);
   const mins = Math.round(abs / 60_000);
+  // Under a minute is "now". It read "in 0m" and "Due 0m ago", a duration of nothing.
+  if (mins < 1) return { label: 'now', overdue };
   if (mins < 60) return { label: `${mins}m`, overdue };
   const hours = Math.round(mins / 60);
   if (hours < 48) return { label: `${hours}h`, overdue };
@@ -92,7 +94,13 @@ export default function Schedule() {
                         "Due" rather than a negative duration. A strategy past its time is either
                         about to fire or is stuck, and neither is well described by "−4h".
                       */}
-                      {t.overdue ? `Due ${t.label} ago` : `in ${t.label}`}
+                      {t.label === 'now'
+                        ? t.overdue
+                          ? 'Due now'
+                          : 'Now'
+                        : t.overdue
+                          ? `Due ${t.label} ago`
+                          : `in ${t.label}`}
                     </Text>
                   }
                 />

@@ -218,8 +218,11 @@ export const useStore = create<Store>()(
       setMethod: (method) => set({ method }),
 
       // ── agents & alerts ──
-      hired: { 'Momentum Scout': true },
-      alerts: { 'SOL above $95': true, 'NVDAx earnings': true },
+      // Empty, and read by nothing: who is hired is the executor's answer (`/agents`). The prototype's sample said Momentum Scout.
+      hired: {},
+      // Empty. It held two of the design prototype's sample alerts, on markets this app cannot trade, as switches that
+      // were "on" for alerts nobody had set; the alerts themselves come from the executor.
+      alerts: {},
       decision: null,
       killed: false,
       toggleHire: (name) => set((s) => ({ hired: { ...s.hired, [name]: !s.hired[name] } })),
