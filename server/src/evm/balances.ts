@@ -96,7 +96,7 @@ export function clearReadableTokenCache(): void {
  * wallet screen that feels broken. Anything we cannot price is reported with `usd: 0` rather than
  * dropped, so the units still show and the missing price is visible instead of silent.
  */
-export async function holdings(owner: Address): Promise<Holding[]> {
+export async function holdings(owner: Address, opts: { strict?: boolean } = {}): Promise<Holding[]> {
   const entries = await readableTokens();
 
   const balances = await publicClient.multicall({
@@ -120,7 +120,8 @@ export async function holdings(owner: Address): Promise<Holding[]> {
 
   return Promise.all(
     held.map(async ({ symbol, units, raw }) => {
-      const price = await priceOf(symbol).catch(() => 0);
+      // Strict: an unpriced holding throws instead of counting as $0 (see `totalValueUsd`).
+      const price = opts.strict ? await priceOf(symbol) : await priceOf(symbol).catch(() => 0);
       return { symbol, units, usd: units * price, raw };
     }),
   );
@@ -211,8 +212,15 @@ export async function suppliedUsd(owner: Address): Promise<number> {
   return Number(formatUnits(raw, 6));
 }
 
-/** Cash plus holdings plus anything supplied — the number on the home screen. */
-export async function totalValueUsd(owner: Address): Promise<{
+/**
+ * Cash plus holdings plus anything supplied — the number on the home screen.
+ *
+ * `strict` is for a value that will be KEPT (PLAN.md 2.10). A screen can show an unpriced holding at $0
+ * beside its units, or supplied cash as 0 after logging that Aave did not answer, and be corrected on
+ * the next load. A stored snapshot cannot: it would record a dip that never happened, forever. Strict
+ * throws instead, and the caller keeps nothing.
+ */
+export async function totalValueUsd(owner: Address, opts: { strict?: boolean } = {}): Promise<{
   cash: number;
   holdings: Holding[];
   supplied: number;
@@ -220,11 +228,12 @@ export async function totalValueUsd(owner: Address): Promise<{
 }> {
   const [cash, rows, supplied] = await Promise.all([
     cashUsd(owner),
-    holdings(owner),
+    holdings(owner, opts),
     // Aave is a mainnet deployment reached over a public RPC, and a lending pool being slow is not
     // a reason for the home screen to have no balance. Unlike the zeros above, this one degrades
     // to "nothing supplied" only after saying so in the log.
     suppliedUsd(owner).catch((e: unknown) => {
+      if (opts.strict) throw e;
       console.error('[balance] aToken read failed:', e instanceof Error ? e.message : e);
       return 0;
     }),

@@ -50,6 +50,7 @@ import { publicClient } from '../evm/client.js';
 import { STOCKS, isStock } from '../venues/stocks.js';
 import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
 import { PUSH_KINDS } from '../notifications/push.js';
+import { SNAPSHOT_EVERY_MS, historySince, listSnapshots, snapshotWallet, thinPoints } from '../portfolio/snapshots.js';
 
 /**
  * Every wallet lookup is scoped to the AUTHENTICATED Privy user.
@@ -309,6 +310,55 @@ routes.get('/wallet/balance', async (c) => {
     dailyCapUsd: policy?.dailyCapUsd ?? 0,
     remainingTodayUsd: policy?.remainingTodayUsd ?? 0,
   });
+});
+
+/**
+ * What the wallet was worth over time (PLAN.md 2.10), from snapshots read on the chain — never a replay.
+ *
+ * `range` is 1D, 1W, 1M or ALL. Points come back oldest first, thinned so a long history stays small, with
+ * every fill, close and withdrawal kept so an event is never sampled away. A wallet with no snapshots yet
+ * answers an empty list, which is the truth about it.
+ */
+routes.get('/portfolio/history', async (c) => {
+  const range = (c.req.query('range') ?? '1W').toUpperCase();
+  const since = historySince(range);
+  if (since === undefined) {
+    return c.json({ error: 'invalid_range', message: 'range is one of 1D, 1W, 1M or ALL.' }, 400);
+  }
+  const w = await currentWallet(c);
+  if (!w) return c.json({ range, chain: CHAIN_KEY, points: [] });
+  return c.json({
+    range,
+    chain: CHAIN_KEY,
+    everyMinutes: SNAPSHOT_EVERY_MS / 60_000,
+    points: thinPoints(await listSnapshots(w.id, since)),
+  });
+});
+
+/**
+ * Take a snapshot now — after a withdrawal or a send the app made itself (PLAN.md 2.10).
+ *
+ * The executor sees its own fills and closes. A withdrawal the user signs never passes through it, so the
+ * app says when one was sent. The value is still read from the chain — nothing in the request is taken as
+ * a number — and given the transaction hash the request waits (bounded) for it to land first, so the
+ * snapshot is of the wallet after it. At most one a minute per wallet.
+ */
+const lastRequestedSnapshot = new Map<string, number>();
+
+routes.post('/portfolio/snapshot', async (c) => {
+  const w = await requireWallet(c);
+  const body = z
+    .object({ txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/).optional() })
+    .parse(await c.req.json().catch(() => ({})));
+  const since = Date.now() - (lastRequestedSnapshot.get(w.id) ?? 0);
+  if (since < 60_000) {
+    const retryAfterSec = Math.ceil((60_000 - since) / 1000);
+    c.header('retry-after', String(retryAfterSec));
+    return c.json({ recorded: false, reason: 'rate_limited', retryAfterSec }, 429);
+  }
+  lastRequestedSnapshot.set(w.id, Date.now());
+  if (body.txHash) await waitForTx(body.txHash as Hex).catch(() => undefined);
+  return c.json({ recorded: await snapshotWallet(w, 'withdrawal') });
 });
 
 // ── Delegation ───────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ vi.mock('../db/index.js', () => ({ query: vi.fn() }));
 vi.mock('./run.js', () => ({ runStrategy: vi.fn() }));
 vi.mock('../alerts/evaluate.js', () => ({ evaluateAlerts: vi.fn(async () => []) }));
 vi.mock('../audit/anchor-sweep.js', () => ({ anchorSweep: vi.fn(async () => null) }));
+vi.mock('../portfolio/snapshots.js', () => ({ snapshotSweep: vi.fn(async () => ({ recorded: 0, failed: 0 })) }));
 
 const { query } = await import('../db/index.js');
 const { runStrategy } = await import('./run.js');

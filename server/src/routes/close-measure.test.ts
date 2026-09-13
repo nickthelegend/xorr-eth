@@ -37,6 +37,7 @@ vi.mock('../positions/index.js', () => ({ applyFill: vi.fn(async () => undefined
 vi.mock('../notifications/push.js', () => ({ send: vi.fn(async () => ({ sent: 0 })) }));
 vi.mock('../executor/failure.js', () => ({ humanFailure: (e: string) => e }));
 vi.mock('../executor/fill-measure.js', () => ({ usdcRawOf: vi.fn(), proceedsSince: vi.fn() }));
+vi.mock('../portfolio/snapshots.js', () => ({ snapshotWallet: vi.fn(async () => true) }));
 
 const { holdings } = await import('../evm/balances.js');
 const { append } = await import('../audit/log.js');

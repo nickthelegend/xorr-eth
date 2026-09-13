@@ -49,7 +49,10 @@ export function useAaveWithdraw() {
         const { to, data } = await api.post<{ to: Address; data: Hex }>('/yield/withdraw-calldata', {
           usd,
         });
-        return await sendTransaction(to, data);
+        const hash = await sendTransaction(to, data);
+        // The portfolio history records the wallet once this withdrawal lands (PLAN.md 2.10); not awaited.
+        void api.post('/portfolio/snapshot', { txHash: hash }).catch(() => undefined);
+        return hash;
       } catch (e) {
         /*
          * The wallet's own failure, translated. `e.message` from viem is a multi-line dump with

@@ -20,6 +20,7 @@ import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { isUsable, type AllowlistEntry } from './allowlist';
 import { humanWalletError } from './walletError';
+import { api } from '@/data/api';
 
 const ERC20_TRANSFER = [
   {
@@ -89,6 +90,9 @@ export function useWithdraw() {
           }),
         );
         setTxHash(hash);
+        // The portfolio history records the wallet once this send lands (PLAN.md 2.10). Not awaited: the
+        // executor waits for the transaction itself, and a snapshot that fails is not the send failing.
+        void api.post('/portfolio/snapshot', { txHash: hash }).catch(() => undefined);
         return hash;
       } catch (e) {
         /*

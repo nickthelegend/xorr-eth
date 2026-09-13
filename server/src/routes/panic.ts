@@ -38,6 +38,7 @@ import { send } from '../notifications/push.js';
 import { humanFailure } from '../executor/failure.js';
 import { proceedsSince, usdcRawOf } from '../executor/fill-measure.js';
 import { isStock } from '../venues/stocks.js';
+import { snapshotWallet } from '../portfolio/snapshots.js';
 
 export const panic = new Hono();
 
@@ -300,6 +301,8 @@ panic.post('/panic/flatten', async (c) => {
 
   const sold = legs.filter((l) => l.status === 'sold');
   const failed = legs.filter((l) => l.status === 'failed');
+  // The wallet's value after the sales (PLAN.md 2.10); not awaited.
+  if (sold.length > 0) void snapshotWallet({ id: w.id, address: owner }, 'close').catch(() => undefined);
 
   if (legs.length === 0) {
     await tx(async (client) => {
@@ -497,6 +500,9 @@ export async function closeHolding(params: {
         client,
       );
     });
+
+    // The wallet's value with this sale in it (PLAN.md 2.10); not awaited.
+    void snapshotWallet({ id: w.id, address: owner }, 'close').catch(() => undefined);
 
     return {
       status: 200,

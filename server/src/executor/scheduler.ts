@@ -14,6 +14,7 @@ import { log } from '../http/request-id.js';
 import { runStrategy, type StrategyRow } from './run.js';
 import { evaluateAlerts } from '../alerts/evaluate.js';
 import { anchorSweep } from '../audit/anchor-sweep.js';
+import { snapshotSweep } from '../portfolio/snapshots.js';
 
 const TICK_MS = Number(process.env.SCHEDULER_TICK_MS ?? 30_000);
 
@@ -76,6 +77,17 @@ export async function tick(now: Date = new Date()): Promise<number> {
     if (swept?.anchored) console.log(`[anchor] ${swept.anchored} wallet(s) anchored`);
   } catch (e) {
     log.error('[anchor] sweep failed:', e instanceof Error ? e.message : e);
+  }
+
+  /*
+   * What each active wallet is worth, every 15 minutes (PLAN.md 2.10). After the runs, so a fill this
+   * tick is in the value; non-fatal like the sweeps above — a history with a gap is still true.
+   */
+  try {
+    const shots = await snapshotSweep();
+    if (shots.recorded || shots.failed) console.log(`[snapshot] ${shots.recorded} kept, ${shots.failed} could not be read`);
+  } catch (e) {
+    log.error('[snapshot] sweep failed:', e instanceof Error ? e.message : e);
   }
 
   /*

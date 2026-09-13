@@ -82,6 +82,20 @@ export class SubgraphUnavailable extends Error {
   }
 }
 
+/**
+ * How long a subgraph query may take (PLAN.md 2.13).
+ *
+ * `fetch` had no deadline, so a gateway that accepted the connection and never answered held the run
+ * that asked — and the scheduler tick behind it — open indefinitely. A timeout is the same fact as any
+ * other unreachable index, and says so in the same error.
+ */
+let timeoutMs = 5_000;
+
+/** Testing only. */
+export function setSubgraphTimeoutForTests(ms: number): void {
+  timeoutMs = ms;
+}
+
 async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const res = await fetch(ENDPOINT, {
     method: 'POST',
@@ -92,6 +106,10 @@ async function gql<T>(query: string, variables: Record<string, unknown> = {}): P
         : {}),
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(timeoutMs),
+  }).catch((e: unknown) => {
+    const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    throw new SubgraphUnavailable(timedOut ? `no answer in ${timeoutMs}ms` : e instanceof Error ? e.message : String(e));
   });
   if (!res.ok) throw new SubgraphUnavailable(`${res.status}`);
   const json = (await res.json()) as { data?: T; errors?: { message: string }[] };

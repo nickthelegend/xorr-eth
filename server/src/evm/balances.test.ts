@@ -28,7 +28,8 @@ vi.mock('../venues/oneinch.js', () => ({
     ({ CBBTC: 'cbBTC', WETH: 'WETH', USDC: 'USDC', NVDAC: 'NVDAc' })[raw.toUpperCase()] ?? raw,
 }));
 
-const { chainUnitsOf, clearReadableTokenCache, suppliedUsd } = await import('./balances.js');
+const { priceOf } = await import('../market/prices.js');
+const { chainUnitsOf, clearReadableTokenCache, suppliedUsd, totalValueUsd } = await import('./balances.js');
 
 const OWNER = '0x95A0b368588713011a15f4b1041423f31B08e615';
 
@@ -81,6 +82,31 @@ describe('units held, for holding a ledger to the chain (PLAN.md 2.7)', () => {
     h.getCode.mockResolvedValue('0x6080604052');
     h.multicall.mockRejectedValue(new Error('rpc timeout'));
     await expect(chainUnitsOf(OWNER, ['WETH'])).rejects.toThrow('rpc timeout');
+  });
+});
+
+describe('the total, for keeping (PLAN.md 2.10)', () => {
+  const ok = (result: bigint) => ({ status: 'success', result });
+  beforeEach(() => {
+    h.readContract.mockResolvedValue(100_000_000n); // $100 of cash
+    h.getCode.mockResolvedValue('0x6080604052');
+    h.multicall.mockResolvedValue([ok(0n), ok(0n), ok(0n)]); // nothing else held
+    vi.mocked(priceOf).mockReset();
+  });
+
+  it('a supplied balance Aave did not answer is 0 on a screen, and an error when the value will be kept', async () => {
+    h.poolHere.mockRejectedValue(new Error('aave timeout'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await totalValueUsd(OWNER)).total).toBe(100);
+    await expect(totalValueUsd(OWNER, { strict: true })).rejects.toThrow('aave timeout');
+  });
+
+  it('an unpriced holding is $0 on a screen, and an error when the value will be kept', async () => {
+    h.poolHere.mockResolvedValue(false);
+    h.multicall.mockResolvedValue([ok(10n ** 18n), ok(0n), ok(0n)]); // 1 WETH
+    vi.mocked(priceOf).mockRejectedValue(new Error('No price feed for WETH'));
+    expect((await totalValueUsd(OWNER)).holdings[0]).toMatchObject({ symbol: 'WETH', units: 1, usd: 0 });
+    await expect(totalValueUsd(OWNER, { strict: true })).rejects.toThrow('No price feed for WETH');
   });
 });
 

@@ -38,6 +38,7 @@ import { chooseSettlement, type SettlementVenue } from './settle.js';
 import { canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { agentForKind } from '../agents/attribution.js';
 import { isStock } from '../venues/stocks.js';
+import { snapshotWallet } from '../portfolio/snapshots.js';
 
 /**
  * Our XorrAquaBook deployment, when there is one. Aqua only exists on Base mainnet, so on Sepolia
@@ -868,6 +869,9 @@ async function runStrategyInner(
       // live, which is indistinguishable from being broken.
       await settleSchedule(client, strategy, at);
     });
+
+    // What the wallet is worth with this fill in it (PLAN.md 2.10). Not awaited: a snapshot never holds up a run.
+    void snapshotWallet({ id: walletId, address: owner }, isClose ? 'close' : 'fill').catch(() => undefined);
 
     /*
      * Tell the user.

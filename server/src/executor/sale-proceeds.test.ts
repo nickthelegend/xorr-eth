@@ -67,6 +67,7 @@ vi.mock('./fill-measure.js', () => ({
   proceedsSince: vi.fn(),
 }));
 vi.mock('./settle.js', () => ({ chooseSettlement: vi.fn() }));
+vi.mock('../portfolio/snapshots.js', () => ({ snapshotWallet: vi.fn(async () => true) }));
 vi.mock('./kinds/index.js', () => ({
   PLANNERS: { momentum: vi.fn(), dca: vi.fn() },
   observationFor: vi.fn(async () => null),

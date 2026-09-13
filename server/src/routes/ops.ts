@@ -19,6 +19,8 @@ import { CHAIN_KEY } from '../evm/chains.js';
 import { DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { gasStatus } from '../evm/gas.js';
 import { publicSurface } from '../auth/middleware.js';
+import { health as graphHealth, indexDescription } from '../graph/client.js';
+import { breakerState } from '../http/get.js';
 
 export const ops = new Hono();
 
@@ -85,6 +87,25 @@ ops.get('/health', async (c) => {
       if (!g.enough) throw new Error(`${g.eth.toFixed(4)} ETH, below the ${g.floor} floor`);
       return `${g.eth.toFixed(4)} ETH`;
     }),
+    /*
+     * The index a trade decision reads (PLAN.md 2.11). Not critical — a run the index cannot answer for
+     * is decided without it and says so — but a health check that never mentions it lets an index stuck
+     * behind, erroring, or pointed at another deployment's contract go unnoticed.
+     */
+    probe('subgraph', false, async () => {
+      const [h, index] = [await graphHealth(), indexDescription()];
+      if (!h.healthy) throw new Error(`indexing errors at block ${h.block}`);
+      if (!index.indexesThisDeployment) {
+        throw new Error(`at block ${h.block}, but indexing ${index.indexedDelegation}, not this deployment's ${index.activeDelegation}`);
+      }
+      return `at block ${h.block}, indexing ${index.indexedDelegation}`;
+    }),
+    // Upstreams the circuit breaker has shut out right now: prices and quotes fail fast while one is open.
+    probe('upstreams', false, async () => {
+      const open = breakerState().filter((b) => b.openUntil > Date.now());
+      if (open.length > 0) throw new Error(`open: ${open.map((b) => b.host).join(', ')}`);
+      return 'no breaker open';
+    }),
   ]);
 
   const down = deps.some((d) => d.status === 'down');
@@ -102,6 +123,8 @@ ops.get('/health', async (c) => {
       delegation: DELEGATION_ADDRESS,
       uptimeSec: Math.round((Date.now() - started) / 1000),
       dependencies: deps,
+      /** Every upstream host the HTTP lane has seen, with its consecutive failures and when a breaker closes. */
+      breakers: breakerState().map((b) => ({ ...b, open: b.openUntil > Date.now() })),
       // The old shape had `db` as a timestamp. Several things read it.
       db: deps.find((d) => d.name === 'postgres')?.detail,
       /*

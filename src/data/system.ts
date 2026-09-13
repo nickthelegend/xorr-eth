@@ -457,6 +457,8 @@ export const system = {
   }) => api.post<StrategyBacktest>('/strategies/backtest', body),
   proposals: () => api.get<ProposalRow[]>('/proposals'),
   notificationPrefs: () => api.get<NotificationPref[]>('/notifications/prefs'),
+  // POST: the executor registers GET and POST on this path, and the PATCH that was sent here 404'd, so a
+  // toggle looked saved and was not (PLAN.md 2.12).
   setNotificationPref: (kind: string, enabled: boolean) =>
-    api.patch<{ ok: boolean }>('/notifications/prefs', { kind, enabled }),
+    api.post<{ ok: boolean; kind: string; enabled: boolean }>('/notifications/prefs', { kind, enabled }),
 } as const;
