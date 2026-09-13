@@ -1,16 +1,23 @@
 /**
- * The hosted build: a static web bundle pointed at the PUBLIC executor.
+ * The hosted build: a static web bundle pointed at a PUBLIC executor, and at the chain it settles on.
  *
  * Everything in this repo could be run, and almost nothing could be opened. A judge, or anyone
  * else, got two JSON endpoints and a GIF unless they were willing to clone, create a Postgres and
  * supply three API keys. This produces the thing that was missing.
  *
- * Base Sepolia, not the fork, and that is a correctness decision rather than a convenience one.
- * `src/chain.ts` explains at length that Privy previews and broadcasts through its own RPC for a
- * chain it knows, and a fork of Base is chain 8453 — indistinguishable from real Base — so on a
- * hosted fork build every user-signed transaction would be simulated against mainnet, where the
- * wallet holds nothing. Sepolia is the environment where the signing half is genuinely real. Fills
- * are the half that is not, and the app already says so on the network screen rather than pretending.
+ * The fork, by default, since PLAN.md 4.2. The hosted build was Base Sepolia because Privy previews
+ * and broadcasts through its own RPC for a chain it knows, and a fork of Base is chain 8453 — so on
+ * a fork build every user-signed transaction was simulated against mainnet, where the wallet holds
+ * nothing. A fork build now has the wallet only sign, and sends the transaction to the fork itself
+ * (`src/wallet/userSigning.ts`, proven with a Privy wallet on the Railway fork). And the fork is
+ * where fills are real, so it is the one environment where the whole loop completes in one place:
+ * sign in, take test funds, grant, watch the bot fill, withdraw. Sepolia fills nothing.
+ * `XORR_WEB_API=https://api.xorr.finance` still builds Sepolia.
+ *
+ * A fork build carries the fork's own RPC (`EXPO_PUBLIC_CHAIN_RPC`), or `src/chain.ts` reads
+ * 127.0.0.1:8545 in every visitor's browser. It comes from `XORR_WEB_CHAIN_RPC`, else from
+ * `server/.env.fork` — what `npm run rebuild:fork` wrote — and is refused unless it answers, from
+ * here, as anvil on chain 8453.
  *
  * WHY THIS REWRITES .env RATHER THAN SETTING A VARIABLE
  *
@@ -29,31 +36,58 @@ import { writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from 'no
 import { join } from 'node:path';
 
 const OUT = 'dist-web';
-/*
- * The executor's own domain, not Railway's generated hostname. The two reach the same service today,
- * but only one of them is ours to keep pointing at the right place.
- */
-const API = process.env.XORR_WEB_API ?? 'https://api.xorr.finance';
+const API = process.env.XORR_WEB_API ?? 'https://executor-fork-production.up.railway.app';
 const ENV_FILE = '.env';
+const FORK_ENV_FILE = 'server/.env.fork';
+
+const refuse = (why) => {
+  console.error(`\n  Refusing to build: ${why}\n`);
+  process.exit(1);
+};
+const local = (url) => /localhost|127\.0\.0\.1/.test(url);
 
 /* Refuse to ship a bundle that talks to a machine nobody else can reach. */
-if (/localhost|127\.0\.0\.1/.test(API)) {
-  console.error(`\n  Refusing to build: ${API} is not reachable from anywhere but this machine.\n`);
-  process.exit(1);
-}
+if (local(API)) refuse(`${API} is not reachable from anywhere but this machine.`);
 
 /* And refuse to ship one pointed at an executor that is down or on the wrong chain. */
 const health = await fetch(`${API}/health`).then((r) => r.json());
-if (!health.ok) {
-  console.error(`\n  Refusing to build: ${API} reports status "${health.status}".\n`);
-  process.exit(1);
-}
+if (!health.ok) refuse(`${API} reports status "${health.status}".`);
 console.log(`  executor up on chain "${health.chain}"`);
 
-if (!existsSync(ENV_FILE)) {
-  console.error(`\n  No ${ENV_FILE} to build from. Copy .env.example and fill it in.\n`);
-  process.exit(1);
+/** A value from a dotenv file, or undefined. Only public build settings are read this way. */
+function envValue(file, name) {
+  if (!existsSync(file)) return undefined;
+  const line = readFileSync(file, 'utf8')
+    .split('\n')
+    .find((l) => l.startsWith(`${name}=`));
+  return line?.slice(name.length + 1).trim().replace(/^["']|["']$/g, '') || undefined;
 }
+
+async function rpc(url, method) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: [] }),
+  });
+  const body = await res.json();
+  if (body.error) throw new Error(`${method}: ${body.error.message}`);
+  return body.result;
+}
+
+/* A fork build names the fork's RPC, and the RPC has to be the fork. */
+const FORK = health.chain === 'base-fork' || health.chain === 'localnet';
+const CHAIN_RPC = FORK ? process.env.XORR_WEB_CHAIN_RPC ?? envValue(FORK_ENV_FILE, 'EXPO_PUBLIC_CHAIN_RPC') : undefined;
+if (FORK) {
+  if (!CHAIN_RPC) refuse(`${API} settles on ${health.chain}, and neither XORR_WEB_CHAIN_RPC nor ${FORK_ENV_FILE} names its RPC.`);
+  if (local(CHAIN_RPC)) refuse(`${CHAIN_RPC} is not reachable from a visitor's browser.`);
+  const [chainId, client] = await Promise.all([rpc(CHAIN_RPC, 'eth_chainId'), rpc(CHAIN_RPC, 'web3_clientVersion')]);
+  if (Number(chainId) !== 8453 || !String(client).startsWith('anvil')) {
+    refuse(`${CHAIN_RPC} answers as ${client} on chain ${Number(chainId)}, not as a fork of Base.`);
+  }
+  console.log(`  fork RPC ${CHAIN_RPC} answers as ${client} on chain ${Number(chainId)}`);
+}
+
+if (!existsSync(ENV_FILE)) refuse(`there is no ${ENV_FILE} to build from. Copy .env.example and fill it in.`);
 
 /* The developer's own file, restored verbatim below whatever happens. */
 const original = readFileSync(ENV_FILE, 'utf8');
@@ -61,12 +95,17 @@ const original = readFileSync(ENV_FILE, 'utf8');
 try {
   const patched = original
     .split('\n')
-    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN)=/.test(l))
-    .concat([`EXPO_PUBLIC_API_URL=${API}`, `EXPO_PUBLIC_XORR_CHAIN=${health.chain}`, ''])
+    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN|CHAIN_RPC)=/.test(l))
+    .concat([
+      `EXPO_PUBLIC_API_URL=${API}`,
+      `EXPO_PUBLIC_XORR_CHAIN=${health.chain}`,
+      ...(CHAIN_RPC ? [`EXPO_PUBLIC_CHAIN_RPC=${CHAIN_RPC}`] : []),
+      '',
+    ])
     .join('\n');
   writeFileSync(ENV_FILE, patched);
   rmSync(OUT, { recursive: true, force: true });
-  console.log(`\n  Building the hosted app → ${OUT}\n  executor: ${API}\n`);
+  console.log(`\n  Building the hosted app → ${OUT}\n  executor: ${API}${CHAIN_RPC ? `\n  chain RPC: ${CHAIN_RPC}` : ''}\n`);
   /*
    * `--clear`, always. Metro caches transformed modules, and an inlined `process.env` value is
    * baked into that cache — so changing the variable and rebuilding reuses the old constant and
@@ -94,13 +133,14 @@ const bundle = readdirSync(dir)
 const js = readFileSync(bundle, 'utf8');
 
 /*
- * Only one assertion, and it is the meaningful one. `localhost:8788` is `DEFAULT_BASE` in
- * `apiBase.ts` — a source literal that is in every bundle ever built, so checking for its absence
- * failed a build that was actually fine. The public URL can only reach the bundle by being inlined,
- * so its presence is proof the substitution happened.
+ * `localhost:8788` is `DEFAULT_BASE` in `apiBase.ts` — a source literal that is in every bundle ever
+ * built, so checking for its absence failed a build that was actually fine. A public URL can only
+ * reach the bundle by being inlined, so its presence is proof the substitution happened — for the
+ * executor, and on a fork build for the chain's RPC too.
  */
 const problems = [];
 if (!js.includes(API)) problems.push(`the bundle does not contain ${API}`);
+if (CHAIN_RPC && !js.includes(CHAIN_RPC)) problems.push(`the bundle does not contain the fork RPC ${CHAIN_RPC}`);
 
 if (problems.length) {
   console.error(`\n  Build produced the wrong artifact:\n${problems.map((p) => `    - ${p}`).join('\n')}\n`);
@@ -142,4 +182,6 @@ writeFileSync(
   ) + '\n',
 );
 
-console.log(`\n  ${bundle}\n  points at ${API} — verified in the bundle, not assumed.\n`);
+console.log(
+  `\n  ${bundle}\n  points at ${API}${CHAIN_RPC ? ` and ${CHAIN_RPC}` : ''} — verified in the bundle, not assumed.\n`,
+);
