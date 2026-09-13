@@ -94,7 +94,7 @@ export default function Policy() {
                   {data.enforced ? 'MAY SEND TO' : 'WOULD ALLOW'}
                 </Text>
                 {destinations.map((d) => (
-                  <View key={d.address} style={{ marginTop: space.s10 }}>
+                  <View key={`${d.label}:${d.address}`} style={{ marginTop: space.s10 }}>
                     <Text variant="rowPrimary">{d.label}</Text>
                     <Text variant="footnote" color={colors.ink28} style={{ marginTop: space.s2 }}>
                       {shortAddress(d.address)}

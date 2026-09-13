@@ -25,9 +25,11 @@ import {
   Fill,
   NoteStrip,
   Pill,
+  Press,
   Price,
   RadioCard,
   Screen,
+  Tag,
   Text,
   border,
   colors,
@@ -49,6 +51,7 @@ import { transferCall } from '@/wallet/transfer';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { formatEther, type Address } from 'viem';
 import { MINUS, shortAddress } from '@/format';
+import { networkChip } from '@/chain';
 
 const FIELD_H = 52;
 
@@ -91,15 +94,15 @@ export default function Send() {
 
   const problem = useMemo(() => {
     if (listLoading) return undefined;
-    if (listError && addresses.length === 0) return 'Your allowlist could not be read, so there is nowhere to send to yet.';
-    if (addresses.length === 0) return 'Add a destination to your allowlist first.';
-    if (usable.length === 0) return 'None of your addresses is usable yet.';
+    if (listError && addresses.length === 0) return 'Couldn’t load your allowlist.';
+    if (addresses.length === 0) return 'Add an address first.';
+    if (usable.length === 0) return 'No address is unlocked yet.';
     if (!entry) return 'Choose a destination.';
     if (!amount) return undefined;
     if (!(typed > 0)) return 'Enter an amount above zero.';
-    if (overBalance) return `That is more ${symbol} than you hold.`;
+    if (overBalance) return 'More than you hold.';
     return undefined;
-  }, [listLoading, listError, addresses.length, usable.length, entry, amount, typed, overBalance, symbol]);
+  }, [listLoading, listError, addresses.length, usable.length, entry, amount, typed, overBalance]);
 
   /*
    * What the send costs you in gas (PLAN.md 3.13), asked of your own wallet, which pays it — nothing here goes
@@ -133,29 +136,34 @@ export default function Send() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
         <BackButton onPress={() => goBack()} />
-        <Text variant="screenTitle">Send</Text>
+        <Text variant="screenTitle" style={{ flex: 1 }}>
+          Send
+        </Text>
+        <Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />
       </View>
 
-      <Text variant="secondary" style={{ marginTop: space.s10 }}>
-        Funds can only leave to an address you have already allowlisted. That is what stops a
-        compromised phone from draining the wallet.
-      </Text>
-
       <Fill style={{ marginTop: space.s22 }}>
-        <Eyebrow small>Destination</Eyebrow>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Eyebrow small>To</Eyebrow>
+          <Press onPress={() => router.push('/allowlist')} accessibilityRole="button" accessibilityLabel="Manage your allowlist">
+            <Text variant="footnote" color={colors.ink55}>
+              Manage
+            </Text>
+          </Press>
+        </View>
         <View style={{ gap: space.s10, marginTop: space.s12 }}>
           {listLoading ? (
             <Text variant="secondary" color={colors.ink40}>
-              Reading your allowlist…
+              Loading…
             </Text>
           ) : listError && addresses.length === 0 ? (
             // A list that could not be read is not an empty list, and must not look like one.
             <Text variant="secondary" color={colors.down}>
-              Could not read your allowlist.
+              Couldn’t load your allowlist.
             </Text>
           ) : addresses.length === 0 ? (
             <Text variant="secondary" color={colors.ink40}>
-              Nothing on your allowlist yet.
+              No addresses yet.
             </Text>
           ) : (
             <>
@@ -181,7 +189,7 @@ export default function Send() {
         </View>
 
         <View style={{ marginTop: space.s22 }}>
-          <Eyebrow small>Asset</Eyebrow>
+          <Eyebrow small>Token</Eyebrow>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s8, marginTop: space.s10 }}>
             {sendable.map((t) => (
               <Pill
@@ -229,8 +237,8 @@ export default function Send() {
               marginTop: space.s8,
             }}
           >
-            <Text variant="footnote" color={colors.ink40}>
-              You hold
+            <Text variant="footnote" color={colors.ink55}>
+              Balance
             </Text>
             {/*
               A dash, never a confident $0.00, when the balance could not be read — and never a
@@ -244,8 +252,8 @@ export default function Send() {
             </Price>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.s6 }}>
-            <Text variant="footnote" color={colors.ink40}>
-              Network fee, paid from your ETH
+            <Text variant="footnote" color={colors.ink55}>
+              Network fee
             </Text>
             <Price variant="footnote">
               {feeUsd !== undefined ? `≈ ${money(feeUsd)}` : fee.loading ? '· · ·' : MINUS}
@@ -253,12 +261,12 @@ export default function Send() {
           </View>
         </View>
 
-        <NoteStrip kind="risk" style={{ marginTop: space.s16 }}>
-          A new address takes effect after a cooling-off period, counted by the executor. Adding one
-          now does not let you send to it today.
-        </NoteStrip>
+        <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s16 }}>
+          New addresses unlock after a cooling-off period.
+        </Text>
 
-        {problem ? (
+        {/* A problem is said once there is something to say it about: an amount typed, or a list that failed. */}
+        {problem && (amount || listError) ? (
           <Text variant="secondary" color={colors.down} style={{ marginTop: space.s12 }}>
             {problem}
           </Text>
@@ -276,18 +284,6 @@ export default function Send() {
       </Fill>
 
       <Button
-        label="Manage allowlist"
-        variant="ghost"
-        onPress={() => router.push('/allowlist')}
-        style={{ marginBottom: space.s10 }}
-      />
-      <Button
-        label="Withdraw everything"
-        variant="ghost"
-        onPress={() => router.push('/withdraw-everything')}
-        style={{ marginBottom: space.s10 }}
-      />
-      <Button
         label={busy ? 'Signing…' : 'Send'}
         disabled={!ready || busy}
         onPress={() => {
@@ -295,14 +291,16 @@ export default function Send() {
           void withdraw({ token, entry, allowlist: usable, amount }).catch(() => undefined);
         }}
       />
-      <Text
-        variant="footnote"
-        color={colors.ink28}
-        align="center"
-        style={{ marginTop: space.s12 }}
+      <Press
+        onPress={() => router.push('/withdraw-everything')}
+        accessibilityRole="button"
+        accessibilityLabel="Withdraw everything"
+        style={{ marginTop: space.s14, alignItems: 'center' }}
       >
-        You sign this yourself. The bot has no power to move funds off this wallet.
-      </Text>
+        <Text variant="footnote" color={colors.ink55}>
+          Withdraw everything ›
+        </Text>
+      </Press>
     </Screen>
   );
 }

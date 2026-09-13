@@ -48,7 +48,6 @@ import { logoProps, useLogos } from '@/data/useLogos';
 import { usePrivyIdentity } from '@/auth/usePrivyIdentity';
 import { useHasHydrated, useStore } from '@/state/store';
 import type { Agent, Instrument } from '@/data/types';
-import { chainLabel } from '@/chain';
 import { nothingSettles } from '@/state/derived';
 
 type SheetTab = 'agents' | 'gainers' | 'stocks' | 'futures';
@@ -169,8 +168,8 @@ export default function Home() {
 
   /* The Privy account, named by its email when Privy has one, and by its wallet otherwise. */
   const address = wallet?.address;
-  const title = email ?? (address ? shortAddress(address) : 'Privy wallet');
-  const subtitle = email && address ? `Privy wallet · ${shortAddress(address)}` : 'Privy wallet';
+  const title = email ?? (address ? shortAddress(address) : 'Wallet');
+  const subtitle = email && address ? shortAddress(address) : 'Wallet';
   const initial = (email ?? address?.replace(/^0x/i, '') ?? 'x').charAt(0).toUpperCase();
 
   /*
@@ -255,7 +254,7 @@ export default function Home() {
         {fillsNothing ? (
           <View style={{ marginTop: space.s16, paddingHorizontal: space.gutter }}>
             <NoteStrip kind="blocked">
-              {`Nothing fills on ${chainLabel}: 1inch has no deployment here, so your strategies are watched, not traded.`}
+              Watch-only here: strategies are tracked, not traded.
             </NoteStrip>
           </View>
         ) : null}
@@ -367,7 +366,7 @@ export default function Home() {
                 </View>
               ) : roster.length === 0 ? (
                 <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
-                  {agents.error ? 'Your agents could not be loaded.' : 'No agents yet.'}
+                  {agents.error ? 'Couldn’t load agents.' : 'No agents yet.'}
                 </Text>
               ) : (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: space.s18, marginTop: space.s18 }}>
@@ -403,7 +402,7 @@ export default function Home() {
                 <LoadingRows count={4} height={size.rowLg} spark />
               ) : gainers.length === 0 ? (
                 <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
-                  {classes.error ? 'Prices could not be loaded.' : 'Nothing on a live feed is up today.'}
+                  {classes.error ? 'Couldn’t load prices.' : 'No gainers today.'}
                 </Text>
               ) : (
                 gainers.map((g, i) => {
@@ -439,14 +438,14 @@ export default function Home() {
               !stocks.data ? (
                 stocks.error ? (
                   <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
-                    Stocks could not be loaded.
+                    Couldn’t load stocks.
                   </Text>
                 ) : (
                   <LoadingRows count={4} height={size.rowLg} />
                 )
               ) : stockRows.length === 0 ? (
                 <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
-                  No tokenized stocks on this build.
+                  No stocks yet.
                 </Text>
               ) : (
                 stockRows.map((s, i) => (
@@ -461,7 +460,7 @@ export default function Home() {
                       value={
                         s.price === null ? (
                           <Text variant="rowPrimary" color={colors.ink40}>
-                            No route
+                            No price
                           </Text>
                         ) : (
                           fmtPrice(s.price)
@@ -474,7 +473,7 @@ export default function Home() {
             ) : !futures.data ? (
               futures.error ? (
                 <Text variant="body" color={colors.ink40} style={{ marginTop: space.s16 }}>
-                  Futures could not be loaded.
+                  Couldn’t load futures.
                 </Text>
               ) : (
                 <LoadingRows count={4} height={size.rowLg} />

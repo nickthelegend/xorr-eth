@@ -62,7 +62,7 @@ export default function Sponsors() {
   return (
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
-        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Integrations</Text>} />
+        <HeaderBar onBack={goBack} title={<Text variant="screenTitle">How it works</Text>} />
         <Text variant="secondary" color={colors.ink40} style={{ marginTop: space.s8 }}>
           What each one does here, and the evidence it is doing it.
         </Text>

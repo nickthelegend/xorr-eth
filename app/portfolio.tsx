@@ -52,6 +52,8 @@ const GRAPH_H = 150;
 const GRAPH_TF = '4H' as const;
 const CARD_TF = '1H' as const;
 const CARD_POINTS = 48;
+/** Below a cent, a holding is left over from a sale rather than held. */
+const DUST_USD = 0.01;
 
 const card = {
   marginTop: space.s14,
@@ -134,7 +136,8 @@ export default function Portfolio() {
   const runs = useAsync(() => system.runs(200), []);
   const activity = useAsync(() => repos.activity.list(), []);
 
-  const book = useMemo(() => positions.data ?? [], [positions.data]);
+  // Dust a sale left behind is not a position: it would read as an open trade worth $0.00.
+  const book = useMemo(() => (positions.data ?? []).filter((p) => p.notional >= DUST_USD), [positions.data]);
   const symbolsKey = book.map((p) => p.symbol).join(',');
   const weekly = useClosesBySymbol(symbolsKey, GRAPH_TF);
   const daily = useClosesBySymbol(symbolsKey, CARD_TF);
@@ -213,7 +216,7 @@ export default function Portfolio() {
           )}
           {positions.loading && !positions.data ? (
             <Placeholder width={160} height={14} style={{ marginTop: space.s10 }} />
-          ) : unrealisedPct !== undefined ? (
+          ) : unrealisedPct !== undefined && Math.abs(unrealised) >= 0.005 ? (
             <Price variant="secondarySm" tone={pnlTone(unrealised)} style={{ marginTop: space.s6 }}>
               {`${signedMoney(unrealised)} · ${percent(unrealisedPct)} open`}
             </Price>
@@ -236,7 +239,7 @@ export default function Portfolio() {
                 style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.s8 }}
               >
                 <Text variant="footnote" color={colors.ink40}>
-                  {`${graph.symbols.join(' + ')}, over the last week`}
+                  Past week
                 </Text>
                 <Price variant="footnote" tone={pnlTone(graphDelta)}>
                   {`${signedMoney(graphDelta)} · ${percent(graphPct)}`}
@@ -254,7 +257,7 @@ export default function Portfolio() {
             <Button label="Deposit" onPress={() => router.push('/deposit')} />
           </View>
           <View style={{ flex: 1 }}>
-            <Button label="Withdraw" variant="ghost" onPress={() => router.push('/send')} />
+            <Button label="Withdraw" variant="ghost" height={size.button} onPress={() => router.push('/send')} />
           </View>
         </Rise>
 
@@ -275,7 +278,7 @@ export default function Portfolio() {
           ) : book.length === 0 ? (
             <View style={{ padding: space.s16, gap: space.s12, borderRadius: radius.panel, backgroundColor: colors.surfaceAlt }}>
               <Text variant="body" color={colors.ink40}>
-                {positions.error ? 'Positions could not be loaded.' : 'No open positions yet.'}
+                {positions.error ? 'Couldn’t load positions.' : 'No open positions yet.'}
               </Text>
               {!positions.error ? (
                 <Button label="Start a recurring buy" variant="ghost" onPress={() => router.push('/strategy/dca')} />
@@ -323,7 +326,6 @@ export default function Portfolio() {
           <Row
             height={size.rowSm}
             title="Open"
-            secondary="On what the bot still holds"
             value={
               positions.data ? (
                 <Price tone={pnlTone(unrealised)}>{signedMoney(unrealised)}</Price>
@@ -335,8 +337,7 @@ export default function Portfolio() {
           <Row
             height={size.rowSm}
             divider={false}
-            title="Taken"
-            secondary="On what it sold"
+            title="Closed"
             value={
               realised.data ? (
                 <Price tone={pnlTone(realised.data.total)}>{signedMoney(realised.data.total)}</Price>
@@ -363,7 +364,7 @@ export default function Portfolio() {
           <Press
             onPress={() => router.push('/yield')}
             accessibilityRole="button"
-            accessibilityLabel="Earning, supplied to Aave. Opens yield."
+            accessibilityLabel="Earning. Opens yield."
             style={{ flex: 1, gap: space.s4 }}
           >
             <Text variant="eyebrowSm">Earning</Text>

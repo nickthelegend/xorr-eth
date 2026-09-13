@@ -41,7 +41,7 @@ export const activeChain: Chain =
   CHAIN_KEY === 'base'
     ? withRpc(base, RPC)
     : CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet'
-      ? withRpc({ ...base, name: 'Base (local fork)' }, RPC ?? 'http://127.0.0.1:8545')
+      ? withRpc({ ...base, name: 'Base fork' }, RPC ?? 'http://127.0.0.1:8545')
       : withRpc(baseSepolia, RPC);
 
 /**
@@ -59,7 +59,13 @@ export const chainLabel =
     ? 'Base'
     : CHAIN_KEY === 'base-sepolia'
       ? 'Base Sepolia'
-      : 'Base (local fork)';
+      : 'Base fork';
+
+/** Every network but Base itself is for testing: nothing on it is real money. */
+export const testNetwork = CHAIN_KEY !== 'base';
+
+/** The one place the network is named on screen: a small chip where money moves — Deposit and Send. */
+export const networkChip = testNetwork ? `${chainLabel} · Test` : chainLabel;
 
 /**
  * Where a transaction the USER signs is broadcast (PLAN.md 4.1).
@@ -95,6 +101,5 @@ export const walletSignsOnly = CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'local
  */
 export const depositQrWorks = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-sepolia';
 
-export const depositQrNote =
-  `No code on this build: it settles on ${chainLabel}, which shares real Base's chain id (${activeChain.id}), so a code ` +
-  `would open a phone wallet on real Base — where a transfer is real money that never arrives here.`;
+/** Said where the code would be. A fork build has no code, and its money is test funds. */
+export const depositQrNote = 'Test network. Use test funds.';

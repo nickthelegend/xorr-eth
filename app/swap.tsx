@@ -140,9 +140,9 @@ export default function Swap() {
   const q = quote.data;
   const cta =
     outcome?.status === 'filled'
-      ? `Swapped ${quantity(outcome.sold)} ${outcome.from} for ${outcome.received === null ? 'at least the floor' : `${quantity(outcome.received)} ${outcome.to}`}`
+      ? `Swapped ${quantity(outcome.sold)} ${outcome.from} for ${outcome.received === null ? outcome.to : `${quantity(outcome.received)} ${outcome.to}`}`
       : reviewing && q
-        ? `Confirm: ${amount} ${pay} for at least ${quantity(q.minimumOut)} ${receive}`
+        ? 'Confirm swap'
         : 'Review swap';
 
   return (
@@ -177,7 +177,7 @@ export default function Swap() {
 
       {nothingSettles ? (
         <Fill style={{ justifyContent: 'center' }}>
-          <EmptyState text="Nothing can be swapped on this network: 1inch has no deployment here, so no swap would settle." />
+          <EmptyState text="Swaps aren’t available on this network." />
         </Fill>
       ) : (
         <Fill style={{ marginTop: space.s18 }}>
@@ -193,7 +193,7 @@ export default function Swap() {
                   {/* A dash while the balance loads, never a zero: see the note on `swapSpendable`. */}
                   {balanceUnread
                     ? `Balance ${MINUS} · tap to retry`
-                    : `Balance ${spendable === undefined ? MINUS : quantity(spendable)}`}
+                    : `Balance ${spendable === undefined ? MINUS : units(spendable)}`}
                 </Text>
               </Press>
             </View>
@@ -201,7 +201,7 @@ export default function Swap() {
               <View style={{ flexShrink: 1 }}>
                 <Price variant="amountLg">{amount}</Price>
                 <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
-                  {payPrice?.price !== undefined ? money(typed * payPrice.price) : 'No live price'}
+                  {payPrice?.price !== undefined ? money(typed * payPrice.price) : 'No price'}
                 </Text>
               </View>
               <TokenPill symbol={pay} onPress={() => setPicking(picking === 'pay' ? null : 'pay')} label="Choose the token you pay" />
@@ -233,14 +233,14 @@ export default function Swap() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flexShrink: 1 }}>
                 <Price variant="amountLg">{q ? quantity(q.outAmount) : MINUS}</Price>
-                <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
+                <Text variant="secondarySm" numberOfLines={2} style={{ marginTop: space.s4 }}>
                   {q
-                    ? `at least ${quantity(q.minimumOut)} ${receive} after slippage`
+                    ? `Min ${quantity(q.minimumOut)}`
                     : !(typed > 0)
-                      ? 'Type an amount'
+                      ? 'Enter an amount'
                       : quote.loading
-                        ? 'Getting a route…'
-                        : (apiReason(quote.error) ?? 'No route available')}
+                        ? 'Quoting…'
+                        : (apiReason(quote.error) ?? 'No quote')}
                 </Text>
               </View>
               <TokenPill
@@ -276,7 +276,7 @@ export default function Swap() {
                       {symbol}
                     </Text>
                     <Text variant="footnote" color={colors.ink40}>
-                      {held === undefined ? MINUS : `${quantity(held)} held`}
+                      {held === undefined ? MINUS : `${units(held)} held`}
                     </Text>
                   </Press>
                 );
@@ -284,44 +284,38 @@ export default function Swap() {
             </View>
           ) : (
             <>
-              <View style={{ marginTop: space.s14 }}>
-                <Row
-                  title="Route"
-                  value={
-                    <Text variant="rowPrimary" color={colors.ink55}>
-                      {q?.route ?? (quote.loading ? 'Finding…' : quote.error ? 'No venue would quote' : MINUS)}
-                    </Text>
-                  }
-                  height={46}
-                />
-                <Row
-                  title="You receive at least"
-                  // The floor, not a fee: xorr charges none, and this is the number the fill is held to on chain.
-                  value={<Price>{q ? `${quantity(q.minimumOut)} ${receive}` : MINUS}</Price>}
-                  height={46}
-                />
-                <Row
-                  title="Price impact"
-                  value={
-                    <Price>
-                      {q && q.priceImpactPct !== null ? percent(q.priceImpactPct, { digits: 3, explicitSign: false }) : MINUS}
-                    </Price>
-                  }
-                  height={46}
-                />
-                <Row
-                  title="Network fee"
-                  // What sending it costs, and who pays: the executor that sends the swap does (PLAN.md 3.13).
-                  value={<Price>{networkFee(q?.gas)}</Price>}
-                  height={46}
-                />
-                <Row
-                  title="Max slippage"
-                  value={<Price>{percent(slippagePct, { digits: 1, explicitSign: false })}</Price>}
-                  height={46}
-                  divider={false}
-                />
-              </View>
+              {/* The rows arrive with a quote: four dashes before anything is typed say nothing. */}
+              {q ? (
+                <View style={{ marginTop: space.s14 }}>
+                  <Row
+                    title="Minimum received"
+                    // The floor, not a fee: xorr charges none, and this is the number the fill is held to on chain.
+                    value={<Price>{q ? `${quantity(q.minimumOut)} ${receive}` : MINUS}</Price>}
+                    height={46}
+                  />
+                  <Row
+                    title="Price impact"
+                    value={
+                      <Price>
+                        {q && q.priceImpactPct !== null ? percent(q.priceImpactPct, { digits: 3, explicitSign: false }) : MINUS}
+                      </Price>
+                    }
+                    height={46}
+                  />
+                  <Row
+                    title="Network fee"
+                    // What sending it costs, and who pays: the executor that sends the swap does (PLAN.md 3.13).
+                    value={<Price>{networkFee(q?.gas)}</Price>}
+                    height={46}
+                  />
+                  <Row
+                    title="Max slippage"
+                    value={<Price>{percent(slippagePct, { digits: 1, explicitSign: false })}</Price>}
+                    height={46}
+                    divider={false}
+                  />
+                </View>
+              ) : null}
               <Fill style={{ justifyContent: 'center' }}>
                 <Keypad onPress={pressKey} />
               </Fill>
@@ -350,48 +344,40 @@ export default function Swap() {
         overBalance={overBalance}
         spendable={spendable}
         pay={pay}
-        reviewing={reviewing}
       />
     </Screen>
   );
 }
 
-/** The route's gas in dollars, said as paid by the executor — or the gas price alone when ETH has no price. */
+/** An amount of a token: cents above one unit, four places below it. */
+const units = (n: number) => quantity(n, n >= 1 ? 2 : 4);
+
+/** The route's gas, which the executor pays — in dollars when ETH has a price. */
 function networkFee(gas: SwapQuoteResult['gas']): string {
   if (!gas) return MINUS;
-  if (gas.feeUsd !== null) return `≈ ${money(gas.feeUsd)} · paid by xorr`;
-  return `${Number(gas.priceGwei.toPrecision(3))} gwei · paid by xorr`;
+  return gas.feeUsd !== null ? `On us · ≈ ${money(gas.feeUsd)}` : 'On us';
 }
 
-/** The one sentence under the button: what happened, what is wrong, or what confirming will do. */
+/** The one line under the button, only when something is wrong. */
 function SwapNote({
   outcome,
   overBalance,
   spendable,
   pay,
-  reviewing,
 }: {
   outcome: SwapOutcome | undefined;
   overBalance: boolean;
   spendable: number | undefined;
   pay: string;
-  reviewing: boolean;
 }) {
   const note =
-    outcome?.status === 'filled'
-      ? {
-          text: `Settled through ${outcome.venue ?? 'the executor'} · ${outcome.txHash.slice(0, 10)}…${outcome.measured === false ? ' · the amount received is the floor the contract enforced' : ''}`,
-          color: colors.ink40,
-        }
-      : outcome?.status === 'blocked'
-        ? { text: outcome.detail, color: colors.down }
-        : outcome?.status === 'failed'
-          ? { text: outcome.error, color: colors.down }
-          : overBalance
-            ? { text: spendable === 0 ? `You hold no ${pay}.` : `You hold ${quantity(spendable ?? 0)} ${pay}.`, color: colors.down }
-            : reviewing
-              ? { text: 'Confirming sends it under your permission. The contract holds the fill to the floor above.', color: colors.ink40 }
-              : null;
+    outcome?.status === 'blocked'
+      ? { text: outcome.detail, color: colors.down }
+      : outcome?.status === 'failed'
+        ? { text: outcome.error, color: colors.down }
+        : overBalance
+          ? { text: spendable === 0 ? `You hold no ${pay}.` : `You hold ${quantity(spendable ?? 0)} ${pay}.`, color: colors.down }
+          : null;
   if (!note) return null;
   return (
     <Text variant="footnote" color={note.color} align="center" style={{ marginTop: space.s10 }}>

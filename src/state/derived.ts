@@ -394,7 +394,7 @@ export function killExplanation(
   expired = false,
 ): string {
   if (unusable) {
-    return 'Your permission names a different bot key than the one running, so nothing can be placed. Grant again to reconnect. Your funds are untouched.';
+    return 'Reconnect to let agents trade. Your funds are untouched.';
   }
   /*
    * No permission at all is its own state, and it outranks the rest.
@@ -406,18 +406,18 @@ export function killExplanation(
    * bug in this same function, which is how a copy change becomes a correctness change.
    */
   if (!granted) {
-    return 'No permission has been granted, so nothing can trade. There is nothing to stop yet.';
+    return 'Nothing is granted yet, so nothing can trade.';
   }
   if (expired) {
-    return 'This permission reached the end date you set, so nothing can be placed. Grant a new one to carry on. Your funds are untouched.';
+    return 'It reached its end date. Grant again to continue.';
   }
-  if (killed) return 'Nothing will be placed until you resume. Open positions are untouched.';
+  if (killed) return 'Nothing trades until you resume.';
   if (liveAgents === 0) {
     // Not "0 agents can place orders", which reads as a stopped bot next to a LIVE badge. The
     // permission is live and unused, and those are different facts.
-    return 'Nothing is scheduled right now, but the permission is live — anything you start can place orders inside your limits.';
+    return 'Nothing is running. Anything you start can trade.';
   }
-  return `${liveAgents} ${liveAgents === 1 ? 'agent' : 'agents'} can place orders inside your limits right now.`;
+  return `${liveAgents} ${liveAgents === 1 ? 'agent' : 'agents'} can trade within your limits.`;
 }
 /**
  * What the big button on Safety should offer.
@@ -588,10 +588,10 @@ export function expiryNote(expiresAt: number | undefined, now = Date.now()): str
   const state = expiryState(expiresAt, now);
   if (state === 'none' || state === 'ok') return undefined;
   if (state === 'expired') {
-    return 'Your permission has expired, so nothing can be placed. Your funds and positions are untouched — grant again to restart.';
+    return 'Permission expired. Your funds are untouched.';
   }
   const hours = Math.max(1, Math.round((expiresAt! - now) / 3_600_000));
-  return `Your permission runs out in ${hours === 1 ? 'an hour' : `${hours} hours`}. The bot stops on its own when it does; granting again takes a minute.`;
+  return `Permission ends in ${hours === 1 ? 'an hour' : `${hours} hours`}.`;
 }
 
 /**
@@ -612,8 +612,8 @@ export function holdingDrift(p: { driftUnits?: number | null }): { kind: 'missin
 /** The drift, said plainly beside the numbers it changes. */
 export function driftSentence(symbol: string, drift: { kind: 'missing' | 'unrecorded'; units: number }): string {
   return drift.kind === 'missing'
-    ? `${quantity(drift.units)} ${symbol} on record is not in your wallet, so size and value show what the wallet holds.`
-    : `${quantity(drift.units)} ${symbol} in your wallet was not bought here, so it has no recorded cost and is not counted.`;
+    ? `${quantity(drift.units)} ${symbol} on record isn’t in your wallet.`
+    : `${quantity(drift.units)} ${symbol} in your wallet wasn’t bought here.`;
 }
 
 /** Which tradable symbols each onboarding sleeve means (PLAN.md 2.17). Stable yield is Aave, not a swap: cash here. */

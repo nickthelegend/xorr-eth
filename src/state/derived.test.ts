@@ -257,9 +257,9 @@ describe('kill switch — screen 20', () => {
     expect(d.killCta(false)).toBe('Stop all agents');
     expect(d.killCta(true)).toBe('Resume agents');
     expect(d.killExplanation(false, 3)).toBe(
-      '3 agents can place orders inside your limits right now.',
+      '3 agents can trade within your limits.',
     );
-    expect(d.killExplanation(true, 3)).toContain('Open positions are untouched');
+    expect(d.killExplanation(true, 3)).toContain('until you resume');
   });
 
   /*
@@ -268,7 +268,7 @@ describe('kill switch — screen 20', () => {
    */
   it('counts one thing as one thing', () => {
     expect(d.killExplanation(false, 1)).toBe(
-      '1 agent can place orders inside your limits right now.',
+      '1 agent can trade within your limits.',
     );
   });
 
@@ -281,11 +281,11 @@ describe('kill switch — screen 20', () => {
    */
   it('does not describe a permission that was never granted', () => {
     const none = d.killExplanation(false, 0, false, false);
-    expect(none).toContain('No permission has been granted');
+    expect(none).toContain('Nothing is granted yet');
     expect(none).not.toContain('the permission is live');
     expect(d.killTitle(false, false, false)).toBe('No agents can trade');
     // And an ungranted wallet with strategies somehow counted still must not claim they can trade.
-    expect(d.killExplanation(false, 3, false, false)).toContain('No permission has been granted');
+    expect(d.killExplanation(false, 3, false, false)).toContain('Nothing is granted yet');
   });
 
   /*
@@ -355,8 +355,8 @@ describe('kill switch — screen 20', () => {
       expect(d.killTitle(false, false, true, true)).toBe('Your permission has ended');
       expect(d.killTitle(false, false, true, true)).not.toContain('live');
       const why = d.killExplanation(false, 3, false, true, true);
-      expect(why).toContain('end date you set');
-      expect(why).not.toContain('can place orders');
+      expect(why).toContain('end date');
+      expect(why).not.toContain('can trade');
     });
 
     /*
@@ -382,9 +382,9 @@ describe('kill switch — screen 20', () => {
    * Zero is not "the bot is stopped" — that is what `killed` means, and it has its own sentence.
    * Under a green LIVE badge, "0 agents can place orders" read as a kill switch already pulled.
    */
-  it('says the permission is live and unused, not that nothing can trade', () => {
+  it('says nothing is running but anything started can trade, not that nothing can', () => {
     const live = d.killExplanation(false, 0);
-    expect(live).toContain('the permission is live');
+    expect(live).toContain('Anything you start can trade');
     expect(live).not.toContain('0 agents');
     expect(live).not.toBe(d.killExplanation(true, 0));
   });
@@ -414,9 +414,9 @@ describe('kill switch — screen 20', () => {
     expect(d.delegateUnusable({ delegateIsCurrent: false }, false)).toBe(true);
     expect(d.killTitle(false, true)).toBe('Agents cannot trade');
     expect(d.killCta(false, true)).toBe('Reconnect agents');
-    expect(d.killExplanation(false, 1, true)).toContain('different bot key');
+    expect(d.killExplanation(false, 1, true)).toContain('Reconnect');
     // And it must not read as a working permission.
-    expect(d.killExplanation(false, 1, true)).not.toContain('can place orders');
+    expect(d.killExplanation(false, 1, true)).not.toContain('can trade within');
   });
 
   it('a stopped switch stays stopped — the two states do not collide', () => {
@@ -586,9 +586,9 @@ describe('a position the wallet does not match — PLAN.md 2.7', () => {
 
   it('says which way it runs, in units of the asset', () => {
     const missing = d.driftSentence('WETH', { kind: 'missing', units: 0.802587 });
-    expect(missing).toContain('WETH on record is not in your wallet');
+    expect(missing).toContain('WETH on record isn’t in your wallet');
     expect(missing).toMatch(/^0\.8026 /);
-    expect(d.driftSentence('WETH', { kind: 'unrecorded', units: 0.2 })).toContain('WETH in your wallet was not bought here');
+    expect(d.driftSentence('WETH', { kind: 'unrecorded', units: 0.2 })).toContain('WETH in your wallet wasn’t bought here');
   });
 });
 
