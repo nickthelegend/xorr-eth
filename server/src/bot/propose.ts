@@ -14,6 +14,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { one, query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { priceOf } from '../market/prices.js';
 import { getJson } from '../http/get.js';
 import { COINGECKO_IDS } from '../market/ids.js';
@@ -167,7 +168,7 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
    * asset has no market against itself.
    */
   const strat = await one<{ symbol: string }>(
-    `SELECT symbol FROM strategies WHERE wallet_id=$1
+    `SELECT symbol FROM strategies WHERE wallet_id=$1 AND chain = ${THIS_CHAIN}
        AND symbol <> 'PORTFOLIO' AND symbol <> $2
      ORDER BY created_at DESC LIMIT 1`,
     [walletId, SETTLEMENT_SYMBOL],

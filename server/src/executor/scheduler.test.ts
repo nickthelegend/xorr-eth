@@ -71,3 +71,22 @@ describe('the interval', () => {
     restore();
   });
 });
+
+describe('housekeeping', () => {
+  it('clears stored idempotent responses older than a day, after the strategies and sweeps', async () => {
+    const restore = quiet();
+    vi.mocked(query).mockResolvedValue([] as never);
+    await tick(new Date());
+    const statements = vi.mocked(query).mock.calls.map((c) => String(c[0]));
+    expect(statements.at(-1)).toMatch(/DELETE FROM idempotency WHERE created_at < now\(\) - interval '24 hours'/);
+    restore();
+  });
+
+  it('a cleanup that fails does not fail the tick', async () => {
+    const restore = quiet();
+    vi.mocked(query).mockResolvedValueOnce([row('a')] as never).mockRejectedValueOnce(new Error('db busy'));
+    vi.mocked(runStrategy).mockResolvedValueOnce({ status: 'filled', runId: 'r', signature: '0x1', units: 1, price: 1 });
+    expect(await tick(new Date())).toBe(1);
+    restore();
+  });
+});

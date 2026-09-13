@@ -20,6 +20,7 @@ import { publicClient } from '../evm/client.js';
 import { ADDRESSES, CHAIN_KEY, chain, rpcUrl, SETTLEMENT_VENUES } from '../evm/chains.js';
 import { DELEGATION_ADDRESS, delegatePublicKey, readPolicy } from '../evm/delegation.js';
 import { query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { agreement, anchoringConfigured } from '../audit/anchor.js';
 import { verify as verifyAudit } from '../audit/log.js';
 import { usdcReserve } from '../market/yield.js';
@@ -585,7 +586,7 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
       how: 'the strategy_runs table',
       run: async () => {
         const rows = await query<{ status: string; n: string }>(
-          `SELECT status, count(*) AS n FROM strategy_runs GROUP BY status ORDER BY n DESC`,
+          `SELECT status, count(*) AS n FROM strategy_runs WHERE chain = ${THIS_CHAIN} GROUP BY status ORDER BY n DESC`,
         );
         if (rows.length === 0) {
           /*
@@ -596,7 +597,7 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
            * reported a red row for working exactly as it should. Say which.
            */
           const [live] = await query<{ n: string }>(
-            `SELECT count(*) AS n FROM strategies WHERE state IN ('live','watch')`,
+            `SELECT count(*) AS n FROM strategies WHERE state IN ('live','watch') AND chain = ${THIS_CHAIN}`,
           );
           const n = Number(live?.n ?? 0);
           if (n > 0) throw new Error(`${n} live strateg${n === 1 ? 'y' : 'ies'} and no runs recorded`);

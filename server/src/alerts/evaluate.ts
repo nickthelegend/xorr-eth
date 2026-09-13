@@ -19,6 +19,7 @@
 import type { PoolClient } from 'pg';
 import type { Address } from 'viem';
 import { query, tx } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { append } from '../audit/log.js';
 import { send } from '../notifications/push.js';
 import { priceOf } from '../market/prices.js';
@@ -130,7 +131,7 @@ async function agentVerdict(a: AlertRow): Promise<Verdict> {
     `SELECT count(*) AS n
        FROM strategy_runs r
        JOIN strategies s ON s.id = r.strategy_id
-      WHERE s.wallet_id = $1
+      WHERE s.wallet_id = $1 AND s.chain = ${THIS_CHAIN}
         AND r.status = 'blocked'
         AND r.finished_at > coalesce((SELECT last_fired_at FROM alerts WHERE id = $2), 'epoch')`,
     [a.wallet_id, a.id],

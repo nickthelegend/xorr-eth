@@ -34,6 +34,7 @@ import { Hono } from 'hono';
 import { httpStatusFor } from '../executor/failure.js';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { closeHolding, CloseInput } from './panic.js';
 import { principalOf, requireScope } from '../auth/middleware.js';
 import { createAgentKey, listAgentKeys, revokeAgentKey, type Scope } from '../auth/agentKeys.js';
@@ -74,7 +75,7 @@ agentSurface.post(
  * not behind a session.
  */
 agentSurface.post('/agent/strategies/:id/run', requireScope('trade:open'), async (c) => {
-  const row = await one<StrategyRow>(`SELECT * FROM strategies WHERE id = $1`, [
+  const row = await one<StrategyRow>(`SELECT * FROM strategies WHERE id = $1 AND chain = ${THIS_CHAIN}`, [
     c.req.param('id'),
   ]);
   if (!row) return c.json({ error: 'not_found' }, 404);
@@ -128,6 +129,7 @@ agentSurface.get('/agent/due', requireScope('read'), async (c) => {
   const rows = await query<{ id: string; label: string; kind: string; next_run_at: Date }>(
     `SELECT id, label, kind, next_run_at FROM strategies
       WHERE state IN ('live','watch') AND next_run_at IS NOT NULL AND next_run_at <= now()
+        AND chain = ${THIS_CHAIN}
       ORDER BY next_run_at ASC LIMIT 20`,
   );
   return c.json({ due: rows });

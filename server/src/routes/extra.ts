@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { append } from '../audit/log.js';
 import { backtestDca, backtestGrid, backtestMomentum, type Lookback } from '../backtest/engine.js';
 import { leaderboard } from '../agents/leaderboard.js';
@@ -404,7 +405,7 @@ extra.post('/proposals/:id/decide', async (c) => {
     }
     if ('openEntryPrice' in state) state.openEntryPrice = outcome.price;
     const managed = await one<{ label: string }>(
-      `UPDATE strategies SET params = params || $3::jsonb WHERE id = $1 AND wallet_id = $2 RETURNING label`,
+      `UPDATE strategies SET params = params || $3::jsonb WHERE id = $1 AND wallet_id = $2 AND chain = ${THIS_CHAIN} RETURNING label`,
       [strategyId, w.id, JSON.stringify(state)],
     );
     const stop = Number(state.stopPrice ?? 0);

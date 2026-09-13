@@ -1,12 +1,29 @@
 import pg from 'pg';
 import 'dotenv/config';
+import { CHAIN_KEY } from '../evm/chains.js';
 
 const { Pool } = pg;
 
 export const DATABASE_URL =
   process.env.DATABASE_URL ?? `postgres://${process.env.USER ?? 'postgres'}@localhost:5432/xorr`;
 
-export const pool = new Pool({ connectionString: DATABASE_URL, max: 10 });
+/*
+ * Every connection says which chain it serves (PLAN.md 2.6).
+ *
+ * `positions`, `strategies` and `strategy_runs` carry a `chain` column that defaults to this session
+ * setting, and their wallet-wide and global reads filter on it (`THIS_CHAIN`). Set in each
+ * connection's startup packet, so nothing has to remember to pass it — the scripts that share this
+ * pool included — and a row cannot be written without its chain or read across one.
+ */
+if (!/^[a-z0-9-]+$/.test(CHAIN_KEY)) {
+  throw new Error(`XORR_CHAIN must be a plain chain key such as base-sepolia, not "${CHAIN_KEY}".`);
+}
+
+export const pool = new Pool({
+  connectionString: DATABASE_URL,
+  max: 10,
+  options: `-c xorr.chain_key=${CHAIN_KEY}`,
+});
 
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,

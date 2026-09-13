@@ -26,6 +26,7 @@
  * says.
  */
 import { query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { CHAIN_KEY } from '../evm/chains.js';
 
 export type VenueQuality = {
@@ -65,7 +66,7 @@ export async function fillQuality(): Promise<FillQuality> {
   const rows = await query<{ venue: string | null; quoted: string; filled: string }>(
     `SELECT venue, quoted_units::text AS quoted, units::text AS filled
        FROM strategy_runs
-      WHERE status = 'filled'
+      WHERE status = 'filled' AND chain = ${THIS_CHAIN}
         AND quoted_units IS NOT NULL AND quoted_units > 0
         AND units IS NOT NULL AND units > 0`,
     [],
@@ -73,7 +74,7 @@ export async function fillQuality(): Promise<FillQuality> {
 
   const unmeasurableRow = await query<{ n: string }>(
     `SELECT count(*)::text AS n FROM strategy_runs
-      WHERE status = 'filled' AND (quoted_units IS NULL OR quoted_units <= 0)`,
+      WHERE status = 'filled' AND chain = ${THIS_CHAIN} AND (quoted_units IS NULL OR quoted_units <= 0)`,
     [],
   );
 

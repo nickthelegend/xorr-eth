@@ -15,6 +15,7 @@ import { httpStatusFor } from '../executor/failure.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { append } from '../audit/log.js';
 import {
   runStrategy,
@@ -154,7 +155,8 @@ async function commitmentRefusal(
 
   const sums = await query<{ sum: string | null }>(
     `SELECT SUM(daily_allocation_usd) AS sum FROM strategies
-      WHERE wallet_id = $1 AND state IN ('live','watch') AND kind <> ALL($2::text[]) AND id <> $3`,
+      WHERE wallet_id = $1 AND state IN ('live','watch') AND kind <> ALL($2::text[]) AND id <> $3
+        AND chain = ${THIS_CHAIN}`,
     [w.id, [...CLOSE_ONLY_KINDS], ask.excludeId ?? ''],
   );
   const committed = Number(sums[0]?.sum ?? 0) + ask.allocationUsd;
@@ -171,7 +173,7 @@ strategyRoutes.get('/strategies', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json([]);
   const rows = await query<StrategyRow>(
-    `SELECT * FROM strategies WHERE wallet_id=$1 ORDER BY created_at DESC`,
+    `SELECT * FROM strategies WHERE wallet_id=$1 AND chain = ${THIS_CHAIN} ORDER BY created_at DESC`,
     [w.id],
   );
   return c.json(rows.map(toApi));
@@ -215,7 +217,7 @@ strategyRoutes.get('/runs', async (c) => {
             r.signature, r.error, r.started_at, r.finished_at
        FROM strategy_runs r
        JOIN strategies s ON s.id = r.strategy_id
-      WHERE s.wallet_id = $1
+      WHERE s.wallet_id = $1 AND s.chain = ${THIS_CHAIN}
       ORDER BY r.started_at DESC
       LIMIT $2`,
     [w.id, limit],
@@ -290,7 +292,7 @@ function describeMove(from: string, to: StrategyState, label: string): { action:
 async function moveStrategy(c: Context, to: StrategyState): Promise<Response | StrategyRow> {
   const w = await requireWallet(c);
   const id = c.req.param('id');
-  const current = await one<StrategyRow>(`SELECT * FROM strategies WHERE id = $1 AND wallet_id = $2`, [
+  const current = await one<StrategyRow>(`SELECT * FROM strategies WHERE id = $1 AND wallet_id = $2 AND chain = ${THIS_CHAIN}`, [
     id,
     w.id,
   ]);
@@ -418,7 +420,7 @@ strategyRoutes.post('/orders', async (c) => {
 strategyRoutes.post('/strategies/:id/run', async (c) => {
   const w = await requireWallet(c);
   const row = await one<StrategyRow>(
-    `SELECT * FROM strategies WHERE id = $1 AND wallet_id = $2`,
+    `SELECT * FROM strategies WHERE id = $1 AND wallet_id = $2 AND chain = ${THIS_CHAIN}`,
     [c.req.param('id'), w.id],
   );
   // Scoped to the caller's own wallet: an id from another user must look like a missing strategy,

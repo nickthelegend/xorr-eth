@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { one, query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { priceOf } from '../market/prices.js';
 
 export type PositionRow = {
@@ -76,7 +77,7 @@ export async function applyFill(
     await client.query(
       `INSERT INTO positions (id, wallet_id, symbol, side, units, cost_usd)
        VALUES ($1,$2,$3,'long',$4,$5)
-       ON CONFLICT (wallet_id, symbol, side) DO UPDATE
+       ON CONFLICT (wallet_id, chain, symbol, side) DO UPDATE
          SET units = positions.units + EXCLUDED.units,
              cost_usd = positions.cost_usd + EXCLUDED.cost_usd,
              updated_at = now()`,
@@ -91,7 +92,7 @@ export async function applyFill(
    */
   const { rows } = await client.query<{ units: string; cost_usd: string }>(
     `SELECT units, cost_usd FROM positions
-      WHERE wallet_id = $1 AND symbol = $2 AND side = 'long' FOR UPDATE`,
+      WHERE wallet_id = $1 AND symbol = $2 AND side = 'long' AND chain = ${THIS_CHAIN} FOR UPDATE`,
     [params.walletId, params.symbol],
   );
   const existing = rows[0];
@@ -106,7 +107,7 @@ export async function applyFill(
     await client.query(
       `INSERT INTO positions (id, wallet_id, symbol, side, units, cost_usd, realised_usd, units_sold, proceeds_usd, unbased_units)
        VALUES ($1,$2,$3,'long',0,0,0,$4,$5,$4)
-       ON CONFLICT (wallet_id, symbol, side) DO NOTHING`,
+       ON CONFLICT (wallet_id, chain, symbol, side) DO NOTHING`,
       [randomUUID(), params.walletId, params.symbol, Math.abs(params.units), Math.abs(params.usd)],
     );
     // A disposal with no cost basis is still a disposal, and the report has to show it — flagged,
@@ -180,7 +181,7 @@ export async function applyFill(
             proceeds_usd = proceeds_usd + $6,
             unbased_units = unbased_units + $8,
             updated_at = now()
-      WHERE wallet_id = $1 AND symbol = $2 AND side = 'long'`,
+      WHERE wallet_id = $1 AND symbol = $2 AND side = 'long' AND chain = ${THIS_CHAIN}`,
     [
       params.walletId,
       params.symbol,
@@ -208,7 +209,7 @@ export async function listPositions(walletId: string): Promise<Position[]> {
      * priced at nothing, next to real ones. The threshold is in the token's own units and
      * deliberately tiny: anything at or below a millionth of a unit cannot be worth a row.
      */
-    `SELECT * FROM positions WHERE wallet_id=$1 AND units > 0.000001 ORDER BY updated_at DESC`,
+    `SELECT * FROM positions WHERE wallet_id=$1 AND chain = ${THIS_CHAIN} AND units > 0.000001 ORDER BY updated_at DESC`,
     [walletId],
   );
 
@@ -284,7 +285,7 @@ function toPosition(r: PositionRow, mark: number | undefined): Position {
 export async function getPosition(walletId: string, id: string): Promise<Position | null> {
   // One row, priced once. It priced the whole book to keep one entry of it (PLAN.md 2.3).
   const row = await one<PositionRow>(
-    `SELECT * FROM positions WHERE wallet_id=$1 AND id=$2 AND units > 0.000001`,
+    `SELECT * FROM positions WHERE wallet_id=$1 AND id=$2 AND chain = ${THIS_CHAIN} AND units > 0.000001`,
     [walletId, id],
   );
   if (!row) return null;
@@ -316,7 +317,7 @@ export async function realisedPnl(walletId: string): Promise<{
     unbased_units: string;
   }>(
     `SELECT symbol, realised_usd, units_sold, proceeds_usd, unbased_units
-       FROM positions WHERE wallet_id = $1 AND units_sold > 0
+       FROM positions WHERE wallet_id = $1 AND chain = ${THIS_CHAIN} AND units_sold > 0
       ORDER BY realised_usd DESC`,
     [walletId],
   );

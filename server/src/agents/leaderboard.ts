@@ -7,6 +7,7 @@
  * An agent with no trades gets zeros and says so, rather than borrowing a flattering number.
  */
 import { query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { priceOf } from '../market/prices.js';
 import { personaForKind } from './attribution.js';
 
@@ -43,7 +44,8 @@ export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
      FROM strategy_runs r
      JOIN strategies s ON s.id = r.strategy_id
      LEFT JOIN agents ag ON ag.id = s.agent_id
-     WHERE s.wallet_id = $1 AND r.status = 'filled' AND r.started_at > now() - interval '30 days'`,
+     WHERE s.wallet_id = $1 AND s.chain = ${THIS_CHAIN}
+       AND r.status = 'filled' AND r.started_at > now() - interval '30 days'`,
     [walletId],
   );
 

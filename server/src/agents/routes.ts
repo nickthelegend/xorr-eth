@@ -201,6 +201,8 @@ agents.delete('/agents/:id', async (c) => {
   );
   if (!row) return c.json({ error: 'not_found' }, 404);
 
+  // Every chain's, deliberately: the agent is not per chain, and a fired agent must not keep trading
+  // on a chain other than the one it was fired from.
   const paused = await query<{ id: string }>(
     `UPDATE strategies SET state = 'paused'
      WHERE agent_id = $1 AND state IN ('live','watch') RETURNING id`,

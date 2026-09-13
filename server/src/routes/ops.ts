@@ -12,6 +12,7 @@
  */
 import { Hono } from 'hono';
 import { query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { fillQuality } from '../executor/fill-quality.js';
 import { publicClient } from '../evm/client.js';
 import { CHAIN_KEY } from '../evm/chains.js';
@@ -125,13 +126,13 @@ ops.get('/health', async (c) => {
 ops.get('/metrics', async (c) => {
   const [runs, alerts, strategies, spend] = await Promise.all([
     query<{ status: string; n: string }>(
-      `SELECT status, count(*) AS n FROM strategy_runs GROUP BY status`,
+      `SELECT status, count(*) AS n FROM strategy_runs WHERE chain = ${THIS_CHAIN} GROUP BY status`,
     ),
     query<{ n: string; fired: string }>(
       `SELECT count(*) AS n, COALESCE(SUM(fire_count),0) AS fired FROM alerts WHERE enabled`,
     ),
     query<{ state: string; n: string }>(
-      `SELECT state, count(*) AS n FROM strategies GROUP BY state`,
+      `SELECT state, count(*) AS n FROM strategies WHERE chain = ${THIS_CHAIN} GROUP BY state`,
     ),
     query<{ total: string }>(
       `SELECT COALESCE(SUM(spent_usd),0) AS total FROM daily_spend WHERE day = (now() AT TIME ZONE 'UTC')::date`,
@@ -154,7 +155,7 @@ ops.get('/metrics', async (c) => {
    */
   const causes = await query<{ error: string | null; n: string }>(
     `SELECT error, count(*) AS n FROM strategy_runs
-      WHERE status = 'failed' AND finished_at > now() - interval '7 days'
+      WHERE status = 'failed' AND finished_at > now() - interval '7 days' AND chain = ${THIS_CHAIN}
       GROUP BY error ORDER BY n DESC LIMIT 20`,
   ).catch(() => []);
   const bucket = (e: string | null): string => {

@@ -11,6 +11,7 @@
  * else: the model writes the sentence, the app renders any number.
  */
 import { query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { speak } from '../bot/llm.js';
 import { TONE_INSTRUCTIONS, type ToneId } from '../bot/tone.js';
 import type { PersonaId } from '../bot/personas.js';
@@ -66,7 +67,7 @@ export async function fetchHeadlines(): Promise<Headline[]> {
 /** The user's actual exposure: symbols they hold or have a strategy on. */
 export async function heldSymbols(walletId: string): Promise<string[]> {
   const rows = await query<{ symbol: string }>(
-    `SELECT DISTINCT symbol FROM strategies WHERE wallet_id=$1 AND state IN ('live','watch','paused')`,
+    `SELECT DISTINCT symbol FROM strategies WHERE wallet_id=$1 AND chain = ${THIS_CHAIN} AND state IN ('live','watch','paused')`,
     [walletId],
   );
   return rows.map((r) => r.symbol);

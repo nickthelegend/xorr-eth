@@ -9,6 +9,7 @@
  * mid-run, or a manual trigger racing the tick all converge on one run per period.
  */
 import { query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { log } from '../http/request-id.js';
 import { runStrategy, type StrategyRow } from './run.js';
 import { evaluateAlerts } from '../alerts/evaluate.js';
@@ -20,6 +21,7 @@ export async function tick(now: Date = new Date()): Promise<number> {
   const due = await query<StrategyRow>(
     `SELECT * FROM strategies
      WHERE state IN ('live','watch') AND next_run_at IS NOT NULL AND next_run_at <= $1
+       AND chain = ${THIS_CHAIN}
      ORDER BY next_run_at ASC LIMIT 20`,
     [now],
   );
@@ -74,6 +76,18 @@ export async function tick(now: Date = new Date()): Promise<number> {
     if (swept?.anchored) console.log(`[anchor] ${swept.anchored} wallet(s) anchored`);
   } catch (e) {
     log.error('[anchor] sweep failed:', e instanceof Error ? e.message : e);
+  }
+
+  /*
+   * Stored `Idempotency-Key` responses, kept for a day (PLAN.md 2.6).
+   *
+   * Nothing deleted them, so the table gained a row per keyed request forever. A retry is a client
+   * recovering from a response it never saw; a day is far past any retry. Non-fatal, like the sweeps.
+   */
+  try {
+    await query(`DELETE FROM idempotency WHERE created_at < now() - interval '24 hours'`);
+  } catch (e) {
+    log.error('[idempotency] cleanup failed:', e instanceof Error ? e.message : e);
   }
 
   return ran;

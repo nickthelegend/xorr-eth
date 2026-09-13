@@ -17,6 +17,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Address } from 'viem';
 import { one, query } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { runStrategy, type RunOutcome, type StrategyRow } from './run.js';
 import { nextRuns } from './schedule.js';
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
@@ -113,7 +114,7 @@ export async function armExits(
 
   const existing = await one<{ id: string }>(
     `SELECT id FROM strategies
-      WHERE wallet_id = $1 AND kind = 'exit-rules' AND symbol = $2 AND state = 'live' LIMIT 1`,
+      WHERE wallet_id = $1 AND kind = 'exit-rules' AND symbol = $2 AND state = 'live' AND chain = ${THIS_CHAIN} LIMIT 1`,
     [w.id, p.symbol],
   );
   if (existing) {

@@ -13,6 +13,7 @@
  * consumed — one skipped buy is a far better outcome than one duplicated buy.
  */
 import { query, tx } from '../db/index.js';
+import { THIS_CHAIN } from '../db/chain-scope.js';
 import { append } from '../audit/log.js';
 import { log } from '../http/request-id.js';
 
@@ -29,7 +30,8 @@ export async function reconcileInterruptedRuns(): Promise<number> {
     `SELECT r.id, r.strategy_id, s.wallet_id, s.label
        FROM strategy_runs r
        JOIN strategies s ON s.id = r.strategy_id
-      WHERE r.status = 'pending' AND r.started_at < now() - interval '${STALE_MS} milliseconds'`,
+      WHERE r.status = 'pending' AND r.started_at < now() - interval '${STALE_MS} milliseconds'
+        AND s.chain = ${THIS_CHAIN}`,
   );
   if (stale.length === 0) return 0;
 
