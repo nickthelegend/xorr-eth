@@ -134,7 +134,7 @@ describe('feed labelling — PLAN.md §1.3 item 8', () => {
   it('every instrument declares whether a real feed backs it', () => {
     for (const c of assetClasses) {
       for (const i of c.instruments) {
-        expect(['live', 'simulated']).toContain(i.feed);
+        expect(['live', 'unavailable']).toContain(i.feed);
       }
     }
   });

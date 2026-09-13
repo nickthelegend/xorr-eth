@@ -88,7 +88,7 @@ export default function ProChart() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
         <BackButton onPress={() => goBack()} />
         <Text variant="cardTitle">{symbol}/USD</Text>
-        {data?.feed === 'simulated' ? <Tag label="No price feed" small tone="warn" /> : null}
+        {data?.feed === 'unavailable' ? <Tag label="No price feed" small tone="warn" /> : null}
       </View>
 
       {/* PLAN.md §1.4.5 — nothing lies. With no series there is no last price, and

@@ -24,6 +24,7 @@ export const PUBLIC_PATHS: readonly string[] = [
    */
   '/market/logos',
   '/market/tradable',
+  '/market/watchable',
   '/market/stocks',
   '/market/stocks/history',
   '/market/crosscheck',

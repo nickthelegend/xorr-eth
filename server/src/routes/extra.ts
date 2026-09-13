@@ -13,7 +13,9 @@ import { TONE_INSTRUCTIONS, type ToneId } from '../bot/tone.js';
 import { briefing } from '../news/feed.js';
 import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
-import { quote, canonicalSymbol } from '../venues/oneinch.js';
+import { quote, canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
+import { ADDRESSES } from '../evm/chains.js';
+import { estimateOutUnits } from '../executor/fill-measure.js';
 import { compareVenues } from '../venues/compare.js';
 import { requireUser } from '../auth/middleware.js';
 import { currentWallet } from './wallet-context.js';
@@ -587,12 +589,26 @@ extra.get('/graph/decision', async (c) => {
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   const w = await one<{ address: string }>(`SELECT address FROM wallets WHERE id=$1`, [id]);
   if (!w) return c.json({ error: 'no_wallet' }, 400);
+  /*
+   * The question a run asks, asked the same way (PLAN.md 3.5).
+   *
+   * This named mainnet USDC by a literal and no book app, bought token or size, so the Aqua half of the
+   * decision always answered "no index configured" here, whatever a run on the same deployment saw. It now
+   * names what `runStrategy` names: the settlement USDC, our Aqua book, and how much of the bought token the
+   * size would need (`symbol`, WETH unless given).
+   */
+  const wantUsd = Number(c.req.query('usd') ?? 100);
+  const symbol = canonicalSymbol(c.req.query('symbol') ?? 'WETH');
+  const outToken = VENUE_TOKENS[symbol];
   try {
     return c.json(
       await decide({
         owner: w.address,
-        wantUsd: Number(c.req.query('usd') ?? 100),
-        token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        wantUsd,
+        token: ADDRESSES.usdcBase,
+        aquaApp: process.env.AQUA_BOOK_ADDRESS,
+        tokenOut: outToken?.address,
+        amountOut: outToken ? await estimateOutUnits(wantUsd, symbol, outToken.decimals) : undefined,
       }),
     );
   } catch (e) {

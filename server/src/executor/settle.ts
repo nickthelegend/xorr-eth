@@ -24,6 +24,7 @@ import type { OutputFloor } from '../evm/delegation.js';
 import { buildSwap, quote, slippageFor, SLIPPAGE, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { buildAquaFill } from '../venues/aqua.js';
 import { buildSwapVmFill } from '../venues/swapvm.js';
+import { aquaIndexConfigured } from '../graph/aqua.js';
 import type { TradeIntent } from './kinds/index.js';
 
 /**
@@ -64,6 +65,16 @@ export async function chooseSettlement(params: {
 }): Promise<Settlement> {
   const { intent, owner, preferred, delegationFrom } = params;
   const isCloseIntent = () => params.isClose;
+  /*
+   * "Route to 1inch" is only an answer about the books when an Aqua index gave it (PLAN.md 3.4).
+   *
+   * `decide()` also says 1inch when no Aqua index is configured at all, or when it could not read one — and
+   * this treated every one of those as "no book is deep enough" and skipped both books without looking. A
+   * delegation index alone could silently route every fill past a book that was sitting there on chain.
+   * Without an Aqua index, the books are discovered from Aqua's own logs below, as they would be with no
+   * index at all.
+   */
+  const skipBooks = preferred === '1inch' && aquaIndexConfigured();
 
   const payToken = VENUE_TOKENS[intent.inSymbol];
   if (!payToken) throw new Error(`No token registry entry for ${intent.inSymbol}`);
@@ -85,7 +96,7 @@ export async function chooseSettlement(params: {
    * to be certain, and a book deep enough to buy into may not be deep enough to sell out of.
    */
   const aqua =
-    intent.direct || isCloseIntent() || preferred === '1inch'
+    intent.direct || isCloseIntent() || skipBooks
       ? undefined
       : await buildAquaFill({
           owner,
@@ -126,7 +137,7 @@ export async function chooseSettlement(params: {
    * on a direct leg, and never on a close, where an exit has to be certain.
    */
   const swapVm =
-    aqua || intent.direct || isCloseIntent() || preferred === '1inch' || !quoted
+    aqua || intent.direct || isCloseIntent() || skipBooks || !quoted
       ? undefined
       : await buildSwapVmFill({
           owner,

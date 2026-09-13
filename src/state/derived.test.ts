@@ -611,3 +611,27 @@ describe('the onboarding portfolio as a rebalance holds it — PLAN.md 2.17', ()
   });
 });
 
+describe('what approving the onboarding proposal creates — PLAN.md 3.7', () => {
+  const sleeves = [
+    { name: 'Blue-chip crypto', weight: 55 },
+    { name: 'Tokenized equities', weight: 30 },
+    { name: 'Stable yield', weight: 15 },
+  ];
+  const crypto = ['ETH', 'WETH', 'USDC', 'CBBTC'];
+
+  it('is a live rebalance over what the network settles', () => {
+    expect(d.proposalRebalance(sleeves, crypto, [])).toEqual({ state: 'live', targets: { WETH: 27.5, CBBTC: 27.5 }, cashPct: 45 });
+  });
+
+  it('where nothing settles, is watched over what the network can follow — not refused', () => {
+    expect(d.proposalRebalance(sleeves, [], crypto)).toEqual({ state: 'watch', targets: { WETH: 27.5, CBBTC: 27.5 }, cashPct: 45 });
+  });
+
+  it('never watches what it could trade: where fills settle, the followable list is not used', () => {
+    expect(d.proposalRebalance(sleeves, ['WETH'], crypto)).toEqual({ state: 'live', targets: { WETH: 55 }, cashPct: 45 });
+  });
+
+  it('with nothing to trade or follow, targets nothing — which the screen refuses to create', () => {
+    expect(d.proposalRebalance(sleeves, [], [])).toEqual({ state: 'watch', targets: {}, cashPct: 100 });
+  });
+});

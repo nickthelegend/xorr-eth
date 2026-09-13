@@ -11,6 +11,8 @@
     "test": "vitest run --exclude \"**/*.live.test.ts\"",
     "test:live": "LIVE=1 vitest run live.test",
     "setup:fork": "tsx src/fork-bootstrap.ts",
+    "rebuild:fork": "tsx src/fork-bootstrap.ts && set -a && . \"./${FORK_ENV_FILE:-.env.fork}\" && set +a && tsx src/fork-grant.ts",
+    "ship:makers": "tsx src/fork/ship-makers.ts",
     "readiness:base": "XORR_CHAIN=base ALLOW_MAINNET=yes tsx src/base-readiness.ts"
   },
   "dependencies": {

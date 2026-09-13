@@ -28,7 +28,7 @@ import { decodeAbiParameters, encodeAbiParameters, parseAbiParameters, type Addr
 import { log } from '../http/request-id.js';
 import { publicClient, delegateAccount } from '../evm/client.js';
 import { getLogsPaged } from '../evm/logs.js';
-import { AQUA_EVENTS, aquaAddress } from './aqua.js';
+import { AQUA_EVENTS, aquaAddress, replayPositions } from './aqua.js';
 import { DELEGATION_ABI, DELEGATION_ADDRESS } from '../evm/delegation.js';
 
 /**
@@ -136,9 +136,6 @@ export async function openPrograms(): Promise<{ order: SwapVmOrder; hash: Hex }[
   // Aqua is shared liquidity: these logs carry every app's books. Ours are the ones whose app is
   // the SwapVM router — that is what distinguishes a program from an ordinary Aqua curve.
   const isSwapVm = (a: unknown) => String(a).toLowerCase() === SWAP_VM.toLowerCase();
-  const state = new Map<Hex, boolean>();
-  const encodedByHash = new Map<Hex, Hex>();
-
   const events = [
     ...shipped.filter((l) => isSwapVm(l.args.app)).map((l) => ({ l, open: true })),
     ...docked.filter((l) => isSwapVm(l.args.app)).map((l) => ({ l, open: false })),
@@ -146,23 +143,19 @@ export async function openPrograms(): Promise<{ order: SwapVmOrder; hash: Hex }[
     (a, b) => Number(a.l.blockNumber! - b.l.blockNumber!) || Number(a.l.logIndex! - b.l.logIndex!),
   );
 
-  for (const e of events) {
-    const hash = e.l.args.strategyHash as Hex;
-    state.set(hash, e.open);
-    const encoded = (e.l.args as { strategy?: Hex }).strategy;
-    if (encoded) encodedByHash.set(hash, encoded);
-  }
-
+  // Per maker and hash, as Aqua keeps them: keyed by hash alone, anyone could close or reopen a program here.
   const out: { order: SwapVmOrder; hash: Hex }[] = [];
-  for (const [hash, open] of state) {
-    if (!open) continue;
-    const encoded = encodedByHash.get(hash);
-    if (!encoded) continue;
+  for (const { hash, maker, encoded } of replayPositions(events)) {
+    let order: SwapVmOrder;
     try {
-      out.push({ order: decodeOrder(encoded), hash });
+      order = decodeOrder(encoded);
     } catch {
       // A payload we cannot decode is another app's, or a version we do not speak. Not an error.
+      continue;
     }
+    // Only the position the router reads: the one shipped by the maker the order names.
+    if (order.maker.toLowerCase() !== maker) continue;
+    out.push({ order, hash });
   }
   return out;
 }

@@ -135,6 +135,19 @@ async function main() {
   await anvil('anvil_setBalance', [delegatePublicKey, '0x8AC7230489E80000']);
   console.log(`delegate funded  ${delegatePublicKey}`);
 
+  /*
+   * And the delegate the deployed executor signs with (PLAN.md 3.2).
+   *
+   * `delegateAccount` is this machine's key. The executor on the fork signs with its own, which only the host
+   * holds; the runbook funded that one by hand as a separate step, and a rebuild that skipped it left every
+   * run dying at signing.
+   */
+  const deployedDelegate = process.env.XORR_DELEGATE_ADDRESS as Address | undefined;
+  if (deployedDelegate && deployedDelegate.toLowerCase() !== delegatePublicKey.toLowerCase()) {
+    await anvil('anvil_setBalance', [deployedDelegate, '0x8AC7230489E80000']);
+    console.log(`delegate funded  ${deployedDelegate} (the deployed executor's)`);
+  }
+
   if (fundTarget) {
     const amount = parseUnits('25000', 6);
     const held = await pub.readContract({
@@ -167,7 +180,31 @@ async function main() {
     console.log(`\nfunded ${fundTarget}\n  ${formatUnits(bal, 6)} USDC + 10 ETH for gas`);
   }
 
-  const envPath = path.resolve(process.cwd(), '.env.fork');
+  /*
+   * The audit anchor, and liquidity in both books (PLAN.md 3.2).
+   *
+   * A rebuilt fork had no `XorrAuditAnchor`, so nothing on it could be anchored and `/verify` skipped the
+   * check; and no maker had shipped to either book, so every fill fell through to the aggregator and the Aqua
+   * and SwapVM paths went unexercised until someone ran `live-aqua.ts` and `live-swapvm.ts` by hand.
+   */
+  const anchorArt = await artifact('XorrAuditAnchor');
+  const anchorHash = await wallet.deployContract({ abi: anchorArt.abi as never, bytecode: anchorArt.bytecode } as never);
+  const anchor = (await pub.waitForTransactionReceipt({ hash: anchorHash })).contractAddress as Address;
+  console.log(`XorrAuditAnchor  ${anchor}`);
+
+  const { shipAquaBook, shipSwapVmProgram } = await import('./fork/makers.js');
+  const { priceOf } = await import('./market/prices.js');
+  const { quote } = await import('./venues/oneinch.js');
+  const aquaBook = await shipAquaBook({ rpc: RPC, book, priceUsd: await priceOf('WETH') });
+  console.log(`Aqua book        ${formatUnits(aquaBook.weth, 18)} WETH / ${formatUnits(aquaBook.usdc, 6)} USDC, maker ${aquaBook.maker}`);
+  const reference = await quote({ inSymbol: 'USDC', outSymbol: 'WETH', amount: 50 });
+  const program = await shipSwapVmProgram({ rpc: RPC, book: swapVMBook, wethPerUsdc: reference.outAmount / 50 });
+  console.log(
+    `SwapVM program   ${program.bytes} bytes, ${formatUnits(program.usdc, 6)} USDC / ${formatUnits(program.weth, 18)} WETH, maker ${program.maker}`,
+  );
+
+  // Where the addresses go. A second file keeps a local rehearsal from overwriting the deployed fork's record.
+  const envPath = path.resolve(process.cwd(), process.env.FORK_ENV_FILE ?? '.env.fork');
   await fs.writeFile(
     envPath,
     [
@@ -184,6 +221,7 @@ async function main() {
       `EXPO_PUBLIC_DELEGATION_ADDRESS=${delegation}`,
       `AQUA_BOOK_ADDRESS=${book}`,
       `SWAPVM_BOOK_ADDRESS=${swapVMBook}`,
+      `ANCHOR_ADDRESS=${anchor}`,
       '',
     ].join('\n'),
     { mode: 0o600 },

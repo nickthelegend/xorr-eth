@@ -80,7 +80,7 @@ describe('an equity has a price, from the venue that would fill it', () => {
     mockApi((url) => {
       if (url.includes('/market/symbols')) return CRYPTO_FEED;
       if (url.includes('/market/stocks'))
-        return [{ symbol: 'METAc', name: 'Meta', address: '0x0', price: null, venues: [], feed: 'simulated' }];
+        return [{ symbol: 'METAc', name: 'Meta', address: '0x0', price: null, venues: [], feed: 'unavailable' }];
       if (url.includes('/market/quotes')) return {};
       return {};
     });

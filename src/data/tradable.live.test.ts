@@ -31,9 +31,24 @@ describe('tradable set', () => {
     const unknown = served.filter((s) => !(TRADABLE as readonly string[]).includes(s));
     expect(unknown, 'executor serves symbols the client has never heard of').toEqual([]);
 
-    // And the crypto four must always be there, on every chain this project runs.
+    /*
+     * The crypto four are settleable wherever a fill can settle, and nothing is offered where none can (PLAN.md
+     * 3.7): 1inch has no deployment on Base Sepolia, so a listed symbol there was a Buy that could only fail.
+     * What a strategy can follow is served on every chain, and always includes them.
+     */
+    const { chain } = (await (await fetch(`${API_BASE}/health`)).json()) as { chain?: string };
+    if (chain === 'base' || chain === 'base-fork') {
+      for (const core of ['ETH', 'WETH', 'USDC', 'CBBTC']) {
+        expect(served, `${core} must be settleable on ${chain}`).toContain(core);
+      }
+    } else {
+      expect(served, `nothing settles on ${chain}, so nothing is offered`).toEqual([]);
+    }
+    const watchable = await fetch(`${API_BASE}/market/watchable`);
+    expect(watchable.status, 'executor must serve /market/watchable without auth').toBe(200);
+    const followed = ((await watchable.json()) as { symbol: string }[]).map((r) => r.symbol);
     for (const core of ['ETH', 'WETH', 'USDC', 'CBBTC']) {
-      expect(served, `${core} must be settleable everywhere`).toContain(core);
+      expect(followed, `${core} can be followed on ${chain}`).toContain(core);
     }
   }, 30_000);
 

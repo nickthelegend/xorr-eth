@@ -238,7 +238,7 @@ export type StockQuote = {
   /** USD per share, derived from a real 1inch route. Null when nothing routes right now. */
   price: number | null;
   venues: string[];
-  feed: 'live' | 'simulated';
+  feed: 'live' | 'unavailable';
 };
 
 /**

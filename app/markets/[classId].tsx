@@ -116,7 +116,7 @@ export default function ClassList() {
                 title={item.sym}
                 secondary={`${item.name} · ${item.tag}`}
                 middle={
-                  item.feed === 'simulated' ? (
+                  item.feed === 'unavailable' ? (
                     <Tag label="No price feed" small tone="warn" />
                   ) : undefined
                 }

@@ -8,17 +8,19 @@
  * The arithmetic is exercised through the exported shape rather than the network: the point under
  * test is the ranking rule, not whether 1inch answers.
  */
-import { describe, expect, it } from 'vitest';
-import type { RouteComparison, VenueQuote } from './compare.js';
+import { describe, expect, it, vi } from 'vitest';
+import type { VenueQuote } from './compare.js';
 
-/** The same rule `compareVenues` applies, stated once so the test cannot drift from a copy of it. */
-function rank(quotes: VenueQuote[]): Pick<RouteComparison, 'best' | 'bestNet'> {
-  const served = quotes.filter((q): q is Extract<VenueQuote, { served: true }> => q.served);
-  const byOut = [...served].sort((a, b) => b.outAmount - a.outAmount);
-  const allCosted = served.length > 0 && served.every((q) => q.netUsd !== undefined);
-  const byNet = allCosted ? [...served].sort((a, b) => b.netUsd! - a.netUsd!) : [];
-  return { best: byOut[0]?.venue, bestNet: byNet[0]?.venue };
-}
+// The ranking is pure; the module around it reads chains and prices, so those are stood in for.
+vi.mock('../evm/client.js', () => ({ publicClient: {}, delegateAccount: { address: '0x0000000000000000000000000000000000000001' } }));
+vi.mock('./oneinch.js', () => ({ quote: vi.fn(), buildSwap: vi.fn(), TOKENS: {}, SLIPPAGE: { scheduled: 0.5 } }));
+vi.mock('./aqua.js', () => ({ buildAquaFill: vi.fn() }));
+vi.mock('./swapvm.js', () => ({ buildSwapVmFill: vi.fn(), openPrograms: vi.fn() }));
+vi.mock('../market/prices.js', () => ({ priceOf: vi.fn() }));
+vi.mock('../evm/delegation.js', () => ({ DELEGATION_ABI: [], DELEGATION_ADDRESS: '0x0000000000000000000000000000000000000002' }));
+
+// The rule `compareVenues` applies — imported, not copied, so the test cannot drift from it (PLAN.md 3.6).
+const { rankVenues: rank } = await import('./compare.js');
 
 const served = (
   venue: VenueQuote['venue'],
@@ -58,5 +60,19 @@ describe('ranking venues after gas', () => {
   it('a single costed venue is its own net winner', () => {
     const r = rank([served('1inch', 1.0, 99.7)]);
     expect(r.bestNet).toBe('1inch');
+  });
+});
+
+describe('the edge', () => {
+  it('is the best served quote over the second, in basis points', () => {
+    expect(rank([served('1inch', 1.01), served('aqua', 1.0)]).edgeBps).toBe(100);
+  });
+
+  it('is not stated when the second quote delivers nothing, rather than dividing by zero', () => {
+    expect(rank([served('1inch', 1.01), served('aqua', 0)]).edgeBps).toBeUndefined();
+  });
+
+  it('is not stated with one venue serving', () => {
+    expect(rank([served('1inch', 1.01)]).edgeBps).toBeUndefined();
   });
 });

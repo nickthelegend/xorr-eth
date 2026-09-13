@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { getJson, staleValue } from '../http/get.js';
 import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../market/ids.js';
-import { TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
+import { CAN_SETTLE, TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
 import { STOCKS, equitiesFunctional, isStock, observedHistory } from '../venues/stocks.js';
 import { earningsCalendar } from '../market/edgar.js';
 import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
@@ -361,17 +361,39 @@ market.get('/market/tradable', async (c) => {
    * `TF`. The screen was confidently wrong, which is the one thing this route exists to prevent:
    * anything not in this list is a chart you can look at, not an order you can place.
    */
-  const equitiesOk = await equitiesFunctional();
-  return c.json(
-    Object.entries(TOKENS)
-      .filter(([symbol]) => equitiesOk || !isStock(symbol))
-      .map(([symbol, t]) => ({
-        symbol,
-        address: SETTLEMENT_ADDRESS[symbol] ?? t.address,
-        decimals: t.decimals,
-      })),
-  );
+  /*
+   * Nothing is tradable where nothing can settle (PLAN.md 3.7).
+   *
+   * 1inch has no deployment on Base Sepolia, so every symbol listed here rendered an enabled Buy for an order
+   * that could only fail at settlement. An empty list disables Buy with the reason the order screen already
+   * gives any symbol this list does not name.
+   */
+  if (!CAN_SETTLE) return c.json([]);
+  return c.json(await functioningHere());
 });
+
+/**
+ * What a strategy can follow on this chain — priced, with a balance that can be read — whether or not a fill
+ * can settle here (PLAN.md 3.7).
+ *
+ * Where fills settle this is `/market/tradable`. Where they do not, `/market/tradable` is empty, and onboarding
+ * still needs symbols to draw the approved portfolio over: without them approving on Base Sepolia refused with
+ * "nothing to rebalance" and a new user could not finish. The portfolio is created watched instead — it reports
+ * what it would trade and moves nothing — over these.
+ */
+market.get('/market/watchable', async (c) => c.json(await functioningHere()));
+
+/** The registry less the equities where they do not function, each at the address a fill would move. */
+async function functioningHere(): Promise<{ symbol: string; address: string; decimals: number }[]> {
+  const equitiesOk = await equitiesFunctional();
+  return Object.entries(TOKENS)
+    .filter(([symbol]) => equitiesOk || !isStock(symbol))
+    .map(([symbol, t]) => ({
+      symbol,
+      address: SETTLEMENT_ADDRESS[symbol] ?? t.address,
+      decimals: t.decimals,
+    }));
+}
 
 /**
  * The address a fill actually moves on THIS chain, for the symbols where that differs.
@@ -437,7 +459,7 @@ market.get('/yield/supply', async (c) => {
  * There is no CoinGecko feed for these, and quoting the underlying NYSE print would be the wrong
  * number anyway: what a user pays is what 1inch routes on Base right now. So the price is derived
  * from a real quote — swap $1,000 of USDC in, see how many tokens come out — which is the same
- * call the order ticket makes. A symbol whose route fails comes back with `feed: 'simulated'` and
+ * call the order ticket makes. A symbol whose route fails comes back with `feed: 'unavailable'` and
  * no price, and the UI stamps it, rather than showing a plausible-looking invention.
  */
 const STOCK_PROBE_USD = 1_000;
@@ -476,7 +498,7 @@ market.get('/market/stocks', async (c) => {
           address: s.address,
           price: null,
           venues: [] as string[],
-          feed: 'simulated' as const,
+          feed: 'unavailable' as const,
         };
       }
     }),

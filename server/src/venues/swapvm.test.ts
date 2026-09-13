@@ -41,6 +41,8 @@ const { openPrograms, buildSwapVmFill, encodeOrder, decodeOrder, swapVmBookAddre
 const SWAP_VM = '0x111111338c5091E8440b67B168bAe16a668AC0De';
 const OTHER_APP = '0xff0845130ca2b077c0cdf964d162fb00e869c199';
 const MAKER = '0x02a54677000000000000000000000000000000aa';
+/** Anyone else — Aqua lets any address ship any bytes under any app. */
+const STRANGER = '0x0000000000000000000000000000000000005742';
 
 /**
  * `ISwapVM.Order` — three fields. It used to be built here with four, matching a wrong ORDER_TUPLE,
@@ -55,8 +57,8 @@ const order = (data: `0x${string}` = '0xdeadbeef') => ({
 });
 
 /** A `Shipped`/`Docked` log as viem decodes it: every parameter non-indexed. */
-const evt = (app: string, hash: string, strategy: string, block: bigint, logIndex: number) => ({
-  args: { maker: MAKER, app, strategyHash: hash, strategy },
+const evt = (app: string, hash: string, strategy: string, block: bigint, logIndex: number, maker: string = MAKER) => ({
+  args: { maker, app, strategyHash: hash, strategy },
   blockNumber: block,
   logIndex,
 });
@@ -142,6 +144,33 @@ describe('discovery filters on the SwapVM app, not ours', () => {
     const enc = encodeOrder(order());
     byEvent([evt(SWAP_VM, '0xdd', enc, 10n, 0), evt(SWAP_VM, '0xdd', enc, 30n, 0)], [evt(SWAP_VM, '0xdd', enc, 20n, 0)]);
     expect(await openPrograms()).toHaveLength(1);
+  });
+
+  /*
+   * A position is a maker's, as Aqua keeps it (found writing PLAN.md 3.8's tests). Keyed by hash alone, a
+   * stranger's logs for a maker's program could close it for every fill, or reopen one the maker had docked.
+   */
+  it("a stranger who ships a maker's program and docks it does not close the maker's", async () => {
+    const enc = encodeOrder(order());
+    byEvent(
+      [evt(SWAP_VM, '0xd1', enc, 10n, 0), evt(SWAP_VM, '0xd1', enc, 20n, 0, STRANGER)],
+      [evt(SWAP_VM, '0xd1', enc, 30n, 0, STRANGER)],
+    );
+    expect((await openPrograms()).map((p) => p.hash)).toEqual(['0xd1']);
+  });
+
+  it("a stranger re-shipping a docked program's bytes does not reopen it", async () => {
+    const enc = encodeOrder(order());
+    byEvent(
+      [evt(SWAP_VM, '0xd2', enc, 10n, 0), evt(SWAP_VM, '0xd2', enc, 30n, 0, STRANGER)],
+      [evt(SWAP_VM, '0xd2', enc, 20n, 0)],
+    );
+    expect(await openPrograms()).toHaveLength(0);
+  });
+
+  it('a program shipped by anyone but the maker it names is not listed', async () => {
+    byEvent([evt(SWAP_VM, '0xd3', encodeOrder(order()), 10n, 0, STRANGER)], []);
+    expect(await openPrograms()).toHaveLength(0);
   });
 
   it('an undecodable payload is skipped, not thrown', async () => {

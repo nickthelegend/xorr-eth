@@ -630,3 +630,17 @@ export function targetsFromSleeves(
   }
   return { targets, cashPct: Math.round((100 - placed) * 100) / 100 };
 }
+
+/**
+ * What approving the onboarding proposal creates (PLAN.md 2.17, 3.7): a live rebalance over what this network
+ * settles or — where nothing settles, as on Base Sepolia — a watched one over what it can follow, which reports
+ * what it would trade and moves nothing. `watchable` is used only when nothing settles.
+ */
+export function proposalRebalance(
+  sleeves: readonly { name: string; weight: number }[],
+  tradable: readonly string[],
+  watchable: readonly string[],
+): { state: 'live' | 'watch'; targets: Record<string, number>; cashPct: number } {
+  const settles = tradable.length > 0;
+  return { state: settles ? 'live' : 'watch', ...targetsFromSleeves(sleeves, settles ? tradable : watchable) };
+}

@@ -12,7 +12,7 @@
  * Applied on the way through:
  *   G4  counts reconciled to 9 per class (45 total); the 9th pre-IPO instrument added.
  *   G12 every numeric field normalised to U+2212.
- *   feed: 'live' | 'simulated' stamped per class so the UI can label synthetic prices.
+ *   feed: 'live' | 'unavailable' stamped per class, so the UI can say when nothing prices an instrument.
  *
  * NO PRICE IS STORED FOR AN INSTRUMENT NOTHING PRICES.
  *
@@ -27,7 +27,7 @@
  * So they keep what is genuinely catalog — symbol, name, venue tag, colours — and carry no
  * number. One of them still shows a price on screen, and correctly: CoinGecko prices tokenized gold,
  * so XAUT is given a real quote at runtime and stops being unfed. What it no longer has is a stored
- * number to fall back on when that quote does not come. `feed: 'simulated'` on them now means "no feed backs this", and the UI says so.
+ * number to fall back on when that quote does not come. `feed: 'unavailable'` on them means no feed backs this, and the UI says so.
  */
 import type { AssetClass } from '../types';
 
@@ -284,7 +284,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#F5CE5F",
         "c2": "#B98A0C",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "XAGT",
@@ -296,7 +296,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#D6DBE2",
         "c2": "#8C929B",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "CL",
@@ -308,7 +308,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#4A5058",
         "c2": "#1B1E22",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "BZ",
@@ -320,7 +320,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#5C6470",
         "c2": "#22262C",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "HG",
@@ -332,7 +332,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#E08B5A",
         "c2": "#9A4E22",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "PL",
@@ -344,7 +344,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#C9CDD4",
         "c2": "#7A7F87",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "PA",
@@ -356,7 +356,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#B8BEC8",
         "c2": "#6A7078",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "NG",
@@ -368,7 +368,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#7FD6F5",
         "c2": "#1D7FA8",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "ZW",
@@ -380,7 +380,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#E8C46B",
         "c2": "#A5822A",
         "classId": "commodities",
-        "feed": "simulated"
+        "feed": "unavailable"
       }
     ]
   },
@@ -400,7 +400,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#5B93FF",
         "c2": "#1B44CE",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "QQQx",
@@ -412,7 +412,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#B58CFF",
         "c2": "#7A45E0",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "IWMx",
@@ -424,7 +424,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#49E39B",
         "c2": "#12A45F",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "DIAx",
@@ -436,7 +436,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#7FA9FF",
         "c2": "#2D57C4",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "EFAx",
@@ -448,7 +448,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#C9CDD4",
         "c2": "#7A7F87",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "GLDx",
@@ -460,7 +460,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#F5CE5F",
         "c2": "#B98A0C",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "TLTx",
@@ -472,7 +472,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#8FA6E8",
         "c2": "#4B5FA8",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "HYGx",
@@ -484,7 +484,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#E8A05A",
         "c2": "#B0561A",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "VIXx",
@@ -496,7 +496,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#E8464B",
         "c2": "#98181C",
         "classId": "indices",
-        "feed": "simulated"
+        "feed": "unavailable"
       }
     ]
   },
@@ -516,7 +516,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#49E39B",
         "c2": "#12A45F",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "ANTHRP",
@@ -528,7 +528,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#E8A05A",
         "c2": "#B0561A",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "SPACEX",
@@ -540,7 +540,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#9AA3AD",
         "c2": "#3A4048",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "XAI",
@@ -552,7 +552,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#C9CDD4",
         "c2": "#5A6068",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "STRIPE",
@@ -564,7 +564,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#8FA6E8",
         "c2": "#4B5FA8",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "DBRK",
@@ -576,7 +576,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#E8464B",
         "c2": "#98181C",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "PPLX",
@@ -588,7 +588,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#49E39B",
         "c2": "#12A45F",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "FIGMA",
@@ -600,7 +600,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#B58CFF",
         "c2": "#7A45E0",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       },
       {
         "sym": "CANVA",
@@ -612,7 +612,7 @@ export const assetClasses: AssetClass[] = [
         "c1": "#7FD6F5",
         "c2": "#1D7FA8",
         "classId": "preipo",
-        "feed": "simulated"
+        "feed": "unavailable"
       }
     ]
   }

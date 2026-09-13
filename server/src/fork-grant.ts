@@ -32,8 +32,9 @@ const rpc = (m: string, p: unknown[]) =>
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: m, params: p }) }).then((r) => r.json());
 
 async function main() {
-  const owner = process.argv[2] as Address;
-  const capUsd = Number(process.argv[3] ?? 2_000);
+  // From the arguments, or the environment `npm run rebuild:fork` runs it in (PLAN.md 3.2).
+  const owner = (process.argv[2] ?? process.env.OWNER_ADDRESS) as Address;
+  const capUsd = Number(process.argv[3] ?? process.env.FORK_GRANT_CAP_USD ?? 2_000);
   const delegation = process.env.DELEGATION_ADDRESS as Address;
   const delegate = process.env.XORR_DELEGATE_ADDRESS as Address | undefined;
   if (!owner || !delegation) throw new Error('usage: fork-grant.ts <owner> [capUsd]; DELEGATION_ADDRESS must be set');

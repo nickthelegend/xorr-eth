@@ -68,7 +68,7 @@ export default function Rates() {
               <Text variant="secondary" color={colors.ink65} style={{ marginTop: space.s10 }}>
                 {rate.data.note}
               </Text>
-              {rate.data.feed === 'simulated' ? (
+              {rate.data.feed === 'unavailable' ? (
                 <Text variant="secondarySm" color={colors.warn} style={{ marginTop: space.s8 }}>
                   This figure is simulated on this chain. It is not what a supply would earn.
                 </Text>

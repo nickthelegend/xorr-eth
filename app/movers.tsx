@@ -110,7 +110,7 @@ export default function Movers() {
               of the ranking entirely, so this tag cannot render here. It stays as a guard in case
               that filter is ever loosened.
             */
-            middle={i.feed === 'simulated' ? <Tag label="No price feed" small tone="warn" /> : undefined}
+            middle={i.feed === 'unavailable' ? <Tag label="No price feed" small tone="warn" /> : undefined}
             value={<Price variant="rowPrimary">{i.px}</Price>}
             delta={i.chg}
             deltaTone={i.up ? 'up' : 'down'}

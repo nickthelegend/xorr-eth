@@ -435,6 +435,8 @@ export const system = {
   crosscheck: (symbol: string) =>
     api.get<CrossCheck>(`/market/crosscheck?symbol=${encodeURIComponent(symbol)}`),
   tradable: () => api.get<TradableToken[]>('/market/tradable'),
+  /** What a strategy can follow here, settleable or not — where nothing settles, a portfolio is watched over these. */
+  watchable: () => api.get<TradableToken[]>('/market/watchable'),
 
   /* identity */
   basenameOf: (address: string) =>

@@ -265,9 +265,11 @@ strategyRoutes.get('/runs', async (c) => {
     error: string | null;
     started_at: Date;
     finished_at: Date | null;
+    venue: string | null;
+    side: string | null;
   }>(
     `SELECT r.id, r.strategy_id, s.kind, s.label, s.symbol, r.status, r.usd, r.units, r.price,
-            r.signature, r.error, r.started_at, r.finished_at
+            r.signature, r.error, r.started_at, r.finished_at, r.venue, r.side
        FROM strategy_runs r
        JOIN strategies s ON s.id = r.strategy_id
       WHERE s.wallet_id = $1 AND s.chain = ${THIS_CHAIN}
@@ -296,6 +298,9 @@ strategyRoutes.get('/runs', async (c) => {
       error: r.error,
       at: r.started_at.toISOString(),
       finishedAt: r.finished_at ? r.finished_at.toISOString() : null,
+      // Where a fill settled and which way it went (PLAN.md 3.1) — facts about the fill, recorded with it.
+      venue: r.venue,
+      side: r.side,
     })),
   );
 });

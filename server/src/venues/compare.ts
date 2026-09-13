@@ -16,7 +16,7 @@
  * belongs. Two places that decide where a trade fills is the bug this file must not become.
  */
 import type { Address } from 'viem';
-import { quote, TOKENS as VENUE_TOKENS, SLIPPAGE } from './oneinch.js';
+import { buildSwap, quote, TOKENS as VENUE_TOKENS, SLIPPAGE } from './oneinch.js';
 import { buildAquaFill } from './aqua.js';
 import { publicClient, delegateAccount } from '../evm/client.js';
 import { priceOf } from '../market/prices.js';
@@ -190,8 +190,32 @@ export async function compareVenues(params: {
           }),
         )
       : Promise.resolve(undefined),
-    agg?.estimatedGas
-      ? gasUsdFor(async () => BigInt(agg.estimatedGas!))
+    /*
+     * The aggregator costed the way the books are (PLAN.md 3.6): the whole `spend()` that would carry it.
+     *
+     * It used 1inch's own `estimatedGas`, which covers the router alone, while each book was estimated through
+     * the delegation — so the books carried `spend()`'s overhead and the aggregator did not, and the net ranking
+     * leaned toward the aggregator by exactly that much.
+     */
+    agg
+      ? gasUsdFor(async () => {
+          const swap = await buildSwap({
+            inSymbol,
+            outSymbol,
+            amount,
+            amountRaw: amountIn,
+            from: DELEGATION_ADDRESS,
+            receiver: owner,
+            slippagePct: SLIPPAGE.scheduled,
+          });
+          return publicClient.estimateContractGas({
+            account: delegateAccount.address,
+            address: DELEGATION_ADDRESS,
+            abi: DELEGATION_ABI,
+            functionName: 'spend',
+            args: [owner, payToken.address, swap.to, amountIn, outToken.address, swap.minOut, swap.data],
+          });
+        })
       : Promise.resolve(undefined),
   ]);
 
@@ -205,7 +229,8 @@ export async function compareVenues(params: {
       ? {
           venue: 'aqua',
           outAmount: outUnits(aqua.quotedOut),
-          detail: `maker book, ${aqua.strategy} strategy`,
+          // The strategy is a struct; it was interpolated whole and printed "[object Object]" (PLAN.md 3.6).
+          detail: `maker book from ${aqua.strategy.maker.slice(0, 10)}…, ${Number(aqua.strategy.feeBps)} bps fee`,
           served: true,
           gasUsd: aquaGas,
           netUsd: net(outUnits(aqua.quotedOut), aquaGas),
@@ -268,28 +293,28 @@ export async function compareVenues(params: {
       : { venue: '1inch', served: false, reason: 'The aggregator returned no route for this pair.' },
   ];
 
-  const served = quotes.filter((q): q is Extract<VenueQuote, { served: true }> => q.served);
-  served.sort((a, b) => b.outAmount - a.outAmount);
+  return { inSymbol, outSymbol, amount, quotes, ...rankVenues(quotes) };
+}
 
-  /*
-   * The net winner, only when EVERY served venue could be costed.
-   *
-   * A net comparison missing one leg is not a comparison — it would silently rank the venues we
-   * happened to price against each other and present the result as "cheapest after gas".
-   */
+/**
+ * Which venue wins, gross and after gas, and by how much (PLAN.md 3.6).
+ *
+ * Exported so the rule is tested as it runs rather than as a copy of it. `bestNet` is named only when every
+ * served venue could be costed: a ranking that silently dropped the venue it could not price would present
+ * a partial comparison as a whole one. The edge is the best served quote over the second, and is not stated
+ * when the second delivers nothing.
+ */
+export function rankVenues(quotes: VenueQuote[]): Pick<RouteComparison, 'best' | 'bestNet' | 'edgeBps'> {
+  const served = quotes.filter((q): q is Extract<VenueQuote, { served: true }> => q.served);
+  const byOut = [...served].sort((a, b) => b.outAmount - a.outAmount);
   const allCosted = served.length > 0 && served.every((q) => q.netUsd !== undefined);
   const byNet = allCosted ? [...served].sort((a, b) => b.netUsd! - a.netUsd!) : [];
-
   return {
-    inSymbol,
-    outSymbol,
-    amount,
-    quotes,
-    best: served[0]?.venue,
+    best: byOut[0]?.venue,
     bestNet: byNet[0]?.venue,
     edgeBps:
-      served.length > 1 && served[0]!.outAmount > 0
-        ? Math.round(((served[0]!.outAmount - served[1]!.outAmount) / served[1]!.outAmount) * 10_000)
+      byOut.length > 1 && byOut[1]!.outAmount > 0
+        ? Math.round(((byOut[0]!.outAmount - byOut[1]!.outAmount) / byOut[1]!.outAmount) * 10_000)
         : undefined,
   };
 }

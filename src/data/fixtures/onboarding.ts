@@ -4,7 +4,7 @@
  * Applied on the way through:
  *   G4  counts reconciled to 9 per class (45 total); the 9th pre-IPO instrument added.
  *   G12 every numeric field normalised to U+2212.
- *   feed: 'live' | 'simulated' stamped per class so the UI can label synthetic prices.
+ *   feed: 'live' | 'unavailable' stamped per class, so the UI can say when nothing prices an instrument.
  */
 export const onboarding = {
   "goals": [

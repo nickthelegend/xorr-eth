@@ -116,72 +116,62 @@ The price moved more than your slippage limit while this was in flight. Nothing 
 Measured: at **~8,700 blocks behind** (about five hours of real trading) every swap failed this
 way. Under an hour it is fine.
 
-Re-fork when you see that error on trades that should route:
+Re-fork when you see that error on trades that should route — the steps are under **Rebuilding the
+fork** below. A restart does **not** re-fork any more: the chain is saved on the service's `fork-state`
+volume and a restart resumes it (PLAN.md 3.3), so ageing is the one reason to start over.
 
-```bash
-# 1. Restart anvil so it forks at the current mainnet block.
-#    On Railway: set any variable on the `base-fork` service — a redeploy re-forks.
-
-# 2. Redeploy OUR contracts onto it and fund a wallet. A fresh anvil has none of them.
-FORK_RPC=<fork url> npm --prefix server run setup:fork -- <walletToFund>
-
-# 3. Point the executor at the new addresses (they change every time).
-#    DELEGATION_ADDRESS, AQUA_BOOK_ADDRESS, SWAPVM_BOOK_ADDRESS
-
-# 4. Prove it end to end.
-npx tsx server/src/live-agents.ts     # 20 checks: grant, fill, close, scopes, cap, revoke
-```
-
-The database survives — agent keys, strategies and the audit trail are keyed by user, not by
-contract address. Only the on-chain state is new, so a wallet has to be re-granted and re-funded,
-which `setup:fork` and `live-agents.ts` do between them.
+The database survives either way — agent keys, strategies and the audit trail are keyed by user, not by
+contract address. Only the on-chain state is new after a re-fork, so the contracts, the makers and the
+grant have to be rebuilt, which `npm run rebuild:fork` does in one go.
 
 ## Rebuilding the fork
 
-The anvil service forks Base at whatever the head is when its container starts, and never moves
-after that. Live Base does. So the gap grows by roughly a block every two seconds, and it matters
-because **1inch quotes against live state while execution happens against the fork's** — a swap
-built from a live quote eventually cannot be satisfied by the frozen pools, and the aggregator
-reverts `ReturnAmountIsNotEnough`.
+`base-fork` runs `infra/base-fork`: anvil pinned at 1.7.1, forking Base at the head the first time it
+starts and saving its chain to `/data` every 30 seconds and on shutdown. A restart or a redeploy resumes
+that chain from the same Base block, with our contracts, the makers and every grant still on it. Live
+Base keeps moving, though — the gap grows by roughly a block every two seconds — and it matters because
+**1inch quotes against live state while execution happens against the fork's**: a swap built from a live
+quote eventually cannot be satisfied by the frozen pools, and the aggregator reverts
+`ReturnAmountIsNotEnough`.
 
-Measured before the last rebuild: 13,110 blocks behind, about 7.3 hours, and every aggregator-routed
+Measured before an earlier rebuild: 13,110 blocks behind, about 7.3 hours, and every aggregator-routed
 DCA failing on slippage. Aqua fills were unaffected, because a book is quoted from its own on-chain
 state and there is nothing to drift against.
 
 Rebuild when a DCA starts failing on slippage, or before a demo:
 
 ```bash
-# 1. Restart anvil so it re-forks at head. Any variable change redeploys the service.
-#    (Railway → base-fork → Variables, or the MCP `set_variables` call.)
+# 1. Re-fork. A new REFORKED_AT is the one thing that drops the saved chain; setting it redeploys
+#    base-fork, which forks Base again at the head. (Any other change now resumes the old chain.)
+railway variables --service base-fork --set "REFORKED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# 2. Redeploy the contracts and fund the wallet. OWNER_ADDRESS is read if no argument is given.
+# 2. Rebuild everything on it: our contracts and the audit anchor, gas for this machine's delegate and
+#    the DEPLOYED executor's, 25,000 USDC for the owner, an Aqua book and a SwapVM program shipped from
+#    their own makers, and the owner's grant to the deployed delegate over every venue the executor
+#    settles through. Privy cannot sign for a fork of Base — chain 8453 is indistinguishable from real
+#    Base to its RPC — so the grant impersonates the owner. Writes server/.env.fork.
 cd server
 set -a && . ../.env && set +a
-export FORK_RPC=https://base-fork-production.up.railway.app XORR_CHAIN=base-fork
-npx tsx src/fork-bootstrap.ts 0xYourWallet      # writes server/.env.fork
+FORK_RPC=https://base-fork-production.up.railway.app XORR_CHAIN=base-fork \
+OWNER_ADDRESS=0xYourWallet XORR_DELEGATE_ADDRESS=0xC38f38f45463f77bD823FebE16b15714Eb98c8A5 \
+FORK_GRANT_CAP_USD=2810 npm run rebuild:fork
 
-# 2b. The bootstrap funds the delegate key on THIS machine. The deployed executor signs with its
-#     own key, which only Railway holds — read its address from `/delegation/params` (signed in)
-#     and fund that one too, or every run dies at signing for want of gas.
-DELEGATE=0xC38f38f45463f77bD823FebE16b15714Eb98c8A5
-curl -s -XPOST -H 'content-type: application/json' "$FORK_RPC" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"anvil_setBalance\",\"params\":[\"$DELEGATE\",\"0x8AC7230489E80000\"]}"
+# 3. Point the executor at the new addresses — Railway vars on `executor-fork`, from server/.env.fork:
+#    DELEGATION_ADDRESS, AQUA_BOOK_ADDRESS, SWAPVM_BOOK_ADDRESS, ANCHOR_ADDRESS. Setting them redeploys it.
 
-# 3. Point the executor at the new addresses — Railway vars on `executor-fork`:
-#    DELEGATION_ADDRESS, AQUA_BOOK_ADDRESS, SWAPVM_BOOK_ADDRESS. Setting them redeploys it.
-
-# 4. Grant. Privy cannot sign for a fork of Base — chain 8453 is indistinguishable from real Base
-#    to its RPC — so this impersonates the owner instead. Name the DEPLOYED delegate: without
-#    XORR_DELEGATE_ADDRESS the grant goes to this machine's key and the executor reverts NotDelegate.
-set -a && . ./.env.fork && set +a
-XORR_DELEGATE_ADDRESS=$DELEGATE npx tsx src/fork-grant.ts 0xYourWallet 2810
-
-# 5. Confirm.
+# 4. Confirm.
 curl -s "$FORK_API/verify?owner=0xYourWallet" | jq '.passed, .failed'
 ```
 
+A book or a program that has been traded dry, or has expired, is replaced without a rebuild:
+`FORK_RPC=… XORR_CHAIN=base-fork AQUA_BOOK_ADDRESS=… SWAPVM_BOOK_ADDRESS=… npm run ship:makers [-- --aqua | --swapvm]`
+from `server/`.
+
+To change the fork's image or entrypoint, deploy the directory — it resumes the saved chain:
+`railway up --service base-fork --ci` from `infra/base-fork`.
+
 The database is untouched by all of this: the audit trail, strategies and positions live in
-Postgres and survive. What is lost is on-chain state — the old contract addresses stop existing,
+Postgres and survive. What a re-fork loses is on-chain state — the old contract addresses stop existing,
 so anything holding a balance on the previous fork is gone with it.
 
 ## 9. Where it runs
@@ -191,7 +181,7 @@ so anything holding a balance on the previous fork is gone with it.
 | The app (static web export) | Vercel | project `xorr-eth` → `https://app.xorr.finance` (also `https://xorr-eth.vercel.app`) |
 | Executor, Base Sepolia | Railway | `executor` → `https://api.xorr.finance`, i.e. `https://executor-production-1659.up.railway.app` (Postgres: `Postgres-gWN2`) |
 | Executor, Base mainnet fork | Railway | `executor-fork` → `https://executor-fork-production.up.railway.app` (Postgres: `Postgres-WPy4`) |
-| The fork itself (anvil) | Railway | `base-fork` → `https://base-fork-production.up.railway.app` — no volume, so a restart re-forks |
+| The fork itself (anvil) | Railway | `base-fork` → `https://base-fork-production.up.railway.app` — `infra/base-fork`, its chain on the `fork-state` volume, so a restart resumes it |
 
 Redeploy the frontend with one command. It refuses to build against an executor that is down or
 unreachable, reads the executor URL back out of the bundle, and deploys `dist-web` with a
@@ -215,5 +205,5 @@ CNAME to the target Railway issued for the executor's custom domain, with Railwa
 Vercel, the whole Railway project was scheduled for deletion. Every
 deployment stopped and the variables locked, but volumes and variables survive the 48-hour window.
 Cancelling brought everything back — the services redeployed on their own, both databases intact —
-except the fork, whose chain state has no volume; it was rebuilt with section 8. The call is the
+except the fork, whose chain state had no volume then; it was rebuilt with section 8. The call is the
 dashboard's restore, or the API's `projectScheduleDeleteCancel(id)`.

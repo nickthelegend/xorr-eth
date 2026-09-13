@@ -206,6 +206,34 @@ export function decodeStrategy(encoded: Hex): AquaStrategy {
  */
 const LOOKBACK_BLOCKS = BigInt(process.env.AQUA_LOOKBACK_BLOCKS ?? 9_000);
 
+/**
+ * The open Aqua positions a replay of `Shipped`/`Docked` logs leaves — one per maker and strategy hash.
+ *
+ * Aqua keeps balances per maker, app and strategy hash, and anyone may ship any bytes under any app. Keyed by
+ * the hash alone, a stranger who shipped a maker's strategy with nothing in it and then docked it closed that
+ * maker's open book for every fill that looked, for the price of gas; and a stranger re-shipping a docked book's
+ * bytes reopened it (found writing PLAN.md 3.8's tests). So the state is per (maker, hash): the last event for
+ * that pair decides, and the bytes are the ones that maker shipped. Callers still check that the maker is the
+ * one the payload names, because that is the only position the book contract or the SwapVM router reads.
+ */
+export function replayPositions(
+  events: { l: { args: { maker?: unknown; strategyHash?: unknown; strategy?: unknown } }; open: boolean }[],
+): { hash: Hex; maker: string; encoded: Hex }[] {
+  const state = new Map<string, { hash: Hex; maker: string; open: boolean; encoded?: Hex }>();
+  for (const { l, open } of events) {
+    const hash = l.args.strategyHash as Hex;
+    const maker = String(l.args.maker).toLowerCase();
+    const key = `${maker}:${hash}`;
+    const encoded = (l.args.strategy as Hex | undefined) ?? state.get(key)?.encoded;
+    state.set(key, { hash, maker, open, encoded });
+  }
+  const out: { hash: Hex; maker: string; encoded: Hex }[] = [];
+  for (const { hash, maker, open, encoded } of state.values()) {
+    if (open && encoded) out.push({ hash, maker, encoded });
+  }
+  return out;
+}
+
 /** Every book still open on our app, with its live balances. Cheapest search first. */
 export async function openBooks(params: {
   /** Restrict to books quoting this pair, in either direction. */
@@ -234,30 +262,21 @@ export async function openBooks(params: {
    * Filtered to OUR app: Aqua is shared liquidity, so these logs carry every app's books.
    */
   const mine = (a: unknown) => String(a).toLowerCase() === app.toLowerCase();
-  const state = new Map<Hex, boolean>();
-  const encodedByHash = new Map<Hex, Hex>();
   const events = [
     ...shipped.filter((l) => mine(l.args.app)).map((l) => ({ l, open: true })),
     ...docked.filter((l) => mine(l.args.app)).map((l) => ({ l, open: false })),
   ].sort((a, b) => Number(a.l.blockNumber! - b.l.blockNumber!) || Number(a.l.logIndex! - b.l.logIndex!));
-  for (const e of events) {
-    const hash = e.l.args.strategyHash as Hex;
-    state.set(hash, e.open);
-    const encoded = (e.l.args as { strategy?: Hex }).strategy;
-    if (encoded) encodedByHash.set(hash, encoded);
-  }
 
   const out: { strategy: AquaStrategy; hash: Hex; balance0: bigint; balance1: bigint }[] = [];
-  for (const [hash, open] of state) {
-    if (!open) continue;
-    const encoded = encodedByHash.get(hash);
-    if (!encoded) continue;
+  for (const { hash, maker, encoded } of replayPositions(events)) {
     let strategy: AquaStrategy;
     try {
       strategy = decodeStrategy(encoded);
     } catch {
       continue;
     }
+    // Only the position the book reads: the one shipped by the maker the strategy names.
+    if (strategy.maker.toLowerCase() !== maker) continue;
     if (params.tokenA && params.tokenB) {
       const pair = [strategy.token0.toLowerCase(), strategy.token1.toLowerCase()].sort().join('/');
       const want = [params.tokenA.toLowerCase(), params.tokenB.toLowerCase()].sort().join('/');

@@ -33,7 +33,7 @@ import {
   timing,
   useReducedMotion,
 } from '@/ui';
-import { canApprove, proposalCta, targetsFromSleeves, weightBarPct, weightTotal } from '@/state/derived';
+import { canApprove, proposalCta, proposalRebalance, weightBarPct, weightTotal } from '@/state/derived';
 import { sleeveFixtures } from '@/data/fixtures/sleeves';
 import { onboarding } from '@/data/fixtures/onboarding';
 import { useStore } from '@/state/store';
@@ -53,6 +53,23 @@ export default function Proposal() {
   const cap = useStore((s) => s.cap);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  /*
+   * Whether trades settle on this network at all — asked before approving, so the user knows what approving does
+   * (PLAN.md 3.7). Undefined until the executor answers.
+   */
+  const [settles, setSettles] = useState<boolean>();
+  useEffect(() => {
+    let live = true;
+    system
+      .tradable()
+      .then((rows) => {
+        if (live) setSettles(rows.length > 0);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const total = weightTotal(weights);
   const ok = canApprove(weights);
@@ -73,16 +90,25 @@ export default function Proposal() {
        * this network can settle decides where each sleeve's weight goes; the rest stays cash.
        */
       const tradable = (await system.tradable()).map((t) => t.symbol);
-      const { targets, cashPct } = targetsFromSleeves(
+      /*
+       * Where nothing settles — Base Sepolia, where 1inch has no deployment — the tradable list is empty (PLAN.md
+       * 3.7) and approving refused with "nothing to rebalance", so a new user could not finish. There the
+       * portfolio is created watched, over what the chain can price and read: it reports what it would trade,
+       * moves nothing, and the screen says so.
+       */
+      const watchable = tradable.length > 0 ? [] : (await system.watchable()).map((t) => t.symbol);
+      const { state, targets, cashPct } = proposalRebalance(
         sleeveFixtures.map((s, i) => ({ name: s.name, weight: weights[i] ?? 0 })),
         tradable,
+        watchable,
       );
       if (Object.keys(targets).length === 0) {
-        throw new Error('Nothing in this portfolio can be traded on this network yet, so there is nothing to rebalance.');
+        throw new Error('Nothing in this portfolio can be traded or followed on this network, so there is nothing to rebalance.');
       }
+      setSettles(state === 'live');
       await repos.strategies.create({
         kind: 'rebalance',
-        state: 'live',
+        state,
         label: 'Rebalance to targets',
         symbol: 'PORTFOLIO',
         params: { targets, cashPct, weights, sleeves: sleeveFixtures.map((s) => s.name) },
@@ -185,6 +211,12 @@ export default function Proposal() {
         {error ? (
           <Text variant="secondarySm" color={colors.down} style={{ marginTop: space.s14 }}>
             {error}
+          </Text>
+        ) : null}
+        {settles === false ? (
+          <Text variant="secondarySm" color={colors.ink45} style={{ marginTop: space.s14 }}>
+            Trades can’t settle on this network, so this portfolio is watched: it shows what it would trade and
+            moves nothing.
           </Text>
         ) : null}
       </Fill>

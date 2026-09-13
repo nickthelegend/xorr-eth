@@ -6,7 +6,7 @@
  * the *account* — positions, strategies, the audit trail — which lives in the executor's Postgres
  * once the server is reachable, and falls back to the on-device store when it is not.
  *
- * Anything without a real feed is returned with feed:'simulated' so the UI can label it.
+ * Anything without a real feed is returned with feed:'unavailable' so the UI can label it.
  * PLAN.md §1.3 item 8: "Never present synthetic data as live."
  */
 import { assetClasses } from './fixtures/markets';
@@ -91,7 +91,7 @@ export const LocalRepositories: Repositories = {
             // No 24h change: a swap quote is a spot price, and inventing a delta from one
             // observation would be the same class of lie as a hardcoded price.
             return s.price === null
-              ? { ...i, px: '—', chg: '', feed: 'simulated' as const }
+              ? { ...i, px: '—', chg: '', feed: 'unavailable' as const }
               : { ...i, px: fmtPrice(s.price), chg: '', feed: 'live' as const };
           }
           const q = live[i.sym];
@@ -107,7 +107,7 @@ export const LocalRepositories: Repositories = {
              * that never had a feed keeps its indicative price, which is what the label is for.
              */
             return i.feed === 'live'
-              ? { ...i, px: '—', chg: '', feed: 'simulated' as const }
+              ? { ...i, px: '—', chg: '', feed: 'unavailable' as const }
               : i;
           }
           return {
@@ -178,7 +178,7 @@ export const LocalRepositories: Repositories = {
       if (warming) return { symbol, timeframe, bars: [], feed: 'warming' };
       // No feed for this symbol means NO CHART. Handing back another asset's bars under this
       // symbol's name would be the most misleading thing this app could do.
-      return { symbol, timeframe, bars: [], feed: 'simulated' };
+      return { symbol, timeframe, bars: [], feed: 'unavailable' };
     },
   },
 

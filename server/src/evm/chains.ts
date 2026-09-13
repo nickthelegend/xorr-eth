@@ -134,11 +134,21 @@ export const AAVE_V3_POOL = '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5' as cons
  * the first thing an Aqua fill hit.
  */
 const AQUA_BOOK = process.env.AQUA_BOOK_ADDRESS;
+/**
+ * Our SwapVM book, when one is deployed (PLAN.md 3.1).
+ *
+ * Settlement already tries it ahead of the aggregator, and `spend()` refuses any venue the user did not
+ * sign for — so a grant made through the app, which is built from this list, could never reach it. The only
+ * grant that ever named the book was the hand-written one in `live-swapvm.ts`.
+ */
+const SWAPVM_BOOK = process.env.SWAPVM_BOOK_ADDRESS;
+const isAddress = (a: string | undefined): a is `0x${string}` => !!a && /^0x[0-9a-fA-F]{40}$/.test(a);
 
 export const SETTLEMENT_VENUES: readonly `0x${string}`[] = [
   ADDRESSES.oneInchRouter,
   ...(IS_BASE_MAINNET_STATE ? [AAVE_V3_POOL] : []),
-  ...(AQUA_BOOK && /^0x[0-9a-fA-F]{40}$/.test(AQUA_BOOK) ? [AQUA_BOOK as `0x${string}`] : []),
+  ...(isAddress(AQUA_BOOK) ? [AQUA_BOOK] : []),
+  ...(isAddress(SWAPVM_BOOK) ? [SWAPVM_BOOK] : []),
 ];
 
 export function explorerTx(hash: string): string {

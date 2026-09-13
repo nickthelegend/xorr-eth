@@ -23,12 +23,12 @@ export type Instrument = GradientStops & {
    * Whether a real feed backs this instrument. PLAN.md §1.3 item 8: "Every price on screen is
    * real, or labelled."
    *
-   * `'simulated'` is the historical name and no longer describes anything: an instrument with no
-   * feed carries NO price (`px` is a dash, `chg` is empty) rather than a prototype number under a
-   * SIMULATED tag, and the UI labels it "No price feed". Kept as the value to avoid churning every
-   * consumer; read it as "nothing prices this".
+   * An instrument with no feed carries NO price (`px` is a dash, `chg` is empty) rather than a prototype
+   * number under a SIMULATED tag, and the UI labels it "No price feed". The value was `'simulated'`, a
+   * name left over from those prototype numbers that no longer described anything; it now says what is
+   * true (PLAN.md 3.18).
    */
-  feed: 'live' | 'simulated';
+  feed: 'live' | 'unavailable';
   /** On-chain mint/market id where one exists — used by the price service and the executor. */
   mint?: string;
 };
@@ -53,13 +53,13 @@ export type Candles = {
   timeframe: Timeframe;
   bars: Bar[];
   /**
-   * `warming` is not `simulated`.
+   * `warming` is not `unavailable`.
    *
    * The executor fetches history from a rate-limited upstream and answers 503 with a Retry-After
    * while it does. Collapsing that into "no chart for this market" tells a user their market has
    * no history when it will have some in seconds — the wrong answer, stated confidently.
    */
-  feed: 'live' | 'simulated' | 'warming';
+  feed: 'live' | 'unavailable' | 'warming';
 };
 
 export type Agent = GradientStops & {
