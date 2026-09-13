@@ -25,9 +25,20 @@ export async function tick(now: Date = new Date()): Promise<number> {
   );
   let ran = 0;
   for (const s of due) {
-    const outcome = await runStrategy(s, now);
-    if (outcome.status !== 'skipped') ran += 1;
-    console.log(`[scheduler] ${s.label}: ${outcome.status}`);
+    /*
+     * One strategy's failure is that strategy's (PLAN.md 1.6).
+     *
+     * This awaited each run with no catch, so a strategy that threw ended the tick: every strategy
+     * after it in the list waited another interval, and the alert and anchor sweeps below did not run
+     * at all. `runStrategy` records its own failures; this only keeps one from becoming everyone's.
+     */
+    try {
+      const outcome = await runStrategy(s, now);
+      if (outcome.status !== 'skipped') ran += 1;
+      console.log(`[scheduler] ${s.label}: ${outcome.status}`);
+    } catch (e) {
+      log.error(`[scheduler] ${s.label} threw:`, e instanceof Error ? e.message : e);
+    }
   }
 
   /*
@@ -68,9 +79,32 @@ export async function tick(now: Date = new Date()): Promise<number> {
   return ran;
 }
 
+let ticking = false;
+
+/**
+ * A tick, unless the previous one is still running — then this one is skipped, not stacked.
+ *
+ * `setInterval` fired every thirty seconds whether or not the last tick had finished, and a tick
+ * waiting on fills can take longer than that. The period claim stopped a double run, but two ticks
+ * still sent transactions from the same delegate key at once, where they contend for a nonce, and
+ * ran the alert and anchor sweeps twice. PLAN.md 1.6.
+ */
+export async function guardedTick(now: Date = new Date()): Promise<number | 'skipped'> {
+  if (ticking) {
+    log.warn('[scheduler] the previous tick is still running; skipping this one');
+    return 'skipped';
+  }
+  ticking = true;
+  try {
+    return await tick(now);
+  } finally {
+    ticking = false;
+  }
+}
+
 export function startScheduler(): NodeJS.Timeout {
   console.log(`  scheduler every ${TICK_MS}ms`);
   return setInterval(() => {
-    tick().catch((e: unknown) => log.error('[scheduler]', e));
+    guardedTick().catch((e: unknown) => log.error('[scheduler]', e));
   }, TICK_MS);
 }

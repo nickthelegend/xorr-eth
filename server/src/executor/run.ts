@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
+import { log } from '../http/request-id.js';
 import { evaluate, recordSpend } from '../rules/engine.js';
 import { closeAsDelegate, readPolicy, spendAsDelegate, waitForTx } from '../evm/delegation.js';
 import { erc20Abi, formatUnits } from 'viem';
@@ -108,6 +109,8 @@ export type StrategyRow = {
   cadence: Cadence | null;
   next_run_at: Date | null;
   daily_allocation_usd: string;
+  /** Consecutive transient failures, reset when a run reaches an answer. Migration 014. */
+  retry_attempts?: number;
 };
 
 /**
@@ -127,6 +130,40 @@ async function claimRun(
     [randomUUID(), strategyId, key],
   );
   return res.rows[0]?.id ?? null;
+}
+
+/** A thrown value, as the sentence it carried. */
+const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/**
+ * How long a strategy waits before its next attempt after `attempt` consecutive transient failures:
+ * one minute, doubling, capped at thirty. PLAN.md 1.6.
+ */
+export function retryDelayMs(attempt: number): number {
+  return Math.min(30 * 60_000, 60_000 * 2 ** Math.max(0, attempt - 1));
+}
+
+/**
+ * A run reached an answer — filled, found nothing to do, was blocked, or failed for good — so the
+ * schedule moves to the next period and any retry streak is over.
+ *
+ * Blocked and failed runs never moved `next_run_at` (PLAN.md 1.6). A strategy stopped by a spent cap
+ * or an expired permission stayed due, the scheduler re-selected it on every tick, and twenty such
+ * strategies filled the tick's `LIMIT 20` and starved every other strategy.
+ */
+async function settleSchedule(
+  client: Pick<PoolClient, 'query'>,
+  strategy: StrategyRow,
+  at: Date,
+): Promise<void> {
+  if (strategy.cadence) {
+    await client.query(`UPDATE strategies SET next_run_at = $2, retry_attempts = 0 WHERE id = $1`, [
+      strategy.id,
+      advance(at, strategy.cadence),
+    ]);
+  } else {
+    await client.query(`UPDATE strategies SET retry_attempts = 0 WHERE id = $1`, [strategy.id]);
+  }
 }
 
 /**
@@ -256,12 +293,7 @@ async function runStrategyInner(
            WHERE id=$1`,
           [runId, usd, units, price],
         );
-        if (strategy.cadence) {
-          await client.query(`UPDATE strategies SET next_run_at=$2 WHERE id=$1`, [
-            strategy.id,
-            advance(at, cadence),
-          ]);
-        }
+        await settleSchedule(client, strategy, at);
         await append(
           {
             walletId,
@@ -276,14 +308,7 @@ async function runStrategyInner(
       });
       return { status: 'watch', runId, units, price };
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      await tx(async (client) => {
-        await client.query(
-          `UPDATE strategy_runs SET status='failed', error=$2, finished_at=now() WHERE id=$1`,
-          [runId, error],
-        );
-      });
-      return { status: 'failed', runId, error: humanFailure(error), raw: error };
+      return failRun({ runId, walletId, strategy, error: messageOf(e), sent: false, at });
     }
   }
 
@@ -296,16 +321,32 @@ async function runStrategyInner(
    * was blocked for a permission that was live on chain. Failing closed is the right direction to
    * be wrong in, but it is still wrong: the chain is the authority everywhere else in this file.
    */
-  const ownerAddress = (
-    await one<{ address: string }>(`SELECT address FROM wallets WHERE id = $1`, [walletId])
-  )?.address as Address | undefined;
-  if (!ownerAddress) {
-    return finishBlocked(runId, walletId, strategy, 'no_wallet', 'This wallet has no address on file.');
-  }
+  /*
+   * Everything between the claim and the send answers to a catch (PLAN.md 1.6).
+   *
+   * These reads — the wallet, the permission from the chain, the rules — ran after the period was
+   * claimed but outside any `try`. An RPC timeout in `readPolicy` escaped `runStrategy` entirely:
+   * the run row stayed `pending`, the period was consumed with nothing in the trail, and the
+   * scheduler's loop stopped for every strategy after this one.
+   */
+  let ownerAddress: Address;
+  let chainPolicy: NonNullable<Awaited<ReturnType<typeof readPolicy>>>;
+  try {
+    const found = (
+      await one<{ address: string }>(`SELECT address FROM wallets WHERE id = $1`, [walletId])
+    )?.address as Address | undefined;
+    if (!found) {
+      return await finishBlocked(runId, walletId, strategy, 'no_wallet', 'This wallet has no address on file.');
+    }
+    ownerAddress = found;
 
-  const chainPolicy = await readPolicy(ownerAddress);
-  if (!chainPolicy) {
-    return finishBlocked(runId, walletId, strategy, 'no_delegation', 'No trading permission has been granted.');
+    const policy = await readPolicy(ownerAddress);
+    if (!policy) {
+      return await finishBlocked(runId, walletId, strategy, 'no_delegation', 'No trading permission has been granted.');
+    }
+    chainPolicy = policy;
+  } catch (e) {
+    return failRun({ runId, walletId, strategy, error: messageOf(e), sent: false, at });
   }
 
   /*
@@ -321,27 +362,32 @@ async function runStrategyInner(
    */
   const selfSizing = SELF_SIZING_KINDS.has(strategy.kind);
 
-  const verdict = await evaluate({
-    walletId,
-    usd: selfSizing ? Math.max(usd, 0.01) : usd,
-    dailyCapUsd: chainPolicy.dailyCapUsd,
-    delegationExpiresAt: new Date(chainPolicy.expiresAt),
-    delegationRevoked: chainPolicy.revoked,
-    /*
-     * A kind that can only close is exempt from the cap, here and on chain.
-     *
-     * This gate runs BEFORE the planner, so it judges a placeholder size — and for `exit-rules`
-     * that meant a wallet which had spent its daily cap got `daily_cap` back for a take-profit,
-     * a stop-loss and a trailing stop alike. The one strategy that exists to reduce risk was the
-     * one a spending limit could switch off, and the failure was intermittent because it depended
-     * on how much the account had already traded that day.
-     *
-     * The strategy-level allowance below already reasons this way for a close, and
-     * `closePosition` on chain never touches the cap either. This is the third place that had to
-     * agree and did not.
-     */
-    reducesRiskOnly: reducesRiskOnly(strategy.kind, (strategy.params ?? {}) as Record<string, unknown>),
-  });
+  let verdict: Awaited<ReturnType<typeof evaluate>>;
+  try {
+    verdict = await evaluate({
+      walletId,
+      usd: selfSizing ? Math.max(usd, 0.01) : usd,
+      dailyCapUsd: chainPolicy.dailyCapUsd,
+      delegationExpiresAt: new Date(chainPolicy.expiresAt),
+      delegationRevoked: chainPolicy.revoked,
+      /*
+       * A kind that can only close is exempt from the cap, here and on chain.
+       *
+       * This gate runs BEFORE the planner, so it judges a placeholder size — and for `exit-rules`
+       * that meant a wallet which had spent its daily cap got `daily_cap` back for a take-profit,
+       * a stop-loss and a trailing stop alike. The one strategy that exists to reduce risk was the
+       * one a spending limit could switch off, and the failure was intermittent because it depended
+       * on how much the account had already traded that day.
+       *
+       * The strategy-level allowance below already reasons this way for a close, and
+       * `closePosition` on chain never touches the cap either. This is the third place that had to
+       * agree and did not.
+       */
+      reducesRiskOnly: reducesRiskOnly(strategy.kind, (strategy.params ?? {}) as Record<string, unknown>),
+    });
+  } catch (e) {
+    return failRun({ runId, walletId, strategy, error: messageOf(e), sent: false, at });
+  }
 
   if (!verdict.allowed) {
     return finishBlocked(runId, walletId, strategy, verdict.reason, verdict.detail);
@@ -780,12 +826,7 @@ async function runStrategyInner(
       }
       // Schedule the next one. Without this a strategy fills once and then sits there looking
       // live, which is indistinguishable from being broken.
-      if (strategy.cadence) {
-        await client.query(`UPDATE strategies SET next_run_at=$2 WHERE id=$1`, [
-          strategy.id,
-          advance(at, strategy.cadence),
-        ]);
-      }
+      await settleSchedule(client, strategy, at);
     });
 
     /*
@@ -807,54 +848,95 @@ async function runStrategyInner(
 
     return { status: 'filled', runId, signature, units: filledUnits, price };
   } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
+    return failRun({ runId, walletId, strategy, error: messageOf(e), sent, at });
+  }
+}
 
-    /*
-     * A run that never reached the chain, and failed for a reason that will not recur, releases its
-     * period so the next tick can try again.
-     *
-     * `strategy_runs.period_key` is UNIQUE — that is what makes a retry, a restart and two
-     * schedulers racing all safe. It also means a FAILED row consumes the period permanently: a
-     * user whose daily buy hit a five-second RPC timeout silently lost that day, and the only trace
-     * was a `failed` row nothing ever revisits.
-     *
-     * Two conditions, both required. Nothing may have been sent — see `sent` above. And the cause
-     * must be transient: a policy refusal, a revoked permission or a spent cap will fail again in
-     * exactly the same way, and re-running them is noise plus gas. Deleting the row is the release,
-     * because the uniqueness IS the claim.
-     */
-    if (!sent && isTransient(error)) {
-      await query(`DELETE FROM strategy_runs WHERE id = $1`, [runId]).catch(() => undefined);
+/**
+ * A run that threw, before it reached the chain or after.
+ *
+ * Every throw after the claim ends here (PLAN.md 1.6), so a failure is recorded the same way
+ * wherever in the run it happened.
+ */
+async function failRun(p: {
+  runId: string;
+  walletId: string;
+  strategy: StrategyRow;
+  error: string;
+  /** Whether anything may have been broadcast. A run that may have landed is never retried. */
+  sent: boolean;
+  at: Date;
+}): Promise<RunOutcome> {
+  const { runId, walletId, strategy, error, sent, at } = p;
+
+  /*
+   * A run that never reached the chain, and failed for a reason that will not recur, releases its
+   * period so it can be tried again.
+   *
+   * `strategy_runs.period_key` is UNIQUE — that is what makes a retry, a restart and two
+   * schedulers racing all safe. It also means a FAILED row consumes the period permanently: a
+   * user whose daily buy hit a five-second RPC timeout silently lost that day, and the only trace
+   * was a `failed` row nothing ever revisits.
+   *
+   * Two conditions, both required. Nothing may have been sent — see `sent` above. And the cause
+   * must be transient: a policy refusal, a revoked permission or a spent cap will fail again in
+   * exactly the same way, and re-running them is noise plus gas. Deleting the row is the release,
+   * because the uniqueness IS the claim.
+   *
+   * The retry waits longer each time, and the trail hears about it once. It used to be the next
+   * tick, thirty seconds later, every time, each writing its own "Retrying" row — an hour of RPC
+   * trouble was a hundred and twenty identical rows per strategy in a log that can never be edited.
+   * Only a DUE schedule is pushed back: a manual run of a strategy whose next slot is still ahead
+   * leaves that slot alone.
+   */
+  if (!sent && isTransient(error)) {
+    await query(`DELETE FROM strategy_runs WHERE id = $1`, [runId]).catch(() => undefined);
+    const attempt = (strategy.retry_attempts ?? 0) + 1;
+    const retryAt = new Date(at.getTime() + retryDelayMs(attempt));
+    await query(
+      `UPDATE strategies
+          SET retry_attempts = retry_attempts + 1,
+              next_run_at = CASE WHEN next_run_at IS NOT NULL AND next_run_at <= $2 THEN $3 ELSE next_run_at END
+        WHERE id = $1`,
+      [strategy.id, at, retryAt],
+    ).catch(() => undefined);
+
+    if (attempt === 1) {
       await append({
         walletId,
         agent: 'xorr',
         action: `Retrying ${strategy.label}`,
-        detail: `${humanFailure(error)} Nothing was placed and nothing reached the chain, so this run will be tried again.`,
+        detail: `${humanFailure(error)} Nothing was placed and nothing reached the chain, so it will be tried again, waiting a little longer each time until it goes through.`,
         kind: 'block',
         payload: { runId, strategyId: strategy.id, raw: error, released: true },
       }).catch(() => undefined);
-      return { status: 'failed', runId, error: humanFailure(error), raw: error };
+    } else {
+      log.warn(
+        `[run] ${strategy.label}: still failing (attempt ${attempt}), next try ${retryAt.toISOString()}: ${error}`,
+      );
     }
-
-    await tx(async (client) => {
-      await client.query(
-        `UPDATE strategy_runs SET status='failed', error=$2, finished_at=now() WHERE id=$1`,
-        [runId, error],
-      );
-      await append(
-        {
-          walletId,
-          agent: agentForKind(strategy.kind),
-          action: `Could not run ${strategy.label}`,
-          detail: humanFailure(error),
-          kind: 'block',
-          payload: { runId, strategyId: strategy.id, raw: error },
-        },
-        client,
-      );
-    });
     return { status: 'failed', runId, error: humanFailure(error), raw: error };
   }
+
+  await tx(async (client) => {
+    await client.query(
+      `UPDATE strategy_runs SET status='failed', error=$2, finished_at=now() WHERE id=$1`,
+      [runId, error],
+    );
+    await settleSchedule(client, strategy, at);
+    await append(
+      {
+        walletId,
+        agent: agentForKind(strategy.kind),
+        action: `Could not run ${strategy.label}`,
+        detail: humanFailure(error),
+        kind: 'block',
+        payload: { runId, strategyId: strategy.id, raw: error },
+      },
+      client,
+    );
+  });
+  return { status: 'failed', runId, error: humanFailure(error), raw: error };
 }
 
 /**
@@ -908,12 +990,7 @@ async function finishNoop(
       `UPDATE strategy_runs SET status='skipped', error=NULL, finished_at=now() WHERE id=$1`,
       [runId],
     );
-    if (strategy.cadence) {
-      await client.query(`UPDATE strategies SET next_run_at=$2 WHERE id=$1`, [
-        strategy.id,
-        advance(new Date(), strategy.cadence),
-      ]);
-    }
+    await settleSchedule(client, strategy, new Date());
     await append(
       {
         walletId,
@@ -941,6 +1018,8 @@ async function finishBlocked(
       `UPDATE strategy_runs SET status='blocked', error=$2, finished_at=now() WHERE id=$1`,
       [runId, reason],
     );
+    // The period is spent either way; a schedule left due was re-selected on every tick.
+    await settleSchedule(client, strategy, new Date());
     // A non-action is logged exactly like an action. That is the point of the trail.
     await append(
       {
