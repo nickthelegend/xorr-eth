@@ -9,6 +9,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
+import { oncePerTransaction } from '../audit/once.js';
 import {
   ANCHOR_ADDRESS,
   agreement,
@@ -699,33 +700,44 @@ routes.post('/delegation/record', async (c) => {
   // granted_at` (PLAN.md 4.7), so the start is recorded from the block that carried the event.
   const grantedAt = new Date(Number(block.timestamp) * 1000);
 
-  await one(
-    `INSERT INTO delegations (id, wallet_id, owner_pubkey, delegate_pubkey, daily_cap_usd, expires_at, venue_allowlist, grant_signature, granted_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-    [
-      randomUUID(),
-      w.id,
-      w.address,
-      grant.delegate,
-      grant.dailyCapUsd,
-      new Date(grant.expiresAt),
-      venues,
-      body.txHash,
-      grantedAt,
-    ],
+  /*
+   * Once per transaction (PLAN.md X76): the row and the trail entry in one transaction, and neither again for a hash the
+   * trail already carries — a retried POST, or a second press while the first waited on the chain, recorded one grant as
+   * two. A repeat answers as the first did.
+   */
+  const written = await tx((client) =>
+    oncePerTransaction(client, { walletId: w.id, action: 'Trading permission granted', signature: body.txHash }, async () => {
+      await client.query(
+        `INSERT INTO delegations (id, wallet_id, owner_pubkey, delegate_pubkey, daily_cap_usd, expires_at, venue_allowlist, grant_signature, granted_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [
+          randomUUID(),
+          w.id,
+          w.address,
+          grant.delegate,
+          grant.dailyCapUsd,
+          new Date(grant.expiresAt),
+          venues,
+          body.txHash,
+          grantedAt,
+        ],
+      );
+      await append(
+        {
+          walletId: w.id,
+          agent: 'xorr',
+          action: 'Trading permission granted',
+          detail: `Up to $${grant.dailyCapUsd.toLocaleString('en-US')} a day, expiring ${new Date(grant.expiresAt).toDateString()}.`,
+          kind: 'risk',
+          signature: body.txHash,
+          payload: { explorer: explorerTx(body.txHash) },
+        },
+        client,
+      );
+    }),
   );
 
-  await append({
-    walletId: w.id,
-    agent: 'xorr',
-    action: 'Trading permission granted',
-    detail: `Up to $${grant.dailyCapUsd.toLocaleString('en-US')} a day, expiring ${new Date(grant.expiresAt).toDateString()}.`,
-    kind: 'risk',
-    signature: body.txHash,
-    payload: { explorer: explorerTx(body.txHash) },
-  });
-
-  return c.json({ ok: true, ...policy, venueAllowlist: venues, grantedAt: grantedAt.getTime() });
+  return c.json({ ok: true, ...policy, venueAllowlist: venues, grantedAt: grantedAt.getTime(), alreadyRecorded: !written });
 });
 
 /** Record a revoke the user already signed. */
@@ -779,23 +791,31 @@ routes.post('/delegation/revoke', async (c) => {
   }
 
   await tx(async (client) => {
-    // This chain's rows (migration 023): a revoke here says nothing about a grant on another chain.
-    await client.query(
-      `UPDATE delegations SET revoked=true, revoke_signature=$2
-        WHERE wallet_id=$1 AND revoked=false AND chain = current_setting('xorr.chain_key')`,
-      [w.id, body.txHash ?? null],
-    );
-    await append(
-      {
-        walletId: w.id,
-        agent: 'xorr',
-        action: 'All agents stopped',
-        detail: 'Permission revoked on-chain. Open positions are untouched.',
-        kind: 'risk',
-        signature: body.txHash,
-      },
-      client,
-    );
+    const stop = async () => {
+      // This chain's rows (migration 023): a revoke here says nothing about a grant on another chain.
+      await client.query(
+        `UPDATE delegations SET revoked=true, revoke_signature=$2
+          WHERE wallet_id=$1 AND revoked=false AND chain = current_setting('xorr.chain_key')`,
+        [w.id, body.txHash ?? null],
+      );
+      await append(
+        {
+          walletId: w.id,
+          agent: 'xorr',
+          action: 'All agents stopped',
+          detail: 'Permission revoked on-chain. Open positions are untouched.',
+          kind: 'risk',
+          signature: body.txHash,
+        },
+        client,
+      );
+    };
+    // Once per transaction (PLAN.md X76). A revoke reported without a hash has nothing to be written once by.
+    if (body.txHash) {
+      await oncePerTransaction(client, { walletId: w.id, action: 'All agents stopped', signature: body.txHash }, stop);
+    } else {
+      await stop();
+    }
   });
 
   return c.json({ revoked: true, ownerPubkey: w.address, dailyCapUsd: 0 });
