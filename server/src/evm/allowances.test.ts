@@ -33,6 +33,9 @@ describe('an allowance, as the screen reads it', () => {
     expect(allowanceView(USDC, 0n)).toMatchObject({ allowance: '0', none: true, unlimited: false, unread: false });
     expect(allowanceView(USDC, MAX)).toMatchObject({ unlimited: true, none: false, unread: false });
     expect(allowanceView(USDC, 2_500_000n)).toMatchObject({ allowance: '2500000', display: '2.5', none: false, unlimited: false });
+    // The fork tooling approves 2^255 and a sale counts it down: still unlimited, not a 59-digit amount.
+    expect(allowanceView(USDC, (1n << 255n) - 10n ** 6n)).toMatchObject({ unlimited: true });
+    expect(allowanceView(USDC, (1n << 254n) - 1n)).toMatchObject({ unlimited: false });
   });
 
   it('says unread when the read failed, rather than none', () => {

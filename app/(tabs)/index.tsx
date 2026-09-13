@@ -21,6 +21,7 @@ import {
   Eyebrow,
   IconButton,
   LoadingRows,
+  NoteStrip,
   Placeholder,
   Press,
   Price,
@@ -47,6 +48,8 @@ import { logoProps, useLogos } from '@/data/useLogos';
 import { usePrivyIdentity } from '@/auth/usePrivyIdentity';
 import { useHasHydrated, useStore } from '@/state/store';
 import type { Agent, Instrument } from '@/data/types';
+import { chainLabel } from '@/chain';
+import { nothingSettles } from '@/state/derived';
 
 type SheetTab = 'agents' | 'gainers' | 'stocks' | 'futures';
 
@@ -121,6 +124,9 @@ export default function Home() {
   const futuresOpened = opened.has('futures');
   const stocks = useAsync(async () => (stocksOpened ? system.stocks() : null), [stocksOpened]);
   const futures = useAsync(async () => (futuresOpened ? repos.perps.markets() : null), [futuresOpened]);
+  /* What this deployment trades and watches: nothing to trade beside things to watch is a chain that fills nothing. */
+  const tradable = useAsync(() => system.tradable(), []);
+  const watchable = useAsync(() => system.watchable(), []);
 
   /*
    * Today's gainers: instruments on a LIVE feed whose change is up, largest first.
@@ -159,6 +165,7 @@ export default function Home() {
 
   const total = balance.data?.total ?? null;
   const live = isLive(limits.data ?? undefined, killed);
+  const fillsNothing = nothingSettles(tradable.data, watchable.data);
 
   /* The Privy account, named by its email when Privy has one, and by its wallet otherwise. */
   const address = wallet?.address;
@@ -239,6 +246,19 @@ export default function Home() {
             )}
           </Press>
         </Rise>
+
+        {/*
+          Said on Home, before anything asks for a permission (PLAN.md 4.3). Where nothing settles — Base Sepolia, where
+          1inch has no deployment — a strategy is watched and never filled, and a person who grants a permission and waits
+          for a fill should not have to find that out three taps away.
+        */}
+        {fillsNothing ? (
+          <View style={{ marginTop: space.s16, paddingHorizontal: space.gutter }}>
+            <NoteStrip kind="blocked">
+              {`Nothing fills on ${chainLabel}: 1inch has no deployment here, so your strategies are watched, not traded.`}
+            </NoteStrip>
+          </View>
+        ) : null}
 
         {/* The sheet: a grabber, a rounded top, and it runs to the bottom — the reference's watchlist. */}
         <Rise

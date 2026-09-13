@@ -12,7 +12,14 @@ import { publicClient } from './client.js';
 import { ADDRESSES, CHAIN_KEY } from './chains.js';
 import { oneinchApi } from '../venues/oneinch.js';
 
-const MAX = (1n << 256n) - 1n;
+/**
+ * An allowance at least this large is unlimited: no token's supply comes near 2^254.
+ *
+ * Not `=== max uint256`. The fork tooling approves 2^255, and WETH counts an allowance short of the
+ * maximum down with every sale, so the Railway fork's WETH allowance read as a 59-digit number of
+ * WETH on the Approvals screen. The same bar as `EFFECTIVELY_UNLIMITED` in src/wallet/grantPlan.ts.
+ */
+const UNLIMITED = 1n << 254n;
 
 export type TokenAllowance = {
   symbol: string;
@@ -35,7 +42,7 @@ export function allowanceView(
     ...token,
     allowance: raw === undefined ? null : raw.toString(),
     display: raw === undefined ? null : formatUnits(raw, token.decimals),
-    unlimited: raw === MAX,
+    unlimited: raw !== undefined && raw >= UNLIMITED,
     none: raw === 0n,
     unread: raw === undefined,
   };

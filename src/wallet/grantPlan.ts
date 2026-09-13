@@ -32,15 +32,20 @@ const DAY_MS = 86_400_000;
 export const SETTLEMENT_APPROVAL_DAYS = 30;
 
 /**
- * An allowance at least this large is unlimited for any real token: no supply comes near 2^255.
+ * An allowance at least this large is unlimited for any real token: no supply comes near 2^254.
  *
  * The bar for the tokens the bot only ever SELLS, which a grant approves for max uint256 because
  * the amount an exit will need is whatever was bought — so anything short of unlimited is a stop
  * that can fail when it fires. Not `=== max uint256`: a token that spends an unlimited allowance
- * down, or the fork tooling's 2^255, is still unlimited for every purpose, and a wallet prompt to
- * restore the last few units would be noise.
+ * down is still unlimited for every purpose, and a wallet prompt to restore the last few units
+ * would be noise.
+ *
+ * 2^254, not 2^255. The fork tooling approves exactly 2^255 (`fork-grant.ts`), and WETH counts any
+ * allowance short of max uint256 down with every sale, so a bar at 2^255 asked the Railway fork's
+ * wallet to approve WETH again after its first sell. Half of that is still more than any token will
+ * ever move. `server/src/evm/allowances.ts` calls an allowance unlimited from the same bar.
  */
-export const EFFECTIVELY_UNLIMITED = 1n << 255n;
+export const EFFECTIVELY_UNLIMITED = 1n << 254n;
 
 /** The permission as `/delegation` reports it: the chain's cap and expiry, and when it was granted. */
 export type ChainPermission = {

@@ -109,6 +109,8 @@ describe('the approvals a resume asks for', () => {
 
   it('count a sold token as enough while it is unlimited, not only at max uint256', () => {
     expect(ask(withAllowance(freshlyGranted(400), WETH, (MAX - 10n ** 18n).toString()))).toEqual([]);
+    // The fork tooling's 2^255, after a sale took one WETH of it.
+    expect(ask(withAllowance(freshlyGranted(400), WETH, ((1n << 255n) - 10n ** 18n).toString()))).toEqual([]);
     expect(ask(withAllowance(freshlyGranted(400), WETH, EFFECTIVELY_UNLIMITED.toString()))).toEqual([]);
     expect(ask(withAllowance(freshlyGranted(400), WETH, (EFFECTIVELY_UNLIMITED - 1n).toString()))).toEqual([
       WETH,

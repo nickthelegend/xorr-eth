@@ -178,18 +178,19 @@ so anything holding a balance on the previous fork is gone with it.
 
 | Piece | Host | Name |
 |---|---|---|
-| The app (static web export) | Vercel | project `xorr-eth` → `https://app.xorr.finance` (also `https://xorr-eth.vercel.app`) |
+| The app (static web export) | Vercel | project `xorr-eth` → `https://app.xorr.finance` (also `https://xorr-eth.vercel.app`), built against `executor-fork` and the `base-fork` RPC since PLAN.md 4.2 |
 | Executor, Base Sepolia | Railway | `executor` → `https://api.xorr.finance`, i.e. `https://executor-production-1659.up.railway.app` (Postgres: `Postgres-gWN2`) |
 | Executor, Base mainnet fork | Railway | `executor-fork` → `https://executor-fork-production.up.railway.app` (Postgres: `Postgres-WPy4`) |
 | The fork itself (anvil) | Railway | `base-fork` → `https://base-fork-production.up.railway.app` — `infra/base-fork`, its chain on the `fork-state` volume, so a restart resumes it |
 
 Redeploy the frontend with one command. It refuses to build against an executor that is down or
-unreachable, reads the executor URL back out of the bundle, and deploys `dist-web` with a
+unreachable — and, for the fork, against an RPC that does not answer as anvil on chain 8453 — reads
+the executor URL and the fork RPC back out of the bundle, and deploys `dist-web` with a
 `vercel.json` that serves the hashed bundles as immutable and falls back to `index.html` for every
 client-side route:
 
 ```bash
-npm run deploy:web          # XORR_WEB_API overrides the executor it points at
+npm run deploy:web          # the fork; XORR_WEB_API=https://api.xorr.finance builds Base Sepolia
 ```
 
 The executor's CORS is `ALLOWED_ORIGINS` on each Railway service — `*` today. If it is ever narrowed,

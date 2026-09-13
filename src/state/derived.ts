@@ -661,3 +661,16 @@ export function proposalRebalance(
   const settles = tradable.length > 0;
   return { state: settles ? 'live' : 'watch', ...targetsFromSleeves(sleeves, settles ? tradable : watchable) };
 }
+
+/**
+ * Whether this deployment fills nothing (PLAN.md 4.3): the executor offers nothing to trade while it still offers
+ * things to watch. `/market/tradable` answers `[]` exactly where nothing settles (3.7); an empty watch list beside it
+ * would be an executor with no registry, not a chain without 1inch, so that says nothing — and neither does a read
+ * that has not answered.
+ */
+export function nothingSettles(
+  tradable: readonly unknown[] | null | undefined,
+  watchable: readonly unknown[] | null | undefined,
+): boolean {
+  return Array.isArray(tradable) && tradable.length === 0 && (watchable?.length ?? 0) > 0;
+}
