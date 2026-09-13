@@ -180,14 +180,19 @@ export const LocalRepositories: Repositories = {
       return (await fetchSparklines(symbols).catch(() => undefined)) ?? {};
     },
     async candles(symbol: string, timeframe: Timeframe): Promise<Candles> {
-      let warming = false;
-      const live = await fetchCandles(symbol, timeframe).catch((e: unknown) => {
-        // "Not yet" and "not ever" are different answers and the screen shows different words.
-        warming = e instanceof StillWarming;
-        return null;
-      });
+      /*
+       * "Not yet" and "not ever" are different answers and the screen shows different words — and a request that failed
+       * is a third, so it throws. It was folded into "no feed", which told a person this market has no chart when a read
+       * had merely failed, and gave the screen nothing to offer a retry on.
+       */
+      let live: Candles | null;
+      try {
+        live = await fetchCandles(symbol, timeframe);
+      } catch (e) {
+        if (e instanceof StillWarming) return { symbol, timeframe, bars: [], feed: 'warming' };
+        throw e;
+      }
       if (live) return live;
-      if (warming) return { symbol, timeframe, bars: [], feed: 'warming' };
       // No feed for this symbol means NO CHART. Handing back another asset's bars under this
       // symbol's name would be the most misleading thing this app could do.
       return { symbol, timeframe, bars: [], feed: 'unavailable' };

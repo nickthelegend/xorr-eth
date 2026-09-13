@@ -49,9 +49,9 @@ import type { Strategy } from '@/data/types';
 import { driftSentence, holdingDrift } from '@/state/derived';
 
 const GRAPH_H = 150;
-/** Two days of hourly closes on each card. */
+/** The day's closes on each card: `1H` reads one day, folded to twelve candles (src/data/marketData.ts). */
 const CARD_TF = '1H' as const;
-const CARD_POINTS = 48;
+const CARD_POINTS = 12;
 /** How far back the history must reach before its caption may say "Past week" rather than when it starts. */
 const WEEK_MS = 6.5 * 24 * 60 * 60 * 1000;
 

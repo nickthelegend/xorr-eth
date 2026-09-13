@@ -204,6 +204,8 @@ export type HealthDependency = {
 export type Health = {
   ok: boolean;
   status: string;
+  /** The commit this executor runs (FEATURES.md #53, compared with the app's own in `src/version.ts`). */
+  version?: string;
   chain: string;
   delegation: string;
   uptimeSec: number;

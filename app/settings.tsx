@@ -34,6 +34,7 @@ import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { TONES, useTone } from '@/bot/tone';
 import { NotSignedIn, errorText } from '@/data/apiError';
+import { VersionRow } from '@/about/VersionRow';
 
 const SETTING_ROW = 54;
 const TONE_OPTIONS = TONES.map((t) => ({ value: t.id, label: t.label }));
@@ -324,6 +325,12 @@ export default function Settings() {
               {signOutError}
             </Text>
           ) : null}
+
+          {/* Which code this is, and whether the server runs the same (FEATURES.md #53, `src/about/VersionRow.tsx`). */}
+          <Eyebrow small style={{ marginTop: space.s26 }}>
+            About
+          </Eyebrow>
+          <VersionRow height={SETTING_ROW} />
           <View style={{ height: space.s30 }} />
         </ScrollView>
       </Fill>

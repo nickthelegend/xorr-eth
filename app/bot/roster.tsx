@@ -117,7 +117,14 @@ export default function Roster() {
                     <View style={{ flex: 1, gap: space.s4 }}>
                       <Text variant="cardTitle">{a.name}</Text>
                       <Text variant="secondarySm">{a.role}</Text>
-                      <Text variant="orbStatus">{a.metric}</Text>
+                      {/*
+                        Neutral. `orbStatus` is green by default, and green is profit — so "No trades yet" and
+                        "0% win rate" were drawn in the colour of a gain. The P&L itself is coloured by its sign
+                        on the leaderboard.
+                      */}
+                      <Text variant="orbStatus" color={colors.ink55}>
+                        {a.metric}
+                      </Text>
                     </View>
                   </Press>
                   <Press
