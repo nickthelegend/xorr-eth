@@ -20,7 +20,8 @@
  * here, as anvil on chain 8453.
  *
  * Every build also pins the delegation contract it was built against (`EXPO_PUBLIC_PINNED_DELEGATION`,
- * FEATURES.md #24): see the check below for how it is chosen.
+ * FEATURES.md #24), names the commit it was built from (`EXPO_PUBLIC_APP_COMMIT`, #53), and installs
+ * like an app (#66): see the steps below.
  *
  * WHY THIS REWRITES .env RATHER THAN SETTING A VARIABLE
  *
@@ -35,7 +36,7 @@
  * without reading the artifact at the end.
  */
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const OUT = 'dist-web';
@@ -119,18 +120,29 @@ console.log(
 
 if (!existsSync(ENV_FILE)) refuse(`there is no ${ENV_FILE} to build from. Copy .env.example and fill it in.`);
 
+/*
+ * The commit this bundle is built from (FEATURES.md #53), so the app can say which code it is and whether the executor
+ * it reads runs the same (`src/version.ts`; every executor reports `/health` → `version`). Only a clean checkout names
+ * one: a build of uncommitted changes is not any commit, and saying it was would be the one wrong answer.
+ */
+const COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const DIRTY = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim() !== '';
+const APP_COMMIT = DIRTY ? undefined : COMMIT;
+console.log(`  app commit ${APP_COMMIT ?? `none named: the checkout at ${COMMIT.slice(0, 7)} has uncommitted changes`}`);
+
 /* The developer's own file, restored verbatim below whatever happens. */
 const original = readFileSync(ENV_FILE, 'utf8');
 
 try {
   const patched = original
     .split('\n')
-    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN|CHAIN_RPC|PINNED_DELEGATION)=/.test(l))
+    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN|CHAIN_RPC|PINNED_DELEGATION|APP_COMMIT)=/.test(l))
     .concat([
       `EXPO_PUBLIC_API_URL=${API}`,
       `EXPO_PUBLIC_XORR_CHAIN=${health.chain}`,
       ...(CHAIN_RPC ? [`EXPO_PUBLIC_CHAIN_RPC=${CHAIN_RPC}`] : []),
       `EXPO_PUBLIC_PINNED_DELEGATION=${PIN}`,
+      ...(APP_COMMIT ? [`EXPO_PUBLIC_APP_COMMIT=${APP_COMMIT}`] : []),
       '',
     ])
     .join('\n');
@@ -173,11 +185,62 @@ const problems = [];
 if (!js.includes(API)) problems.push(`the bundle does not contain ${API}`);
 if (CHAIN_RPC && !js.includes(CHAIN_RPC)) problems.push(`the bundle does not contain the fork RPC ${CHAIN_RPC}`);
 if (!js.includes(PIN)) problems.push(`the bundle does not contain the pinned delegation contract ${PIN}`);
+if (APP_COMMIT && !js.includes(APP_COMMIT)) problems.push(`the bundle does not name its commit ${APP_COMMIT}`);
 
 if (problems.length) {
   console.error(`\n  Build produced the wrong artifact:\n${problems.map((p) => `    - ${p}`).join('\n')}\n`);
   process.exit(1);
 }
+
+/*
+ * An app a phone can install (FEATURES.md #66): a manifest, icons, and the tags a phone reads when the page is added to a
+ * home screen — standalone, black, the app's own mark. The icons in `assets/web/` are cut from `assets/icon.png`.
+ *
+ * No service worker. An offline shell for an app whose every number is live would open on stale money, and a cache
+ * that holds a deploy wrong is how a fix never reaches anyone; that is a separate decision from being installable.
+ */
+mkdirSync(join(OUT, 'icons'), { recursive: true });
+for (const file of ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png']) {
+  copyFileSync(join('assets/web', file), join(OUT, 'icons', file));
+}
+writeFileSync(
+  join(OUT, 'manifest.webmanifest'),
+  JSON.stringify(
+    {
+      name: 'xorr',
+      short_name: 'xorr',
+      description: 'A bot that trades while you get on with your life',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#000000',
+      theme_color: '#000000',
+      icons: [
+        { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      ],
+    },
+    null,
+    2,
+  ) + '\n',
+);
+const INDEX = join(OUT, 'index.html');
+const html = readFileSync(INDEX, 'utf8');
+if (!html.includes('</head>')) {
+  console.error(`\n  ${INDEX} has no </head> to add the app manifest to.\n`);
+  process.exit(1);
+}
+const installTags = [
+  '<link rel="manifest" href="/manifest.webmanifest" />',
+  '<meta name="theme-color" content="#000000" />',
+  '<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />',
+  '<meta name="mobile-web-app-capable" content="yes" />',
+  '<meta name="apple-mobile-web-app-capable" content="yes" />',
+  '<meta name="apple-mobile-web-app-title" content="xorr" />',
+  '<meta name="apple-mobile-web-app-status-bar-style" content="black" />',
+].join('');
+writeFileSync(INDEX, html.replace('</head>', `${installTags}</head>`));
 
 /*
  * Make the output deployable on Vercel, where the frontend lives.
@@ -230,5 +293,5 @@ writeFileSync(
 );
 
 console.log(
-  `\n  ${bundle}\n  points at ${API}${CHAIN_RPC ? ` and ${CHAIN_RPC}` : ''}, pins ${PIN} — verified in the bundle, not assumed.\n`,
+  `\n  ${bundle}\n  points at ${API}${CHAIN_RPC ? ` and ${CHAIN_RPC}` : ''}, pins ${PIN}${APP_COMMIT ? `, names ${APP_COMMIT.slice(0, 7)}` : ''}, installable — verified in the bundle, not assumed.\n`,
 );

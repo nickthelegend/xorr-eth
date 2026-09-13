@@ -50,6 +50,19 @@ const READ_TIMEOUT_MS = 45_000;
 const WRITE_TIMEOUT_MS = 180_000;
 
 /**
+ * An id for one request (FEATURES.md #90), sent as `x-request-id`.
+ *
+ * The executor adopts a well-formed id instead of minting its own (`server/src/http/request-id.ts`) and begins every
+ * log line for the request with its first eight characters. So the reference a screen shows under a failure finds the
+ * request in the logs — including a timed-out one, which never gets an answer to read an id from. Random hex first, so
+ * those eight characters differ from one request to the next. It is a label, not a secret or a token.
+ */
+function newRequestId(): string {
+  const random = Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  return `${random}${Date.now().toString(16)}`;
+}
+
+/**
  * Run `op` under a deadline, aborting the in-flight fetch when it passes.
  *
  * The deadline covers the WHOLE operation, not just the fetch: `whenAuthKnown()` and the Privy
@@ -59,6 +72,7 @@ const WRITE_TIMEOUT_MS = 180_000;
 async function withDeadline<T>(
   path: string,
   ms: number,
+  requestId: string,
   op: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const ctrl = new AbortController();
@@ -66,14 +80,14 @@ async function withDeadline<T>(
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       ctrl.abort();
-      reject(new TimedOut(path, ms));
+      reject(new TimedOut(path, ms, requestId));
     }, ms);
   });
   try {
     return await Promise.race([op(ctrl.signal), expired]);
   } catch (e) {
     // An abort we caused is the deadline, not a network fault, and it must read as one.
-    if (e instanceof Error && e.name === 'AbortError') throw new TimedOut(path, ms);
+    if (e instanceof Error && e.name === 'AbortError') throw new TimedOut(path, ms, requestId);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -82,10 +96,11 @@ async function withDeadline<T>(
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const timeoutMs = init?.method && init.method !== 'GET' ? WRITE_TIMEOUT_MS : READ_TIMEOUT_MS;
-  return withDeadline(path, timeoutMs, (signal) => send<T>(path, signal, init));
+  const requestId = newRequestId();
+  return withDeadline(path, timeoutMs, requestId, (signal) => send<T>(path, signal, requestId, init));
 }
 
-async function send<T>(path: string, signal: AbortSignal, init?: RequestInit): Promise<T> {
+async function send<T>(path: string, signal: AbortSignal, requestId: string, init?: RequestInit): Promise<T> {
   /*
    * Do not ask a question we KNOW we cannot answer — and only then.
    *
@@ -111,6 +126,7 @@ async function send<T>(path: string, signal: AbortSignal, init?: RequestInit): P
     headers: {
       'content-type': 'application/json',
       accept: 'application/json',
+      'x-request-id': requestId,
       ...(await authHeaders()),
       ...init?.headers,
     },
@@ -125,7 +141,7 @@ async function send<T>(path: string, signal: AbortSignal, init?: RequestInit): P
     } catch {
       parsed = undefined;
     }
-    throw new ApiError(res.status, `${res.status} ${res.statusText}${text ? `: ${text}` : ''}`, parsed);
+    throw new ApiError(res.status, `${res.status} ${res.statusText}${text ? `: ${text}` : ''}`, parsed, requestId);
   }
   return (await res.json()) as T;
 }
@@ -139,11 +155,14 @@ export const api = {
   del: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
   async getText(path: string): Promise<string> {
     if (!isPublicPath(path) && authKnowledge() === 'signed-out') throw new NotSignedIn(path);
-    return withDeadline(path, READ_TIMEOUT_MS, async (signal) => {
-      const res = await fetch(`${API_BASE}${path}`, { signal, headers: await authHeaders() });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const requestId = newRequestId();
+    return withDeadline(path, READ_TIMEOUT_MS, requestId, async (signal) => {
+      const res = await fetch(`${API_BASE}${path}`, {
+        signal,
+        headers: { 'x-request-id': requestId, ...(await authHeaders()) },
+      });
+      if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText}`, undefined, requestId);
       return res.text();
     });
   },
 };
-

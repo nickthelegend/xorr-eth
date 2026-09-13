@@ -25,7 +25,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } fr
  * this is a couple of string functions, not the data layer's fetching machinery. The alternative
  * was resolving the text at all 51 call sites.
  */
-import { NotSignedIn, errorText, isRetryable } from '@/data/apiError';
+import { NotSignedIn, errorRef, errorText, isRetryable } from '@/data/apiError';
 import { Button } from './Button';
 import { Press } from './Press';
 import { SignInPrompt } from './SignIn';
@@ -151,12 +151,23 @@ export function ErrorState({
 }) {
   // Signed out is not a failure — nothing was asked — so it gets a way in, not a retry. See SignIn.tsx.
   if (error instanceof NotSignedIn) return <SignInPrompt testID={testID} />;
+  const ref = errorRef(error);
   return (
     <View testID={testID} style={{ paddingVertical: space.s30, gap: space.s14, alignItems: 'center' }}>
       <Text variant="rowPrimary">That did not load.</Text>
       <Text variant="secondary" align="center">
         {errorText(error)}
       </Text>
+      {/*
+        The request's reference, under a server fault or a timeout (FEATURES.md #90): the first eight characters the
+        executor's own log lines for it begin with. Quiet, and selectable, because its only job is to be copied into a
+        report.
+      */}
+      {ref ? (
+        <Text variant="footnote" color={colors.ink55} selectable>
+          {`Ref ${ref}`}
+        </Text>
+      ) : null}
       {/*
         A retry is offered only where repeating the request could answer differently. Under a
         permanent refusal the button is worse than nothing — it invites someone to press it until

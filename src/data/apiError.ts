@@ -18,6 +18,8 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly body?: unknown,
+    /** The id the request carried as `x-request-id`, which the executor's log lines for it begin with. */
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -133,6 +135,8 @@ export class TimedOut extends Error {
   constructor(
     readonly path: string,
     readonly ms: number,
+    /** The id the request carried: it may still be running, and this is how its log lines are found. */
+    readonly requestId?: string,
   ) {
     // Never "it failed". A request that timed out may still be running on the server, and for a
     // trade the difference between those two sentences is a double spend.
@@ -142,6 +146,20 @@ export class TimedOut extends Error {
     );
     this.name = 'TimedOut';
   }
+}
+
+/**
+ * A reference for a failure worth reporting (FEATURES.md #90): the first eight characters of the request's id, which is
+ * how every log line the executor writes for that request begins (`server/src/http/request-id.ts`).
+ *
+ * Only where it helps. A 5xx is the server's own fault, and a timed-out request may still be running: those are what
+ * someone reports, and the reference is what finds them. A 4xx already says what to change, and a signed-out or offline
+ * failure never reached a log at all.
+ */
+export function errorRef(e: unknown): string | undefined {
+  const id =
+    e instanceof TimedOut ? e.requestId : e instanceof ApiError && e.status >= 500 ? e.requestId : undefined;
+  return id ? id.slice(0, 8) : undefined;
 }
 
 /**
