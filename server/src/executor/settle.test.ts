@@ -5,7 +5,8 @@
  * settles where the owner receives the most — a book when it pays at least the aggregator's quote, Aqua over SwapVM
  * on a tie — a direct leg to its own venue, and never a book on a close. These cases prove which builder is asked,
  * with what, which venue wins, and which floor the leg is held to, including that "route to 1inch" skips the books
- * only when an Aqua index gave that answer.
+ * only when an Aqua index gave that answer — and that on a fork the aggregator is measured by a dry run and held to
+ * what its route delivers there (PLAN.md X77).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeFunctionData, parseAbi } from 'viem';
@@ -13,6 +14,7 @@ import type { AquaFill } from '../venues/aqua.js';
 import type { SwapCalldata, SwapQuote } from '../venues/oneinch.js';
 import type { SwapVmFill } from '../venues/swapvm.js';
 import type { TradeIntent } from './kinds/index.js';
+import type { SettlementSend } from './settle.js';
 
 const TOKENS = vi.hoisted(
   () =>
@@ -33,11 +35,20 @@ vi.mock('../venues/oneinch.js', () => ({
 vi.mock('../venues/aqua.js', () => ({ buildAquaFill: vi.fn() }));
 vi.mock('../venues/swapvm.js', () => ({ buildSwapVmFill: vi.fn() }));
 vi.mock('../graph/aqua.js', () => ({ aquaIndexConfigured: vi.fn() }));
+// Off a fork unless a case says otherwise: where 1inch's prices and the pools drift apart, the route is measured (PLAN.md X77).
+const fork = vi.hoisted(() => ({ drifts: false }));
+vi.mock('../evm/measure-route.js', () => ({
+  get PRICES_DRIFT() {
+    return fork.drifts;
+  },
+  deliveredOnChain: vi.fn(),
+}));
 
 const { buildSwap, quote, slippageFor } = await import('../venues/oneinch.js');
 const { buildAquaFill } = await import('../venues/aqua.js');
 const { buildSwapVmFill } = await import('../venues/swapvm.js');
 const { aquaIndexConfigured } = await import('../graph/aqua.js');
+const { deliveredOnChain } = await import('../evm/measure-route.js');
 const { chooseSettlement } = await import('./settle.js');
 
 const USDC = TOKENS.USDC.address;
@@ -64,13 +75,15 @@ const buy = (over: Partial<TradeIntent> = {}): TradeIntent => ({
   ...over,
 });
 
-const settle = (intent: TradeIntent, opts: { preferred?: string; isClose?: boolean } = {}) =>
+const settle = (intent: TradeIntent, opts: { preferred?: string; isClose?: boolean; send?: SettlementSend } = {}) =>
   chooseSettlement({
     intent,
     owner: OWNER,
     preferred: opts.preferred,
     isClose: opts.isClose ?? false,
     delegationFrom: DELEGATION,
+    // What `spend()` would pull for the $100 buy; a case that measures a close says what it sells.
+    send: opts.send ?? { via: 'spend', amount: 100_000_000n },
   });
 
 /** What 1inch quoted for the buy: 0.04 WETH, 0.42% under the mid. */
@@ -137,6 +150,8 @@ beforeEach(() => {
   vi.mocked(buildSwap).mockReset().mockResolvedValue(ROUTER_CALL);
   vi.mocked(slippageFor).mockReset().mockReturnValue(WIDENED);
   vi.mocked(aquaIndexConfigured).mockReset().mockReturnValue(false);
+  vi.mocked(deliveredOnChain).mockReset();
+  fork.drifts = false;
 });
 
 describe('best execution across venues (PLAN.md 3.20)', () => {
@@ -363,6 +378,107 @@ describe('the legs around it', () => {
     expect(quote).not.toHaveBeenCalled();
     expect(buildSwapVmFill).not.toHaveBeenCalled();
     expect(buildSwap).not.toHaveBeenCalled();
+  });
+});
+
+describe('on a fork, where 1inch prices Base and the pools hold their fork block (PLAN.md X77)', () => {
+  /** What the route really delivers on the fork: 0.0395 WETH, under the 0.04 1inch quotes on Base. */
+  const DELIVERED = 39_500_000_000_000_000n;
+  const REFUSED = 'execution reverted: ReturnAmountIsNotEnough(5927798290791051)';
+
+  beforeEach(() => {
+    fork.drifts = true;
+    vi.mocked(deliveredOnChain).mockResolvedValue(DELIVERED);
+  });
+
+  it('holds the aggregator to what its route delivers on the fork, less the tolerance, not to the quote', async () => {
+    const s = await settle(buy());
+
+    // 0.0395 WETH less the widened 0.45%.
+    expect(s).toEqual({
+      payToken: { address: USDC, decimals: 6 },
+      swap: { to: ROUTER, data: '0x1111' },
+      venue: '1inch',
+      floor: { tokenOut: WETH, minOut: 39_322_250_000_000_000n },
+    });
+    // Built once, at the leg's tolerance, and measured through the call that will carry it, as it will be sent.
+    expect(buildSwap).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(buildSwap).mock.calls[0]![0]).toMatchObject({ slippagePct: WIDENED });
+    expect(slippageFor).toHaveBeenCalledTimes(1);
+    expect(deliveredOnChain).toHaveBeenCalledWith({
+      owner: OWNER,
+      via: 'spend',
+      token: USDC,
+      venue: ROUTER,
+      amount: 100_000_000n,
+      tokenOut: WETH,
+      data: '0x1111',
+    });
+  });
+
+  it('holds a book against what the route delivers there: under the quote, but over the route, a book wins', async () => {
+    // 0.03995 WETH: less than the 0.04 quoted on Base, more than the 0.0395 the route delivers on the fork.
+    vi.mocked(buildAquaFill).mockResolvedValue(AQUA_SHORT);
+
+    expect((await settle(buy())).venue).toBe('aqua');
+  });
+
+  it("prices SwapVM's floor from what the route delivers on the fork", async () => {
+    vi.mocked(buildSwapVmFill).mockResolvedValue(SWAPVM_FILL);
+
+    await settle(buy());
+
+    expect(vi.mocked(buildSwapVmFill).mock.calls[0]![0]).toMatchObject({ quotedOut: DELIVERED });
+  });
+
+  it("measures a close through closePosition(), in the sold token's own units, and holds it to that less its tolerance", async () => {
+    vi.mocked(deliveredOnChain).mockResolvedValue(99_000_000n);
+    vi.mocked(slippageFor).mockReturnValue(1.35);
+    const close: TradeIntent = {
+      inSymbol: 'WETH',
+      outSymbol: 'USDC',
+      amountIn: 0.04,
+      amountInRaw: 40_000_000_000_000_008n,
+      usd: 99.7,
+      because: 'WETH fell through the stop.',
+    };
+
+    const s = await settle(close, { isClose: true, send: { via: 'closePosition', amount: 40_000_000_000_000_008n } });
+
+    expect(deliveredOnChain).toHaveBeenCalledWith(
+      expect.objectContaining({ via: 'closePosition', token: WETH, amount: 40_000_000_000_000_008n, tokenOut: USDC }),
+    );
+    // 99 USDC less 1.35%.
+    expect(s.floor).toEqual({ tokenOut: USDC, minOut: 97_663_500n });
+  });
+
+  it('takes a book that serves when the route cannot run on the fork, whatever the quote says', async () => {
+    vi.mocked(deliveredOnChain).mockRejectedValue(new Error(REFUSED));
+    vi.mocked(buildAquaFill).mockResolvedValue({ ...AQUA_SHORT, quotedOut: 30_000_000_000_000_000n });
+
+    expect((await settle(buy())).venue).toBe('aqua');
+  });
+
+  it("fails with the chain's own refusal when the route cannot run and no book serves", async () => {
+    vi.mocked(deliveredOnChain).mockRejectedValue(new Error(REFUSED));
+
+    await expect(settle(buy())).rejects.toThrow('ReturnAmountIsNotEnough');
+  });
+
+  it('measures nothing for a direct leg, and nothing off a fork', async () => {
+    const direct: NonNullable<TradeIntent['direct']> = {
+      venue: AAVE_POOL,
+      data: '0x617ba037',
+      unitPriceUsd: 1,
+      tokenOut: A_USDC,
+      minOut: 99_990_000n,
+    };
+    expect((await settle(buy({ outSymbol: 'aUSDC', direct }))).venue).toBe('aave');
+    expect(deliveredOnChain).not.toHaveBeenCalled();
+
+    fork.drifts = false;
+    await settle(buy());
+    expect(deliveredOnChain).not.toHaveBeenCalled();
   });
 });
 

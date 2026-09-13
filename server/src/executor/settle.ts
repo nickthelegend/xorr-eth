@@ -23,10 +23,19 @@
  *
  * Neither book is tried on a close or a direct leg. An exit has to be certain, and a book deep
  * enough to buy into may not be deep enough to sell out of.
+ *
+ * On a fork of Base the aggregator is measured, not taken at its word (PLAN.md X77). 1inch prices a
+ * route against live Base, while a fork's pools stay as they were at its fork block and drift from
+ * Base as the market moves — so a quote there can be a price the fork no longer has, and the Railway
+ * fork's router refused aggregator buys for it. On a fork the route is dry-run through the call that
+ * will carry the leg (`evm/measure-route.ts`), and what it delivers there is what a book has to beat,
+ * what SwapVM's floor is priced from, and what the owner is held to, less the tolerance. Real Base
+ * prices and executes the same state, and settles on the quote.
  */
 import type { Address } from 'viem';
 import type { OutputFloor } from '../evm/delegation.js';
-import { buildSwap, quote, slippageFor, SLIPPAGE, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
+import { deliveredOnChain, PRICES_DRIFT } from '../evm/measure-route.js';
+import { buildSwap, quote, slippageFor, SLIPPAGE, TOKENS as VENUE_TOKENS, type SwapCalldata } from '../venues/oneinch.js';
 import { buildAquaFill } from '../venues/aqua.js';
 import type { AquaFill } from '../venues/aqua.js';
 import { buildSwapVmFill } from '../venues/swapvm.js';
@@ -44,6 +53,15 @@ import type { TradeIntent } from './kinds/index.js';
  */
 export type SettlementVenue = 'aqua' | 'swapvm' | '1inch' | 'aave';
 
+/**
+ * The contract call that will carry the leg, and what it pulls (PLAN.md X77).
+ *
+ * On a fork the route is dry-run before it is chosen, and a dry run is only a measurement if it is the
+ * call that will be sent: `closePosition()` pulls the sold token in its own units, `spend()` pulls the
+ * settlement token for the dollars.
+ */
+export type SettlementSend = { via: 'spend' | 'closePosition'; amount: bigint };
+
 export type Settlement = {
   /** The token being spent, from the registry. */
   payToken: { address: Address; decimals: number };
@@ -53,14 +71,17 @@ export type Settlement = {
   /**
    * What the owner must receive for the trade to stand. Enforced by the contract against the owner's
    * own balance (PLAN.md 1.4) — each venue supplies its own honest floor: the book's quote less
-   * slippage, the program's compiled minimum, the router's `dstAmount` less slippage, or the pool's
-   * receipt token.
+   * slippage, the program's compiled minimum, the router's `dstAmount` less slippage (on a fork, what
+   * its route delivers there less slippage), or the pool's receipt token.
    */
   floor: OutputFloor;
 };
 
 /** A book that can serve the leg, and what it would deliver the owner, in the output token's base units. */
 type BookOffer = { venue: 'aqua'; fill: AquaFill; out: bigint } | { venue: 'swapvm'; fill: SwapVmFill; out: bigint };
+
+/** The aggregator's route on a fork: as measured there, at the tolerance it was built with, or why it cannot run. */
+type MeasuredRoute = { swap: SwapCalldata; delivered: bigint; tolerancePct: number } | { refusal: unknown };
 
 /**
  * The better of the two books for this leg, Aqua keeping a tie.
@@ -76,9 +97,15 @@ function bestBook(aqua: AquaFill | undefined, swapVm: SwapVmFill | undefined): B
   return offers.reduce<BookOffer | undefined>((best, o) => (best === undefined || o.out > best.out ? o : best), undefined);
 }
 
+/** `amount` less `pct` percent, rounded down to a whole raw unit. */
+function lessPct(amount: bigint, pct: number): bigint {
+  return (amount * BigInt(Math.floor((1 - pct / 100) * 1_000_000))) / 1_000_000n;
+}
+
 /**
  * @param owner     The user whose capital is being spent — never ours.
  * @param preferred What the subgraph join recommended, when it had an opinion.
+ * @param send      The call that will carry the leg and what it pulls, so a fork can measure exactly that.
  */
 export async function chooseSettlement(params: {
   intent: TradeIntent;
@@ -86,8 +113,9 @@ export async function chooseSettlement(params: {
   preferred: string | undefined;
   isClose: boolean;
   delegationFrom: Address;
+  send: SettlementSend;
 }): Promise<Settlement> {
-  const { intent, owner, preferred, delegationFrom } = params;
+  const { intent, owner, preferred, delegationFrom, send } = params;
   const isCloseIntent = () => params.isClose;
   /*
    * "Route to 1inch" is only an answer about the books when an Aqua index gave it (PLAN.md 3.4).
@@ -127,6 +155,69 @@ export async function chooseSettlement(params: {
   const quotedOut = quoted ? BigInt(Math.round(quoted.outAmount * 10 ** (outToken?.decimals ?? 18))) : undefined;
 
   /*
+   * Urgency sets the floor; the pool sets the rest.
+   *
+   * A risk-reducing close gets more room than a scheduled buy — see `SLIPPAGE` — but those
+   * constants know nothing about the pair being traded. On a thin pool a $60 order can move
+   * the price further than the ceiling allows, and the router then refuses at a price its
+   * own quote had already predicted. `slippageFor` widens the ceiling by the impact the
+   * quote reports, with a cap: a quote predicting several percent is saying the size is
+   * wrong for the pool, and accepting that is paying for your own market impact.
+   *
+   * Except where the person named a tolerance of their own (PLAN.md 3.9): the urgency constants and the
+   * impact widening are defaults for trades nobody is watching, not a ceiling to put on someone who chose.
+   * A route that needs more than they allowed is refused, and says so.
+   */
+  const tolerancePct = () =>
+    intent.slippagePct ?? slippageFor(isCloseIntent() ? SLIPPAGE.stop : SLIPPAGE.scheduled, quoted?.priceImpactPct ?? null);
+
+  const route = (slippagePct: number) =>
+    buildSwap({
+      inSymbol: intent.inSymbol,
+      outSymbol: intent.outSymbol,
+      // In the INPUT token's units. Passing dollars here scaled a position into wei and the
+      // router refused a trade orders of magnitude too large.
+      amount: intent.amountIn,
+      // On a whole-position close the planner has the chain's own figure; the delegation and
+      // the router have to be handed the same one or the router reverts for the difference.
+      amountRaw: intent.amountInRaw,
+      from: delegationFrom,
+      receiver: owner,
+      slippagePct,
+    });
+
+  /*
+   * On a fork, what the route delivers there, measured before anything is held against it (PLAN.md X77).
+   *
+   * Built at the leg's own tolerance and dry-run through the call that will carry it. A route that cannot
+   * run on the fork at all is kept as its refusal: a book that serves is then the only way the leg fills,
+   * and with none, that refusal is the leg's answer. A direct leg has no route.
+   */
+  const measureRoute = async (): Promise<MeasuredRoute> => {
+    const tol = tolerancePct();
+    try {
+      const swap = await route(tol);
+      const delivered = await deliveredOnChain({
+        owner,
+        via: send.via,
+        token: payToken.address,
+        venue: swap.to,
+        amount: send.amount,
+        tokenOut,
+        data: swap.data,
+      });
+      return { swap, delivered, tolerancePct: tol };
+    } catch (refusal) {
+      return { refusal };
+    }
+  };
+  const measured = PRICES_DRIFT && !intent.direct ? await measureRoute() : undefined;
+  const delivered = measured && 'delivered' in measured ? measured.delivered : undefined;
+  /** What a book has to beat, and what SwapVM's floor is priced from: on a fork what the route delivers there. */
+  const reference = delivered ?? quotedOut;
+  const routeCannotFill = measured !== undefined && delivered === undefined;
+
+  /*
    * The books, asked together.
    *
    * Aqua: the taker side is the side an operator can legitimately act on — the MAKER self-custodies
@@ -135,9 +226,9 @@ export async function chooseSettlement(params: {
    * as every other trade: cap, expiry and venue allowlist, all enforced by the contract rather than by us.
    *
    * SwapVM: the same shape with different enforcement — the deadline, the floor and the fee are compiled
-   * into bytecode the router executes, rather than trusted to whoever submits the fill. It needs the quote,
+   * into bytecode the router executes, rather than trusted to whoever submits the fill. It needs a reference,
    * because `delegatedFillArgs` takes a minimum out and the only honest source for that is what something
-   * else said this trade is worth.
+   * else said this trade is worth: the quote, or on a fork what the route delivers there.
    *
    * `undefined` from either is not a failure: a maker quotes what they hold, and the aggregator is there
    * for the rest. Tried whenever a book exists and nothing rules the books out — the chain is the authority
@@ -152,7 +243,7 @@ export async function chooseSettlement(params: {
           amountIn,
           slippage: bookSlippage,
         }).catch(() => undefined),
-        quotedOut === undefined
+        reference === undefined
           ? Promise.resolve(undefined)
           : buildSwapVmFill({
               owner,
@@ -160,17 +251,18 @@ export async function chooseSettlement(params: {
               tokenOut,
               amountIn,
               slippage: bookSlippage,
-              quotedOut,
+              quotedOut: reference,
             }).catch(() => undefined),
       ])
     : [undefined, undefined];
 
   /*
-   * Best execution. A book settles the leg when it delivers at least what the aggregator quotes. With no
-   * quote there is nothing to hold a book against, and a book that serves is taken — its own quote is real.
+   * Best execution. A book settles the leg when it delivers at least what the aggregator would — its quote,
+   * or on a fork what its route delivers there. With nothing to hold a book against — no quote, or a route
+   * the fork cannot run — a book that serves is taken: its own quote is real.
    */
   const book = bestBook(aqua, swapVm);
-  if (book && (quotedOut === undefined || book.out >= quotedOut)) {
+  if (book && (routeCannotFill || reference === undefined || book.out >= reference)) {
     if (book.venue === 'aqua') {
       return {
         payToken,
@@ -196,36 +288,23 @@ export async function chooseSettlement(params: {
     };
   }
 
-  const aggregator = await buildSwap({
-    inSymbol: intent.inSymbol,
-    outSymbol: intent.outSymbol,
-    // In the INPUT token's units. Passing dollars here scaled a position into wei and the
-    // router refused a trade orders of magnitude too large.
-    amount: intent.amountIn,
-    // On a whole-position close the planner has the chain's own figure; the delegation and
-    // the router have to be handed the same one or the router reverts for the difference.
-    amountRaw: intent.amountInRaw,
-    from: delegationFrom,
-    receiver: owner,
-    /*
-     * Urgency sets the floor; the pool sets the rest.
-     *
-     * A risk-reducing close gets more room than a scheduled buy — see `SLIPPAGE` — but those
-     * constants know nothing about the pair being traded. On a thin pool a $60 order can move
-     * the price further than the ceiling allows, and the router then refuses at a price its
-     * own quote had already predicted. `slippageFor` widens the ceiling by the impact the
-     * quote reports, with a cap: a quote predicting several percent is saying the size is
-     * wrong for the pool, and accepting that is paying for your own market impact.
-     */
-    slippagePct:
-      /*
-       * Except where the person named a tolerance of their own (PLAN.md 3.9): the urgency constants and the
-       * impact widening are defaults for trades nobody is watching, not a ceiling to put on someone who chose.
-       * A route that needs more than they allowed is refused by the router, and says so.
-       */
-      intent.slippagePct ??
-      slippageFor(isCloseIntent() ? SLIPPAGE.stop : SLIPPAGE.scheduled, quoted?.priceImpactPct ?? null),
-  });
+  if (measured) {
+    // On a fork: the route as measured there, held to what it delivers less the tolerance — or why it cannot run.
+    if (!('delivered' in measured)) throw measured.refusal;
+    if (!outToken) throw new Error(`No token registry entry for ${intent.outSymbol}`);
+    const minOut = lessPct(measured.delivered, measured.tolerancePct);
+    if (minOut <= 0n) {
+      throw new Error(`The ${intent.inSymbol} -> ${intent.outSymbol} route delivers nothing on this fork at this size`);
+    }
+    return {
+      payToken,
+      swap: { to: measured.swap.to, data: measured.swap.data },
+      venue: '1inch',
+      floor: { tokenOut: outToken.address, minOut },
+    };
+  }
+
+  const aggregator = await route(tolerancePct());
   if (!outToken) throw new Error(`No token registry entry for ${intent.outSymbol}`);
   return {
     payToken,

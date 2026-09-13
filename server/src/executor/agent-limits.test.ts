@@ -59,6 +59,8 @@ vi.mock('../evm/delegation.js', () => ({
   spendAsDelegate: vi.fn(),
   closeAsDelegate: vi.fn(),
   waitForTx: vi.fn(),
+  // `run.ts` works out what `spend()` pulls before settlement, so a fork can measure it (PLAN.md X77).
+  usdToUnits: vi.fn((usd: number) => BigInt(Math.round(usd * 1_000_000))),
   DELEGATION_ADDRESS: '0x6c5528Fd8E74a047A85bAb413856A9239E73540e',
 }));
 vi.mock('../graph/decide.js', () => ({ decide: vi.fn(async () => null) }));

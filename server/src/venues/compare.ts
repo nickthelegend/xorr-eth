@@ -22,6 +22,8 @@ import { publicClient, delegateAccount } from '../evm/client.js';
 import { priceOf } from '../market/prices.js';
 import { DELEGATION_ABI, DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { buildSwapVmFill, openPrograms } from './swapvm.js';
+import { deliveredOnChain, PRICES_DRIFT } from '../evm/measure-route.js';
+import { humanFailure } from '../executor/failure.js';
 
 export type VenueQuote =
   | {
@@ -126,6 +128,50 @@ export async function compareVenues(params: {
   const agg = await settled(quote({ inSymbol, outSymbol, amount }));
 
   /*
+   * On a fork, what the route delivers there, not what 1inch quotes on Base (PLAN.md X77).
+   *
+   * A fork's pools stay as they were at its fork block while 1inch prices live Base, so the quote can be a price the
+   * fork no longer has — the Railway fork's router refused aggregator buys for it while this table still listed the
+   * route as serving. The route is dry-run through the `spend()` that would carry it, and that figure is both the
+   * aggregator's row and what SwapVM's floor is priced from, as in `settle.ts`.
+   */
+  const forkRoute =
+    PRICES_DRIFT && agg
+      ? await buildSwap({
+          inSymbol,
+          outSymbol,
+          amount,
+          amountRaw: amountIn,
+          from: DELEGATION_ADDRESS,
+          receiver: owner,
+          slippagePct: SLIPPAGE.scheduled,
+        })
+          .then(async (swap) => ({
+            swap,
+            delivered: await deliveredOnChain({
+              owner,
+              via: 'spend',
+              token: payToken.address,
+              venue: swap.to,
+              amount: amountIn,
+              tokenOut: outToken.address,
+              data: swap.data,
+            }),
+          }))
+          .catch((e: unknown) => ({ refusal: humanFailure(e instanceof Error ? e.message : String(e)) }))
+      : undefined;
+  /** The aggregator's answer in raw output units: measured on a fork, quoted elsewhere; undefined where it has none. */
+  const aggOutRaw =
+    forkRoute !== undefined
+      ? 'delivered' in forkRoute
+        ? forkRoute.delivered
+        : undefined
+      : agg
+        ? BigInt(Math.round(agg.outAmount * 10 ** outToken.decimals))
+        : undefined;
+  const aggOut = forkRoute !== undefined ? (aggOutRaw === undefined ? undefined : outUnits(aggOutRaw)) : agg?.outAmount;
+
+  /*
    * How many programs exist at all, so a refusal can name its own cause. Counted separately from
    * the fill attempt because `buildSwapVmFill` collapses "none shipped" and "none fillable" into
    * the same `undefined`.
@@ -142,7 +188,7 @@ export async function compareVenues(params: {
         slippage: SLIPPAGE.scheduled / 100,
       }),
     ),
-    agg
+    aggOutRaw !== undefined
       ? settled(
           buildSwapVmFill({
             owner,
@@ -150,7 +196,7 @@ export async function compareVenues(params: {
             tokenOut: outToken.address,
             amountIn,
             slippage: SLIPPAGE.scheduled / 100,
-            quotedOut: BigInt(Math.round(agg.outAmount * 10 ** outToken.decimals)),
+            quotedOut: aggOutRaw,
           }),
         )
       : Promise.resolve(undefined),
@@ -197,23 +243,30 @@ export async function compareVenues(params: {
      * the delegation — so the books carried `spend()`'s overhead and the aggregator did not, and the net ranking
      * leaned toward the aggregator by exactly that much.
      */
-    agg
+    agg && aggOut !== undefined
       ? gasUsdFor(async () => {
-          const swap = await buildSwap({
-            inSymbol,
-            outSymbol,
-            amount,
-            amountRaw: amountIn,
-            from: DELEGATION_ADDRESS,
-            receiver: owner,
-            slippagePct: SLIPPAGE.scheduled,
-          });
+          // On a fork, the route already measured, at its measured floor; elsewhere the route as 1inch builds it.
+          const measured = forkRoute && 'delivered' in forkRoute ? forkRoute : undefined;
+          const swap =
+            measured?.swap ??
+            (await buildSwap({
+              inSymbol,
+              outSymbol,
+              amount,
+              amountRaw: amountIn,
+              from: DELEGATION_ADDRESS,
+              receiver: owner,
+              slippagePct: SLIPPAGE.scheduled,
+            }));
+          const minOut = measured
+            ? (measured.delivered * BigInt(Math.floor((1 - SLIPPAGE.scheduled / 100) * 1_000_000))) / 1_000_000n
+            : swap.minOut;
           return publicClient.estimateContractGas({
             account: delegateAccount.address,
             address: DELEGATION_ADDRESS,
             abi: DELEGATION_ABI,
             functionName: 'spend',
-            args: [owner, payToken.address, swap.to, amountIn, outToken.address, swap.minOut, swap.data],
+            args: [owner, payToken.address, swap.to, amountIn, outToken.address, minOut, swap.data],
           });
         })
       : Promise.resolve(undefined),
@@ -272,16 +325,16 @@ export async function compareVenues(params: {
            * guesses is worth less than one that admits the difference — "nobody is quoting" and
            * "somebody is quoting and you cannot take it" are opposite facts about the venue.
            */
-          reason: !agg
+          reason: aggOutRaw === undefined
             ? 'Needs a reference price, and the aggregator did not answer.'
             : shippedCount === 0
               ? 'No maker has shipped a program for this pair.'
               : `${shippedCount} program${shippedCount === 1 ? ' is' : 's are'} shipped, but none can fill this size under your permission right now.`,
         },
-    agg
+    agg && aggOut !== undefined
       ? {
           venue: '1inch',
-          outAmount: agg.outAmount,
+          outAmount: aggOut,
           /*
            * The pools by name, not "Best of 2 venues".
            *
@@ -290,12 +343,22 @@ export async function compareVenues(params: {
            * the other two rows give a reason — so it names what it routed through, the same way the
            * activity trail does.
            */
-          detail: agg.venues.length ? `via ${agg.venues.join(', ')}` : 'direct, no pool hop',
+          detail:
+            (agg.venues.length ? `via ${agg.venues.join(', ')}` : 'direct, no pool hop') +
+            // On a fork the amount is what the route delivers there, beside what 1inch quotes on Base (PLAN.md X77).
+            (forkRoute ? `, measured on this fork — 1inch quotes ${Number(agg.outAmount.toPrecision(6))} on Base` : ''),
           served: true,
           gasUsd: aggGas,
-          netUsd: net(agg.outAmount, aggGas),
+          netUsd: net(aggOut, aggGas),
         }
-      : { venue: '1inch', served: false, reason: 'The aggregator returned no route for this pair.' },
+      : {
+          venue: '1inch',
+          served: false,
+          reason:
+            forkRoute && 'refusal' in forkRoute
+              ? `1inch's route does not fill on this fork right now: ${forkRoute.refusal}`
+              : 'The aggregator returned no route for this pair.',
+        },
   ];
 
   return { inSymbol, outSymbol, amount, quotes, ...rankVenues(quotes) };

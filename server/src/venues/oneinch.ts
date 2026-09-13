@@ -427,6 +427,17 @@ const AMM_ONLY =
     ? `&complexityLevel=0&mainRouteParts=1&parts=1&protocols=${FORK_AMMS}`
     : '';
 
+/**
+ * The router's own slippage on a fork: the most 1inch accepts — 50.01 is refused `SLIPPAGE_TOO_HIGH` (PLAN.md X77).
+ *
+ * The router refuses a fill that delivers less than `dstAmount` less this, and `dstAmount` is priced against live Base,
+ * which a fork's pools drift away from — so on a fork the router refused trades for a price the fork never had. The
+ * tolerance a trade was given still holds there: `settle.ts` measures what the route delivers on the fork and holds the
+ * owner to that, less the tolerance, in the contract's own floor. On Base the router enforces the tolerance itself.
+ */
+export const FORK_ROUTER_SLIPPAGE_PCT = 50;
+const ROUTER_DRIFTS = CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet';
+
 /** Where a swap can actually land. Base mainnet, or a fork of it. */
 export const CAN_SETTLE = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-fork';
 
@@ -479,7 +490,7 @@ export async function buildSwap(params: {
   const res = await getJson<{ dstAmount?: string; tx: { to: Address; data: Hex; value: string } }>(
     `${BASE}/${ONEINCH_CHAIN_ID}/swap?src=${src.address}&dst=${dst.address}&amount=${raw}` +
       `&from=${params.from}&origin=${params.from}&receiver=${params.receiver}` +
-      `&slippage=${slippagePct}&disableEstimate=true${AMM_ONLY}`,
+      `&slippage=${ROUTER_DRIFTS ? FORK_ROUTER_SLIPPAGE_PCT : slippagePct}&disableEstimate=true${AMM_ONLY}`,
     15_000,
     15_000,
     { Authorization: `Bearer ${API_KEY}` },

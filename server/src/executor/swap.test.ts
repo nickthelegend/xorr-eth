@@ -190,6 +190,8 @@ describe('paying anything else converts the holding through closePosition()', ()
       preferred: undefined,
       isClose: true,
       delegationFrom: h.DELEGATION,
+      // The same call and raw amount as the close below, so a fork measures the route it will run (PLAN.md X77).
+      send: { via: 'closePosition', amount: 200_000_000_000_000_000n },
     });
     expect(closeAsDelegate).toHaveBeenCalledWith({
       owner: OWNER,

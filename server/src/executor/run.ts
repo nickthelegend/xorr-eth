@@ -16,7 +16,7 @@ import { one, query, tx } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { log } from '../http/request-id.js';
 import { evaluate, recordSpend } from '../rules/engine.js';
-import { closeAsDelegate, readPolicy, spendAsDelegate, waitForTx } from '../evm/delegation.js';
+import { closeAsDelegate, readPolicy, spendAsDelegate, usdToUnits, waitForTx } from '../evm/delegation.js';
 import { erc20Abi, formatUnits } from 'viem';
 import { publicClient } from '../evm/client.js';
 import { gasStatus } from '../evm/gas.js';
@@ -659,17 +659,26 @@ async function runStrategyInner(
      * middle of this function, between the gate checks and the transaction bookkeeping, and they
      * are the part that grows every time a venue is added.
      */
+    // A direct leg is never a close: it puts capital to work rather than taking it off the table,
+    // so it spends against the cap like any other outflow.
+    const isClose = !intent.direct && intent.outSymbol === 'USDC';
+    /*
+     * In the SOLD token's own units, not dollars — and from the chain when the planner had the exact figure.
+     * The float path overshot a real balance by 8 wei and reverted; a partial sell can keep using it, because
+     * there the float IS the intended size. Worked out before settlement, so a fork's dry run of the route
+     * pulls exactly what the close below will (PLAN.md X77).
+     */
+    const soldToken = VENUE_TOKENS[intent.inSymbol];
+    if (!soldToken) throw new Error(`No token registry entry for ${intent.inSymbol}`);
+    const closeAmount = intent.amountInRaw ?? BigInt(Math.floor(intent.amountIn * 10 ** soldToken.decimals));
     const { payToken, swap, venue, floor } = await chooseSettlement({
       intent,
       owner,
       preferred,
       isClose: isCloseIntent(intent),
       delegationFrom: DELEGATION_FROM,
+      send: isClose ? { via: 'closePosition', amount: closeAmount } : { via: 'spend', amount: usdToUnits(intent.usd) },
     });
-
-    // A direct leg is never a close: it puts capital to work rather than taking it off the table,
-    // so it spends against the cap like any other outflow.
-    const isClose = !intent.direct && intent.outSymbol === 'USDC';
 
     /*
      * From here on the period claim can never be released.
@@ -693,12 +702,8 @@ async function runStrategyInner(
           owner,
           token: payToken.address,
           venue: swap.to as Address,
-          /*
-           * In the SOLD token's own units, not dollars — and from the chain when the planner had
-           * the exact figure. The float path overshot a real balance by 8 wei and reverted; a
-           * partial sell can keep using it, because there the float IS the intended size.
-           */
-          amount: intent.amountInRaw ?? BigInt(Math.floor(intent.amountIn * 10 ** payToken.decimals)),
+          // The amount the route was measured with on a fork — see `closeAmount` above.
+          amount: closeAmount,
           data: swap.data,
           ...floor,
         })

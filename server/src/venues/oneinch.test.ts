@@ -291,9 +291,10 @@ describe('the AMM-only restriction', () => {
 
     await buildSwap({ inSymbol: 'USDC', outSymbol: 'WETH', amount: 100, ...PARTIES });
 
+    // The router's own slippage is the widest 1inch accepts on a fork (PLAN.md X77); the floor keeps the tolerance.
     expect(h.getJson).toHaveBeenCalledWith(
       `${API}/swap?src=${USDC}&dst=${WETH}&amount=100000000&from=${DELEGATION}&origin=${DELEGATION}` +
-        `&receiver=${OWNER}&slippage=0.3&disableEstimate=true${AMM_ONLY}`,
+        `&receiver=${OWNER}&slippage=50&disableEstimate=true${AMM_ONLY}`,
       15_000,
       15_000,
       AUTH,
@@ -402,6 +403,18 @@ describe('what a fill returns', () => {
 
     // 0.04 WETH less the default 0.3%.
     expect(tx).toMatchObject({ to: ROUTER, data: SWAP_DATA, value: '0', minOut: 39_880_000_000_000_000n });
+  });
+
+  it('on a fork, asks the router for the widest slippage 1inch accepts and still holds the floor to the tolerance given (PLAN.md X77)', async () => {
+    const { buildSwap, FORK_ROUTER_SLIPPAGE_PCT } = await load('base-fork');
+    h.getJson.mockResolvedValue(swapResponse('40000000000000000'));
+
+    const tx = await buildSwap({ inSymbol: 'USDC', outSymbol: 'WETH', amount: 100, slippagePct: 1.2, ...PARTIES });
+
+    expect(FORK_ROUTER_SLIPPAGE_PCT).toBe(50);
+    expect(paramsOf().get('slippage')).toBe('50');
+    // 0.04 WETH less the 1.2% it was given, not less 50%.
+    expect(tx.minOut).toBe(39_520_000_000_000_000n);
   });
 
   it('lowers the floor by exactly the wider tolerance it was given', async () => {

@@ -155,6 +155,8 @@ async function convert(w: WalletRow, from: string, to: string, req: SwapRequest)
       // `closePosition()` sells what the owner holds: no book is asked, as on any exit.
       isClose: true,
       delegationFrom: DELEGATION_ADDRESS,
+      // The `closePosition()` below, with the same raw amount, so a fork measures the route it will run (PLAN.md X77).
+      send: { via: 'closePosition', amount: raw },
     });
     const intoSettlement = to === SETTLEMENT_SYMBOL;
     const before = intoSettlement ? await usdcRawOf(owner) : await rawBalanceOf(owner, to);
