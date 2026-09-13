@@ -250,6 +250,12 @@ Ordered by dependency and by what does the most damage if left.
 | 8.11 | Fusion, Fusion+ and orderbook order submission | Mainnet actions |
 | 8.12 | Sepolia audit chain forked at entry 2 | Permanent by design — append-only |
 
+## Owner requests, added during execution
+
+| # | Request | Status |
+|---|---|---|
+| O1 | **Every database copied into MongoDB Atlas** (2026-09-13, "add all the databases in here"). Asked how, the owner chose a verified copy with Postgres still serving the app, over rewriting the executor onto MongoDB | **IN PROGRESS** — `server/src/db/mongo-mirror.ts` copies every table as of one snapshot and replaces a collection only when the sorted row hashes from Postgres and MongoDB agree. It records each table's digest, so `npm run mirror:mongo -- --verify-only` re-checks a copy from MongoDB alone. The executors run it on a schedule and through `/ops/mirror`, since their databases have no public address (RUNBOOK §10). Done so far: local `xorr_eth` → Atlas `xorr_local`, 21 tables and 3,789 rows, every table's hashes agreeing, re-checked from MongoDB alone with 0 mismatches. The first attempt found a real defect and stopped: `price_observations` rows a microsecond apart collapsed onto one `_id`, so keys now keep the exact timestamp text. Still to do: the live Sepolia (`Postgres-gWN2`) and fork (`Postgres-WPy4`) databases, copied by their executors once this is deployed. Deliberately not copied: the unreferenced `Postgres` service (8.10, the owner's call), other projects' local databases (`xorr`, `molfi_somnia`) and agents' temporary proof databases |
+
 ---
 
 ## 3. The gap list

@@ -207,3 +207,33 @@ deployment stopped and the variables locked, but volumes and variables survive t
 Cancelling brought everything back — the services redeployed on their own, both databases intact —
 except the fork, whose chain state had no volume then; it was rebuilt with section 8. The call is the
 dashboard's restore, or the API's `projectScheduleDeleteCancel(id)`.
+
+## 10. The MongoDB copy
+
+Postgres is the executor's database. Each executor also copies every table of its database into
+MongoDB Atlas — `executor` into `xorr_base_sepolia`, `executor-fork` into `xorr_base_fork` — on a
+schedule, verified row by row (`server/src/db/mongo-mirror.ts`). The copy runs inside the executors
+because `Postgres-gWN2` and `Postgres-WPy4` have no public address.
+
+- **Settings**, on each executor service: `MONGODB_URI`, `MONGO_MIRROR_DB` (no default, on purpose: a
+  local executor loads the same `.env`, and must not copy a laptop over a deployment's copy) and
+  `MONGO_MIRROR_INTERVAL_MIN` (30 unless set; `0` stops the schedule). Without the first two nothing is
+  copied.
+- **How a copy works.** One REPEATABLE READ snapshot. Each table is written to `<table>__incoming`,
+  read back and hashed on both sides, and replaces the previous collection only when the sorted row
+  hashes agree; a table that disagrees keeps its last good copy and the run fails. `_mirror` holds each
+  table's row count, columns and digest; `_mirror_runs` holds every run, failed ones included.
+- **Copy now, or see the last copy:** `POST /ops/mirror` and `GET /ops/mirror` with the operator token.
+- **Check a copy from here**, from MongoDB alone — every table's count and digest against what Postgres
+  had:
+
+  ```bash
+  cd server && MONGO_MIRROR_DB=xorr_base_fork npm run mirror:mongo -- --verify-only
+  ```
+
+- **Copy the local database** into `xorr_local`: `cd server && npm run mirror:mongo`.
+- **Precision.** A MongoDB date keeps milliseconds and Postgres keeps microseconds, so timestamp fields
+  are dates to the millisecond while a primary key keeps the exact timestamp text. A numeric too wide
+  for Decimal128's 34 digits — a uint256 — is kept as exact decimal text.
+- **A copy failing with a server-selection timeout** is Atlas refusing the connection: its Network
+  Access list has to admit the executors' outbound addresses.

@@ -13,6 +13,7 @@
     "setup:fork": "tsx src/fork-bootstrap.ts",
     "rebuild:fork": "tsx src/fork-bootstrap.ts && set -a && . \"./${FORK_ENV_FILE:-.env.fork}\" && set +a && tsx src/fork-grant.ts",
     "ship:makers": "tsx src/fork/ship-makers.ts",
+    "mirror:mongo": "tsx src/db/mirror-to-mongo.ts",
     "readiness:base": "XORR_CHAIN=base ALLOW_MAINNET=yes tsx src/base-readiness.ts"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "dotenv": "^17.2.3",
     "hono": "^4.10.7",
     "jose": "^6.2.12",
+    "mongodb": "^6.21.0",
     "pg": "^8.16.3",
     "viem": "^2.56.3",
     "zod": "^4.1.12"

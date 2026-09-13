@@ -18,6 +18,7 @@ import { crosschainRoutes } from './routes/crosschain.js';
 import { tokenRoutes } from './routes/tokens.js';
 import { historyRoutes } from './routes/history.js';
 import { limitOrderRoutes } from './routes/limit-orders.js';
+import { mirrorRoutes, startMirrorSchedule } from './routes/mirror.js';
 import { idempotency } from './http/idempotency.js';
 import { rateLimit } from './http/rate-limit.js';
 import { requestId, currentRequestId, log } from './http/request-id.js';
@@ -173,6 +174,7 @@ app.route('/', crosschainRoutes);
 app.route('/', tokenRoutes);
 app.route('/', historyRoutes);
 app.route('/', limitOrderRoutes);
+app.route('/', mirrorRoutes);
 
 const port = Number(process.env.PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port });
@@ -191,6 +193,8 @@ const server = serve({ fetch: app.fetch, port });
  */
 const DRAIN_MS = 10_000;
 let shuttingDown = false;
+/** The MongoDB copy's schedule, when this deployment has one (routes/mirror.ts). Declared here so shutdown can stop it. */
+let stopMirror: (() => void) | undefined;
 
 async function shutdown(signal: string) {
   if (shuttingDown) return;
@@ -198,6 +202,7 @@ async function shutdown(signal: string) {
   log.info(`${signal} — draining for up to ${DRAIN_MS}ms`);
 
   if (scheduler) clearInterval(scheduler);
+  stopMirror?.();
   server.close();
 
   const deadline = Date.now() + DRAIN_MS;
@@ -239,3 +244,6 @@ const scheduler = process.env.SCHEDULER !== 'off' ? startScheduler() : undefined
 
 // Populate the price and chart caches before anyone opens a screen.
 warmMarketCache();
+
+// Copy the database into MongoDB Atlas on a schedule, where a destination is configured.
+stopMirror = startMirrorSchedule();
