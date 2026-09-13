@@ -14,7 +14,7 @@ import { publicClient } from './client.js';
 import { ADDRESSES } from './chains.js';
 import { TOKENS } from '../venues/oneinch.js';
 import { priceOf } from '../market/prices.js';
-import { usdcReserve } from '../market/yield.js';
+import { aavePoolIsDeployedHere, usdcReserve } from '../market/yield.js';
 
 export type Holding = {
   symbol: string;
@@ -129,6 +129,14 @@ export async function holdings(owner: Address): Promise<Holding[]> {
  * ask" instead of showing both as zero.
  */
 export async function suppliedUsd(owner: Address): Promise<number> {
+  /*
+   * Where there is no pool, say so before asking mainnet about one (PLAN.md 2.4).
+   *
+   * The reserve comes from Base mainnet over the free public endpoint, and it was asked first — so on
+   * Sepolia every balance paid that round trip, and whatever back-off the endpoint's throttle imposed,
+   * only to find the aToken has no code here and answer 0.
+   */
+  if (!(await aavePoolIsDeployedHere())) return 0;
   const reserve = await usdcReserve();
   const code = await publicClient.getCode({ address: reserve.aToken }).catch(() => undefined);
   if ((code?.length ?? 0) <= 4) return 0;

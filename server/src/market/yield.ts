@@ -112,7 +112,34 @@ export type UsdcReserve = {
   pool: Address;
 };
 
-export async function usdcReserve(): Promise<UsdcReserve> {
+/**
+ * The reserve, reused for a minute (PLAN.md 2.4).
+ *
+ * It is a read of the free public Base endpoint behind a throttle guard that backs off and retries,
+ * and the balance, yield and tier-4 paths each asked for it again on every request — so every screen
+ * paid the round trip, and any back-off the endpoint imposed. A lending rate a minute old is still the
+ * rate. A read that failed is not kept, and `maxAgeMs = 0` asks now, for a caller whose job is to prove
+ * the read works.
+ */
+const RESERVE_TTL_MS = 60_000;
+let reserveCache: { at: number; value: Promise<UsdcReserve> } | undefined;
+
+export function usdcReserve(maxAgeMs = RESERVE_TTL_MS): Promise<UsdcReserve> {
+  if (reserveCache && Date.now() - reserveCache.at < maxAgeMs) return reserveCache.value;
+  const entry = { at: Date.now(), value: readUsdcReserve() };
+  reserveCache = entry;
+  entry.value.catch(() => {
+    if (reserveCache === entry) reserveCache = undefined;
+  });
+  return entry.value;
+}
+
+/** Testing only. */
+export function clearReserveCache(): void {
+  reserveCache = undefined;
+}
+
+async function readUsdcReserve(): Promise<UsdcReserve> {
   /*
    * Through the throttle guard, because this reads the FREE public Base endpoint.
    *
@@ -177,9 +204,11 @@ export async function usdcSupplyYield(): Promise<SupplyYield> {
  * property of the deployment, not of the moment — a pool does not appear mid-process.
  */
 let deployedHere: boolean | undefined;
-async function aavePoolIsDeployedHere(): Promise<boolean> {
+export async function aavePoolIsDeployedHere(): Promise<boolean> {
   if (deployedHere !== undefined) return deployedHere;
-  const code = await publicClient.getCode({ address: AAVE_V3_POOL }).catch(() => undefined);
+  // A read that fails throws and is not remembered. Caching it as "no pool" would have hidden a
+  // fork's supplied USDC from its balance for the life of the process.
+  const code = await publicClient.getCode({ address: AAVE_V3_POOL });
   deployedHere = (code?.length ?? 0) > 4;
   return deployedHere;
 }

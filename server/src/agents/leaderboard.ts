@@ -8,6 +8,7 @@
  */
 import { query } from '../db/index.js';
 import { priceOf } from '../market/prices.js';
+import { personaForKind } from './attribution.js';
 
 export type LeaderboardRow = {
   id: string;
@@ -28,39 +29,45 @@ const AGENTS = [
   { id: 'drawdown-guard', name: 'Drawdown Guard', role: 'Cuts risk when the book bleeds', c1: '#B58CFF', c2: '#7A45E0' },
 ];
 
-type RunRow = { agent: string | null; symbol: string; usd: string; units: string; price: string };
+type RunRow = { kind: string; persona_id: string | null; symbol: string; usd: string; units: string; price: string };
 
 export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
   const runs = await query<RunRow>(
-    `SELECT a.agent, s.symbol, r.usd, r.units, r.price
+    /*
+     * Credited by the rule the trail itself records (PLAN.md 2.2): the agent that owns the strategy
+     * when it has one, otherwise the persona that runs its kind (`personaForKind`). It was found by
+     * searching the wallet's audit log for each run's id inside JSON — a scan of the trail per run —
+     * and a run that search missed was credited to Yield Keeper by default.
+     */
+    `SELECT s.kind, ag.persona_id, s.symbol, r.usd, r.units, r.price
      FROM strategy_runs r
      JOIN strategies s ON s.id = r.strategy_id
-     LEFT JOIN LATERAL (
-       SELECT al.agent FROM audit_log al
-       WHERE al.wallet_id = s.wallet_id AND al.payload->>'runId' = r.id
-       LIMIT 1
-     ) a ON true
+     LEFT JOIN agents ag ON ag.id = s.agent_id
      WHERE s.wallet_id = $1 AND r.status = 'filled' AND r.started_at > now() - interval '30 days'`,
     [walletId],
   );
 
-  // One price lookup per symbol, not per run.
+  // One price lookup per symbol, not per run — and all of them at once, not one after another.
   const symbols = [...new Set(runs.map((r) => r.symbol))];
   const marks = new Map<string, number>();
-  for (const s of symbols) {
-    try {
-      // A screen, so a short deadline: an unpriced symbol is excluded, not waited for.
-      marks.set(s, await priceOf(s, 3_000));
-    } catch {
-      // No feed for this symbol — its runs are excluded rather than valued at a guess.
-    }
-  }
+  await Promise.all(
+    symbols.map(async (s) => {
+      try {
+        // A screen, so a short deadline: an unpriced symbol is excluded, not waited for.
+        marks.set(s, await priceOf(s, 3_000));
+      } catch {
+        // No feed for this symbol — its runs are excluded rather than valued at a guess.
+      }
+    }),
+  );
 
   const byAgent = new Map<string, { pnl: number; wins: number; trades: number }>();
   for (const r of runs) {
     const mark = marks.get(r.symbol);
     if (mark === undefined) continue;
-    const agent = r.agent ?? 'Yield Keeper';
+    // A run no persona ran — a recurring buy, a rebalance — is on nobody's record.
+    const agent = r.persona_id ?? personaForKind(r.kind);
+    if (!agent) continue;
     const value = Number(r.units) * mark;
     const paid = Number(r.usd);
     const pnl = value - paid;
@@ -72,7 +79,7 @@ export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
   }
 
   return AGENTS.map((a) => {
-    const acc = byAgent.get(a.name) ?? { pnl: 0, wins: 0, trades: 0 };
+    const acc = byAgent.get(a.id) ?? { pnl: 0, wins: 0, trades: 0 };
     const win = acc.trades > 0 ? Math.round((acc.wins / acc.trades) * 100) : 0;
     return {
       ...a,

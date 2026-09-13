@@ -8,7 +8,7 @@
 import type { Context, Next } from 'hono';
 import { log } from '../http/request-id.js';
 import { UnauthorizedError, verifyToken, type AuthedUser } from './privy.js';
-import { agentFor, can, operatorFor, type Principal, type Scope } from './agentKeys.js';
+import { agentFor, can, isAgentKey, operatorFor, type Principal, type Scope } from './agentKeys.js';
 
 /**
  * Routes reachable without a token. Deliberately tiny.
@@ -92,7 +92,8 @@ export async function authMiddleware(c: Context, next: Next) {
    */
   const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/i, '').trim();
   if (bearer) {
-    const principal = operatorFor(bearer) ?? (await agentFor(bearer));
+    // Only a token shaped like an agent key is looked up as one; a Privy session never is.
+    const principal = operatorFor(bearer) ?? (isAgentKey(bearer) ? await agentFor(bearer) : undefined);
     if (principal) {
       c.set('principal', principal);
       return next();

@@ -449,7 +449,8 @@ export async function runChecks(owner?: Address): Promise<VerifyReport> {
       claim: 'The idle-cash rate is currentLiquidityRate read from the Aave v3 Pool on Base.',
       how: 'getReserveData(USDC) on 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
       run: async () => {
-        const r = await usdcReserve();
+        // Asked now: this check proves the read works, which a cached answer would not.
+        const r = await usdcReserve(0);
         return `${(r.apy * 100).toFixed(2)}% a year, aToken ${r.aToken}`;
       },
     },

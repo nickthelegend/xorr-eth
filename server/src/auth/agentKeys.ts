@@ -52,9 +52,23 @@ export function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+/** What every agent key starts with. */
+export const AGENT_KEY_PREFIX = 'xagt_';
+
 /** `xagt_` + 32 random bytes. Prefixed so a leaked one is recognisable in a log or a repo. */
 export function mintToken(): string {
-  return `xagt_${crypto.randomBytes(32).toString('hex')}`;
+  return `${AGENT_KEY_PREFIX}${crypto.randomBytes(32).toString('hex')}`;
+}
+
+/**
+ * Whether a bearer token could be an agent key at all (PLAN.md 2.1).
+ *
+ * Every key minted here has carried the prefix since agent keys existed, so a token without it is
+ * not one — and looking it up anyway cost every Privy session a write to `agent_keys` (`agentFor`
+ * stamps `last_seen_at`) before its own verification began.
+ */
+export function isAgentKey(token: string): boolean {
+  return token.startsWith(AGENT_KEY_PREFIX);
 }
 
 /**

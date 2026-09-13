@@ -4,7 +4,7 @@
  * The chain is the source of truth for what the bot may spend. Our database caches it for display,
  * and every enforcement decision re-reads the contract rather than trusting that cache.
  */
-import { parseUnits, formatUnits, type Address, type Hex } from 'viem';
+import { parseUnits, formatUnits, type Address, type ContractFunctionParameters, type Hex } from 'viem';
 import { publicClient, walletClient, delegateAccount } from './client.js';
 import { ADDRESSES, SETTLEMENT_VENUES } from './chains.js';
 import 'dotenv/config';
@@ -201,29 +201,62 @@ export function unitsToUsd(units: bigint): number {
   return Number(formatUnits(units, USD_DECIMALS));
 }
 
-/** Read the live policy. Never trust our own database for an enforcement decision. */
-export async function readPolicy(owner: Address): Promise<OnChainPolicy | null> {
-  const [policy, remaining, spent] = await Promise.all([
-    publicClient.readContract({
-      address: DELEGATION_ADDRESS,
-      abi: DELEGATION_ABI,
-      functionName: 'policyOf',
-      args: [owner],
-    }),
-    publicClient.readContract({
-      address: DELEGATION_ADDRESS,
-      abi: DELEGATION_ABI,
-      functionName: 'remainingToday',
-      args: [owner],
-    }),
-    publicClient.readContract({
-      address: DELEGATION_ADDRESS,
-      abi: DELEGATION_ABI,
-      functionName: 'spentToday',
-      args: [owner],
-    }),
-  ]);
+/** The three reads a permission is made of. */
+function policyCalls(owner: Address) {
+  return [
+    { address: DELEGATION_ADDRESS, abi: DELEGATION_ABI, functionName: 'policyOf', args: [owner] },
+    { address: DELEGATION_ADDRESS, abi: DELEGATION_ABI, functionName: 'remainingToday', args: [owner] },
+    { address: DELEGATION_ADDRESS, abi: DELEGATION_ABI, functionName: 'spentToday', args: [owner] },
+  ] as const;
+}
 
+/**
+ * Read the live policy. Never trust our own database for an enforcement decision.
+ *
+ * One `eth_call` through Multicall3 rather than three (PLAN.md 2.4): every balance, limit check and
+ * run paid three round trips for one permission. `allowFailure: false` keeps the old contract — any
+ * read that fails throws, so a failure can never come back as "no permission".
+ */
+export async function readPolicy(owner: Address): Promise<OnChainPolicy | null> {
+  const [policy, remaining, spent] = await publicClient.multicall({
+    allowFailure: false,
+    contracts: policyCalls(owner),
+  });
+  return toPolicy(policy, remaining, spent);
+}
+
+/**
+ * The permission and the venues it allows, in one read (PLAN.md 2.5).
+ *
+ * The permission screen asked for the policy, then for the venue list — four calls in two rounds for
+ * one screen. A failed read throws, as in `readPolicy`: an empty venue list must only ever mean the
+ * user allowed nothing.
+ */
+export async function readPolicyAndVenues(
+  owner: Address,
+): Promise<{ policy: OnChainPolicy | null; venues: Address[] }> {
+  // Widened on purpose: these are different functions of one ABI, which viem's per-call inference
+  // cannot hold in a single array. Each result is typed back below by its position.
+  const contracts: ContractFunctionParameters[] = [
+    ...policyCalls(owner),
+    ...SETTLEMENT_VENUES.map((venue) => ({
+      address: DELEGATION_ADDRESS,
+      abi: DELEGATION_ABI,
+      functionName: 'isVenueAllowed',
+      args: [owner, venue],
+    })),
+  ];
+  const results = (await publicClient.multicall({ allowFailure: false, contracts })) as unknown[];
+  const [policy, remaining, spent, ...allowed] = results;
+  return {
+    policy: toPolicy(policy as PolicyTuple, remaining as bigint, spent as bigint),
+    venues: SETTLEMENT_VENUES.filter((_, i) => allowed[i] === true) as Address[],
+  };
+}
+
+type PolicyTuple = readonly [Address, bigint, bigint, boolean];
+
+function toPolicy(policy: PolicyTuple, remaining: bigint, spent: bigint): OnChainPolicy | null {
   const [delegate, dailyCap, expiresAt, revoked] = policy;
   if (delegate === '0x0000000000000000000000000000000000000000') return null;
 

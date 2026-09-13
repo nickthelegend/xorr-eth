@@ -8,7 +8,7 @@
  * Privy is also the embedded-wallet provider, which means the user identity and the wallet that
  * signs are the same object — there is no separate account system to keep in sync.
  */
-import { PrivyClient } from '@privy-io/server-auth';
+import { PrivyClient, type User } from '@privy-io/server-auth';
 import 'dotenv/config';
 
 const APP_ID = process.env.PRIVY_APP_ID;
@@ -53,6 +53,57 @@ export class UnauthorizedError extends Error {
 }
 
 /**
+ * Privy's record of an account, reused for five minutes (PLAN.md 2.1).
+ *
+ * Every authenticated request asked Privy for the user by id — a round trip to an endpoint Privy's
+ * own SDK marks as strictly rate limited — to read a wallet list two routes use. The token is still
+ * verified on every request, locally, against Privy's key; only the account record is reused. That
+ * record can be up to five minutes old, so a route about to refuse an address it did not find asks
+ * again with `freshWallets` first: a wallet linked a moment ago is never turned away by an old copy.
+ *
+ * A failed read is not kept. It means "could not ask", and the next request asks.
+ */
+const USER_TTL_MS = 5 * 60_000;
+const USER_CACHE_MAX = 10_000;
+const users = new Map<string, { at: number; user: Promise<User | null> }>();
+
+function readUser(userId: string, fresh = false): Promise<User | null> {
+  const hit = users.get(userId);
+  if (!fresh && hit && Date.now() - hit.at < USER_TTL_MS) return hit.user;
+  const entry = { at: Date.now(), user: privy.getUser(userId).catch(() => null) };
+  users.delete(userId);
+  if (users.size >= USER_CACHE_MAX) users.delete(users.keys().next().value as string);
+  users.set(userId, entry);
+  void entry.user.then((u) => {
+    if (u === null && users.get(userId) === entry) users.delete(userId);
+  });
+  return entry.user;
+}
+
+function walletsOf(user: User | null): LinkedWallet[] | undefined {
+  if (!user) return undefined;
+  return (user.linkedAccounts ?? []).flatMap((a) => {
+    const w = a as { type?: string; address?: unknown; chainType?: string; walletClientType?: string };
+    return w.type === 'wallet' && w.chainType === 'ethereum' && typeof w.address === 'string'
+      ? [{ address: w.address, embedded: w.walletClientType === 'privy' }]
+      : [];
+  });
+}
+
+/**
+ * The account's wallets as Privy lists them now rather than as cached — for a route about to refuse
+ * an address it did not find. Replaces the cached record as a side effect.
+ */
+export async function freshWallets(userId: string): Promise<LinkedWallet[] | undefined> {
+  return walletsOf(await readUser(userId, true));
+}
+
+/** Testing only. */
+export function clearUserCache(): void {
+  users.clear();
+}
+
+/**
  * Verify a Privy access token and return the user it belongs to.
  * Throws rather than returning null: a route that forgets to check a null cannot leak data.
  */
@@ -69,15 +120,8 @@ export async function verifyToken(authorization: string | undefined): Promise<Au
     );
   }
 
-  const user = await privy.getUser(claims.userId).catch(() => null);
-  const wallets: LinkedWallet[] | undefined = user
-    ? (user.linkedAccounts ?? []).flatMap((a) => {
-        const w = a as { type?: string; address?: unknown; chainType?: string; walletClientType?: string };
-        return w.type === 'wallet' && w.chainType === 'ethereum' && typeof w.address === 'string'
-          ? [{ address: w.address, embedded: w.walletClientType === 'privy' }]
-          : [];
-      })
-    : undefined;
+  const user = await readUser(claims.userId);
+  const wallets = walletsOf(user);
   const email = user?.linkedAccounts?.find(
     (a): a is typeof a & { address: string } =>
       a.type === 'email' && typeof (a as { address?: unknown }).address === 'string',

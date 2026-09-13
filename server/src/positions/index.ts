@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { query } from '../db/index.js';
+import { one, query } from '../db/index.js';
 import { priceOf } from '../market/prices.js';
 
 export type PositionRow = {
@@ -212,46 +212,66 @@ export async function listPositions(walletId: string): Promise<Position[]> {
     [walletId],
   );
 
-  const out: Position[] = [];
-  for (const r of rows) {
-    const units = Number(r.units);
-    const cost = Number(r.cost_usd);
-    const entry = units > 0 ? cost / units : 0;
-    const leverage = Number(r.leverage);
+  const marks = await marksFor(rows.map((r) => r.symbol));
+  return rows.map((r) => toPosition(r, marks.get(r.symbol)));
+}
 
-    let mark = 0;
-    let feed: 'live' | 'unavailable' = 'live';
-    try {
-      mark = await priceOf(r.symbol);
-    } catch {
-      feed = 'unavailable';
-    }
+/**
+ * A screen's patience for a mark. A symbol whose feed misses it reads `feed: 'unavailable'` — the
+ * answer a symbol with no feed already gets — instead of holding up the whole book.
+ */
+const MARK_DEADLINE_MS = 4_000;
 
-    const value = units * mark;
-    const unrealised = feed === 'live' ? value - cost : 0;
-    out.push({
-      id: r.id,
-      symbol: r.symbol,
-      side: r.side,
-      leverage,
-      entry,
-      mark,
-      // Spot cannot be liquidated. Reporting 0 is honest — the screen hides the row rather than
-      // inventing a liquidation price for a position that has none.
-      liquidation: leverage > 1 ? entry * (1 - 0.92 / leverage) : 0,
-      notional: value,
-      margin: leverage > 1 ? cost / leverage : cost,
-      unrealised,
-      unrealisedPct: cost > 0 && feed === 'live' ? (unrealised / cost) * 100 : 0,
-      units,
-      // Spot carries no funding. A perp position would accrue it; there are none yet.
-      fundingPaid: 0,
-      feed,
-      realised: Number(r.realised_usd),
-      unitsSold: Number(r.units_sold),
-    });
-  }
-  return out;
+/**
+ * One mark per symbol, all asked at once (PLAN.md 2.3).
+ *
+ * The book was priced a row at a time, each lookup waiting on the one before and none with a
+ * deadline, so a cold feed made the Portfolio screen wait on every holding in turn.
+ */
+async function marksFor(symbols: string[]): Promise<Map<string, number>> {
+  const marks = new Map<string, number>();
+  await Promise.all(
+    [...new Set(symbols)].map(async (symbol) => {
+      try {
+        marks.set(symbol, await priceOf(symbol, MARK_DEADLINE_MS));
+      } catch {
+        // No feed, or none in time: left out, so the row says `unavailable` rather than a guess.
+      }
+    }),
+  );
+  return marks;
+}
+
+/** A ledger row valued at `mark`, or reported unpriced when there is no mark. */
+function toPosition(r: PositionRow, mark: number | undefined): Position {
+  const units = Number(r.units);
+  const cost = Number(r.cost_usd);
+  const entry = units > 0 ? cost / units : 0;
+  const leverage = Number(r.leverage);
+  const feed: 'live' | 'unavailable' = mark === undefined ? 'unavailable' : 'live';
+  const value = units * (mark ?? 0);
+  const unrealised = feed === 'live' ? value - cost : 0;
+  return {
+    id: r.id,
+    symbol: r.symbol,
+    side: r.side,
+    leverage,
+    entry,
+    mark: mark ?? 0,
+    // Spot cannot be liquidated. Reporting 0 is honest — the screen hides the row rather than
+    // inventing a liquidation price for a position that has none.
+    liquidation: leverage > 1 ? entry * (1 - 0.92 / leverage) : 0,
+    notional: value,
+    margin: leverage > 1 ? cost / leverage : cost,
+    unrealised,
+    unrealisedPct: cost > 0 && feed === 'live' ? (unrealised / cost) * 100 : 0,
+    units,
+    // Spot carries no funding. A perp position would accrue it; there are none yet.
+    fundingPaid: 0,
+    feed,
+    realised: Number(r.realised_usd),
+    unitsSold: Number(r.units_sold),
+  };
 }
 
 /**
@@ -262,8 +282,13 @@ export async function listPositions(walletId: string): Promise<Position[]> {
  * tap on something else. PLAN.md 1.7.
  */
 export async function getPosition(walletId: string, id: string): Promise<Position | null> {
-  const all = await listPositions(walletId);
-  return all.find((p) => p.id === id) ?? null;
+  // One row, priced once. It priced the whole book to keep one entry of it (PLAN.md 2.3).
+  const row = await one<PositionRow>(
+    `SELECT * FROM positions WHERE wallet_id=$1 AND id=$2 AND units > 0.000001`,
+    [walletId, id],
+  );
+  if (!row) return null;
+  return toPosition(row, (await marksFor([row.symbol])).get(row.symbol));
 }
 
 /**

@@ -31,14 +31,15 @@ import { delegateAccount } from '../evm/client.js';
 import { basenameOf } from '../evm/basename.js';
 import { dripGasIfNeeded } from '../evm/gasDrip.js';
 import {
-  allowedVenues,
   delegatePublicKey,
   readPolicy,
+  readPolicyAndVenues,
   waitForTx,
   DELEGATION_ADDRESS,
 } from '../evm/delegation.js';
 import { requireUser } from '../auth/middleware.js';
 import { bindWallet, findLinkedWallet } from '../auth/walletBinding.js';
+import { freshWallets } from '../auth/privy.js';
 import { currentWallet, requireWallet, type WalletRow } from './wallet-context.js';
 import { erc20Abi, formatUnits, getAddress } from 'viem';
 import type { Address, Hex } from 'viem';
@@ -111,8 +112,15 @@ routes.post('/wallet/create', async (c) => {
    * This used to fall back to `body.address`, which let a request name any wallet at all and — through
    * the upsert below it — take the row from whoever held it. See `auth/walletBinding.ts`.
    */
-  if (!user.wallets) return identityUnavailable(c);
-  const embedded = user.wallets.find((w) => w.embedded);
+  // The account record can be minutes old (see `verifyToken`), and a wallet Privy made seconds ago is
+  // exactly what this route exists for — so ask again before saying there is none.
+  let wallets = user.wallets;
+  let embedded = wallets?.find((w) => w.embedded);
+  if (!embedded) {
+    wallets = await freshWallets(user.userId);
+    embedded = wallets?.find((w) => w.embedded);
+  }
+  if (!wallets) return identityUnavailable(c);
   if (!embedded) {
     return c.json(
       {
@@ -194,8 +202,15 @@ routes.post('/wallet/connect', async (c) => {
    * user could take any wallet row — and with it trade, close and flatten on that owner's permission.
    * Privy is the authority on which wallets an account has; a request body is not.
    */
-  if (!user.wallets) return identityUnavailable(c);
-  const linked = findLinkedWallet(user.wallets, body.address);
+  // Missing from the cached account record is not yet "not yours": a wallet linked a moment ago
+  // postdates it, so ask Privy again before refusing.
+  let wallets = user.wallets;
+  let linked = wallets && findLinkedWallet(wallets, body.address);
+  if (!linked) {
+    wallets = await freshWallets(user.userId);
+    linked = wallets && findLinkedWallet(wallets, body.address);
+  }
+  if (!wallets) return identityUnavailable(c);
   if (!linked) {
     return c.json(
       {
@@ -301,8 +316,11 @@ routes.get('/wallet/balance', async (c) => {
 routes.get('/delegation', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json(null);
-  // `null` is the chain saying there is no permission; a read that failed is a 502, not that.
-  const policy = await readChain('your permission', () => readPolicy(w.address as Address));
+  // `null` is the chain saying there is no permission; a read that failed is a 502, not that. The
+  // venues it allows come back in the same read (PLAN.md 2.5).
+  const { policy, venues: allowed } = await readChain('your permission', () =>
+    readPolicyAndVenues(w.address as Address),
+  );
   if (!policy) return c.json(null);
   /*
    * What the user ACTUALLY allowed, asked of the contract.
@@ -311,9 +329,8 @@ routes.get('/delegation', async (c) => {
    * it wrongly for anyone who granted before a venue was added — the safety screen would have
    * shown them a permission they never gave. The chain knows; ask it.
    */
-  // An empty list here is "you allowed nothing" on the one screen that must be exactly true, so a
-  // failed read cannot be allowed to produce one.
-  const allowed = await readChain('the venues you allowed', () => allowedVenues(w.address as Address));
+  // An empty list here is "you allowed nothing" on the one screen that must be exactly true, so it
+  // comes from the same all-or-nothing read as the policy: a failure is a 502, never an empty list.
   /*
    * Who the two parties actually are, in words.
    *
