@@ -196,6 +196,25 @@ export type Proposal = {
   expiresAt: number;
 };
 
+/**
+ * What deciding a proposal actually did — PLAN.md 1.3.
+ *
+ * Approving used to answer "Filled … Stop set at …" for a trade that never happened. The status is
+ * now the executor's own account of what it did, and `filled` only ever arrives with the transaction
+ * that filled it.
+ */
+export type ProposalDecision = {
+  /** `approve`, `skip` and `expired` also answer a proposal that had already been decided that way. */
+  status: 'filled' | 'blocked' | 'failed' | 'skip' | 'expired' | 'gone' | 'approve';
+  message: string;
+  /** With `filled`: the settling transaction. */
+  signature?: string;
+  orderId?: string;
+  /** The `exit-rules` strategy holding the proposal's stop and target, when one was set. */
+  exitStrategyId?: string | null;
+  reason?: string;
+};
+
 // ── Pivot entities ────────────────────────────────────────────────────────────
 
 export type Wallet = {

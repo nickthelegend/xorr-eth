@@ -6,7 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { fact, voice, type Segment, type ThreadMessage } from './message';
-import type { Proposal } from '../data/types';
+import type { Proposal, ProposalDecision } from '../data/types';
 
 const KEY = 'xorr-thread-v1';
 const PAGE = 30;
@@ -78,35 +78,29 @@ export function proposalMessage(proposalId: string): ThreadMessage {
   return { id: nextId(), at: Date.now(), author: 'bot', type: 'proposal', proposalId };
 }
 
-export function fillMessage(agent: string, units: number, at: number, stop: number): ThreadMessage {
-  return {
-    id: nextId(),
-    at: Date.now(),
-    author: 'bot',
-    type: 'fill',
-    agent,
-    outcome: 'filled',
-    segments: [
-      voice('Filled.'),
-      fact(units, 'quantity', 'fill'),
-      voice('SOL at'),
-      fact(at, 'price', 'fill'),
-      voice('. Stop is set at'),
-      fact(stop, 'price', 'order'),
-      voice('.'),
-    ],
-  };
-}
-
-export function declinedMessage(agent: string, symbol: string): ThreadMessage {
-  return {
-    id: nextId(),
-    at: Date.now(),
-    author: 'bot',
-    type: 'declined',
-    agent,
-    segments: [voice(`Skipped. I will not re-propose ${symbol} today.`)],
-  };
+/**
+ * The thread's record of a decision, written from what the executor says it did.
+ *
+ * This file had a `fillMessage` composing "Filled. {units} SOL at {price}. Stop is set at {stop}." —
+ * a fill template for an instrument this app cannot trade, which nothing called. The approve path
+ * wrote its own version of that sentence for a trade that never happened. Now only a `filled` answer
+ * becomes a fill, and every other outcome is shown as what it was. PLAN.md 1.3.
+ */
+export function decisionMessage(agent: string, d: ProposalDecision): ThreadMessage {
+  const base = { id: nextId(), at: Date.now(), author: 'bot' as const, agent, segments: [voice(d.message)] };
+  switch (d.status) {
+    case 'filled':
+      return { ...base, type: 'fill' as const, outcome: 'filled' as const };
+    case 'blocked':
+    case 'failed':
+      return { ...base, type: 'blocked' as const, reason: d.reason ?? d.status };
+    case 'skip':
+      return { ...base, type: 'declined' as const };
+    case 'expired':
+      return expiredMessage();
+    default:
+      return { ...base, type: 'prose' as const };
+  }
 }
 
 export function expiredMessage(): ThreadMessage {

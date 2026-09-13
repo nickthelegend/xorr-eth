@@ -44,9 +44,10 @@ import { mmss } from '@/format';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { renderSegments, type ThreadMessage } from '@/bot/message';
+import { apiReason } from '@/data/apiError';
 import {
   botProse,
-  declinedMessage,
+  decisionMessage,
   expiredMessage,
   proposalMessage,
   useThread,
@@ -55,7 +56,6 @@ import {
 } from '@/bot/thread';
 import { voice } from '@/bot/message';
 import { useTone } from '@/bot/tone';
-import { DEFAULT_BUY } from '@/data/tradable';
 import type { Proposal } from '@/data/types';
 import { AgentRail } from './AgentRail';
 import { Thinking } from './Thinking';
@@ -96,6 +96,8 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
   const scroller = useRef<ScrollView>(null);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
+  /** A decision is on its way to the executor. */
+  const [deciding, setDeciding] = useState(false);
   const { tone } = useTone();
   const {
     messages,
@@ -311,25 +313,38 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
                 key={item.id}
                 proposal={proposal}
                 decided={decided}
+                busy={deciding}
                 onDecide={async (d) => {
-                  setDecided(d);
-                  const res = await repos.bot.decideProposal(proposal!.id, d);
-                  append(
-                    d === 'approve'
-                      ? {
-                          id: `${item.id}-r`,
-                          at: Date.now(),
-                          author: 'bot',
-                          type: 'fill',
-                          agent: agentName,
-                          outcome: 'filled',
-                          segments: [voice(res.message)],
-                        }
-                      : declinedMessage(agentName, DEFAULT_BUY),
-                  );
+                  /*
+                   * Decided once the executor has answered, and shown as what it answered.
+                   *
+                   * This marked the card decided before the request left, then drew a green fill for
+                   * any approve at all — so a refused order, a failed swap and a request that never
+                   * landed all looked like a trade. PLAN.md 1.3.
+                   */
+                  if (!proposal || deciding) return;
+                  setDeciding(true);
+                  try {
+                    const res = await repos.bot.decideProposal(proposal.id, d);
+                    setDecided(d);
+                    append(decisionMessage(agentName, res));
+                  } catch (e) {
+                    const why = apiReason(e);
+                    append(
+                      botProse(agentName, [
+                        voice(
+                          why
+                            ? `${why.replace(/[.\s]*$/, '.')} Nothing was decided, so you can try again.`
+                            : 'That did not reach the executor, so nothing was decided. Try again.',
+                        ),
+                      ]),
+                    );
+                  } finally {
+                    setDeciding(false);
+                  }
                 }}
                 onExpire={() => {
-                  if (decided) return;
+                  if (decided || deciding) return;
                   setDecided('skip');
                   append(expiredMessage());
                 }}
@@ -572,11 +587,14 @@ function Turn({
 function ProposalCard({
   proposal,
   decided,
+  busy,
   onDecide,
   onExpire,
 }: {
   proposal: Proposal | null;
   decided: null | 'approve' | 'skip';
+  /** A decision is in flight: no second tap, which would be a second order request. */
+  busy: boolean;
   onDecide: (d: 'approve' | 'skip') => void;
   onExpire: () => void;
 }) {
@@ -644,7 +662,7 @@ function ProposalCard({
               variant="secondary"
               color={colors.ink70}
               height={size.hit}
-              disabled={expired}
+              disabled={expired || busy}
               onPress={() => onDecide('skip')}
             />
           }
@@ -652,7 +670,7 @@ function ProposalCard({
             <Button
               label="Approve"
               height={size.hit}
-              disabled={expired}
+              disabled={expired || busy}
               onPress={() => onDecide('approve')}
             />
           }

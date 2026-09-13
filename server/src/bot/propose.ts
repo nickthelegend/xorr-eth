@@ -64,7 +64,15 @@ export type ProposalPayload = {
   entry: string;
   stop: string;
   target: string;
+  /**
+   * The numbers approving acts on, as plain decimals — `notional`, `stop` and `target` above are
+   * formatted for reading, and parsing "$2,406.10" back out of a sentence is how a size goes wrong.
+   */
+  usd: string;
+  stopPrice: string;
+  targetPrice: string;
   rationale: string;
+  /** What approving will do. Never what it did: that is the decision's answer. */
   onApprove: string;
   onSkip: string;
 };
@@ -166,6 +174,28 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
   );
   const symbol = strat?.symbol ?? DEFAULT_PROPOSAL_SYMBOL;
 
+  /*
+   * "Skipped. I will not re-propose WETH today." The skip reply promises it, so something must keep it.
+   *
+   * Nothing did. The only check above is for a proposal still open, so the next time the Bot tab
+   * mounted it asked again and could put the trade the user had just turned down straight back in
+   * front of them. "Today" is the UTC day, the unit the daily cap already resets on.
+   */
+  const skipped = await one<{ id: string }>(
+    `SELECT id FROM proposals
+      WHERE wallet_id = $1 AND decision = 'skip' AND payload->>'symbol' = $2
+        AND decided_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+      LIMIT 1`,
+    [walletId, symbol],
+  );
+  if (skipped) {
+    return {
+      created: false,
+      reason: 'skipped_today',
+      detail: `You skipped ${symbol} today, so I will not propose it again until tomorrow (UTC).`,
+    };
+  }
+
   const [price, band] = await Promise.all([priceOf(symbol).catch(() => 0), range(symbol)]);
   if (!price || !band) {
     return { created: false, reason: 'no_market_data', detail: `No live market for ${symbol}.` };
@@ -220,8 +250,15 @@ export async function propose(walletId: string, tone: ToneId = 'dry'): Promise<P
     entry: money(price),
     stop: money(stop),
     target: money(target),
+    usd: String(notional),
+    stopPrice: String(stop),
+    targetPrice: String(target),
     rationale: `Risking ${money(risk * units)} to make ${money(risk * 2 * units)}. Within your ${money(del.dailyCapUsd)} daily cap.`,
-    onApprove: `Filled ${units.toFixed(4)} ${symbol} at ${money(price)}. Stop set at ${money(stop)}.`,
+    /*
+     * This said "Filled 0.0041 WETH at $2,431. Stop set at $2,406." — written before anyone had
+     * approved anything, and then used as the approval's reply while nothing traded. PLAN.md 1.3.
+     */
+    onApprove: `Buys ${money(notional)} of ${symbol} at market through your permission; the stop and target become a real exit on the position.`,
     onSkip: `Skipped. I will not re-propose ${symbol} today.`,
   };
 

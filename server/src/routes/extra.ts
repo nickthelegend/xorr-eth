@@ -16,6 +16,7 @@ import { quote, canonicalSymbol } from '../venues/oneinch.js';
 import { compareVenues } from '../venues/compare.js';
 import { requireUser } from '../auth/middleware.js';
 import { currentWallet } from './wallet-context.js';
+import { armExits, money, placeOrder } from '../executor/order.js';
 import { readPolicy } from '../evm/delegation.js';
 import type { Address } from 'viem';
 import { decide } from '../graph/decide.js';
@@ -286,56 +287,119 @@ extra.post('/proposals', async (c) => {
   return c.json({ id: row!.id, expiresAt: new Date(row!.expires_at).getTime() });
 });
 
+/**
+ * Approve or skip a proposal.
+ *
+ * Approving wrote "Filled 0.0041 WETH at $2,431. Stop set at $2,406." into the thread and the trail —
+ * and traded nothing. No order, no stop, no transaction: a fill that existed only as a sentence, on
+ * the one card in the product that asks permission to spend. PLAN.md 1.3.
+ *
+ * Approving now places the order the card describes through `placeOrder`, the same path as
+ * `POST /orders` — on-chain permission, cap, venue allowlist and trail all apply — and the answer is
+ * what actually happened: a fill with its transaction, or why nothing was placed. When the proposal
+ * named a stop and a target, a real `exit-rules` strategy holds them.
+ */
 extra.post('/proposals/:id/decide', async (c) => {
   const body = z.object({ decision: z.enum(['approve', 'skip']) }).parse(await c.req.json());
   const pid = c.req.param('id');
-  const wid = await walletId(c);
-  if (!wid) return c.json({ error: 'no_wallet' }, 400);
+  const w = await currentWallet(c);
+  if (!w) return c.json({ error: 'no_wallet' }, 400);
 
-  return c.json(
-    await tx(async (client) => {
-      // Idempotent: the UPDATE only matches an undecided, unexpired proposal, so a double-approve
-      // cannot double-fill. PLAN.md 12.10.
-      const res = await client.query<{ id: string; agent: string; payload: Record<string, string> }>(
-        `UPDATE proposals SET decision=$2, decided_at=now()
-         WHERE id=$1 AND decision IS NULL AND expires_at > now()
-         RETURNING id, agent, payload`,
-        [pid, body.decision],
-      );
-      const row = res.rows[0];
-      if (!row) {
-        const existing = await client.query<{ decision: string | null; expires_at: Date }>(
-          `SELECT decision, expires_at FROM proposals WHERE id=$1`,
-          [pid],
-        );
-        const e = existing.rows[0];
-        if (!e) return { message: 'That proposal no longer exists.', status: 'gone' };
-        if (e.decision) return { message: 'That was already decided.', status: e.decision };
-        return {
-          message: 'That proposal expired before you decided. I did not place it.',
-          status: 'expired',
-        };
-      }
+  /*
+   * Decide first, and trade only once the decision has committed.
+   *
+   * Idempotent: the UPDATE matches only an undecided, unexpired proposal belonging to THIS wallet, so
+   * a double approve cannot double-fill (PLAN.md 12.10) and another account's proposal id reads as
+   * gone — it used to match any id at all. The order runs outside the transaction because it waits
+   * on a chain, and a transaction held open across a swap is how a connection pool runs dry.
+   */
+  const decided = await tx(async (client) => {
+    const res = await client.query<{ id: string; agent: string; payload: Record<string, unknown> }>(
+      `UPDATE proposals SET decision = $3, decided_at = now()
+        WHERE id = $1 AND wallet_id = $2 AND decision IS NULL AND expires_at > now()
+        RETURNING id, agent, payload`,
+      [pid, w.id, body.decision],
+    );
+    if (res.rows[0]) return { row: res.rows[0] };
+    const existing = await client.query<{ decision: string | null }>(
+      `SELECT decision FROM proposals WHERE id = $1 AND wallet_id = $2`,
+      [pid, w.id],
+    );
+    const e = existing.rows[0];
+    if (!e) return { answer: { status: 'gone', message: 'That proposal no longer exists.' } };
+    if (e.decision) return { answer: { status: e.decision, message: 'That was already decided.' } };
+    return {
+      answer: { status: 'expired', message: 'That proposal expired before you decided. I did not place it.' },
+    };
+  });
+  if ('answer' in decided) return c.json(decided.answer);
 
-      const message =
-        body.decision === 'approve'
-          ? `Filled ${row.payload.action ?? 'the order'} at ${row.payload.entry ?? 'the quoted price'}. Stop set at ${row.payload.stop ?? 'your level'}.`
-          : `Skipped. I will not re-propose ${row.payload.symbol ?? 'this'} today.`;
+  const { row } = decided;
+  const text = (key: string) => (typeof row.payload[key] === 'string' ? (row.payload[key] as string) : '');
+  const symbol = text('symbol') ? canonicalSymbol(text('symbol')) : '';
+  const record = (detail: string, kind: 'trade' | 'block', payload: Record<string, unknown> = {}) =>
+    append({
+      walletId: w.id,
+      agent: row.agent,
+      action: body.decision === 'approve' ? 'Approved a proposal' : 'Skipped a proposal',
+      detail,
+      kind,
+      payload: { proposalId: row.id, ...payload },
+    });
 
-      await append(
-        {
-          walletId: wid,
-          agent: row.agent,
-          action: body.decision === 'approve' ? 'Approved a proposal' : 'Skipped a proposal',
-          detail: message,
-          kind: body.decision === 'approve' ? 'trade' : 'block',
-          payload: { proposalId: row.id },
-        },
-        client,
-      );
-      return { message, status: body.decision };
-    }),
-  );
+  if (body.decision === 'skip') {
+    const message = `Skipped. I will not re-propose ${symbol || 'this'} today.`;
+    await record(message, 'block');
+    return c.json({ status: 'skip', message });
+  }
+
+  const usd = Number(text('usd'));
+  if (!symbol || !(usd > 0)) {
+    const message = 'That proposal did not say how much to buy, so I placed nothing. Ask me for a fresh one.';
+    await record(message, 'block', { reason: 'no_size' });
+    return c.json({ status: 'blocked', reason: 'no_size', message });
+  }
+
+  const order = await placeOrder(w, symbol, usd, `${money(usd)} of ${symbol}, approved`);
+  if (!order.placed) {
+    const message = `I placed nothing. ${order.refusal.detail}`;
+    await record(message, 'block', { reason: order.refusal.reason });
+    return c.json({ status: 'blocked', reason: order.refusal.reason, message });
+  }
+
+  const { outcome, orderId } = order;
+  if (outcome.status !== 'filled') {
+    const status = outcome.status === 'failed' ? 'failed' : 'blocked';
+    const message =
+      outcome.status === 'blocked'
+        ? `I placed nothing. ${outcome.detail}`
+        : outcome.status === 'failed'
+          ? `The order did not go through. ${outcome.error}`
+          : 'I placed nothing: there was nothing to do.';
+    await record(message, 'block', { orderId, runStatus: outcome.status });
+    return c.json({ status, message, orderId });
+  }
+
+  const exits = await armExits(w, {
+    symbol,
+    entryPrice: outcome.price,
+    stopPrice: Number(text('stopPrice')),
+    targetPrice: Number(text('targetPrice')),
+  });
+  const message = `Bought ${outcome.units.toFixed(4)} ${symbol} at ${money(outcome.price)}. ${exits.sentence}`;
+  await record(message, 'trade', {
+    orderId,
+    runId: outcome.runId,
+    signature: outcome.signature,
+    exitStrategyId: exits.strategyId,
+  });
+  return c.json({
+    status: 'filled',
+    message,
+    orderId,
+    signature: outcome.signature,
+    exitStrategyId: exits.strategyId,
+  });
 });
 
 // ── The bot's voice ──────────────────────────────────────────────────────────

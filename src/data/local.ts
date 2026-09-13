@@ -37,6 +37,7 @@ import type {
   Position,
   PrivyPolicyView,
   Proposal,
+  ProposalDecision,
   Sleeve,
   Strategy,
   Timeframe,
@@ -259,7 +260,7 @@ export const LocalRepositories: Repositories = {
     async decideProposal(id, decision) {
       // A decision must reach the server or it did not happen. Reporting a local "filled" for a
       // request that never landed is the worst possible lie on this screen.
-      return api.post<{ message: string }>(`/proposals/${id}/decide`, { decision });
+      return api.post<ProposalDecision>(`/proposals/${id}/decide`, { decision });
     },
     async backtest(agentId, lookback): Promise<BacktestResult> {
       /*

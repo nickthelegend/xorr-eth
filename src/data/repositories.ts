@@ -19,6 +19,7 @@ import type {
   Position,
   PrivyPolicyView,
   Proposal,
+  ProposalDecision,
   Sleeve,
   Strategy,
   Timeframe,
@@ -65,7 +66,8 @@ export interface BotRepository {
    * product. The thread renders that decline rather than sitting empty.
    */
   generateProposal(): Promise<{ proposal: Proposal | null; declined?: string }>;
-  decideProposal(id: string, decision: 'approve' | 'skip'): Promise<{ message: string }>;
+  /** Approve places the order for real; the answer says what happened. See `ProposalDecision`. */
+  decideProposal(id: string, decision: 'approve' | 'skip'): Promise<ProposalDecision>;
   backtest(agentId: string, lookback: BacktestResult['lookback']): Promise<BacktestResult>;
   leaderboard(): Promise<Agent[]>;
   /**

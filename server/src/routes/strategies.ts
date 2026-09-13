@@ -34,6 +34,7 @@ import { CHAIN_KEY } from '../evm/chains.js';
 import { equitiesFunctional, isStock } from '../venues/stocks.js';
 import { readPolicy } from '../evm/delegation.js';
 import type { Address } from 'viem';
+import { placeOrder } from '../executor/order.js';
 import { currentWallet, requireWallet, type WalletRow } from './wallet-context.js';
 
 export const strategyRoutes = new Hono();
@@ -392,78 +393,18 @@ for (const [path, to] of [
  * exactly the risk the cap describes and exactly what the kill switch ends in one tap. It
  * cannot withdraw, cannot name a destination, and cannot pick a price.
  */
-/** The order's own label. `toLocaleString` so a four-figure order keeps its separator. */
-function money(usd: number): string {
-  return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-}
-
 const OrderInput = z.object({
   symbol: z.string().min(1).max(12),
   usd: z.number().positive().max(1_000_000),
 });
 
+/** One order, placed now. The path itself — permission, one-shot row, run — is `placeOrder`. */
 strategyRoutes.post('/orders', async (c) => {
   const w = await requireWallet(c);
   const body = OrderInput.parse(await c.req.json());
-  // Equities are `NVDAc`/`TSLAc`; uppercasing loses the suffix and the venue lookup misses.
-  const symbol = canonicalSymbol(body.symbol);
-
-  if (!VENUE_TOKENS[symbol]) {
-    return c.json(
-      {
-        status: 'blocked',
-        reason: 'not_tradable',
-        detail: `${symbol} cannot be settled on ${CHAIN_KEY}, so there is no order to place.`,
-      },
-      409,
-    );
-  }
-
-  // The same on-chain permission check `/strategies` does at creation. Read from the CHAIN:
-  // absent permission has to mean refuse, not allow.
-  const policy = await readPolicy(w.address as Address);
-  if (!policy || policy.revoked) {
-    return c.json(
-      {
-        status: 'blocked',
-        reason: 'no_delegation',
-        detail: 'No active trading permission on-chain. Grant one before placing an order.',
-      },
-      409,
-    );
-  }
-  if (policy.expiresAt <= Date.now()) {
-    return c.json(
-      {
-        status: 'blocked',
-        reason: 'delegation_expired',
-        detail: 'The trading permission has expired. Renew it before placing an order.',
-      },
-      409,
-    );
-  }
-
-  // A one-shot `buy`: no cadence, so `advance()` never reschedules it.
-  const row = await one<StrategyRow>(
-    `INSERT INTO strategies (id, wallet_id, kind, state, label, symbol, params, cadence, next_run_at, daily_allocation_usd)
-     VALUES ($1,$2,'buy','live',$3,$4,$5,NULL,NULL,$6) RETURNING *`,
-    [
-      randomUUID(),
-      w.id,
-      `${money(body.usd)} of ${symbol}`,
-      symbol,
-      JSON.stringify({ usd: body.usd, manual: true }),
-      body.usd,
-    ],
-  );
-
-  const outcome = await runStrategy(row!);
-
-  // Retire it either way. A one-shot that stays `live` would sit on the strategy list
-  // holding allowance against the cap for a trade that has already happened.
-  await query(`UPDATE strategies SET state='ended' WHERE id=$1`, [row!.id]);
-
-  return c.json({ ...outcome, orderId: row!.id }, httpStatusFor(outcome));
+  const order = await placeOrder(w, body.symbol, body.usd);
+  if (!order.placed) return c.json(order.refusal, 409);
+  return c.json({ ...order.outcome, orderId: order.orderId }, httpStatusFor(order.outcome));
 });
 
 /**
