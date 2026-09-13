@@ -51,7 +51,7 @@ import { priceOf } from '../market/prices.js';
 import { totalValueUsd } from '../evm/balances.js';
 import { TOKENS } from '../venues/oneinch.js';
 import { publicClient } from '../evm/client.js';
-import { STOCKS, isStock } from '../venues/stocks.js';
+import { STOCKS, isStock, equitiesFunctional } from '../venues/stocks.js';
 import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
 import { PUSH_KINDS } from '../notifications/push.js';
 import { SNAPSHOT_EVERY_MS, historySince, listSnapshots, snapshotWallet, thinPoints } from '../portfolio/snapshots.js';
@@ -471,16 +471,18 @@ async function approvableTokens(): Promise<{ symbol: string; address: Address }[
    * The user would then have granted a permission that could never pull the token it spends.
    *
    * `ADDRESSES` follows `XORR_CHAIN`, so this is what the delegation will actually be asked to
-   * move. The equities are added only where they exist, which `IS_BASE_MAINNET_STATE` already
-   * answers and `getCode` then confirms.
+   * move. The equities are added only where they function. `IS_BASE_MAINNET_STATE` is true on a
+   * fork too, and `getCode` cannot tell a fork's equities from Base's: each carries one byte of
+   * code, and on a fork every call to it fails `OpcodeNotFound`. So a fork build's grant asked for
+   * eight approvals that could never execute, and stopped at the first (found proving PLAN.md 4.7).
+   * The test is the one `/market/tradable` and `/verify` already use.
    */
+  const equities = IS_BASE_MAINNET_STATE && (await equitiesFunctional());
   const settlement: [string, Address][] = [
     ['USDC', ADDRESSES.usdcBase],
     ['WETH', ADDRESSES.wethBase],
     ['CBBTC', ADDRESSES.cbbtcBase],
-    ...(IS_BASE_MAINNET_STATE
-      ? Object.values(STOCKS).map((st) => [st.symbol, st.address] as [string, Address])
-      : []),
+    ...(equities ? Object.values(STOCKS).map((st) => [st.symbol, st.address] as [string, Address]) : []),
   ];
   const entries = settlement;
   const codes = await Promise.all(

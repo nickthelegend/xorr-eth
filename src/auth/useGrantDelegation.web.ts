@@ -7,14 +7,21 @@
  *
  * The same applies to revoking. The kill switch is a transaction the user signs, which is why
  * "takes effect in under a second across every device" is true without any server being reachable.
+ *
+ * How a signature reaches the chain — the wallet put on this build's network and asked where it is,
+ * then either sending itself or, on a fork build, only signing while the app broadcasts to the fork —
+ * is `src/wallet/userSigning.ts`, shared with the native hook (PLAN.md 4.1, 4.6).
  */
 import { useCallback, useState } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { pickEmbedded } from './embeddedWallet';
 import { encodeFunctionData, parseUnits, type Address, type Hex } from 'viem';
 import { api } from '@/data/api';
-import { activeChain } from '@/chain';
+import { activeChain, walletSignsOnly } from '@/chain';
 import { humanWalletError } from '@/wallet/walletError';
+import { SETTLEMENT_APPROVAL_DAYS, type GrantOptions } from '@/wallet/grantPlan';
+import { chainAccess } from '@/wallet/chainAccess';
+import { estimateUserFee, sendAsUser, type UserSigner } from '@/wallet/userSigning';
 
 const DELEGATION_ABI = [
   {
@@ -63,98 +70,54 @@ export function useGrantDelegation() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
+  /*
+   * The embedded wallet signs, or nothing does.
+   *
+   * `wallets[0]` was an injected extension on any browser that had one — verified on the hosted
+   * build, where pressing this raised a browser wallet's own dialog for the USDC approval. A
+   * permission signed by the wrong key grants nothing the executor can use.
+   */
+  const signer = useCallback(async (): Promise<UserSigner | undefined> => {
+    const wallet = pickEmbedded(wallets);
+    if (!wallet) return undefined;
+    return {
+      provider: await wallet.getEthereumProvider(),
+      from: wallet.address as Address,
+      chain: activeChain,
+      chainAccess,
+      signOnly: walletSignsOnly,
+    };
+  }, [wallets]);
+
   const send = useCallback(
     async (to: Address, data: Hex) => {
-      /*
-       * The embedded wallet signs this, or nothing does.
-       *
-       * `wallets[0]` was an injected extension on any browser that had one — verified on the hosted
-       * build, where pressing this raised a browser wallet's own dialog for the USDC approval. A
-       * permission signed by the wrong key grants nothing the executor can use.
-       */
-      const wallet = pickEmbedded(wallets);
-      if (!wallet) {
+      const s = await signer();
+      if (!s) {
         throw new Error(
           wallets?.length
             ? 'This needs your xorr wallet, not a browser extension. Sign out and back in to use it.'
             : 'No wallet yet. Finish sign-in first.',
         );
       }
-      const provider = await wallet.getEthereumProvider();
-      /*
-       * Put the wallet on the chain this deployment settles on, before it signs anything.
-       *
-       * Privy's provider has its own idea of the current chain and it is not necessarily ours:
-       * the web SDK took `defaultChain` from a hardcoded constant, and the native SDK is told
-       * nothing at all. Either way a user's `grant`, their approvals and their withdrawals were
-       * signed against whatever chain the wallet happened to be on — which on a fork deployment
-       * is not the chain the executor reads, so the bot ends up with permission nobody can use.
-       *
-       * Asking explicitly is cheap and it is the only way to be certain. A wallet already on the
-       * right chain answers immediately; one that cannot switch says so before a signature is
-       * requested rather than after.
-       */
-      await provider
-        .request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: `0x${activeChain.id.toString(16)}` }],
-        })
-        .catch(() => undefined);
-
-      /*
-       * Estimate the gas ourselves, and say so in the request.
-       *
-       * Without a `gas` field the wallet supplies its own, and Privy's fell back to a plain
-       * transfer's 21,000 — below the intrinsic cost of any contract call. Every user-signed write
-       * in the product is a contract call, so `grant`, the ERC-20 approvals and a withdrawal all
-       * came back **"intrinsic gas too low"** with a Retry button that would fail identically.
-       *
-       * A quarter of headroom over the estimate, because an estimate is made against the current
-       * state and the transaction executes against the next one — a storage slot going from zero
-       * to non-zero costs more than the estimator saw. When estimation itself fails the request
-       * still goes without a limit rather than with a made-up one: the wallet's guess is bad, and
-       * a number we invented here would be worse.
-       */
-      const gas = await provider
-        .request({ method: 'eth_estimateGas', params: [{ from: wallet.address, to, data }] })
-        .then((g) => `0x${((BigInt(g as string) * 125n) / 100n).toString(16)}`)
-        .catch(() => undefined);
-
-      return (await provider.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: wallet.address, to, data, ...(gas ? { gas } : {}) }],
-      })) as Hex;
+      return sendAsUser(s, to, data);
     },
-    [wallets],
+    [signer, wallets],
   );
 
   /**
-   * What sending `data` to `to` would cost in gas (PLAN.md 3.13), asked of the user's own wallet provider — the node
-   * the send itself goes through. Undefined when the provider cannot say; never a zero.
+   * What sending `data` to `to` would cost in gas (PLAN.md 3.13), asked of the chain the transaction will run on.
+   * Undefined when that cannot be said; never a zero.
    */
   const estimateFee = useCallback(
     async (to: Address, data: Hex): Promise<{ gas: bigint; gasPrice: bigint } | undefined> => {
-      const wallet = pickEmbedded(wallets);
-      if (!wallet) return undefined;
-      const provider = await wallet.getEthereumProvider();
-      await provider
-        .request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${activeChain.id.toString(16)}` }] })
-        .catch(() => undefined);
-      try {
-        const [gas, gasPrice] = await Promise.all([
-          provider.request({ method: 'eth_estimateGas', params: [{ from: wallet.address, to, data }] }),
-          provider.request({ method: 'eth_gasPrice', params: [] }),
-        ]);
-        return { gas: BigInt(gas as string), gasPrice: BigInt(gasPrice as string) };
-      } catch {
-        return undefined;
-      }
+      const s = await signer();
+      return s ? estimateUserFee(s, to, data) : undefined;
     },
-    [wallets],
+    [signer],
   );
 
   const grant = useCallback(
-    async (dailyCapUsd: number, durationMs: number) => {
+    async (dailyCapUsd: number, durationMs: number, options?: GrantOptions) => {
       setBusy(true);
       setError(undefined);
       try {
@@ -184,8 +147,18 @@ export function useGrantDelegation() {
         const approvable = params.tokens?.length
           ? params.tokens
           : [{ symbol: 'USDC', address: params.token }];
+        /*
+         * Only the approvals still missing, when the caller has worked that out (PLAN.md 4.7).
+         *
+         * A resume re-grants a permission whose allowances a revoke never touched; asking for every
+         * one again was up to eleven wallet prompts to restore what was already there. Without
+         * `options.approvals` every token is approved, as a first grant needs.
+         */
+        const wanted = options?.approvals?.map((a) => a.toLowerCase());
         for (const t of approvable) {
-          const amount = t.address.toLowerCase() === settlement ? cap * 30n : MAX_UINT256;
+          if (wanted && !wanted.includes(t.address.toLowerCase())) continue;
+          const amount =
+            t.address.toLowerCase() === settlement ? cap * BigInt(SETTLEMENT_APPROVAL_DAYS) : MAX_UINT256;
           await send(
             t.address,
             encodeFunctionData({
@@ -205,13 +178,9 @@ export function useGrantDelegation() {
           }),
         );
 
-        // The server re-reads the CHAIN before it records anything, so a client claiming to have
-        // signed something is not enough.
-        await api.post('/delegation/record', {
-          txHash,
-          dailyCapUsd,
-          expiresAt: Number(expiresAt) * 1000,
-        });
+        // The server reads the grant from the transaction's own event before it records anything,
+        // so a client claiming to have signed something is not enough.
+        await api.post('/delegation/record', { txHash });
         return txHash;
       } catch (e) {
         // viem's message is a five-line dump with the RPC URL and the whole signed
@@ -239,8 +208,8 @@ export function useGrantDelegation() {
       return txHash;
     } catch (e) {
       // viem's message is a five-line dump with the RPC URL and the whole signed
-        // transaction in it. See humanWalletError.
-        const msg = humanWalletError(e);
+      // transaction in it. See humanWalletError.
+      const msg = humanWalletError(e);
       setError(msg);
       throw e;
     } finally {

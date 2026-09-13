@@ -34,10 +34,11 @@ export function humanWalletError(e: unknown): string {
     return 'You cancelled the signature, so nothing changed.';
   }
   /*
-   * The wallet has no ETH for gas ON THE CHAIN PRIVY SIGNS AGAINST. On a fork build that is
-   * always real Base — see `userSigningWorks` in src/chain.ts — and "have 0" is the truth about a
-   * chain the user is not looking at, which is why the screens that ask for a signature say so
-   * before the button rather than letting this be the explanation.
+   * The wallet has no ETH for the network fee on the chain the transaction goes to. On a fork build
+   * that used to be real Base whatever the screen showed — Privy sent there — and "have 0" was the
+   * truth about a chain the user was not looking at. A fork build now signs and the app sends to the
+   * fork (`walletSignsOnly` in src/chain.ts), so this is the fork wallet's own balance, which the
+   * faucet tops up.
    */
   if (/insufficient funds/i.test(raw)) {
     return 'Your wallet has no ETH to pay the network fee, so the transaction was not sent.';

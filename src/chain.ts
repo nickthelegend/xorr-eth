@@ -63,29 +63,39 @@ export const chainLabel =
 
 
 /**
- * Can the USER's wallet actually sign on this chain?
+ * Where a transaction the USER signs is broadcast (PLAN.md 4.1).
  *
  * Privy's embedded wallet previews and broadcasts through Privy's own RPC for a chain it knows, and
  * a fork of Base is chain 8453 — indistinguishable from real Base. Pointing `rpcUrls` at the fork
  * changes what the app reads and not what Privy signs against, so on a fork build every
- * user-signed transaction is simulated against real Base, where the wallet holds nothing:
+ * user-signed transaction was simulated against real Base, where the wallet holds nothing:
  *
  *   Execution reverted with reason: ERC20: transfer amount exceeds balance
  *
- * — over an amount shown as `0 USDC`. Which is true of real Base and says nothing about the fork
- * the user is looking at, and there is no way to tell that from the message.
+ * — over an amount shown as `0 USDC`, which is true of real Base and says nothing about the fork
+ * the user is looking at.
  *
- * The bot's own trades are unaffected: the executor signs with its delegate key against the RPC we
- * give it. This is only the transactions a PERSON signs — the grant, the approvals, a withdrawal.
+ * `eth_signTransaction` only signs. So on a fork build the wallet signs a transaction whose nonce,
+ * gas and fees were read from the fork, and the app broadcasts it to the fork itself
+ * (`src/wallet/userSigning.ts`). Proven with a Privy wallet on the Railway fork
+ * (`tools/prove-user-signing.ts`): Privy signed for chain 8453 without consulting real Base, and the
+ * fork mined it. On Base and Base Sepolia the wallet sends, because there Privy's RPC is the chain.
  *
- * So the screens that ask for a signature say so up front rather than letting Privy deliver a
- * revert nobody can act on.
+ * The bot's own trades never depended on this: the executor signs with its delegate key against the
+ * RPC it is given. This is only the transactions a PERSON signs — the grant, the approvals, a withdrawal.
  */
-export const userSigningWorks = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-sepolia';
+export const walletSignsOnly = CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet';
+
+/**
+ * Can the USER's wallet sign on this chain? On every chain this app builds for, now that a fork
+ * build signs through `walletSignsOnly`. The screens that asked still read it, and stop asking once
+ * the withdrawal work (PLAN.md 4.9) that also edits them has landed.
+ */
+export const userSigningWorks = true;
 
 export const userSigningNote =
-  `This build settles on ${chainLabel}. Your wallet signs through Privy, which uses public Base — ` +
-  `so a transaction you sign here will not go through. Run against Base Sepolia to sign for real.`;
+  `This build settles on ${chainLabel}. Your wallet signs and this app sends the transaction to that ` +
+  `network, because Privy's own network for this chain id is public Base.`;
 
 /**
  * Can a deposit code name the chain this build is on?
