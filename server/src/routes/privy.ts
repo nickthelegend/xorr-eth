@@ -63,6 +63,15 @@ privyRoutes.get('/privy/policy', async (c) => {
  * signed-in user had no business being able to spend the app's Privy request budget on it.
  */
 privyRoutes.post('/privy/policy/prove', requireScope('admin'), async (c) => {
+  /*
+   * The rules under test are the ones this build means, not whatever Privy last stored.
+   *
+   * The demo wallet id is remembered, so nothing on this path used to bring the policy up to date
+   * before probing it. The first proof after the calldata rules shipped tested the OLD rules —
+   * `transfer` and a grant to a stranger both passed — and only the key check at the end patched
+   * them in, so the same request a minute later came back proven.
+   */
+  await ensurePolicy();
   const walletId = await demoWalletId();
   if (!walletId) {
     return c.json({ error: 'no_demo_wallet', message: 'No policy-bound wallet on this deployment.' }, 400);
