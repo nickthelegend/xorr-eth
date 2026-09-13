@@ -51,8 +51,23 @@ export async function currentWallet(c: Context): Promise<WalletRow | undefined> 
   );
 }
 
+/**
+ * A signed-in user with no wallet registered yet, on a route that needs one.
+ *
+ * This was a plain `Error`, so the global handler answered 500 — "the server is broken, retry" — to
+ * an account that simply had not finished onboarding, and the 409 the situation deserves never
+ * reached the client. 409: the request is fine; the account's state is what has to change first.
+ */
+export class NoWalletError extends Error {
+  readonly status = 409;
+  constructor() {
+    super('No wallet for this user. POST /wallet/create first.');
+    this.name = 'NoWalletError';
+  }
+}
+
 export async function requireWallet(c: Context): Promise<WalletRow> {
   const w = await currentWallet(c);
-  if (!w) throw new Error('No wallet for this user. POST /wallet/create first.');
+  if (!w) throw new NoWalletError();
   return w;
 }

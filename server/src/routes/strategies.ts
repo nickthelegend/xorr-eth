@@ -12,7 +12,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { httpStatusFor } from '../executor/failure.js';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
 import { append } from '../audit/log.js';
@@ -34,7 +34,7 @@ import { CHAIN_KEY } from '../evm/chains.js';
 import { equitiesFunctional, isStock } from '../venues/stocks.js';
 import { readPolicy } from '../evm/delegation.js';
 import type { Address } from 'viem';
-import { currentWallet, requireWallet } from './wallet-context.js';
+import { currentWallet, requireWallet, type WalletRow } from './wallet-context.js';
 
 export const strategyRoutes = new Hono();
 
@@ -118,6 +118,54 @@ function toApi(r: StrategyRow) {
   };
 }
 
+/**
+ * Why this wallet may not commit `allocationUsd` more a day — or null when it may. PLAN.md 9.2.
+ *
+ * Asked when a strategy is created and when one is resumed. Resuming used to skip it: the total
+ * counts only `live` and `watch`, so pausing a strategy frees its allowance — pause one, create
+ * another in the room it left, resume the first, and the day was committed past the cap this check
+ * exists to hold. The permission is read from the chain, where absent means refuse.
+ */
+async function commitmentRefusal(
+  w: WalletRow,
+  ask: { allocationUsd: number; closeOnly: boolean; doing: string; excludeId?: string },
+): Promise<{ error: string; message: string } | null> {
+  const policy = await readPolicy(w.address as Address);
+  if (!policy || policy.revoked) {
+    return {
+      error: 'no_delegation',
+      message: `No active trading permission on-chain. Grant one before ${ask.doing}.`,
+    };
+  }
+  if (policy.expiresAt <= Date.now()) {
+    return { error: 'delegation_expired', message: 'The trading permission has expired. Renew it first.' };
+  }
+
+  /*
+   * A strategy that can only CLOSE commits nothing, so the cap has nothing to say about it.
+   *
+   * The commitment check refused an `exit-rules` strategy whose own allocation was zero, because
+   * the strategies already live summed past the cap — so a user whose day was committed could not
+   * add a stop-loss, which is exactly the moment they would want one. Same mistake as the runtime
+   * gate: a limit on putting capital at risk was being applied to the thing that takes it off.
+   */
+  if (ask.closeOnly) return null;
+
+  const sums = await query<{ sum: string | null }>(
+    `SELECT SUM(daily_allocation_usd) AS sum FROM strategies
+      WHERE wallet_id = $1 AND state IN ('live','watch') AND kind <> ALL($2::text[]) AND id <> $3`,
+    [w.id, [...CLOSE_ONLY_KINDS], ask.excludeId ?? ''],
+  );
+  const committed = Number(sums[0]?.sum ?? 0) + ask.allocationUsd;
+  if (committed > policy.dailyCapUsd) {
+    return {
+      error: 'over_cap',
+      message: `That would commit $${committed.toLocaleString('en-US')} a day against a $${policy.dailyCapUsd.toLocaleString('en-US')} cap. Raise the cap or lower this strategy.`,
+    };
+  }
+  return null;
+}
+
 strategyRoutes.get('/strategies', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json([]);
@@ -196,14 +244,93 @@ strategyRoutes.get('/runs', async (c) => {
   );
 });
 
+type StrategyState = 'draft' | 'watch' | 'live' | 'paused' | 'ended';
+
+/** The states that hold allowance against the daily cap. */
+const COMMITTED_STATES: ReadonlySet<string> = new Set(['live', 'watch']);
+
+/** What a move says on the trail. */
+function describeMove(from: string, to: StrategyState, label: string): { action: string; detail: string } {
+  switch (to) {
+    case 'paused':
+      return { action: `Paused ${label}`, detail: 'It will not run again until you resume it. Nothing was sold.' };
+    case 'live':
+      return {
+        action: `${from === 'paused' ? 'Resumed' : 'Started'} ${label}`,
+        detail: 'It runs on its schedule again, inside your daily cap.',
+      };
+    case 'watch':
+      return { action: `Watching ${label}`, detail: 'It records what it would do and moves nothing.' };
+    case 'draft':
+      return { action: `Moved ${label} back to draft`, detail: 'It will not run until you start it.' };
+    case 'ended':
+      return {
+        action: `Ended ${label}`,
+        detail: 'It will not run again. Your history and any position it opened are untouched.',
+      };
+  }
+}
+
 /**
- * Run one strategy now.
+ * Every change to a strategy's state goes through here.
  *
- * A cadence is the point of the product, but it is useless for showing someone what the bot does:
- * "come back on Sunday" is not a demo, and it is not a way to test a change either. This runs the
- * same `runStrategy` the scheduler runs, with the same period claim — so triggering it twice in a
- * period is a no-op rather than a double buy, which is the property that makes it safe to expose.
+ * There were three ways to change one, and they disagreed. `POST /strategies/:id/{pause,resume,end}`
+ * — the routes the Strategy screen calls — updated by id alone, so anyone signed in who had another
+ * account's strategy id could pause, resume or end it, and nothing reached the trail. PATCH and
+ * DELETE did check the wallet, and were each registered twice, the second copies unreachable.
+ *
+ * One path now, holding four things:
+ *   - scoped to the caller's wallet, so another account's id reads exactly like a missing one;
+ *   - written on the trail when the state changes, and not when a repeated tap changes nothing;
+ *   - an ended strategy stays ended — retiring clears `next_run_at`, so a resumed one would sit
+ *     "live" and never run;
+ *   - resuming asks the cap question creating asks (`commitmentRefusal`).
  */
+async function moveStrategy(c: Context, to: StrategyState): Promise<Response | StrategyRow> {
+  const w = await requireWallet(c);
+  const id = c.req.param('id');
+  const current = await one<StrategyRow>(`SELECT * FROM strategies WHERE id = $1 AND wallet_id = $2`, [
+    id,
+    w.id,
+  ]);
+  if (!current) return c.json({ error: 'not_found' }, 404);
+  if (current.state === to) return current;
+  if (current.state === 'ended') {
+    return c.json(
+      { error: 'strategy_ended', message: 'An ended strategy stays ended. Set up a new one instead.' },
+      409,
+    );
+  }
+  if (COMMITTED_STATES.has(to) && !COMMITTED_STATES.has(current.state)) {
+    const refusal = await commitmentRefusal(w, {
+      allocationUsd: Number(current.daily_allocation_usd),
+      closeOnly: CLOSE_ONLY_KINDS.has(current.kind),
+      doing: 'resuming it',
+      excludeId: current.id,
+    });
+    if (refusal) return c.json(refusal, 400);
+  }
+
+  const row = await one<StrategyRow>(
+    `UPDATE strategies
+        SET state = $3::text,
+            next_run_at = CASE WHEN $3::text = 'ended' THEN NULL ELSE next_run_at END
+      WHERE id = $1 AND wallet_id = $2
+      RETURNING *`,
+    [id, w.id, to],
+  );
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  await append({
+    walletId: w.id,
+    agent: 'xorr',
+    ...describeMove(current.state, to, row.label),
+    kind: 'risk',
+    payload: { strategyId: row.id, from: current.state, state: to },
+  });
+  return row;
+}
+
 /**
  * Pause, resume or retire a strategy.
  *
@@ -215,26 +342,8 @@ strategyRoutes.patch('/strategies/:id', async (c) => {
   const body = z
     .object({ state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']) })
     .parse(await c.req.json());
-  const w = await requireWallet(c);
-
-  const row = await one<StrategyRow>(
-    `UPDATE strategies SET state = $3 WHERE id = $1 AND wallet_id = $2 RETURNING *`,
-    [c.req.param('id'), w.id, body.state],
-  );
-  if (!row) return c.json({ error: 'not_found' }, 404);
-
-  await append({
-    walletId: w.id,
-    agent: 'xorr',
-    action: `${body.state === 'paused' ? 'Paused' : body.state === 'live' ? 'Resumed' : 'Set'} ${row.label}`,
-    detail:
-      body.state === 'paused'
-        ? 'It will not run again until you resume it. Nothing was sold.'
-        : `Now ${body.state}.`,
-    kind: 'risk',
-    payload: { strategyId: row.id, state: body.state },
-  });
-  return c.json(toApi(row));
+  const moved = await moveStrategy(c, body.state);
+  return moved instanceof Response ? moved : c.json(toApi(moved));
 });
 
 /**
@@ -244,23 +353,21 @@ strategyRoutes.patch('/strategies/:id', async (c) => {
  * the user's own history, and a delete would take them with it.
  */
 strategyRoutes.delete('/strategies/:id', async (c) => {
-  const w = await requireWallet(c);
-  const row = await one<StrategyRow>(
-    `UPDATE strategies SET state = 'ended', next_run_at = NULL
-     WHERE id = $1 AND wallet_id = $2 RETURNING *`,
-    [c.req.param('id'), w.id],
-  );
-  if (!row) return c.json({ error: 'not_found' }, 404);
-  await append({
-    walletId: w.id,
-    agent: 'xorr',
-    action: `Ended ${row.label}`,
-    detail: 'It will not run again. Your history and any position it opened are untouched.',
-    kind: 'risk',
-    payload: { strategyId: row.id },
-  });
-  return c.json({ ok: true });
+  const moved = await moveStrategy(c, 'ended');
+  return moved instanceof Response ? moved : c.json({ ok: true });
 });
+
+/** The same moves by name — what the app's Strategy screen calls. */
+for (const [path, to] of [
+  ['pause', 'paused'],
+  ['resume', 'live'],
+  ['end', 'ended'],
+] as const) {
+  strategyRoutes.post(`/strategies/:id/${path}`, async (c) => {
+    const moved = await moveStrategy(c, to);
+    return moved instanceof Response ? moved : c.json(toApi(moved));
+  });
+}
 
 /**
  * A market order the user placed themselves — screen 14's "Buy ${amount} of {symbol}".
@@ -359,6 +466,14 @@ strategyRoutes.post('/orders', async (c) => {
   return c.json({ ...outcome, orderId: row!.id }, httpStatusFor(outcome));
 });
 
+/**
+ * Run one strategy now.
+ *
+ * A cadence is the point of the product, but it is useless for showing someone what the bot does:
+ * "come back on Sunday" is not a demo, and it is not a way to test a change either. This runs the
+ * same `runStrategy` the scheduler runs, with the same period claim — so triggering it twice in a
+ * period is a no-op rather than a double buy, which is the property that makes it safe to expose.
+ */
 strategyRoutes.post('/strategies/:id/run', async (c) => {
   const w = await requireWallet(c);
   const row = await one<StrategyRow>(
@@ -471,49 +586,12 @@ strategyRoutes.post('/strategies', async (c) => {
     }
   }
 
-  const policy = await readPolicy(w.address as Address);
-  if (!policy || policy.revoked) {
-    return c.json(
-      {
-        error: 'no_delegation',
-        message: 'No active trading permission on-chain. Grant one before creating a strategy.',
-      },
-      400,
-    );
-  }
-  if (policy.expiresAt <= Date.now()) {
-    return c.json(
-      { error: 'delegation_expired', message: 'The trading permission has expired. Renew it first.' },
-      400,
-    );
-  }
-
-  /*
-   * A strategy that can only CLOSE commits nothing, so the cap has nothing to say about it.
-   *
-   * The commitment check refused an `exit-rules` strategy whose own allocation was zero, because
-   * the strategies already live summed past the cap — so a user whose day was committed could not
-   * add a stop-loss, which is exactly the moment they would want one. Same mistake as the runtime
-   * gate: a limit on putting capital at risk was being applied to the thing that takes it off.
-   *
-   * The sum still counts every spending strategy, and this one adds nothing to it.
-   */
-  const closeOnly = CLOSE_ONLY_KINDS.has(body.kind);
-  const sums = await query<{ sum: string | null }>(
-    `SELECT SUM(daily_allocation_usd) AS sum FROM strategies
-      WHERE wallet_id=$1 AND state IN ('live','watch') AND kind <> ALL($2::text[])`,
-    [w.id, [...CLOSE_ONLY_KINDS]],
-  );
-  const committed = Number(sums[0]?.sum ?? 0) + (closeOnly ? 0 : body.dailyAllocationUsd);
-  if (!closeOnly && committed > policy.dailyCapUsd) {
-    return c.json(
-      {
-        error: 'over_cap',
-        message: `That would commit $${committed.toLocaleString('en-US')} a day against a $${policy.dailyCapUsd.toLocaleString('en-US')} cap. Raise the cap or lower this strategy.`,
-      },
-      400,
-    );
-  }
+  const refusal = await commitmentRefusal(w, {
+    allocationUsd: body.dailyAllocationUsd,
+    closeOnly: CLOSE_ONLY_KINDS.has(body.kind),
+    doing: 'creating a strategy',
+  });
+  if (refusal) return c.json(refusal, 400);
 
   /*
    * A spending strategy needs an amount; a self-sizing one decides its own.
@@ -587,79 +665,4 @@ strategyRoutes.post('/strategies', async (c) => {
   });
 
   return c.json(toApi(row!));
-});
-
-for (const [path, state] of [
-  ['pause', 'paused'],
-  ['resume', 'live'],
-  ['end', 'ended'],
-] as const) {
-  strategyRoutes.post(`/strategies/:id/${path}`, async (c) => {
-    const id = c.req.param('id');
-    const row = await one<StrategyRow>(
-      `UPDATE strategies SET state=$2 WHERE id=$1 RETURNING *`,
-      [id, state],
-    );
-    if (!row) return c.json({ error: 'not_found' }, 404);
-    return c.json(toApi(row));
-  });
-}
-
-/** Run a strategy now. Idempotent per period — a second call in the same period is a no-op. */
-/**
- * Pause, resume or retire a strategy.
- *
- * There was no way to stop one. A user could add strategies until they hit the cap and then had
- * no route out — which also meant the cap, working correctly, read as the app being broken. The
- * commitment total only counts `live` and `watch`, so pausing frees the allowance immediately.
- */
-strategyRoutes.patch('/strategies/:id', async (c) => {
-  const body = z
-    .object({ state: z.enum(['draft', 'watch', 'live', 'paused', 'ended']) })
-    .parse(await c.req.json());
-  const w = await requireWallet(c);
-
-  const row = await one<StrategyRow>(
-    `UPDATE strategies SET state = $3 WHERE id = $1 AND wallet_id = $2 RETURNING *`,
-    [c.req.param('id'), w.id, body.state],
-  );
-  if (!row) return c.json({ error: 'not_found' }, 404);
-
-  await append({
-    walletId: w.id,
-    agent: 'xorr',
-    action: `${body.state === 'paused' ? 'Paused' : body.state === 'live' ? 'Resumed' : 'Set'} ${row.label}`,
-    detail:
-      body.state === 'paused'
-        ? 'It will not run again until you resume it. Nothing was sold.'
-        : `Now ${body.state}.`,
-    kind: 'risk',
-    payload: { strategyId: row.id, state: body.state },
-  });
-  return c.json(toApi(row));
-});
-
-/**
- * Retire a strategy.
- *
- * Marks it `ended` rather than deleting the row: the runs and audit entries that reference it are
- * the user's own history, and a delete would take them with it.
- */
-strategyRoutes.delete('/strategies/:id', async (c) => {
-  const w = await requireWallet(c);
-  const row = await one<StrategyRow>(
-    `UPDATE strategies SET state = 'ended', next_run_at = NULL
-     WHERE id = $1 AND wallet_id = $2 RETURNING *`,
-    [c.req.param('id'), w.id],
-  );
-  if (!row) return c.json({ error: 'not_found' }, 404);
-  await append({
-    walletId: w.id,
-    agent: 'xorr',
-    action: `Ended ${row.label}`,
-    detail: 'It will not run again. Your history and any position it opened are untouched.',
-    kind: 'risk',
-    payload: { strategyId: row.id },
-  });
-  return c.json({ ok: true });
 });
