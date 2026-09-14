@@ -25,6 +25,7 @@ import { buildSwapVmFill, openPrograms } from './swapvm.js';
 import { deliveredOnChain, PRICES_DRIFT } from '../evm/measure-route.js';
 import { humanFailure } from '../executor/failure.js';
 import { beforeDeadline } from '../http/deadline.js';
+import { log } from '../http/request-id.js';
 
 export type VenueQuote =
   | {
@@ -219,7 +220,13 @@ export async function compareVenues(params: {
               data: swap.data,
             }),
           }))
-          .catch((e: unknown) => ({ refusal: humanFailure(e instanceof Error ? e.message : String(e)) })),
+          .catch((e: unknown) => {
+            const message = e instanceof Error ? e.message : String(e);
+            // The sentence is for the person and the cause is for the log: a revert nobody had named read only as "did
+            // not go through", and the fork's aggregator row could not be diagnosed from the executor's logs.
+            log.warn(`[route] the aggregator's route does not fill on this chain: ${message.replace(/\s+/g, ' ').slice(0, 600)}`);
+            return { refusal: humanFailure(message) };
+          }),
       )
     : undefined;
   const routeLate = routeAnswer === LATE;
