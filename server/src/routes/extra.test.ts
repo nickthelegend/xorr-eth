@@ -1,9 +1,10 @@
 /**
- * The backtest, quote, comparison and decision routes, asked badly (docs/qa/ENDPOINTS.md E026, E083, E166, E183, E188).
+ * The backtest, proposal, quote, comparison and decision routes (docs/qa/ENDPOINTS.md E025, E026, E083, E160, E166,
+ * E183, E188).
  *
- * Each of these is a request only the caller can fix, so each is a named 400 or 404 given before any venue, feed or
- * index is asked: never a 502 that tells the app to retry an impossible request, and never a 200 carrying a result
- * nobody computed. These drive the real routes with every upstream stood in for.
+ * A request only the caller can fix is a named 400 or 404 given before any venue, feed or index is asked: never a 502
+ * that tells the app to retry an impossible request, and never a 200 carrying a result nobody computed. And an id the
+ * app was given is answered as what it names. These drive the real routes with every upstream stood in for.
  */
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,7 +50,9 @@ vi.mock('../graph/client.js', () => ({
   spendsFor: vi.fn(),
 }));
 
-const { one } = await import('../db/index.js');
+const { one, tx } = await import('../db/index.js');
+const { append } = await import('../audit/log.js');
+const { placeOrder } = await import('../executor/order.js');
 const engine = await import('../backtest/engine.js');
 const { quote } = await import('../venues/oneinch.js');
 const { networkCost } = await import('../evm/gas-price.js');
@@ -108,6 +111,103 @@ describe('GET /agents/:id/backtest', () => {
     vi.mocked(readPolicy).mockResolvedValue(null);
     refused(await get('/agents/momentum-scout/backtest?lookback=90d&symbol=NOPE'), 404, 'no_history');
     expect(engine.backtestMomentum).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /agents/:id/backtest, with the id the roster gives (E025)', () => {
+  const RESULT = {
+    lookback: '90d',
+    ret: 4.2,
+    maxDd: -3.1,
+    sharpe: 1.1,
+    trades: 3,
+    equity: [500, 521],
+    feed: 'live',
+    source: 'coingecko market_chart, daily closes · 20-day breakout, 8% stop',
+    disclaimer: 'Nothing here is a promise.',
+  };
+  /** This wallet's agent rows name `persona`, whatever id is asked about — or there are none. */
+  const rowsName = (persona: string | undefined) =>
+    vi.mocked(one).mockImplementation((async (text: string) =>
+      /FROM agents/.test(text) ? (persona ? { persona_id: persona } : undefined) : { address: OWNER }) as never);
+  const agentLookups = () => vi.mocked(one).mock.calls.filter(([text]) => /FROM agents/.test(String(text)));
+
+  beforeEach(() => {
+    vi.mocked(readPolicy).mockResolvedValue(null);
+    vi.mocked(engine.backtestMomentum).mockResolvedValue(RESULT as never);
+  });
+
+  it("answers a hired agent's row id exactly as its persona answers, looking the row up in this wallet only", async () => {
+    rowsName('momentum-scout');
+    const ROW = '2d3316bd-8c11-455f-ae10-8975ace4c3de';
+    expect(await get(`/agents/${ROW}/backtest?lookback=90d`)).toEqual({ status: 200, body: RESULT });
+    expect(agentLookups()).toEqual([[expect.stringContaining('wallet_id = $2'), [ROW, 'wallet-1']]]);
+
+    rowsName('drawdown-guard');
+    expect(await get('/agents/ad9c524c-dbdc-4eb2-b853-e056d373a832/backtest?lookback=90d')).toMatchObject({
+      status: 422,
+      body: { error: 'not_backtestable', agent: 'ad9c524c-dbdc-4eb2-b853-e056d373a832' },
+    });
+  });
+
+  it('answers a persona id without looking for a row', async () => {
+    expect((await get('/agents/momentum-scout/backtest?lookback=30d')).status).toBe(200);
+    expect((await get('/agents/earnings-desk/backtest?lookback=30d')).status).toBe(422);
+    expect(agentLookups()).toEqual([]);
+  });
+
+  it("answers an id that is neither a persona nor one of this wallet's rows as unknown, and replays nothing", async () => {
+    rowsName(undefined);
+    expect(await get('/agents/nope/backtest?lookback=90d')).toMatchObject({ status: 404, body: { error: 'unknown_agent' } });
+    // On every object's prototype, and no persona.
+    expect(await get('/agents/constructor/backtest?lookback=90d')).toMatchObject({ status: 404, body: { error: 'unknown_agent' } });
+    expect(engine.backtestMomentum).not.toHaveBeenCalled();
+  });
+
+  it('does not take a wallet read that failed for no wallet', async () => {
+    vi.mocked(currentWallet).mockRejectedValue(new Error('connection terminated'));
+    const r = await get('/agents/2d3316bd-8c11-455f-ae10-8975ace4c3de/backtest?lookback=90d');
+    expect(r.status).toBeGreaterThanOrEqual(500);
+    expect(r.body.error).not.toBe('unknown_agent');
+    expect(engine.backtestMomentum).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /proposals/:id/decide (E160)', () => {
+  /** The decision's transaction, answering whatever it asks from `rows`. */
+  const proposals = (rows: (text: string) => unknown[]) => {
+    const asked: string[] = [];
+    vi.mocked(tx).mockImplementation((async (fn: (client: unknown) => Promise<unknown>) =>
+      fn({
+        query: async (text: string) => {
+          asked.push(text);
+          return { rows: rows(text) };
+        },
+      })) as never);
+    return asked;
+  };
+
+  it("answers an id that is not this wallet's proposal with a named 404, for skip and approve alike, and places nothing", async () => {
+    const asked = proposals(() => []);
+    for (const decision of ['skip', 'approve']) {
+      expect(await post('/proposals/5b7d2c0e-8f7a-4d7e-9c3b-3b2f1a9d4e11/decide', { decision })).toEqual({
+        status: 404,
+        body: { error: 'not_found', status: 'gone', message: 'That proposal no longer exists.' },
+      });
+    }
+    // Only ever this wallet's proposals, so another account's id reads exactly like an unknown one.
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked.every((text) => /wallet_id = \$2/.test(text))).toBe(true);
+    expect(placeOrder).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+  });
+
+  it('still answers a proposal that was already decided with what was decided', async () => {
+    proposals((text) => (/SELECT decision/.test(text) ? [{ decision: 'skip' }] : []));
+    expect(await post('/proposals/p-1/decide', { decision: 'skip' })).toEqual({
+      status: 200,
+      body: { status: 'skip', message: 'That was already decided.' },
+    });
   });
 });
 

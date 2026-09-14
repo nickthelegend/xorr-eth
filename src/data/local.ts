@@ -22,7 +22,7 @@ import {
 } from './marketData';
 import { ApiError, NotSignedIn, api, apiReason } from './api';
 import { waitOutWarming } from './warming';
-import { absentOrThrow } from './apiError';
+import { absentOrThrow, goneProposal } from './apiError';
 import type {
   ActivityEvent,
   Agent,
@@ -277,7 +277,15 @@ export const LocalRepositories: Repositories = {
     async decideProposal(id, decision) {
       // A decision must reach the server or it did not happen. Reporting a local "filled" for a
       // request that never landed is the worst possible lie on this screen.
-      return api.post<ProposalDecision>(`/proposals/${id}/decide`, { decision });
+      try {
+        return await api.post<ProposalDecision>(`/proposals/${id}/decide`, { decision });
+      } catch (e) {
+        // A proposal that is not there any more is an answer, not a failure — the executor's 404
+        // keeps the thread's sentence. Only that answer: every other refusal is still the error it is.
+        const gone = goneProposal(e);
+        if (gone) return gone;
+        throw e;
+      }
     },
     async backtest(agentId, lookback): Promise<BacktestResult> {
       /*

@@ -80,6 +80,17 @@ const NOT_BACKTESTABLE: Record<string, string> = {
     'Drawdown Guard only closes positions. What it would have returned depends entirely on the book it was guarding, so there is no strategy return to measure independently of a portfolio.',
 };
 
+/** The persona a roster id names: a persona's own id, or the persona of this wallet's agent row with that id. */
+async function personaOf(agentId: string, walletId: string | undefined): Promise<string | undefined> {
+  if (Object.hasOwn(PERSONAS, agentId)) return agentId;
+  if (!walletId) return undefined;
+  const row = await one<{ persona_id: string }>(`SELECT persona_id FROM agents WHERE id = $1 AND wallet_id = $2`, [
+    agentId,
+    walletId,
+  ]);
+  return row?.persona_id;
+}
+
 extra.get('/agents/:id/backtest', async (c) => {
   /*
    * A lookback there is no window for is refused, not replayed.
@@ -95,9 +106,22 @@ extra.get('/agents/:id/backtest', async (c) => {
   // The AGENT, from the path. This was shadowed by the wallet lookup below and never read.
   const agentId = c.req.param('id');
 
-  const reason = NOT_BACKTESTABLE[agentId];
+  /*
+   * Whichever id the roster holds for the agent.
+   *
+   * `GET /agents` names an agent by its persona until the wallet has a row for it, and by the row's id from then on, and
+   * the roster screen routes here with the id it was given. This understood persona ids only, so a hired agent's
+   * backtest answered 404 `unknown_agent` for an agent listed one screen earlier. A row id is resolved to its persona
+   * within the caller's wallet; an id that is neither — another wallet's row included — is still unknown.
+   *
+   * The wallet read is not caught. It was `.catch(() => null)`, so a read that failed became "no wallet": an unknown
+   * agent here, and a chart scaled to the default cap below.
+   */
+  const w = await currentWallet(c);
+  const persona = await personaOf(agentId, w?.id);
+  const reason = persona !== undefined && Object.hasOwn(NOT_BACKTESTABLE, persona) ? NOT_BACKTESTABLE[persona] : undefined;
   if (reason) return c.json({ error: 'not_backtestable', agent: agentId, message: reason }, 422);
-  if (agentId !== 'momentum-scout') {
+  if (persona !== 'momentum-scout') {
     return c.json(
       {
         error: 'unknown_agent',
@@ -114,7 +138,6 @@ extra.get('/agents/:id/backtest', async (c) => {
    * through us, and a backtest scaled to a cap the user no longer has is a chart of a strategy
    * they could not run. Falls back to the default only when there is no policy to read.
    */
-  const w = await currentWallet(c).catch(() => null);
   // The default is for a wallet with no policy. A read that FAILED used to take it too, scaling the
   // chart to a cap the user may not have (PLAN.md 1.7) — that is a 502 now, not a guess.
   const policy = w ? await readChain('your permission', () => readPolicy(w.address as Address)) : null;
@@ -331,7 +354,7 @@ extra.post('/proposals/:id/decide', async (c) => {
    *
    * Idempotent: the UPDATE matches only an undecided, unexpired proposal belonging to THIS wallet, so
    * a double approve cannot double-fill (PLAN.md 12.10) and another account's proposal id reads as
-   * gone — it used to match any id at all. The order runs outside the transaction because it waits
+   * missing — it used to match any id at all. The order runs outside the transaction because it waits
    * on a chain, and a transaction held open across a swap is how a connection pool runs dry.
    */
   const decided = await tx(async (client) => {
@@ -347,12 +370,23 @@ extra.post('/proposals/:id/decide', async (c) => {
       [pid, w.id],
     );
     const e = existing.rows[0];
-    if (!e) return { answer: { status: 'gone', message: 'That proposal no longer exists.' } };
+    if (!e) return { gone: true as const };
     if (e.decision) return { answer: { status: e.decision, message: 'That was already decided.' } };
     return {
       answer: { status: 'expired', message: 'That proposal expired before you decided. I did not place it.' },
     };
   });
+  /*
+   * Not this wallet's proposal — unknown, or another account's, which the scoped query cannot tell apart — is a 404, as
+   * every other owned resource answers.
+   *
+   * It was a 200 `{status: 'gone'}` so the chat thread could render the sentence straight from the body, which told a
+   * caller that deciding something that does not exist had worked. `status` and `message` stay in the 404's body: the
+   * app reads the sentence from there (`decideProposal`, src/data/local.ts).
+   */
+  if ('gone' in decided) {
+    return c.json({ error: 'not_found', status: 'gone', message: 'That proposal no longer exists.' }, 404);
+  }
   if ('answer' in decided) return c.json(decided.answer);
 
   const { row } = decided;

@@ -168,9 +168,22 @@ function toApi(r: StrategyRow) {
     symbol: r.symbol,
     params: r.params,
     cadence: r.cadence ?? undefined,
-    nextRunAt: r.next_run_at ? new Date(r.next_run_at).getTime() : undefined,
+    /*
+     * An ended strategy has no next run.
+     *
+     * Ending one clears `next_run_at` (`moveStrategy`), and strategies ended before it did kept a date the scheduler will
+     * never reach — the fork published seventeen. Migration 024 clears those rows; this keeps any row that still carries
+     * one from publishing it.
+     */
+    nextRunAt: r.state !== 'ended' && r.next_run_at ? new Date(r.next_run_at).getTime() : undefined,
     dailyAllocationUsd: Number(r.daily_allocation_usd),
-    createdAt: Date.now(),
+    /*
+     * When the row was written, not when it was read.
+     *
+     * This was `Date.now()`, so every strategy was created at the moment of each request — and every run of every
+     * strategy appeared to predate the strategy that made it.
+     */
+    createdAt: new Date(r.created_at).getTime(),
   };
 }
 
@@ -532,6 +545,15 @@ strategyRoutes.post('/strategies', async (c) => {
       ...body.params,
       targets: Object.fromEntries(Object.entries(targets).map(([symbol, weight]) => [canonicalSymbol(symbol), weight])),
     };
+  } else {
+    /*
+     * The symbol itself, too.
+     *
+     * Only a portfolio's targets were renamed, and `body.symbol` was stored as sent: `weth` went into the row as `weth`
+     * and missed every lookup keyed by the registry afterwards — prices, holdings, the leaderboard's marks. The schema
+     * has already refused a symbol that does not resolve.
+     */
+    body.symbol = canonicalSymbol(body.symbol);
   }
 
   /*

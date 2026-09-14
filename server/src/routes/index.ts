@@ -1106,12 +1106,35 @@ routes.get('/limits', async (c) => {
    * failed read is now a 502, and `granted` says whether there is a permission at all.
    */
   if (!policy) {
-    return c.json({ dailyCapUsd: 0, spentTodayUsd: ourSpend, remainingUsd: 0, revoked: false, granted: false });
-  }
-  if (policy.revoked) {
     return c.json({
       dailyCapUsd: 0,
       spentTodayUsd: ourSpend,
+      // No permission on the chain, so no tally of the chain's to set beside the executor's.
+      chainSpentTodayUsd: null,
+      executorSpentTodayUsd: ourSpend,
+      remainingUsd: 0,
+      revoked: false,
+      granted: false,
+    });
+  }
+
+  /*
+   * Two tallies of today's spend, and the one reported is the stricter.
+   *
+   * The contract counts what `spend()` let through today; the executor counts the fills it recorded. They should agree,
+   * and on a fork rebuilt under the book they did not: fills the database remembered were no longer on the chain, and the
+   * Limits screen read "$908.05 spent" beside "$1,855.95 left" of a $2,810 cap — the chain's spend next to a remainder
+   * taken from the executor's larger tally, three numbers that did not add up. `spentTodayUsd` is now the larger of the
+   * two and `remainingUsd` is taken from that same figure, so the cap is always spent plus left. Both tallies travel
+   * beside it, so a screen can say when they part.
+   */
+  const spent = Math.max(policy.spentTodayUsd, ourSpend);
+  const tallies = { chainSpentTodayUsd: policy.spentTodayUsd, executorSpentTodayUsd: ourSpend };
+  if (policy.revoked) {
+    return c.json({
+      dailyCapUsd: 0,
+      spentTodayUsd: spent,
+      ...tallies,
       remainingUsd: 0,
       revoked: true,
       granted: true,
@@ -1121,9 +1144,10 @@ routes.get('/limits', async (c) => {
 
   return c.json({
     dailyCapUsd: policy.dailyCapUsd,
-    // The chain's own tally, so "spent" and "cap" come from one source and cannot disagree.
-    spentTodayUsd: policy.spentTodayUsd,
-    remainingUsd: Math.max(0, Math.min(policy.remainingTodayUsd, policy.dailyCapUsd - ourSpend)),
+    spentTodayUsd: spent,
+    ...tallies,
+    // The chain's remainder is already 0 once the permission has expired; otherwise cap − spent is the bound that holds.
+    remainingUsd: Math.max(0, Math.min(policy.remainingTodayUsd, policy.dailyCapUsd - spent)),
     revoked: false,
     granted: true,
     /*

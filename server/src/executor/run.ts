@@ -80,6 +80,8 @@ export type StrategyRow = {
   cadence: Cadence | null;
   next_run_at: Date | null;
   daily_allocation_usd: string;
+  /** When the row was written. `GET /strategies` publishes it as `createdAt`. */
+  created_at: Date;
   /** Consecutive transient failures, reset when a run reaches an answer. Migration 014. */
   retry_attempts?: number;
   /** The hired agent that runs this strategy, when one does — its limits apply (PLAN.md 2.15). */

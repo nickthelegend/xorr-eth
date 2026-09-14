@@ -193,3 +193,21 @@ export function errorRef(e: unknown): string | undefined {
 export async function absentOrThrow<T>(read: () => Promise<T | null | undefined>): Promise<T | null> {
   return (await read()) ?? null;
 }
+
+/**
+ * A decision on a proposal that is not there any more, read as the answer it is.
+ *
+ * `POST /proposals/:id/decide` answers an id that is not this wallet's proposal — or another account's, which it does
+ * not tell apart — with a 404, as the executor answers every resource that is not the caller's, and keeps the thread's
+ * sentence in the body: `{ error: 'not_found', status: 'gone', message }`. The chat renders that sentence, so that one
+ * answer comes back as a decision. Any other refusal, and a 404 without that body, is still the error it is: a proposal
+ * nobody could decide is not a proposal that was decided.
+ *
+ * Here rather than in `local.ts` for the reason `absentOrThrow` is.
+ */
+export function goneProposal(e: unknown): { status: 'gone'; message: string } | undefined {
+  if (!(e instanceof ApiError) || e.status !== 404) return undefined;
+  const body = e.body as { status?: unknown; message?: unknown } | null | undefined;
+  if (body?.status !== 'gone' || typeof body.message !== 'string' || !body.message.trim()) return undefined;
+  return { status: 'gone', message: body.message };
+}
