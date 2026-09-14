@@ -23,7 +23,7 @@ import {
   space,
   type FigureKind,
 } from '@/ui';
-import { money, price, quantity } from '@/format';
+import { money, price, quantity, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system, type StrategyRunRow } from '@/data/system';
 import { kindLabel, labelFigure } from '@/strategies/ladder';
@@ -76,7 +76,7 @@ export default function RunDetail() {
               </Text>
               <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s8 }}>
                 {/* The kind as the library names it — "Recurring buy", not `dca`. */}
-                {run.symbol} · {kindLabel(run.kind)} · {new Date(run.at).toLocaleString('en-US')}
+                {run.symbol} · {kindLabel(run.kind)} · {when(new Date(run.at).getTime())}
               </Text>
             </SheetCard>
 

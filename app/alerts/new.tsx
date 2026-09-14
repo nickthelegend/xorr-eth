@@ -99,9 +99,10 @@ export default function NewAlert() {
       await repos.alerts.create({
         kind: 'price',
         symbol: sym,
-        name: `${sym} above $${level}`,
+        // Formatted as the button above says it: the alert list read "WETH above $2662" beside prices with separators.
+        name: `${sym} above ${fmtPrice(value)}`,
         // Once per crossing, not once ever: see the note on the screen below.
-        detail: `Each time ${sym} crosses above $${level}.`,
+        detail: `Each time ${sym} crosses above ${fmtPrice(value)}.`,
         config: { above: value },
       });
       goBack();

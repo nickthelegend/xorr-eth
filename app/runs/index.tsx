@@ -29,7 +29,7 @@ import {
   size,
   space,
 } from '@/ui';
-import { money, quantity } from '@/format';
+import { money, quantity, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system, type StrategyRunRow } from '@/data/system';
 import { labelFigure } from '@/strategies/ladder';
@@ -100,7 +100,7 @@ export default function Runs() {
                 height={size.rowLg}
                 onPress={() => router.push(`/runs/${r.id}`)}
                 title={r.symbol}
-                secondary={`${r.label} · ${new Date(r.at).toLocaleString('en-US')}`}
+                secondary={`${r.label} · ${when(new Date(r.at).getTime())}`}
                 // Hidden balances hide the units it filled, and the label's size; the date beside the label stays.
                 figure="units"
                 secondaryFigure={labelFigure(r.kind)}

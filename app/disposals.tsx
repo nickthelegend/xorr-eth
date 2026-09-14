@@ -30,7 +30,7 @@ import {
   space,
   type FigureKind,
 } from '@/ui';
-import { money, quantity, signedMoney } from '@/format';
+import { money, quantity, signedMoney, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system, type Disposal } from '@/data/system';
 
@@ -95,7 +95,7 @@ function DisposalRow({ disposal }: { disposal: Disposal }) {
       </View>
 
       <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s4 }}>
-        {new Date(disposal.at).toLocaleString('en-US')}
+        {when(new Date(disposal.at).getTime())}
       </Text>
 
       <View style={{ flexDirection: 'row', gap: space.s20, marginTop: space.s12 }}>

@@ -25,7 +25,7 @@ import {
   space,
   type FigureKind,
 } from '@/ui';
-import { money, shortAddress } from '@/format';
+import { day, money, shortAddress } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { repos } from '@/data';
 import { useNow } from '@/state/useNow';
@@ -128,7 +128,7 @@ export default function DelegationDetail() {
             <Field
               label="Expiry"
               value={expiryPhrase(data.expiresAt, now)}
-              sub={new Date(data.expiresAt).toLocaleDateString('en-US')}
+              sub={day(data.expiresAt)}
             />
             <Field
               label="Owner"
