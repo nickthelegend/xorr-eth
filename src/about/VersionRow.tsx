@@ -10,11 +10,12 @@ import React from 'react';
 import { Row, Text, colors } from '@/ui';
 import { useAsync } from '@/data/useAsync';
 import { system } from '@/data/system';
-import { appCommit, compareVersions, shortCommit } from '@/version';
+import { appCommit, compareVersions, serverMatch, shortCommit } from '@/version';
 
 export function VersionRow({ height }: { height: number }) {
   const health = useAsync(() => system.health(), []);
-  const versions = compareVersions(appCommit, health.data?.version);
+  // An executor still on the commit a web-only deploy left it at runs this build's server code: that agrees.
+  const versions = compareVersions(appCommit, health.data?.version, serverMatch);
   const label =
     versions.kind === 'same'
       ? shortCommit(versions.commit)

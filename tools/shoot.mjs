@@ -208,17 +208,19 @@ const EXPECT = {
   '08-markets': { must: [/Crypto/, /Stocks/, /Commodities/, /\d+ shown/], never: [/^0 shown/m] },
   '09-markets-crypto': { must: [/\$[\d,]+/, /markets/] },
   '10-markets-stocks': { must: [/\$[\d,]+/] },
-  '11-markets-commodities': { must: [/NO PRICE FEED/, /9 of 9/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
-  '12-markets-indices': { must: [/NO PRICE FEED/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
-  '13-markets-preipo': { must: [/NO PRICE FEED/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
+  // Unpriced rows stay quiet now (a dash, no NO PRICE FEED tag); the count says how many of the class are shown.
+  '11-markets-commodities': { must: [/9 of 9/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
+  '12-markets-indices': { must: [/of \d+ markets/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
+  '13-markets-preipo': { must: [/of \d+ markets/], never: [/SIMULATED/, /\$164\.20|\$121\.55|\$402\.70|\$3,412\.10|\$598\.14|\$38\.71|\$521\.77/] },
   '14-watchlist': { must: [/\$[\d,]+/] },
   '15-search': { must: [/Search/i] },
   // The asset screen headlines the instrument's NAME, not its ticker — "Bitcoin", not "BTC".
   // Trimmed 2026-09-12: no "Your position: None" row and no agent note on a coin nobody holds.
   '16-asset': { must: [/Bitcoin|BTC/, /\$[\d,]+/], never: [/No agent holds this yet/] },
   // A stock has a price and no candle feed, and says so in the asset screen's current words.
-  '17-asset-stock': { must: [/Nvidia|NVDA/, /\$[\d,]+/, /No history yet/] },
-  '18-chart': { must: [/\$[\d,]+/, /15m/, /1H/, /1D/] },
+  '17-asset-stock': { must: [/Nvidia|NVDA/, /\$[\d,]+/, /No chart yet/] },
+  // The pills are the candle lengths the feed can cut (`CHART_PLAN`): 15m is gone, 4H is new.
+  '18-chart': { must: [/\$[\d,]+/, /1H/, /4H/, /1D/], never: [/15m/] },
   '19-order': { must: [/WETH/] },
   '20-order-stock': { must: [/NVDA/] },
   '21-swap': { must: [/Swap|swap/] },
@@ -284,7 +286,7 @@ const EXPECT = {
    */
   '38-safety': {
     must: [
-      /Agents are live|All agents stopped|Your permission has ended|Agents cannot trade|No agents can trade/,
+      /Trading is live|Trading is stopped|Your permission has ended|Nothing can trade/,
       /Your wallet/,
       /Agent key/,
       /0x[0-9a-fA-F]{4}…[0-9a-fA-F]{4}/,
@@ -369,7 +371,7 @@ const EXPECT = {
   '72-sponsors': { must: [/How it works|Integrations|Sponsors/, /1inch/i] },
   // The venues the grant allows, read from the contract, not the executor's current parameters.
   '73-venues': { must: [/Venues/, /trade can fill/i] },
-  '74-tokens': { must: [/Tokens/, /settle/i] },
+  '74-tokens': { must: [/Tokens/, /traded/i] },
   '75-coverage': { must: [/Coverage/, /PRICED/i] },
   // Real feeds unlabelled, synthetic ones labelled — the whole point of this screen.
   /*
@@ -388,8 +390,9 @@ const EXPECT = {
   '83-policy': { must: [/PRIVY POLICY/i], never: [/we attached/i] },
   // Who you are and where things live — the counts and the activity feed moved behind their rows.
   '84-profile': {
-    must: [/0x[0-9A-Fa-f]{4}/, /Privy/, /Activity/, /Permissions/, /Approvals/, /Settings/],
-    never: [/Risk checks/, /Recent activity/],
+    // The wallet's kind in plain words: no vendor and no network on a main sheet.
+    must: [/0x[0-9A-Fa-f]{4}/, /Wallet made with your email|Connected wallet/, /Activity/, /Permissions/, /Approvals/, /Settings/],
+    never: [/Risk checks/, /Recent activity/, /Privy/],
   },
   // Where the balance goes: what the chain holds, what the book bought, and what it made.
   '97-portfolio': { must: [/TOTAL BALANCE/, /Deposit/, /Withdraw/, /Positions/, /Profit/] },
@@ -424,9 +427,9 @@ const EXPECT = {
    */
   '92-not-found': { must: [/There is nothing here/], never: [/Unmatched Route/, /Sitemap/] },
   // No oracle for a crypto symbol is a real answer; a retry on it is not.
-  '93-oracle-equity': { must: [/NVDAc/, /Readings|oracle/i] },
+  '93-oracle-equity': { must: [/NVDAc/, /recorded/i] },
   '94-crosscheck': { must: [/CROSS-CHECK/i, /agree|differ/i] },
-  '95-route': { must: [/Route/, /USDC/, /EVERY VENUE, SAME SIZE/] },
+  '95-route': { must: [/Route/, /USDC/, /SAME SIZE, EVERY WAY TO FILL/] },
   /*
    * The anchor screen's whole claim is that the reader can repeat the read without us, so it must
    * show a state, the head Base holds, and the two addresses that reproduce it.

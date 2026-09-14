@@ -138,6 +138,14 @@ type WalletSlice = {
   walletChecked: boolean;
   setWalletChecked: (v: boolean) => void;
   setDelegation: (d: Delegation | null) => void;
+  /**
+   * Forget what this device holds about the signed-in person, and keep what belongs to the device.
+   *
+   * Sign-out cleared `wallet` alone, so the next account on the same phone inherited the last one's "Done" on Recovery
+   * (a claim that a recovery step was taken, made to someone who never took it) along with its stop switch, its
+   * limits and its onboarding answers. Screen and list preferences stay: they are the device's.
+   */
+  forgetAccount: () => void;
 };
 
 export type Store = AgentConfigSlice &
@@ -148,9 +156,31 @@ export type Store = AgentConfigSlice &
   ViewsSlice &
   WalletSlice;
 
+/** What belongs to the signed-in person rather than to this device. `forgetAccount` puts each back to its default. */
+const ACCOUNT_KEYS = [
+  'wallet',
+  'walletChecked',
+  'delegation',
+  'recoveryBackedUp',
+  'killed',
+  'hired',
+  'alerts',
+  'decision',
+  'runFor',
+  'cap',
+  'stocksPaused',
+  'goals',
+  'riskQ',
+  'weights',
+  'approved',
+  'walletStep',
+  'dep',
+  'method',
+] as const satisfies readonly (keyof Store)[];
+
 export const useStore = create<Store>()(
   persist(
-    (set, get) => ({
+    (set, get, api) => ({
       // ── agent config — state.md defaults ──
       runFor: 1,
       cap: 1600,
@@ -250,6 +280,10 @@ export const useStore = create<Store>()(
       walletChecked: false,
       setWalletChecked: (walletChecked) => set({ walletChecked }),
       setDelegation: (delegation) => set({ delegation }),
+      forgetAccount: () => {
+        const initial = api.getInitialState();
+        set(Object.fromEntries(ACCOUNT_KEYS.map((key) => [key, initial[key]])) as Partial<Store>);
+      },
     }),
     {
       name: 'xorr-store',

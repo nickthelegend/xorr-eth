@@ -112,7 +112,7 @@ export default function AuditChain() {
               The half of the integrity claim that does not depend on trusting us.
               Everything above is our code re-hashing our rows and reporting the result, which a
               sceptic has no reason to accept. The anchor screen shows the head hash sitting in a
-              Base contract at a named block, readable without our cooperation.
+              contract at a named block, readable without our cooperation.
             */}
             <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
               {/* No network named here (PLAN.md O3): which chain holds the anchor is the anchor screen's to say. */}

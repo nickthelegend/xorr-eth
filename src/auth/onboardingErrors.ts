@@ -56,7 +56,8 @@ export function verifyFailure(e: unknown): string {
 /** Registering the address with the executor. */
 export function connectFailure(e: unknown): string {
   if (e instanceof ApiError && e.status >= 500) {
-    return 'The executor is not answering right now. Your wallet is fine; this will retry.';
+    // Nothing retries on its own: the screen's Try again is the retry, so the sentence points at it.
+    return 'We could not reach xorr just now. Your wallet is fine. Try again in a moment.';
   }
   return stated(e, 'Your wallet could not be registered with the executor.');
 }

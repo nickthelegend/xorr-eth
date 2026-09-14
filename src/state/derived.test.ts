@@ -272,10 +272,10 @@ describe('leaderboard — screen 16', () => {
 
 describe('kill switch — screen 20', () => {
   it('state-driven title, explanation and CTA', () => {
-    expect(d.killTitle(false)).toBe('Agents are live');
-    expect(d.killTitle(true)).toBe('All agents stopped');
-    expect(d.killCta(false)).toBe('Stop all agents');
-    expect(d.killCta(true)).toBe('Resume agents');
+    expect(d.killTitle(false)).toBe('Trading is live');
+    expect(d.killTitle(true)).toBe('Trading is stopped');
+    expect(d.killCta(false)).toBe('Stop all trading');
+    expect(d.killCta(true)).toBe('Resume trading');
     expect(d.killExplanation(false, { agents: 3, strategies: 0 })).toBe(
       '3 agents can trade within your limits.',
     );
@@ -315,6 +315,25 @@ describe('kill switch — screen 20', () => {
   });
 
   /*
+   * The title and the button name trading, never agents. The switch stops strategies as well, and a wallet running only
+   * strategies was headed "Agents are live" and offered "Stop all agents" above a sentence counting nine strategies.
+   */
+  it('names trading, not agents, in the title and the button, whatever the state', () => {
+    const states: [boolean, boolean, boolean, boolean][] = [
+      [false, false, true, false],
+      [true, false, true, false],
+      [false, true, true, false],
+      [false, false, false, false],
+      [false, false, true, true],
+    ];
+    for (const s of states) {
+      expect(d.killTitle(...s)).not.toMatch(/agent/i);
+      expect(d.killCta(...s)).not.toMatch(/agent/i);
+    }
+    expect(d.killExplanation(false, { agents: 0, strategies: 2 }, true)).not.toMatch(/agent/i);
+  });
+
+  /*
    * A count that could not be read is not zero.
    *
    * The roster read no longer falls back to fixture personas, so it can fail — and counting a failed
@@ -342,7 +361,7 @@ describe('kill switch — screen 20', () => {
     const none = d.killExplanation(false, { agents: 0, strategies: 0 }, false, false);
     expect(none).toContain('Nothing is granted yet');
     expect(none).not.toContain('the permission is live');
-    expect(d.killTitle(false, false, false)).toBe('No agents can trade');
+    expect(d.killTitle(false, false, false)).toBe('Nothing can trade yet');
     // And an ungranted wallet with strategies somehow counted still must not claim they can trade.
     expect(d.killExplanation(false, { agents: 0, strategies: 3 }, false, false)).toContain('Nothing is granted yet');
   });
@@ -425,13 +444,13 @@ describe('kill switch — screen 20', () => {
      */
     it('offers a new grant, not a stop', () => {
       expect(d.killCta(false, false, true, true)).toBe('Grant a new permission');
-      expect(d.killCta(false, false, true, false)).toBe('Stop all agents');
+      expect(d.killCta(false, false, true, false)).toBe('Stop all trading');
     });
 
     it('leaves the other states alone', () => {
       // Disconnected outranks expired: a key that moved is the more specific fault.
-      expect(d.killCta(false, true, true, true)).toBe('Reconnect agents');
-      expect(d.killTitle(false, true, true, true)).toBe('Agents cannot trade');
+      expect(d.killCta(false, true, true, true)).toBe('Reconnect');
+      expect(d.killTitle(false, true, true, true)).toBe('Nothing can trade');
       // And an ungranted wallet has no clock to run out.
       expect(d.killCta(false, false, false, true)).toBe('Set the limits');
     });
@@ -461,19 +480,19 @@ describe('kill switch — screen 20', () => {
    * had never been granted.
    */
   it('offers a grant, not a stop, when nothing is granted', () => {
-    expect(d.killTitle(false, false, false)).toBe('No agents can trade');
+    expect(d.killTitle(false, false, false)).toBe('Nothing can trade yet');
     expect(d.killCta(false, false, false)).toBe('Set the limits');
     // And the states that already worked keep working.
-    expect(d.killCta(false, false, true)).toBe('Stop all agents');
-    expect(d.killCta(true, false, true)).toBe('Resume agents');
+    expect(d.killCta(false, false, true)).toBe('Stop all trading');
+    expect(d.killCta(true, false, true)).toBe('Resume trading');
     // `unusable` still wins over both — a broken grant is re-granted, not "set".
-    expect(d.killCta(false, true, false)).toBe('Reconnect agents');
+    expect(d.killCta(false, true, false)).toBe('Reconnect');
   });
 
   it('a grant to a key the executor does not hold is not "live"', () => {
     expect(d.delegateUnusable({ delegateIsCurrent: false }, false)).toBe(true);
-    expect(d.killTitle(false, true)).toBe('Agents cannot trade');
-    expect(d.killCta(false, true)).toBe('Reconnect agents');
+    expect(d.killTitle(false, true)).toBe('Nothing can trade');
+    expect(d.killCta(false, true)).toBe('Reconnect');
     expect(d.killExplanation(false, { agents: 1, strategies: 0 }, true)).toContain('Reconnect');
     // And it must not read as a working permission.
     expect(d.killExplanation(false, { agents: 1, strategies: 0 }, true)).not.toContain('can trade within');

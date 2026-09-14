@@ -218,12 +218,12 @@ export default function Safety() {
       if (enrolled) {
         const res = await LocalAuthentication.authenticateAsync({
           promptMessage: unusable
-            ? 'Reconnect your agents'
+            ? 'Reconnect trading'
             : expired
               ? 'Grant a new permission'
               : killed
-                ? 'Resume your agents'
-                : 'Stop all agents',
+                ? 'Resume trading'
+                : 'Stop all trading',
         });
         if (!res.success) {
           setLocalError('Not confirmed. Nothing changed.');

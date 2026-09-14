@@ -14,6 +14,16 @@ describe('compareVersions', () => {
     expect(compareVersions(FULL, 'e607289ab')).toEqual({ kind: 'different', app: FULL, executor: 'e607289ab' });
   });
 
+  it('agrees when the executor is on an older commit that runs this build’s server code', () => {
+    // A web-only deploy: the build found nothing under server/ changed since the executor's commit.
+    expect(compareVersions(FULL, 'e607289ab', 'e607289ab4c1')).toEqual({ kind: 'same', commit: FULL });
+  });
+
+  it('does not let a match for some other commit hide a difference', () => {
+    expect(compareVersions(FULL, 'e607289ab', '1234567')).toEqual({ kind: 'different', app: FULL, executor: 'e607289ab' });
+    expect(compareVersions(FULL, 'e607289ab', 'not-a-commit')).toEqual({ kind: 'different', app: FULL, executor: 'e607289ab' });
+  });
+
   it('is unknown, not a guess, when either side did not say or said something that is not a commit', () => {
     expect(compareVersions(undefined, FULL).kind).toBe('unknown');
     expect(compareVersions(FULL, undefined).kind).toBe('unknown');

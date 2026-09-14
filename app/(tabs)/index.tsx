@@ -355,10 +355,10 @@ export default function Home() {
               accessibilityRole="button"
               accessibilityLabel={
                 live
-                  ? 'Agents can trade. Open Safety.'
+                  ? 'Trading is live. Open Safety.'
                   : limits.data
-                    ? 'Agents cannot trade right now. Open Safety.'
-                    : 'Couldn’t read whether agents can trade. Open Safety.'
+                    ? 'Not trading right now. Open Safety.'
+                    : 'Couldn’t read whether anything can trade. Open Safety.'
               }
               style={{
                 marginLeft: 'auto',

@@ -130,19 +130,40 @@ const DIRTY = execFileSync('git', ['status', '--porcelain', '--untracked-files=n
 const APP_COMMIT = DIRTY ? undefined : COMMIT;
 console.log(`  app commit ${APP_COMMIT ?? `none named: the checkout at ${COMMIT.slice(0, 7)} has uncommitted changes`}`);
 
+/*
+ * Whether the executor's commit carries this build's server code (`src/version.ts` → `serverMatch`). A web-only deploy
+ * leaves the executors where they were, and when nothing under `server/` (the executor's whole build, per
+ * `server/railway.json`) has changed since, the app would report two commits in the warning colour about identical
+ * code. Git answers. A difference, or a commit this checkout does not have, leaves it unset and the difference shown.
+ */
+const EXECUTOR_COMMIT = /^[0-9a-f]{7,40}$/i.test(String(health.version ?? '')) ? String(health.version).toLowerCase() : undefined;
+let SERVER_MATCH;
+if (APP_COMMIT && EXECUTOR_COMMIT && !APP_COMMIT.startsWith(EXECUTOR_COMMIT)) {
+  try {
+    execFileSync('git', ['diff', '--quiet', EXECUTOR_COMMIT, COMMIT, '--', 'server'], { stdio: 'ignore' });
+    SERVER_MATCH = EXECUTOR_COMMIT;
+  } catch {
+    // Exit 1 is a difference and 128 a commit this checkout does not have: no match to claim either way.
+  }
+}
+console.log(
+  `  executor commit ${EXECUTOR_COMMIT ? EXECUTOR_COMMIT.slice(0, 7) : 'not named'}${SERVER_MATCH ? `, whose server code is this build's` : ''}`,
+);
+
 /* The developer's own file, restored verbatim below whatever happens. */
 const original = readFileSync(ENV_FILE, 'utf8');
 
 try {
   const patched = original
     .split('\n')
-    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN|CHAIN_RPC|PINNED_DELEGATION|APP_COMMIT)=/.test(l))
+    .filter((l) => !/^EXPO_PUBLIC_(API_URL|XORR_CHAIN|CHAIN_RPC|PINNED_DELEGATION|APP_COMMIT|SERVER_MATCH)=/.test(l))
     .concat([
       `EXPO_PUBLIC_API_URL=${API}`,
       `EXPO_PUBLIC_XORR_CHAIN=${health.chain}`,
       ...(CHAIN_RPC ? [`EXPO_PUBLIC_CHAIN_RPC=${CHAIN_RPC}`] : []),
       `EXPO_PUBLIC_PINNED_DELEGATION=${PIN}`,
       ...(APP_COMMIT ? [`EXPO_PUBLIC_APP_COMMIT=${APP_COMMIT}`] : []),
+      ...(SERVER_MATCH ? [`EXPO_PUBLIC_SERVER_MATCH=${SERVER_MATCH}`] : []),
       '',
     ])
     .join('\n');
@@ -186,6 +207,7 @@ if (!js.includes(API)) problems.push(`the bundle does not contain ${API}`);
 if (CHAIN_RPC && !js.includes(CHAIN_RPC)) problems.push(`the bundle does not contain the fork RPC ${CHAIN_RPC}`);
 if (!js.includes(PIN)) problems.push(`the bundle does not contain the pinned delegation contract ${PIN}`);
 if (APP_COMMIT && !js.includes(APP_COMMIT)) problems.push(`the bundle does not name its commit ${APP_COMMIT}`);
+if (SERVER_MATCH && !js.includes(SERVER_MATCH)) problems.push(`the bundle does not carry the matching executor commit ${SERVER_MATCH}`);
 
 if (problems.length) {
   console.error(`\n  Build produced the wrong artifact:\n${problems.map((p) => `    - ${p}`).join('\n')}\n`);

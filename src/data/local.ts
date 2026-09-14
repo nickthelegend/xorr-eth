@@ -144,8 +144,14 @@ export const LocalRepositories: Repositories = {
       const needsStocks = symbols.some((s) => STOCK_SYMBOLS.has(s));
       let warming = false;
       const [live, stocks] = await Promise.all([
+        /*
+         * Still warming is an answer, and every symbol below says so. Any other failure throws, as `listClasses` does:
+         * `{}` made a feed that did not answer look like symbols with no feed, and a ticket then said "No live WETH
+         * price" about a price nobody had been able to ask for.
+         */
         fetchQuotes(symbols).catch((e: unknown): Record<string, Quote> => {
-          warming = e instanceof StillWarming;
+          if (!(e instanceof StillWarming)) throw new Error('The price feed did not answer.');
+          warming = true;
           return {};
         }),
         needsStocks

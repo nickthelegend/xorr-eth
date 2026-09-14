@@ -2,28 +2,16 @@
 appId: finance.xorr.app
 ---
 - launchApp
-- tapOn:
-    id: 'Home'
-- tapOn:
-    id: 'Settings'
-- tapOn: 'Status'
+- openLink: 'xorr://safety'
 
-- assertVisible: 'Agents are live'
-- assertVisible: 'Stops and take-profits'
-- assertVisible: 'Stay active — your risk is still covered'
-- assertVisible: 'Open positions'
-- assertVisible: 'Left exactly as they are'
+- assertVisible: 'Trading is live'
 
-- tapOn: 'Stop all agents'
-- assertVisible: 'All agents stopped'
-- assertVisible: 'Open positions are untouched'
-- assertVisible: 'Resume agents'
+- tapOn: 'Stop all trading'
+- assertVisible: 'Trading is stopped'
+- assertVisible: 'Nothing trades until you resume.'
+- assertVisible: 'Resume trading'
 
-# The state is real, not a screen-local toggle.
+# The state is real, read back from the chain after a relaunch, not a screen-local toggle.
 - launchApp
-- tapOn:
-    id: 'Home'
-- tapOn:
-    id: 'Settings'
-- tapOn: 'Status'
-- assertVisible: 'All agents stopped'
+- openLink: 'xorr://safety'
+- assertVisible: 'Trading is stopped'

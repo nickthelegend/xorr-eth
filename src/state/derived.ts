@@ -381,17 +381,24 @@ export function permissionUnreadable(
   return Boolean(loadError) && !signedOut && (delegation === null || delegation === undefined);
 }
 
+/**
+ * The headline on Safety, in words that are true of whatever the permission runs.
+ *
+ * It named agents in every state, and the switch governs strategies just as much: a wallet with nine live strategies
+ * and no agent hired was headed "Agents are live", and after a stop "All agents stopped", above a sentence that counted
+ * the strategies correctly. What the switch turns on and off is trading, so trading is what the title names.
+ */
 export function killTitle(
   killed: boolean,
   unusable = false,
   granted = true,
   expired = false,
 ): string {
-  if (unusable) return 'Agents cannot trade';
-  // "Agents are live" over an ungranted wallet is the same false claim as the explanation below.
-  if (!granted) return 'No agents can trade';
+  if (unusable) return 'Nothing can trade';
+  // "Trading is live" over an ungranted wallet is the same false claim as the explanation below.
+  if (!granted) return 'Nothing can trade yet';
   if (expired) return 'Your permission has ended';
-  return killed ? 'All agents stopped' : 'Agents are live';
+  return killed ? 'Trading is stopped' : 'Trading is live';
 }
 /** What is scheduled against the permission right now, counted by kind. */
 export type RunningCount = { agents: number; strategies: number };
@@ -425,7 +432,7 @@ export function killExplanation(
   expired = false,
 ): string {
   if (unusable) {
-    return 'Reconnect to let agents trade. Your funds are untouched.';
+    return 'Reconnect to trade again. Your funds are untouched.';
   }
   /*
    * No permission at all is its own state, and it outranks the rest.
@@ -474,10 +481,11 @@ export function killCta(
   granted = true,
   expired = false,
 ): string {
-  if (unusable) return 'Reconnect agents';
+  // Trading, not agents, for the reason `killTitle` gives: the switch stops strategies too.
+  if (unusable) return 'Reconnect';
   if (!granted) return 'Set the limits';
   if (expired) return 'Grant a new permission';
-  return killed ? 'Resume agents' : 'Stop all agents';
+  return killed ? 'Resume trading' : 'Stop all trading';
 }
 
 // ── Activity (screen 15) ─────────────────────────────────────────────────────

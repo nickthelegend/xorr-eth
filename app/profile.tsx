@@ -34,7 +34,6 @@ import { usePrivyIdentity } from '@/auth/usePrivyIdentity';
 import { useAsync } from '@/data/useAsync';
 import { repos } from '@/data';
 import { system } from '@/data/system';
-import { chainLabel } from '@/chain';
 
 const AVATAR = 84;
 const LINK_GLYPH = 18;
@@ -182,7 +181,8 @@ export default function Profile() {
         {wallet.data ? (
           <Rise index={2}>
             <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s18 }}>
-              {`Privy ${wallet.data.kind} wallet · ${chainLabel}`}
+              {/* The kind of wallet in plain words: no vendor and no network on a main sheet (PLAN.md O3). */}
+              {wallet.data.kind === 'connected' ? 'Connected wallet' : 'Wallet made with your email'}
             </Text>
           </Rise>
         ) : null}

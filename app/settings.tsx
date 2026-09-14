@@ -107,7 +107,7 @@ export default function Settings() {
    */
   const { logout, ready, authenticated } = useAuth();
   const signedOut = ready && !authenticated;
-  const setWallet = useStore((s) => s.setWallet);
+  const forgetAccount = useStore((s) => s.forgetAccount);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string>();
 
@@ -120,8 +120,9 @@ export default function Settings() {
     try {
       await logout();
       // The persisted store outlives the session, and the entry gate reads `wallet` to choose
-      // between onboarding and the tab shell. Leaving it set signs you out into a signed-in shell.
-      setWallet(null);
+      // between onboarding and the tab shell. Leaving it set signs you out into a signed-in shell,
+      // and the rest of what it keeps about the person went to whoever signed in next.
+      forgetAccount();
       router.replace('/welcome');
     } catch (e) {
       setConfirmingSignOut(false);

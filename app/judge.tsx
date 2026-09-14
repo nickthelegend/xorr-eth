@@ -41,7 +41,7 @@ import {
 import { api } from '@/data/api';
 import { ApiError, TimedOut, errorRef, errorText, isRetryable } from '@/data/apiError';
 import { useAsync } from '@/data/useAsync';
-import { useStore } from '@/state/store';
+import { useHasHydrated, useStore } from '@/state/store';
 
 type Check = {
   id: string;
@@ -98,21 +98,33 @@ function failureDetail(e: Error): string | undefined {
 
 export default function Judge() {
   const goBack = useGoBack();
-  const wallet = useStore((s) => s.wallet);
-  const [owner, setOwner] = useState(wallet?.address ?? '');
+  /*
+   * The signed-in wallet, once the store has loaded it. This was `useState(wallet?.address ?? '')`, read on the first
+   * render, before the store had hydrated: the field started empty and the first run checked no wallet for a person who
+   * has one. Both values now follow the stored address until the reader types or runs something else, and the first
+   * run waits for the store, as Verify's does.
+   */
+  const hydrated = useHasHydrated();
+  const stored = useStore((s) => s.wallet?.address) ?? '';
+  const [typed, setTyped] = useState<string>();
+  const owner = typed ?? stored;
   // The address the last run used, so editing the field does not silently relabel the results
   // above it as being about an address they were never run against.
-  const [ranFor, setRanFor] = useState(owner);
+  const [asked, setAsked] = useState<string>();
+  const ranFor = asked ?? stored;
   const [nonce, setNonce] = useState(0);
 
   const report = useAsync(
     // No auth needed — the route is public on purpose, so this works signed out.
-    () => api.get<Report>(`/verify${ranFor ? `?owner=${encodeURIComponent(ranFor)}` : ''}`),
-    [ranFor, nonce],
+    () =>
+      hydrated
+        ? api.get<Report>(`/verify${ranFor ? `?owner=${encodeURIComponent(ranFor)}` : ''}`)
+        : new Promise<Report>(() => undefined),
+    [ranFor, nonce, hydrated],
   );
 
   const rerun = useCallback(() => {
-    setRanFor(owner.trim());
+    setAsked(owner.trim());
     setNonce((n) => n + 1);
   }, [owner]);
 
@@ -160,7 +172,7 @@ export default function Judge() {
         <Eyebrow small>Owner</Eyebrow>
         <TextInput
           value={owner}
-          onChangeText={setOwner}
+          onChangeText={setTyped}
           onSubmitEditing={rerun}
           placeholder="0x… (optional)"
           placeholderTextColor={colors.ink30}
