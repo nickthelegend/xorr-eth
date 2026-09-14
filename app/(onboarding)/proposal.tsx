@@ -225,7 +225,8 @@ export default function Proposal() {
             }}
           >
             <Text variant="rowPrimary">Allocated</Text>
-            <Price variant="value" color={ok ? colors.up : colors.warn}>
+            {/* Ink when it adds up: green is for profit and loss, and a total of 100% is neither (G3). */}
+            <Price variant="value" color={ok ? colors.ink : colors.warn}>
               {total}%
             </Price>
           </View>
