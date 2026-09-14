@@ -99,7 +99,12 @@ export type MessageBase = { id: string; at: number; author: 'bot' | 'user' | 'sy
 
 export type ThreadMessage =
   | (MessageBase & { type: 'prose'; agent: string; segments: Segment[] })
-  | (MessageBase & { type: 'proposal'; proposalId: string })
+  | (MessageBase & {
+      type: 'proposal';
+      proposalId: string;
+      /** The agent that proposed it, which is whose conversation the card sits in. Absent on older proposals. */
+      agent?: string;
+    })
   | (MessageBase & { type: 'fill'; agent: string; segments: Segment[]; outcome: 'filled' })
   | (MessageBase & { type: 'declined'; agent: string; segments: Segment[] })
   | (MessageBase & { type: 'expired'; segments: Segment[] })
@@ -107,7 +112,12 @@ export type ThreadMessage =
   | (MessageBase & { type: 'strategy-created'; agent: string; segments: Segment[]; strategyId: string })
   | (MessageBase & { type: 'blocked'; agent: string; segments: Segment[]; reason: string })
   | (MessageBase & { type: 'briefing'; agent: string; segments: Segment[] })
-  | (MessageBase & { type: 'user'; text: string });
+  | (MessageBase & {
+      type: 'user';
+      text: string;
+      /** The agent it was asked of. Absent on questions asked before conversations were split by agent. */
+      to?: string;
+    });
 
 export const MESSAGE_TYPES = [
   'prose',

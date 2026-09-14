@@ -1,53 +1,52 @@
 /**
- * The tab shell — three buttons (2026-09-12).
+ * The tab shell — Home, Swap and Messages (2026-09-15).
  *
- * Home, the AI chat, and a grid, all drawn by `TabBar`. The old tabs — Markets and Assets — and the
- * chat's own route are still screens in this group, so every link and push that lands on them still
+ * All drawn by `TabBar`. Home is the one place. Swap opens the swap screen as a sheet from the bottom (`app/_layout.tsx`
+ * presents it). Messages raises the drawer of conversations with the agents over whatever you were looking at and over
+ * this bar, and closing it puts you back on that screen. The drawer is mounted at the root rather than here, so it can
+ * rise over any screen; `/bot` survives as a route for the pushes and links that open it directly.
+ *
+ * Markets, Assets and the old grid tab are still screens in this group, so every link and push that lands on them still
  * arrives with the bar underneath. Strategies left the group: it is a page with a back arrow now.
  *
- * The middle button raises the chat as a sheet over whatever you were looking at, and closing it
- * puts you back on that screen. `/bot` survives as a route for the pushes and links that open the
- * conversation directly, and renders the same `<Chat />` the sheet does.
- *
- * The bar lives HERE and nowhere else. A screen inside this group must not render its own — the
- * layout already draws one, and two bars stack.
+ * The bar lives HERE and nowhere else. A screen inside this group must not render its own — the layout already draws one,
+ * and two bars stack.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import { TabBar, colors, type TabKey } from '@/ui';
-import { ChatSheet } from '@/chat/ChatSheet';
+import { TabBar, colors } from '@/ui';
+import { useThread } from '@/bot/thread';
+import { CHAT_AGENTS } from '@/chat/agents';
+import { useChatDrawer } from '@/chat/chatDrawer';
+import { summaries, unreadTotal } from '@/chat/conversations';
 
-const ROUTE: Record<TabKey, string> = {
-  home: '/',
-  more: '/more',
-};
-
-/** Which place is lit. A screen that is neither — Markets from a link, say — lights nothing. */
-function activeTab(pathname: string): TabKey | null {
-  if (pathname === '/') return 'home';
-  if (pathname.startsWith('/more')) return 'more';
-  return null;
-}
+const AGENT_NAMES = CHAT_AGENTS.map((a) => a.name);
 
 export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
-  const [chatOpen, setChatOpen] = useState(false);
+  const show = useChatDrawer((s) => s.show);
+  const messages = useThread((s) => s.messages);
+  const read = useThread((s) => s.read);
+  const hydrate = useThread((s) => s.hydrate);
 
-  /*
-   * The sheet is a sibling of the navigator, not a screen inside it, so it covers the tab bar as
-   * well as the content. Rendering it from the `tabBar` slot would confine it to the bar's own
-   * height.
-   */
+  // The count on Messages is the thread's, so the thread is read as the shell mounts rather than when the drawer opens.
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+  const unread = useMemo(() => unreadTotal(summaries(messages, AGENT_NAMES, read)), [messages, read]);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Tabs
         tabBar={() => (
           <TabBar
-            active={activeTab(pathname)}
-            onSelect={(key) => router.navigate(ROUTE[key] as never)}
-            onAction={() => setChatOpen(true)}
+            active={pathname === '/' ? 'home' : null}
+            onHome={() => router.navigate('/')}
+            onSwap={() => router.push('/swap')}
+            onMessages={() => show()}
+            unread={unread}
           />
         )}
         screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg } }}
@@ -58,8 +57,6 @@ export default function TabsLayout() {
         <Tabs.Screen name="holdings" />
         <Tabs.Screen name="bot" />
       </Tabs>
-
-      <ChatSheet open={chatOpen} onClose={() => setChatOpen(false)} />
     </View>
   );
 }

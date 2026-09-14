@@ -18,8 +18,8 @@ import { Icon } from '@/design/Icon';
 import { assetGradient } from '@/design/gradients';
 import {
   AssetMark,
-  BackButton,
   Button,
+  CloseButton,
   EmptyState,
   ErrorState,
   Eyebrow,
@@ -173,7 +173,8 @@ export default function Swap() {
     <Screen>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s8 }}>
-          <BackButton onPress={() => goBack()} />
+          {/* A sheet from the tab bar's centre, so it closes rather than going back. */}
+          <CloseButton onPress={() => goBack()} accessibilityLabel="Close swap" />
           <Text variant="cardTitle">Swap</Text>
         </View>
         <IconButton

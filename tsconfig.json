@@ -28,6 +28,7 @@
     ".scaffold",
     "contracts",
     "dist",
+    "landing",
     "node_modules",
     "programs",
     "server",

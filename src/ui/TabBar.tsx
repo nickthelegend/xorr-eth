@@ -1,43 +1,37 @@
 /**
- * TabBar.tsx — the three-button bar.
+ * TabBar.tsx — Home, Swap and Messages (2026-09-15).
  *
- * Rebuilt 2026-09-12 to the product owner's reference: Home on the left, a solid circle in the
- * middle, and a grid on the right. No labels — three glyphs this distinct do not need them, and
- * five icons with words under them was the clutter this replaces.
+ * Rebuilt to the product owner's reference, a messenger's bar: one floating capsule, three items, each a glyph over its
+ * name. It replaced a solid centre circle that opened the chat, between Home and a grid that opened a blank screen. The
+ * chat moved to where the grid was, as Messages, and the centre became Swap.
  *
- * The middle button is the AI chat. It is an ACTION, not a place: it raises the conversation over
- * whatever is on screen, so it never lights up. Home and the grid are the two places: lit is white,
- * unlit is ink30. The chat circle is solid white with a dark glyph — the brightest thing on the bar,
- * because it is the thing you reach for.
+ * Home is the one place, and the only item that lights — white, on a raised pill. Swap and Messages are actions: Swap
+ * raises the swap sheet from the bottom, and Messages the drawer of conversations with the agents, over whatever is on
+ * screen. Messages carries how many of the agents' messages are new, as a messenger does; at zero nothing is drawn.
  *
- * The glyphs are drawn here rather than taken from the icon set, as the old bar's were: they are
- * solid where the set is stroked, because a filled shape is what makes three buttons read at a
- * glance.
+ * The glyphs are drawn here, solid where the icon set is stroked, because a filled shape is what makes three items read
+ * at a glance. Nothing on the bar animates.
  *
  * The bottom padding is the real inset, floored so a device that reports none still clears the edge.
  */
 import React from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { Press } from './Press';
+import { Text } from './Text';
 import { colors, space } from './tokens';
 
-export type TabKey = 'home' | 'more';
+/** The places on the bar. One: Swap and Messages are actions, and are never selected. */
+export type TabKey = 'home';
 
-/** The two places, left to right. The action sits between them. */
-export const TAB_ORDER: readonly TabKey[] = ['home', 'more'];
+export const TAB_ORDER: readonly TabKey[] = ['home'];
 
-const TAB_LABEL: Readonly<Record<TabKey, string>> = {
-  home: 'Home',
-  more: 'More',
-};
-
-/** The tab glyph box, and the centre circle's diameter — which is also every slot's height. */
-const GLYPH = 26;
-const ACTION = 54;
-const ACTION_GLYPH = 24;
-const ACTION_STROKE = 2.2;
+const BAR_H = 60;
+const ITEM_H = 50;
+const GLYPH = 24;
+const STROKE = 2.1;
+const BADGE_H = 17;
 
 /** The house, solid, with its door cut out. */
 function HomeGlyph({ color }: { color: string }) {
@@ -55,127 +49,162 @@ function HomeGlyph({ color }: { color: string }) {
   );
 }
 
-/** Four rounded squares — "everything else". */
-function GridGlyph({ color }: { color: string }) {
-  const cells = [
-    [3.5, 3.5],
-    [13.5, 3.5],
-    [3.5, 13.5],
-    [13.5, 13.5],
-  ] as const;
+const stroked = (color: string) =>
+  ({ stroke: color, strokeWidth: STROKE, strokeLinecap: 'round', strokeLinejoin: 'round', fill: 'none' }) as const;
+
+/** Two arrows passing each other: one token for another. */
+function SwapGlyph({ color }: { color: string }) {
   return (
     <Svg width={GLYPH} height={GLYPH} viewBox="0 0 24 24">
-      {cells.map(([x, y]) => (
-        <Rect key={`${x}-${y}`} x={x} y={y} width={7} height={7} rx={2.2} fill={color} />
-      ))}
+      <Path d="M8 19V5M8 5 4.5 8.5M8 5l3.5 3.5" {...stroked(color)} />
+      <Path d="M16 5v14m0 0-3.5-3.5M16 19l3.5-3.5" {...stroked(color)} />
     </Svg>
   );
 }
 
 /**
- * The chat bubble in the centre circle, with the agent's face in it.
+ * A chat bubble with the agents' face in it.
  *
- * The two dots and the smile are the same face the roster and the proposal cards draw: it is the
- * bot you are talking to, not a support inbox.
+ * The two dots and the smile are the same face the roster and the proposal cards draw: it is the agents you are talking
+ * to, not a support inbox.
  */
 function ChatGlyph({ color }: { color: string }) {
-  const stroke = {
-    stroke: color,
-    strokeWidth: ACTION_STROKE,
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    fill: 'none',
-  } as const;
   return (
-    <Svg width={ACTION_GLYPH} height={ACTION_GLYPH} viewBox="0 0 24 24">
+    <Svg width={GLYPH} height={GLYPH} viewBox="0 0 24 24">
       <Path
         d="M21 11.5c0 4.14-4.03 7.5-9 7.5a10.5 10.5 0 0 1-2.6-.32L4.5 20.5l1.2-3.2A7.02 7.02 0 0 1 3 11.5C3 7.36 7.03 4 12 4s9 3.36 9 7.5Z"
-        {...stroke}
+        {...stroked(color)}
       />
       <Circle cx={9.2} cy={11.2} r={1.2} fill={color} />
       <Circle cx={14.8} cy={11.2} r={1.2} fill={color} />
-      <Path d="M9.3 14.2a3.4 3.4 0 0 0 5.4 0" {...stroke} />
+      <Path d="M9.3 14.2a3.4 3.4 0 0 0 5.4 0" {...stroked(color)} />
     </Svg>
   );
 }
 
 export interface TabBarProps {
-  /**
-   * The open place, or null when the screen is neither.
-   *
-   * A route inside the tab group that is not one of the two — Markets, say, opened from the grid —
-   * lights the grid, because that is where it lives now. The layout decides; the bar just draws it.
-   */
+  /** The open place, or null when the screen is not Home. The layout decides; the bar draws it. */
   active: TabKey | null;
-  onSelect: (tab: TabKey) => void;
-  /** The centre action — opens the AI chat. Not a place, so it takes no `active`. */
-  onAction: () => void;
+  onHome: () => void;
+  /** Raises the swap sheet. */
+  onSwap: () => void;
+  /** Raises the Messages drawer. */
+  onMessages: () => void;
+  /** The agents' messages that are new. Nothing is drawn at zero. */
+  unread?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
 
-export function TabBar({ active, onSelect, onAction, style, testID }: TabBarProps) {
+export function TabBar({ active, onHome, onSwap, onMessages, unread = 0, style, testID }: TabBarProps) {
   const insets = useSafeAreaInsets();
-
-  const place = (tab: TabKey) => {
-    const selected = tab === active;
-    const tint = selected ? colors.ink : colors.ink30;
-    return (
-      <Press
-        key={tab}
-        onPress={() => onSelect(tab)}
-        accessibilityRole="tab"
-        accessibilityState={{ selected }}
-        /*
-         * `aria-selected` IS valid on `role="tab"` — and React Native Web still does not emit it,
-         * so the bar announced its tabs with no current one. Added explicitly.
-         */
-        aria-selected={selected}
-        accessibilityLabel={TAB_LABEL[tab]}
-        hitHeight={ACTION}
-        style={{ flex: 1, height: ACTION, alignItems: 'center', justifyContent: 'center' }}
-      >
-        {tab === 'home' ? <HomeGlyph color={tint} /> : <GridGlyph color={tint} />}
-      </Press>
-    );
-  };
+  const home = active === 'home';
 
   return (
     <View
       testID={testID}
       style={[
         {
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingTop: space.s8,
-          paddingHorizontal: space.s30,
-          paddingBottom: Math.max(insets.bottom, space.s16),
+          paddingHorizontal: space.s16,
+          paddingTop: space.s6,
+          paddingBottom: Math.max(insets.bottom, space.s12),
           backgroundColor: colors.bg,
         },
         style,
       ]}
     >
-      {place('home')}
-      <View style={{ flex: 1, alignItems: 'center' }}>
-        <Press
-          onPress={onAction}
-          accessibilityRole="button"
-          accessibilityLabel="Chat with your agent"
-          hitHeight={ACTION}
-          hitWidth={ACTION}
-          style={{
-            width: ACTION,
-            height: ACTION,
-            borderRadius: ACTION / 2,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.ink,
-          }}
-        >
-          <ChatGlyph color={colors.sheet.ink} />
-        </Press>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          height: BAR_H,
+          paddingHorizontal: space.s6,
+          borderRadius: BAR_H / 2,
+          backgroundColor: colors.surfaceAlt,
+          borderWidth: 1,
+          borderColor: colors.ghostBorder,
+        }}
+      >
+        <Item label="Home" place selected={home} onPress={onHome}>
+          <HomeGlyph color={home ? colors.ink : colors.ink55} />
+        </Item>
+        <Item label="Swap" onPress={onSwap}>
+          <SwapGlyph color={colors.ink55} />
+        </Item>
+        <Item label="Messages" onPress={onMessages} badge={unread > 0 ? (unread > 9 ? '9+' : String(unread)) : undefined}>
+          <ChatGlyph color={colors.ink55} />
+        </Item>
       </View>
-      {place('more')}
     </View>
+  );
+}
+
+function Item({
+  label,
+  place = false,
+  selected = false,
+  badge,
+  onPress,
+  children,
+}: {
+  label: string;
+  /** A place is a tab and can be the selected one; an action is a button. */
+  place?: boolean;
+  selected?: boolean;
+  badge?: string;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Press
+      onPress={onPress}
+      accessibilityRole={place ? 'tab' : 'button'}
+      accessibilityState={place ? { selected } : undefined}
+      /*
+       * `aria-selected` IS valid on `role="tab"` — and React Native Web still does not emit it,
+       * so the bar announced its tab with no current one. Added explicitly.
+       */
+      aria-selected={place ? selected : undefined}
+      accessibilityLabel={badge ? `${label}, ${badge} new` : label}
+      hitHeight={ITEM_H}
+      style={{
+        flex: 1,
+        height: ITEM_H,
+        borderRadius: ITEM_H / 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: space.s2,
+        backgroundColor: selected ? colors.control : 'transparent',
+      }}
+    >
+      <View>
+        {children}
+        {badge ? (
+          <View
+            style={{
+              position: 'absolute',
+              top: -5,
+              left: GLYPH - 8,
+              minWidth: BADGE_H,
+              height: BADGE_H,
+              paddingHorizontal: space.s4,
+              borderRadius: BADGE_H / 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.ink,
+              borderWidth: 2,
+              borderColor: colors.surfaceAlt,
+            }}
+          >
+            <Text variant="tagSm" color={colors.bg}>
+              {badge}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <Text variant="tabLabel" color={selected ? colors.ink : colors.ink55}>
+        {label}
+      </Text>
+    </Press>
   );
 }

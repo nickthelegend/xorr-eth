@@ -1,288 +1,259 @@
 /**
- * The conversation — thread, proposal card and composer.
+ * One agent's conversation — thread, proposal card and composer.
  *
- * Lifted out of `app/(tabs)/bot.tsx` whole, because it now has two callers: the `/bot` route (still
- * the target of the `proposal-awaiting` push and the briefing's button) and the sheet that comes up
- * from the tab bar. Two copies of an approve-before-execute flow is two places for the expiry, the
- * decline path and the fallback-is-not-an-answer rule to drift apart, so there is one.
+ * Opened from the Messages list, in the drawer that slides up from the bottom (`ChatSheet`). Each agent has its own
+ * conversation, as a messenger has one per person: the thread is one record, and `conversationOf` keeps this agent's part
+ * of it. The header says who you are talking to, with the way back to the list and the way to close the drawer. One
+ * conversation component for every agent: two copies of an approve-before-execute flow would be two places for the
+ * expiry, the decline path and the fallback-is-not-an-answer rule to drift apart.
  *
- * The shape is the one people already know from ChatGPT: the agent speaks plainly at full width
- * with no bubble, your own words sit in a rounded bubble on the right, and the composer is a pill
- * with a circular send. The bot's own sentences are the content here — putting them in a narrow
- * bubble was costing a third of the line length for decoration.
+ * It is drawn as its own light room: a lavender ground, a glass orb and "What Can I Do For You Today?"
+ * while nothing has been said, then the conversation as a messenger draws one — the agent's words in white
+ * cards on the left beside its orb, yours on the right in the room's accent — above a glass composer. The
+ * trading screens stay true black; this is where you talk to the agents, and it looks like a different
+ * place on purpose.
  *
- * What is NOT ChatGPT is the proposal card. It stays a card with real Approve and Skip buttons and
- * a real countdown, because that is the one message in the thread that spends money.
+ * What is not decoration is the proposal card. It keeps real Approve and Skip buttons and a real
+ * countdown, because it is the one message in the thread that spends money.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, TextInput, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Icon } from '@/design/Icon';
-import { agentGradient } from '@/design/gradients';
 import {
-  AssetMark,
-  Button,
-  ButtonRow,
-  CloseButton,
-  Eyebrow,
-  IconButton,
-  Press,
-  SheetCard,
-  StatTile,
-  Text,
-  colors,
-  divider,
-  duration,
-  radius,
-  size,
-  space,
-  timing,
-  typeScale,
-  useReducedMotion,
-} from '@/ui';
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { agentGradient } from '@/design/gradients';
+import { Press, Text, duration, space, timing, useReducedMotion } from '@/ui';
 import { mmss } from '@/format';
 import { repos } from '@/data';
-import { useAsync } from '@/data/useAsync';
-import { renderSegments, type ThreadMessage } from '@/bot/message';
+import { renderSegments, voice, type ThreadMessage } from '@/bot/message';
 import { apiReason } from '@/data/apiError';
 import {
   botProse,
   decisionMessage,
   expiredMessage,
-  proposalMessage,
   useThread,
   userMessage,
   withDividers,
 } from '@/bot/thread';
-import { voice } from '@/bot/message';
 import { useTone } from '@/bot/tone';
 import type { Proposal } from '@/data/types';
-import { AgentRail } from './AgentRail';
+import { AgentPicker } from './AgentPicker';
+import { Composer } from './Composer';
+import { GlassOrb } from './GlassOrb';
 import { Thinking } from './Thinking';
-import { DEFAULT_AGENT, agentByName, type ChatAgent } from './agents';
+import { XorrMark } from './XorrMark';
+import type { ChatAgent } from './agents';
+import { conversationOf } from './conversations';
+import { AgentAvatar, GLASS, GlassButton } from './parts';
+import { chat, chatShadow, chatType } from './theme';
+import { useDictation } from './useDictation';
 
-/** Thread gutter, composer and send button. */
+/** Thread gutter. */
 const THREAD_PAD_H = space.s16;
-const COMPOSER_MIN_H = 46;
-const COMPOSER_MAX_H = 132;
-const SEND = 34;
-/** Your own words. Wide enough to read, short enough that the ragged right edge still says "mine". */
-const USER_MAX = '84%' as const;
+/** An agent's orb beside its words. */
+const AVATAR = 30;
+/** Wide enough to read; short enough that the free edge still says who spoke. */
+const USER_MAX = '78%' as const;
+const BOT_MAX = '82%' as const;
+/** The hero orb's ceiling: the room's centrepiece, never so large it crowds the composer. */
+const ORB_MAX = 250;
+const DECIDE_H = 44;
 
-/** A tile inside the proposal card. The card is `surface`, so its tiles step up a shade. */
-const TILE_ON_CARD = { backgroundColor: colors.surfaceAlt, borderRadius: radius.tileSm } as const;
+/** A message card. The proposal card is the same card with more in it. */
+const CARD = {
+  backgroundColor: chat.card,
+  borderRadius: 18,
+  borderWidth: 1,
+  borderColor: chat.cardBorder,
+  paddingHorizontal: space.s14,
+  paddingVertical: space.s10,
+  boxShadow: chatShadow,
+} as const;
+
+/** Your words: the room's accent, on the right, the corner nearest you squared off as a messenger draws it. */
+const YOURS = {
+  backgroundColor: chat.accentDeep,
+  borderRadius: 18,
+  borderBottomRightRadius: 6,
+  paddingHorizontal: space.s14,
+  paddingVertical: space.s10,
+  boxShadow: chatShadow,
+} as const;
 
 export interface ChatProps {
-  /**
-   * Renders a close control in the header instead of the conversation-options button.
-   *
-   * The sheet needs a way out that is not the tab bar it covers; the route does not, because it
-   * has the back gesture and the bar.
-   */
+  /** Who this conversation is with. */
+  agent: ChatAgent;
+  /** Back to the list of conversations. */
+  onBack?: () => void;
+  /** Renders a close control in the header — the drawer's way down, beside its handle and the dimmed screen. */
   onClose?: () => void;
+  /** The roster, opened from the composer or the agent's orb, moves to another agent's conversation. */
+  onSwitchAgent?: (agent: ChatAgent) => void;
   /** Extra top padding. The sheet puts its drag handle above the header. */
   headerTop?: number;
   /**
    * Space under the composer.
    *
-   * The route gets this from `<Screen tabBar>`; the sheet has no `Screen` around it, so it passes
-   * its own — without it the composer sat on the home indicator, which on a device with a gesture
-   * bar means the send button and the swipe-up gesture share the same 20 points.
+   * The drawer has no `Screen` around it, so it passes the home-indicator inset — without it the composer
+   * sat on the home indicator, which on a device with a gesture bar means the send button and the
+   * swipe-up gesture share the same 20 points.
    */
   footerInset?: number;
 }
 
-export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
+export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, footerInset = 0 }: ChatProps) {
   const scroller = useRef<ScrollView>(null);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   /** A decision is on its way to the executor. */
   const [deciding, setDeciding] = useState(false);
+  /** The roster, opened from the composer. */
+  const [agentsOpen, setAgentsOpen] = useState(false);
+  /**
+   * Suggested questions. `null` follows the thread — shown while nothing has been said — and a boolean
+   * is the person's own choice from the sparkle button, until the next thing they ask.
+   */
+  const [startersChoice, setStartersChoice] = useState<boolean | null>(null);
   const { tone } = useTone();
-  const {
-    messages,
-    proposal,
-    decided,
-    hydrated,
-    hydrate,
-    append,
-    setProposal,
-    setDecided,
-    markRead,
-  } = useThread();
-
-  // Ask for an open proposal; if there is none, ask the agent to CONSIDER one. Without this
-  // the approve-before-execute pipeline had no producer and the thread was permanently empty.
-  const { data } = useAsync(async () => {
-    const open = await repos.bot.currentProposal();
-    if (open) return { proposal: open, declined: undefined as string | undefined };
-    return repos.bot.generateProposal();
-  }, []);
+  const messages = useThread((s) => s.messages);
+  const proposal = useThread((s) => s.proposal);
+  const decided = useThread((s) => s.decided);
+  const hydrated = useThread((s) => s.hydrated);
+  const hydrate = useThread((s) => s.hydrate);
+  const append = useThread((s) => s.append);
+  const setDecided = useThread((s) => s.setDecided);
+  const markReadFor = useThread((s) => s.markReadFor);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
 
-  useEffect(() => {
-    markRead();
-  }, [markRead]);
-
-  // Seed the thread once, from whatever the agent actually decided.
-  //
-  // The `seeded` ref only guards one mount, and the thread is persisted — so every fresh
-  // load appended the same proposal again and the chat showed it two, three, four times.
-  // The real guard is the thread's own contents: a proposal already in the thread is
-  // already seeded.
-  const seeded = useRef(false);
-  useEffect(() => {
-    if (!hydrated || !data || seeded.current) return;
-    seeded.current = true;
-
-    if (data.proposal) {
-      const already = messages.some(
-        (m) => m.type === 'proposal' && m.proposalId === data.proposal!.id,
-      );
-      if (already) {
-        setProposal(data.proposal);
-        return;
-      }
-    }
-
-    if (data.proposal) {
-      setProposal(data.proposal);
-      /*
-       * The opening line is spoken only when a model wrote one.
-       *
-       * It used to fall back to the persona's pre-written sentence, which reads as the agent's
-       * take on THIS setup and is not. The proposal card below carries the size, the entry, the
-       * stop, the target and the cap it fits inside — all computed from real prices — so the
-       * absence costs the user a sentence, never a fact.
-       */
-      if (data.proposal.opening) {
-        append(botProse(data.proposal.agent, [voice(data.proposal.opening)]));
-      }
-      append(proposalMessage(data.proposal.id));
-      return;
-    }
-    /*
-     * A decline is a message, not a blank screen. "What it chose not to do" is the product.
-     *
-     * Guarded on the thread's contents, the same way the proposal above is. The proposal got that
-     * guard and the decline did not, so every fresh mount appended another identical line — and
-     * with the chat now mounted from two places, "No live market for WETH" stacked up four deep in
-     * a thread whose whole claim is that it is a record of what happened.
-     */
-    if (data.declined) {
-      const line = stripNumbers(data.declined);
-      const said = messages.some(
-        (m) =>
-          m.type === 'prose' &&
-          m.segments.some((seg) => seg.kind === 'voice' && seg.text === line),
-      );
-      if (!said) append(botProse(agentNameFallback, [voice(line)]));
-    }
-  }, [hydrated, data, messages, append, setProposal]);
-
-  const items = useMemo(() => withDividers(messages), [messages]);
-
-  /*
-   * Who you are talking to, chosen rather than inherited.
-   *
-   * This used to be `proposal?.agent ?? 'Momentum Scout'` — whichever agent happened to own the
-   * open proposal, and Momentum Scout the rest of the time. Four personas existed on the server,
-   * each with its own mandate and its own refusals, and three of them were unreachable.
-   *
-   * Seeded from the proposal when there is one, because if an agent has just asked you for
-   * something, that is who you are about to reply to.
-   */
-  const [agent, setAgent] = useState<ChatAgent>(
-    () => (proposal ? agentByName(proposal.agent) : DEFAULT_AGENT),
-  );
-  const accent = agentGradient(agent.name).c1;
   const agentName = agent.name;
-  const empty = draft.trim().length === 0;
+  const accent = agentGradient(agentName).c1;
+  const conversation = useMemo(() => conversationOf(messages, agentName), [messages, agentName]);
+  const items = useMemo(() => withDividers(conversation), [conversation]);
+
+  /* An open conversation is a read one: what the agent has said, and whatever it says while you are here. */
+  useEffect(() => {
+    if (hydrated) markReadFor(agentName);
+  }, [hydrated, markReadFor, agentName, conversation.length]);
 
   /*
-   * `override` is what lets an opener send itself. Routing a starter through `setDraft` and a
+   * When the room's question gives way to the conversation.
+   *
+   * Not "when the conversation has anything in it": an agent that declines to propose says why as the drawer opens, so the
+   * room would never be seen. The conversation starts when you say something, or when there is something to act on or
+   * read back: a proposal, a fill, a receipt. Until then the agent's latest line is the subtitle.
+   */
+  const inProgress = thinking || conversation.some((m) => m.type !== 'prose');
+  const latestLine = latestProse(conversation);
+  const startersOpen = !thinking && (startersChoice ?? !inProgress);
+  const dictation = useDictation(setDraft);
+  const { listening, stop: stopListening } = dictation;
+  const liveProposal = proposal && proposal.agent === agentName && !decided ? proposal : null;
+
+  /*
+   * `override` is what lets a suggested question send itself. Routing it through `setDraft` and a
    * second tap would make the chips a way to fill in the box rather than a way to ask.
    */
-  const send = useCallback((override?: string) => {
-    const text = (override ?? draft).trim();
-    if (!text || thinking) return;
-    append(userMessage(text));
-    setDraft('');
-    setThinking(true);
-    // PLAN.md 11.7: a real question to the real agent. The reply is PROSE ONLY — anything
-    // numeric is rejected server-side before it can reach this thread.
-    void repos.bot
-      .ask({ agentId: agent.id, question: text, tone })
-      /*
-       * A fallback line is not an answer, and must not be dressed as one.
-       *
-       * `ask` returns `{ text, source }` and this used only `text`. With no language model
-       * configured the server answers `source: 'none'` with no text at all, so asking
-       * "why did the CBBTC buy fail?" got back "Nothing worth chasing today. Ranges are thin and
-       * the tape is quiet." — a confident non-sequitur in the agent's own voice, which is exactly
-       * the canned-content-as-real-output this project refuses everywhere else.
-       *
-       * The reply still arrives; it just says what it is.
-       */
-      .then((reply) =>
-        append(
-          botProse(agentName, [
-            voice(
-              reply.source === 'none' || !reply.text
-                ? 'I cannot answer that here — no language model is configured in this build, and I will not read you a stock line as though it were an answer.'
-                : reply.text,
-            ),
-          ]),
-        ),
-      )
-      .catch(() =>
-        append(
-          botProse(agentName, [voice('I could not answer that just now, so I will not guess.')]),
-        ),
-      )
-      .finally(() => setThinking(false));
-  }, [draft, thinking, append, agent, agentName, tone]);
+  const send = useCallback(
+    (override?: string) => {
+      const text = (override ?? draft).trim();
+      if (!text || thinking) return;
+      if (listening) stopListening();
+      append(userMessage(text, agentName));
+      setDraft('');
+      setStartersChoice(null);
+      setAgentsOpen(false);
+      setThinking(true);
+      // PLAN.md 11.7: a real question to the real agent. The reply is PROSE ONLY — anything
+      // numeric is rejected server-side before it can reach this thread.
+      void repos.bot
+        .ask({ agentId: agent.id, question: text, tone })
+        /*
+         * A fallback line is not an answer, and must not be dressed as one.
+         *
+         * `ask` returns `{ text, source }` and this used only `text`. With no language model
+         * configured the server answers `source: 'none'` with no text at all, so asking
+         * "why did the CBBTC buy fail?" got back "Nothing worth chasing today. Ranges are thin and
+         * the tape is quiet." — a confident non-sequitur in the agent's own voice, which is exactly
+         * the canned-content-as-real-output this project refuses everywhere else.
+         *
+         * The reply still arrives; it just says what it is.
+         */
+        .then((reply) =>
+          append(
+            botProse(agentName, [
+              voice(
+                reply.source === 'none' || !reply.text
+                  ? 'I cannot answer that here — no language model is configured in this build, and I will not read you a stock line as though it were an answer.'
+                  : reply.text,
+              ),
+            ]),
+          ),
+        )
+        .catch(() =>
+          append(
+            botProse(agentName, [voice('I could not answer that just now, so I will not guess.')]),
+          ),
+        )
+        .finally(() => setThinking(false));
+    },
+    [draft, thinking, listening, stopListening, append, agent, agentName, tone],
+  );
 
   return (
-    <>
-      <View style={[{ paddingTop: headerTop, paddingBottom: space.s16 }, divider]}>
-        {/*
-          The close control sits above the rail rather than beside a name, because the rail is four
-          things wide and a control at the end of it lands under a thumb reaching for an agent.
-        */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            paddingHorizontal: space.gutter,
-            minHeight: size.mark,
-            marginBottom: space.s6,
-          }}
-        >
-          {proposal ? (
-            <Text variant="footnote" color={colors.up} style={{ flex: 1 }}>
-              {proposal.status}
-            </Text>
-          ) : (
-            <View style={{ flex: 1 }} />
-          )}
-          {onClose ? (
-            <CloseButton onPress={onClose} accessibilityLabel="Close chat" />
-          ) : (
-            <IconButton
-              name="more"
-              accessibilityLabel="Conversation options"
-              background="none"
-              color={colors.ink40}
-            />
-          )}
-        </View>
+    <View style={{ flex: 1 }}>
+      <LinearGradient
+        colors={[chat.groundTop, chat.groundMid, chat.groundBottom]}
+        pointerEvents="none"
+        style={StyleSheet.absoluteFill}
+      />
 
-        <AgentRail selected={agent} onSelect={setAgent} />
+      {/*
+        A hairline under the header: a thread scrolled back was cut off right against the agent's name, and with no rule
+        between them the cut line read as the conversation sliding under the header.
+      */}
+      <View
+        style={{
+          paddingTop: headerTop,
+          paddingBottom: space.s10,
+          paddingHorizontal: space.gutter,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: space.s10,
+          minHeight: GLASS,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: chat.hairline,
+        }}
+      >
+        {onBack ? <GlassButton icon="back" label="All messages" onPress={onBack} /> : null}
+        {/* Who is listening — and, where there is a roster to open, the way to talk to someone else. */}
+        <Press
+          onPress={onSwitchAgent ? () => setAgentsOpen((open) => !open) : undefined}
+          disabled={!onSwitchAgent}
+          accessibilityRole={onSwitchAgent ? 'button' : 'image'}
+          accessibilityLabel={onSwitchAgent ? `${agentName}. Talk to another agent` : agentName}
+          hitWidth={44}
+          hitHeight={44}
+        >
+          <AgentAvatar name={agentName} size={GLASS} />
+        </Press>
+        <View style={{ flex: 1 }}>
+          <Text color={chat.heading} style={chatType.title} numberOfLines={1}>
+            {agentName}
+          </Text>
+          <Text color={chat.muted} style={chatType.small} numberOfLines={1}>
+            {liveProposal ? liveProposal.status : agent.role}
+          </Text>
+        </View>
+        {onClose ? <GlassButton icon="close" label="Close messages" onPress={onClose} /> : null}
       </View>
 
       <KeyboardAvoidingView
@@ -292,234 +263,211 @@ export function Chat({ onClose, headerTop = 0, footerInset = 0 }: ChatProps) {
       >
         <ScrollView
           ref={scroller}
-          style={{ flex: 1 }}
+          // Clipped at its own top edge: scrolled back, the thread slid under the header's controls.
+          style={{ flex: 1, overflow: 'hidden' }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (inProgress) scroller.current?.scrollToEnd({ animated: false });
+          }}
           contentContainerStyle={{
+            flexGrow: 1,
             paddingTop: space.s18,
             paddingBottom: space.s12,
             paddingHorizontal: THREAD_PAD_H,
-            gap: space.s16,
+            gap: space.s14,
           }}
         >
-          {items.map((item, i) =>
-            'divider' in item ? (
-              <Text key={`d${i}`} variant="footnoteSm" color={colors.ink28} align="center">
-                {item.divider}
-              </Text>
-            ) : item.type === 'proposal' ? (
-              <ProposalCard
-                key={item.id}
-                proposal={proposal}
-                decided={decided}
-                busy={deciding}
-                onDecide={async (d) => {
-                  /*
-                   * Decided once the executor has answered, and shown as what it answered.
-                   *
-                   * This marked the card decided before the request left, then drew a green fill for
-                   * any approve at all — so a refused order, a failed swap and a request that never
-                   * landed all looked like a trade. PLAN.md 1.3.
-                   */
-                  if (!proposal || deciding) return;
-                  setDeciding(true);
-                  try {
-                    const res = await repos.bot.decideProposal(proposal.id, d);
-                    setDecided(d);
-                    append(decisionMessage(agentName, res));
-                  } catch (e) {
-                    const why = apiReason(e);
-                    append(
-                      botProse(agentName, [
-                        voice(
-                          why
-                            ? `${why.replace(/[.\s]*$/, '.')} Nothing was decided, so you can try again.`
-                            : 'That did not reach the executor, so nothing was decided. Try again.',
-                        ),
-                      ]),
-                    );
-                  } finally {
-                    setDeciding(false);
-                  }
-                }}
-                onExpire={() => {
-                  if (decided || deciding) return;
-                  setDecided('skip');
-                  append(expiredMessage());
-                }}
-              />
-            ) : (
-              <Turn key={item.id} message={item} speakerBefore={speakerAt(items, i)} />
-            ),
+          {inProgress ? (
+            items.map((item, i) =>
+              'divider' in item ? (
+                <Text key={`d${i}`} color={chat.faint} align="center" style={chatType.small}>
+                  {item.divider}
+                </Text>
+              ) : item.type === 'proposal' ? (
+                proposal && item.proposalId === proposal.id ? (
+                  <ProposalCard
+                    key={item.id}
+                    proposal={proposal}
+                    decided={decided}
+                    busy={deciding}
+                    onDecide={async (d) => {
+                      /*
+                       * Decided once the executor has answered, and shown as what it answered.
+                       *
+                       * This marked the card decided before the request left, then drew a green fill
+                       * for any approve at all — so a refused order, a failed swap and a request that
+                       * never landed all looked like a trade. PLAN.md 1.3.
+                       */
+                      if (!proposal || deciding) return;
+                      setDeciding(true);
+                      try {
+                        const res = await repos.bot.decideProposal(proposal.id, d);
+                        setDecided(d);
+                        append(decisionMessage(agentName, res));
+                      } catch (e) {
+                        const why = apiReason(e);
+                        append(
+                          botProse(agentName, [
+                            voice(
+                              why
+                                ? `${why.replace(/[.\s]*$/, '.')} Nothing was decided, so you can try again.`
+                                : 'That did not reach the executor, so nothing was decided. Try again.',
+                            ),
+                          ]),
+                        );
+                      } finally {
+                        setDeciding(false);
+                      }
+                    }}
+                    onExpire={() => {
+                      if (decided || deciding) return;
+                      setDecided('skip');
+                      append(expiredMessage());
+                    }}
+                  />
+                ) : (
+                  // A card whose proposal is no longer the open one: what it offered is not held here, so it is not redrawn.
+                  <Text key={item.id} color={chat.faint} align="center" style={chatType.small}>
+                    An earlier proposal, now closed.
+                  </Text>
+                )
+              ) : (
+                <Turn key={item.id} message={item} />
+              ),
+            )
+          ) : (
+            <Hero agent={agent} line={latestLine} />
           )}
 
-          {/*
-            Openers, only on an empty thread and only for the agent selected right now.
-            
-            They are QUESTIONS. A starter that asserted a position or a number would put words in
-            the agent's mouth before it had said anything, which on this product is the one thing a
-            convenience must not do.
-          */}
-          {items.length === 0 && !thinking ? (
-            <View style={{ gap: space.s10, marginTop: space.s6 }}>
-              <Text variant="secondary" color={colors.ink40}>
-                {agent.role}. Ask it something.
-              </Text>
-              {agent.openers.map((q) => (
-                <Press
-                  key={q}
-                  onPress={() => send(q)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Ask: ${q}`}
-                  style={{
-                    alignSelf: 'flex-start',
-                    borderRadius: radius.card,
-                    paddingHorizontal: space.s14,
-                    paddingVertical: space.s10,
-                    backgroundColor: colors.surfaceAlt,
-                  }}
-                >
-                  <Text variant="bodySm" color={colors.ink65}>
-                    {q}
-                  </Text>
-                </Press>
-              ))}
-            </View>
-          ) : null}
-
-          {/* Where the answer is about to land, not in the header twelve lines above it. */}
-          {thinking ? <Thinking color={accent} /> : null}
+          {/* Where the answer is about to land, not in the header above it. */}
+          {thinking ? <ThinkingTurn agentName={agentName} accent={accent} /> : null}
         </ScrollView>
 
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'flex-end',
-            gap: space.s8,
-            paddingHorizontal: THREAD_PAD_H,
-            paddingTop: space.s8,
-            paddingBottom: footerInset,
-          }}
-        >
-          <View
-            style={{
-              flex: 1,
-              minHeight: COMPOSER_MIN_H,
-              justifyContent: 'center',
-              backgroundColor: colors.inputBg,
-              borderRadius: radius.sheet,
-              paddingHorizontal: space.s18,
-            }}
-          >
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder={`Ask ${agent.name}…`}
-              placeholderTextColor={colors.ink35}
-              accessibilityLabel="Message the bot"
-              editable={!thinking}
-              multiline
-              onSubmitEditing={() => send()}
-              /*
-               * Enter sends on web, where there is a hardware keyboard and a newline costs a
-               * modifier. On a phone the return key on a multiline field inserts a newline, which
-               * is what it is for — the send button is right there.
-               */
-              blurOnSubmit={Platform.OS === 'web'}
-              returnKeyType="send"
-              style={[
-                typeScale.bodyLg,
-                {
-                  color: colors.ink,
-                  paddingTop: space.s12,
-                  paddingBottom: space.s12,
-                  maxHeight: COMPOSER_MAX_H,
-                },
-              ]}
+        {agentsOpen && onSwitchAgent ? (
+          <View style={{ paddingHorizontal: THREAD_PAD_H, paddingBottom: space.s8 }}>
+            <AgentPicker
+              selected={agent}
+              onSelect={(a) => {
+                setAgentsOpen(false);
+                setStartersChoice(null);
+                if (a.id !== agent.id) onSwitchAgent(a);
+              }}
             />
           </View>
-          {/* Without this the only way to send was the keyboard's return key, which is invisible
-              to anyone who has dismissed the keyboard. */}
-          <Press
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
-            accessibilityState={{ disabled: thinking || empty }}
-            disabled={thinking || empty}
-            onPress={() => send()}
-            hitHeight={SEND}
-            hitWidth={SEND}
-            style={{
-              width: SEND,
-              height: SEND,
-              marginBottom: (COMPOSER_MIN_H - SEND) / 2,
-              borderRadius: radius.full,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: empty ? colors.control : colors.ink,
+        ) : null}
+
+        {/*
+          Suggested questions for this agent. They are QUESTIONS: a starter that asserted a position or a
+          number would put words in the agent's mouth before it had said anything, which on this product is
+          the one thing a convenience must not do.
+        */}
+        {startersOpen ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            style={{ flexGrow: 0 }}
+            contentContainerStyle={{
+              gap: space.s8,
+              paddingHorizontal: THREAD_PAD_H,
+              paddingBottom: space.s8,
             }}
           >
-            <Icon name="send" size={15} color={empty ? colors.ink35 : colors.bg} />
-          </Press>
-        </View>
+            {agent.openers.map((q) => (
+              <Press
+                key={q}
+                onPress={() => send(q)}
+                accessibilityRole="button"
+                accessibilityLabel={`Ask: ${q}`}
+                style={{
+                  borderRadius: 18,
+                  paddingHorizontal: space.s14,
+                  paddingVertical: space.s8,
+                  backgroundColor: chat.glass,
+                  borderWidth: 1,
+                  borderColor: chat.glassBorder,
+                }}
+              >
+                <Text color={chat.inkSoft} style={chatType.chip}>
+                  {q}
+                </Text>
+              </Press>
+            ))}
+          </ScrollView>
+        ) : null}
+
+        <Composer
+          draft={draft}
+          onChangeDraft={setDraft}
+          onSend={() => send()}
+          busy={thinking}
+          agentName={agentName}
+          agentsOpen={agentsOpen}
+          onToggleAgents={() => setAgentsOpen((open) => !open)}
+          startersOpen={startersOpen}
+          onToggleStarters={() => setStartersChoice(!startersOpen)}
+          dictation={dictation}
+          footerInset={footerInset}
+        />
       </KeyboardAvoidingView>
-    </>
+    </View>
   );
 }
 
-const agentNameFallback = 'Momentum Scout';
-
 /**
- * Who spoke immediately before position `i`, skipping day dividers.
- *
- * Used to decide whether a bot message needs a name over it. Once the rail exists, a thread can
- * contain four voices, and an unattributed wall of prose is worse than the single-agent version it
- * replaced — you would be reading Drawdown Guard's answer under Momentum Scout's orb.
- *
- * Dividers are skipped rather than treated as a speaker change, or every morning would re-label a
- * continuing conversation.
+ * The room before anything has been said: the agent's latest line — or who is listening — the question
+ * the room asks, and the orb, lit in the agent's colour so each conversation has its own light.
  */
-function speakerAt(
-  items: (ThreadMessage | { divider: string })[],
-  i: number,
-): string | undefined {
-  for (let j = i - 1; j >= 0; j--) {
-    const prev = items[j];
-    if (!prev || 'divider' in prev) continue;
-    return prev.type === 'user' ? 'user' : ('agent' in prev ? prev.agent : undefined);
+function Hero({ agent, line }: { agent: ChatAgent; line?: string }) {
+  const { width, height } = useWindowDimensions();
+  const orb = Math.round(Math.min(ORB_MAX, width * 0.62, height * 0.3));
+
+  return (
+    <View style={{ flex: 1, alignItems: 'center', paddingTop: space.s10 }}>
+      <Text color={chat.muted} align="center" style={[chatType.subtitle, { maxWidth: 290 }]}>
+        {line ?? `Just type your question — ${agent.name} ${lowerFirst(agent.role)}.`}
+      </Text>
+      <Text color={chat.heading} align="center" style={[chatType.heading, { marginTop: space.s12 }]}>
+        {'What Can I Do For\nYou Today?'}
+      </Text>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: space.s18 }}>
+        <GlassOrb size={orb} tint={accentOf(agent)} />
+      </View>
+    </View>
+  );
+}
+
+const accentOf = (agent: ChatAgent) => agentGradient(agent.name).c1;
+
+function lowerFirst(s: string): string {
+  return s.length > 0 ? s[0]!.toLowerCase() + s.slice(1) : s;
+}
+
+/** The agent's most recent plain line — the room's subtitle until the conversation starts. */
+function latestProse(messages: readonly ThreadMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.type === 'prose') return renderSegments(m.segments);
   }
   return undefined;
 }
 
 /**
- * The server's decline reasons name a symbol but sometimes a figure too. A voice segment may
- * not carry a number (src/bot/message.ts), so any digits are dropped rather than the message.
- */
-function stripNumbers(text: string): string {
-  const cleaned = text.replace(/[$]?[\d,.]+%?/g, '').replace(/\s{2,}/g, ' ').trim();
-  return cleaned.length > 4 ? cleaned : 'There is nothing worth proposing right now.';
-}
-
-/**
- * One turn in the thread.
+ * One turn in the conversation, drawn as a messenger draws one: the agent's words on the left beside its orb, yours on the
+ * right in the room's accent.
  *
- * Yours is a bubble; the agent's is not. The asymmetry is the whole reason this layout reads as a
- * chat rather than a transcript — a bubble on both sides makes two speakers of equal weight, and
- * here one of them is answering the other.
+ * Every turn was a white card on the right — the agent's with its orb beside it, yours without — so a conversation read
+ * as one column of cards and who said what came down to an orb. With one agent per conversation its name is the header's,
+ * so no turn repeats it; a system line, an expiry, carries xorr's mark instead of the orb.
  */
-function Turn({
-  message,
-  speakerBefore,
-}: {
-  message: ThreadMessage;
-  speakerBefore?: string;
-}) {
+function Turn({ message }: { message: ThreadMessage }) {
   const reduced = useReducedMotion();
   const scale = useSharedValue(message.type === 'fill' ? 0.96 : 1);
 
   useEffect(() => {
     // animations.md "If you add motion" #2: a single 250ms scale-in on the filled-order
-    // bubble, once, on arrival. Nothing else in the thread animates.
+    // card, once, on arrival. Nothing else in the thread animates.
     if (message.type === 'fill') {
       scale.value = withTiming(1, timing(duration.slow, reduced));
     }
@@ -529,58 +477,47 @@ function Turn({
 
   if (message.type === 'user') {
     return (
-      <View
-        style={{
-          alignSelf: 'flex-end',
-          maxWidth: USER_MAX,
-          backgroundColor: colors.control,
-          borderRadius: radius.card,
-          paddingHorizontal: space.s16,
-          paddingVertical: space.s12,
-        }}
-      >
-        <Text variant="bodyLg">{message.text}</Text>
+      <View style={[YOURS, { alignSelf: 'flex-end', maxWidth: USER_MAX }]}>
+        <Text color="#FFFFFF" style={chatType.message}>
+          {message.text}
+        </Text>
       </View>
     );
   }
 
   const segments = 'segments' in message ? message.segments : [];
   /*
-   * A fill is green and a decline is red because both are outcomes with a direction. Everything
-   * else the agent says is ordinary prose and takes ordinary ink — colouring the whole side of the
-   * conversation would spend the P&L palette on tone of voice.
+   * A fill is green and a decline is red because both are outcomes with a direction. Everything else
+   * the agent says is ordinary prose and takes ordinary ink — colouring a whole side of the conversation
+   * would spend the P&L palette on tone of voice.
    */
   const color =
-    message.type === 'fill' ? colors.up : message.type === 'declined' ? colors.down : colors.ink;
-
+    message.type === 'fill' ? chat.up : message.type === 'declined' ? chat.down : chat.ink;
   const who = 'agent' in message ? message.agent : undefined;
-  /*
-   * A name only when the voice changes. Stamping every message with its author turns a
-   * conversation into a log; stamping none of them makes four agents look like one.
-   */
-  const newVoice = !!who && who !== speakerBefore;
 
   return (
     <Animated.View style={[{ alignSelf: 'stretch' }, anim]}>
-      {newVoice ? (
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: space.s8,
-            marginBottom: space.s8,
-          }}
-        >
-          <AssetMark gradient={agentGradient(who!)} size={size.noteOrb} />
-          <Text variant="footnote" color={colors.ink40}>
-            {who}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.s8 }}>
+        {who ? <AgentAvatar name={who} size={AVATAR} /> : <XorrMark size={AVATAR} />}
+        <View style={[CARD, { flexShrink: 1, maxWidth: BOT_MAX, borderBottomLeftRadius: 6 }]}>
+          <Text color={color} style={chatType.message}>
+            {renderSegments(segments)}
           </Text>
         </View>
-      ) : null}
-      <Text variant="bodyLg" color={color}>
-        {renderSegments(segments)}
-      </Text>
+      </View>
     </Animated.View>
+  );
+}
+
+/** The agent working: its three dots in a card beside its orb, where the answer will land. */
+function ThinkingTurn({ agentName, accent }: { agentName: string; accent: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.s8 }}>
+      <AgentAvatar name={agentName} size={AVATAR} />
+      <View style={[CARD, { paddingVertical: space.s14, borderBottomLeftRadius: 6 }]}>
+        <Thinking color={accent} />
+      </View>
+    </View>
   );
 }
 
@@ -614,12 +551,15 @@ function ProposalCard({
 
   if (!proposal) return null;
   const expired = remaining === 0;
+  const locked = expired || busy;
 
   return (
-    <SheetCard bordered borderRadius={radius.panel} padding={space.s16}>
+    <View style={[CARD, { borderRadius: 22, padding: space.s16 }]}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Eyebrow color={colors.up}>Proposed trade</Eyebrow>
-        <Text variant="footnote" color={expired ? colors.down : colors.ink35}>
+        <Text color={chat.accentDeep} style={chatType.label}>
+          PROPOSED TRADE
+        </Text>
+        <Text color={expired ? chat.down : chat.muted} style={chatType.small}>
           {expired ? 'expired' : `expires ${mmss(remaining)}`}
         </Text>
       </View>
@@ -627,55 +567,100 @@ function ProposalCard({
       <View
         style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s8, marginTop: space.s10 }}
       >
-        <Text variant="screenTitle">{proposal.action}</Text>
-        <Text variant="bodySm">{proposal.notional}</Text>
+        <Text color={chat.ink} style={chatType.action}>
+          {proposal.action}
+        </Text>
+        <Text color={chat.muted} style={chatType.body}>
+          {proposal.notional}
+        </Text>
       </View>
 
       <View style={{ flexDirection: 'row', gap: space.s8, marginTop: space.s12 }}>
-        <StatTile label="Entry" value={proposal.entry} compact style={TILE_ON_CARD} />
-        <StatTile
-          label="Stop"
-          value={proposal.stop}
-          color={colors.down}
-          compact
-          style={TILE_ON_CARD}
-        />
-        <StatTile
-          label="Target"
-          value={proposal.target}
-          color={colors.up}
-          compact
-          style={TILE_ON_CARD}
-        />
+        <Stat label="Entry" value={proposal.entry} />
+        <Stat label="Stop" value={proposal.stop} color={chat.down} />
+        <Stat label="Target" value={proposal.target} color={chat.up} />
       </View>
 
-      <Text variant="secondarySm" color={colors.ink40} style={{ marginTop: space.s12 }}>
+      <Text color={chat.muted} style={[chatType.body, { marginTop: space.s12 }]}>
         {proposal.rationale}
       </Text>
 
       {decided ? null : (
-        <ButtonRow
-          style={{ marginTop: space.s14 }}
-          secondary={
-            <Button
-              label="Skip"
-              variant="secondary"
-              color={colors.ink70}
-              height={size.hit}
-              disabled={expired || busy}
-              onPress={() => onDecide('skip')}
+        // design.md §5's decision row: the secondary at flex 1, the primary at 1.3.
+        <View style={{ flexDirection: 'row', gap: space.s10, marginTop: space.s14 }}>
+          <Press
+            accessibilityRole="button"
+            accessibilityLabel="Skip this trade"
+            accessibilityState={{ disabled: locked }}
+            disabled={locked}
+            onPress={() => onDecide('skip')}
+            style={{
+              flex: 1,
+              height: DECIDE_H,
+              borderRadius: DECIDE_H / 2,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: chat.tile,
+              opacity: locked ? 0.5 : 1,
+            }}
+          >
+            <Text color={chat.inkSoft} style={chatType.button}>
+              Skip
+            </Text>
+          </Press>
+          <Press
+            accessibilityRole="button"
+            accessibilityLabel="Approve this trade"
+            accessibilityState={{ disabled: locked }}
+            disabled={locked}
+            onPress={() => onDecide('approve')}
+            style={{
+              flex: 1.3,
+              height: DECIDE_H,
+              borderRadius: DECIDE_H / 2,
+              overflow: 'hidden',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: locked ? 0.5 : 1,
+            }}
+          >
+            <LinearGradient
+              colors={[chat.primaryTop, chat.primaryBottom]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
             />
-          }
-          primary={
-            <Button
-              label="Approve"
-              height={size.hit}
-              disabled={expired || busy}
-              onPress={() => onDecide('approve')}
-            />
-          }
-        />
+            {/* Above the gradient: on web an absolute layer paints over its in-flow siblings. */}
+            <View style={{ zIndex: 1 }}>
+              <Text color="#FFFFFF" style={chatType.button}>
+                Approve
+              </Text>
+            </View>
+          </Press>
+        </View>
       )}
-    </SheetCard>
+    </View>
+  );
+}
+
+/** One of the card's three figures, on a tile a step darker than the card. */
+function Stat({ label, value, color = chat.ink }: { label: string; value: string; color?: string }) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: chat.tile,
+        borderRadius: 14,
+        paddingHorizontal: space.s10,
+        paddingVertical: space.s8,
+      }}
+    >
+      <Text color={chat.muted} style={chatType.small}>
+        {label}
+      </Text>
+      <Text color={color} style={[chatType.value, { marginTop: space.s2 }]} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
   );
 }

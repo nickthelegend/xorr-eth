@@ -2,6 +2,9 @@
  * Thread state — PLAN.md 6.2. The handoff designed screen 12 as a single-exchange snapshot [G43];
  * as the centre tab it needs a real thread: persistence, scrollback, unread state, and the
  * proposal's expiry actually expiring.
+ *
+ * One record of everything said, which `src/chat/conversations.ts` splits into a conversation per agent. What has been
+ * read is kept per agent (`read`), so the Messages list can mark the agents with something new, as a messenger does.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
@@ -9,22 +12,33 @@ import { fact, voice, type Segment, type ThreadMessage } from './message';
 import type { Proposal, ProposalDecision } from '../data/types';
 
 const KEY = 'xorr-thread-v1';
+/** When each agent's conversation was last open, and when this device began keeping track. */
+const READ_KEY = 'xorr-thread-read-v1';
 const PAGE = 30;
 
 let seq = 0;
 const nextId = () => `m${Date.now().toString(36)}-${(seq++).toString(36)}`;
+
+/**
+ * What has been read. `since` is when this device started keeping track: everything said before it counts as read, so an
+ * old thread does not arrive as a wall of unread marks the first time the list is opened.
+ */
+export type ReadState = { since: number; byAgent: Record<string, number> };
 
 export type ThreadStore = {
   messages: ThreadMessage[];
   proposal: Proposal | null;
   decided: null | 'approve' | 'skip';
   unread: number;
+  read: ReadState;
   hydrated: boolean;
   hydrate: () => Promise<void>;
   append: (m: ThreadMessage) => void;
   setProposal: (p: Proposal | null) => void;
   setDecided: (d: null | 'approve' | 'skip') => void;
   markRead: () => void;
+  /** Everything one agent has said so far is read: its conversation is open. */
+  markReadFor: (agent: string) => void;
   /** Oldest-first page for scrollback. */
   page: (n: number) => ThreadMessage[];
 };
@@ -34,12 +48,21 @@ export const useThread = create<ThreadStore>((set, get) => ({
   proposal: null,
   decided: null,
   unread: 0,
+  read: { since: Date.now(), byAgent: {} },
   hydrated: false,
 
   async hydrate() {
+    // The tab bar's count, the list and a conversation all ask; the thread is read from storage once.
+    if (get().hydrated) return;
     try {
-      const raw = await AsyncStorage.getItem(KEY);
+      const [raw, rawRead] = await Promise.all([AsyncStorage.getItem(KEY), AsyncStorage.getItem(READ_KEY)]);
       if (raw) set({ messages: JSON.parse(raw) as ThreadMessage[] });
+      const saved = rawRead ? (JSON.parse(rawRead) as Partial<ReadState>) : undefined;
+      if (saved && typeof saved.since === 'number') {
+        set({ read: { since: saved.since, byAgent: saved.byAgent ?? {} } });
+      } else {
+        void AsyncStorage.setItem(READ_KEY, JSON.stringify(get().read)).catch(() => undefined);
+      }
     } catch {
       // A corrupt thread must not brick the tab; start clean rather than crash.
     } finally {
@@ -58,6 +81,13 @@ export const useThread = create<ThreadStore>((set, get) => ({
   setProposal: (proposal) => set({ proposal, decided: null }),
   setDecided: (decided) => set({ decided }),
   markRead: () => set({ unread: 0 }),
+  markReadFor(agent) {
+    set((s) => {
+      const read = { since: s.read.since, byAgent: { ...s.read.byAgent, [agent]: Date.now() } };
+      void AsyncStorage.setItem(READ_KEY, JSON.stringify(read)).catch(() => undefined);
+      return { read };
+    });
+  },
   page: (n) => {
     const all = get().messages;
     return all.slice(Math.max(0, all.length - n * PAGE));
@@ -70,12 +100,14 @@ export function botProse(agent: string, segments: Segment[]): ThreadMessage {
   return { id: nextId(), at: Date.now(), author: 'bot', type: 'prose', agent, segments };
 }
 
-export function userMessage(text: string): ThreadMessage {
-  return { id: nextId(), at: Date.now(), author: 'user', type: 'user', text };
+/** A question, and the agent it was asked of — which is what puts it in that agent's conversation. */
+export function userMessage(text: string, to?: string): ThreadMessage {
+  return { id: nextId(), at: Date.now(), author: 'user', type: 'user', text, ...(to ? { to } : {}) };
 }
 
-export function proposalMessage(proposalId: string): ThreadMessage {
-  return { id: nextId(), at: Date.now(), author: 'bot', type: 'proposal', proposalId };
+/** A proposal card, with the agent that proposed it — which is whose conversation it sits in. */
+export function proposalMessage(proposalId: string, agent?: string): ThreadMessage {
+  return { id: nextId(), at: Date.now(), author: 'bot', type: 'proposal', proposalId, ...(agent ? { agent } : {}) };
 }
 
 /**

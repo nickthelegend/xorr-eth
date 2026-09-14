@@ -1,21 +1,32 @@
 /**
- * Screen 12 — Bot chat, as a route.
+ * `/bot` — raises the Messages drawer, and steps aside.
  *
- * The conversation itself now lives in `src/chat/Chat.tsx`, because the tab-bar button opens the
- * same thing as a sheet and an approve-before-execute flow must not exist twice.
- *
- * This route is no longer a tab, but it is not dead: `routeFor('proposal-awaiting')` returns
- * `/bot`, so a push about a waiting proposal lands here, and the morning briefing's button pushes
- * it too. Both are deep links, and a deep link needs somewhere to arrive.
+ * Messages is a drawer that slides up over the screen you are on (`src/chat/ChatSheet.tsx`), never a page with the tab
+ * bar under it. The route stays because pushes and links still arrive at it: `routeFor('proposal-awaiting')` returns
+ * `/bot`, and the morning briefing's button pushes it. So it opens the drawer — on the list, where the agent asking for
+ * something is marked, or straight into one agent's conversation when the link names it (`/bot?agent=yield-keeper`) —
+ * and gets out of the way: back to the screen that pushed it, or home for a push or a typed address with nothing behind
+ * it.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '@/ui';
-import { Chat } from '@/chat/Chat';
+import { CHAT_AGENTS } from '@/chat/agents';
+import { useChatDrawer } from '@/chat/chatDrawer';
 
 export default function BotChat() {
-  return (
-    <Screen tabBar gutter="none">
-      <Chat />
-    </Screen>
-  );
+  const router = useRouter();
+  const { agent } = useLocalSearchParams<{ agent?: string }>();
+  const show = useChatDrawer((s) => s.show);
+  const cameFromAScreen = router.canGoBack();
+  // By persona id or by name; a link naming no agent this app has opens the list rather than a conversation with no one.
+  const named = CHAT_AGENTS.find((a) => a.id === agent || a.name === agent)?.name ?? null;
+
+  useEffect(() => {
+    show(named);
+    if (cameFromAScreen) router.back();
+  }, [show, named, router, cameFromAScreen]);
+
+  // The app's ground for the frame it takes to step back, rather than no shell at all.
+  return cameFromAScreen ? <Screen /> : <Redirect href="/" />;
 }

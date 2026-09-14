@@ -34,7 +34,10 @@ export type IconName =
   | 'shield'
   | 'activity'
   | 'chat'
-  | 'copy';
+  | 'copy'
+  | 'mic'
+  | 'waveform'
+  | 'sparkle';
 
 export type IconProps = {
   name: IconName;
@@ -185,6 +188,31 @@ function render(name: IconName, c: Common, color: string) {
       );
     case 'check':
       return <Path d="M5 12.5 L10 17.5 L19 7" {...c} />;
+    case 'mic':
+      return (
+        <>
+          <Rect x={9} y={3.5} width={6} height={11} rx={3} {...c} />
+          <Path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" {...c} />
+          <Path d="M12 18v2.5" {...c} />
+        </>
+      );
+    case 'waveform':
+      return (
+        <>
+          <Path d="M4.5 10.5v3" {...c} />
+          <Path d="M8.25 7.5v9" {...c} />
+          <Path d="M12 4.5v15" {...c} />
+          <Path d="M15.75 8v8" {...c} />
+          <Path d="M19.5 10.5v3" {...c} />
+        </>
+      );
+    case 'sparkle':
+      return (
+        <>
+          <Path d="M11 5c.6 3.4 2.6 5.4 6 6-3.4.6-5.4 2.6-6 6-.6-3.4-2.6-5.4-6-6 3.4-.6 5.4-2.6 6-6Z" {...c} />
+          <Path d="M18.5 3v3.5M16.75 4.75h3.5" {...c} />
+        </>
+      );
     case 'send':
       return (
         <>

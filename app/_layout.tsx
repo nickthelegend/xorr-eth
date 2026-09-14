@@ -15,6 +15,8 @@ import { useRegisterDevice } from '@/notifications/useRegisterDevice';
 import { useHydrateWallet } from '@/wallet/useHydrateWallet';
 import { useHydrateDelegation } from '@/wallet/useHydrateDelegation';
 import { ReachabilityProvider } from '@/net/Reachability';
+import { ChatSheet } from '@/chat/ChatSheet';
+import { useChatDrawer } from '@/chat/chatDrawer';
 
 /**
  * Hold the splash until the typefaces are ready.
@@ -52,6 +54,20 @@ function WalletHydration() {
   // whichever screen last wrote it. See useHydrateDelegation.
   useHydrateDelegation();
   return null;
+}
+
+/**
+ * The Messages drawer, over every screen.
+ *
+ * Mounted once, after the navigator and inside the frame, so it slides up over whatever screen is open —
+ * the tab bar included — and is clipped to the phone column on a wide browser like everything else. It is
+ * opened through `useChatDrawer`: by the tab bar's Messages button, and by the `/bot` route that pushes and
+ * the briefing link to.
+ */
+function ChatDrawer() {
+  const open = useChatDrawer((s) => s.open);
+  const hide = useChatDrawer((s) => s.hide);
+  return <ChatSheet open={open} onClose={hide} />;
 }
 
 export default function RootLayout() {
@@ -117,7 +133,10 @@ export default function RootLayout() {
           <Stack.Screen name="bot/[id]/intro" options={{ presentation: 'modal' }} />
           <Stack.Screen name="bot/[id]/settings" options={{ presentation: 'modal' }} />
           <Stack.Screen name="strategy/dca" options={{ presentation: 'modal' }} />
+          {/* Swap rises from the bottom, from the tab bar's centre: a sheet over the screen it was asked from. */}
+          <Stack.Screen name="swap" options={{ presentation: 'modal' }} />
         </Stack>
+        <ChatDrawer />
         </PhoneFrame>
         </ReachabilityProvider>
       </SafeAreaProvider>
