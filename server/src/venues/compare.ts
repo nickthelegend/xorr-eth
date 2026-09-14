@@ -24,6 +24,7 @@ import { DELEGATION_ABI, DELEGATION_ADDRESS } from '../evm/delegation.js';
 import { buildSwapVmFill, openPrograms } from './swapvm.js';
 import { deliveredOnChain, PRICES_DRIFT } from '../evm/measure-route.js';
 import { humanFailure } from '../executor/failure.js';
+import { beforeDeadline } from '../http/deadline.js';
 
 export type VenueQuote =
   | {
@@ -76,11 +77,22 @@ export type RouteComparison = {
   edgeBps?: number;
 };
 
+/**
+ * How long a caller waits for a comparison (`http/patience.ts`).
+ *
+ * `withinMs` bounds the whole of it; `priceMs` bounds each price it reads.
+ */
+export type ComparePatience = { withinMs: number; priceMs: number };
+
 /** One venue's answer, never allowed to fail the whole comparison. */
 async function settled<T>(work: Promise<T>): Promise<T | undefined> {
   return work.catch(() => undefined);
 }
 
+/** A leg the comparison stopped waiting for: not the venue failing, an answer that had not arrived. */
+const LATE = Symbol('late');
+type Late = typeof LATE;
+class OutOfTime extends Error {}
 
 /**
  * What one of these fills costs to send, in dollars.
@@ -92,18 +104,19 @@ async function settled<T>(work: Promise<T>): Promise<T | undefined> {
  * `undefined` rather than zero on any failure. Zero is a claim about the transaction; not knowing
  * is a claim about us, and a net-of-gas comparison built on a silent zero would confidently
  * recommend whichever venue we failed to price.
+ *
+ * The gas price and the price of ETH are read once for all three venues: each venue read both again, so a comparison
+ * asked for the same ETH price three times over.
  */
 async function gasUsdFor(
-  estimate: () => Promise<bigint>,
+  estimate: () => Promise<bigint | Late | undefined>,
+  feePerGas: bigint | undefined,
+  ethUsd: number | undefined,
 ): Promise<number | undefined> {
-  const [units, feePerGas, ethUsd] = await Promise.all([
-    estimate().catch(() => undefined),
-    publicClient.getGasPrice().catch(() => undefined),
-    priceOf('ETH').catch(() => undefined),
-  ]);
-  if (units === undefined || feePerGas === undefined || !ethUsd) return undefined;
-  const wei = units * feePerGas;
-  return (Number(wei) / 1e18) * ethUsd;
+  if (feePerGas === undefined || !ethUsd) return undefined;
+  const units = await estimate();
+  if (typeof units !== 'bigint') return undefined;
+  return (Number(units * feePerGas) / 1e18) * ethUsd;
 }
 
 export async function compareVenues(params: {
@@ -111,8 +124,18 @@ export async function compareVenues(params: {
   inSymbol: string;
   outSymbol: string;
   amount: number;
+  /**
+   * How long the caller waits. Without it every leg waits as long as it takes, as the live test does.
+   *
+   * `/route/compare` passes a screen's patience. The legs ran one after another with no bound, so one slow answer — a
+   * 1inch call waiting its turn behind a rate limit, a dry run on a busy fork, a price on a cold cache — held the whole
+   * comparison: against the hosted fork one ask took 46 s and another gave no answer inside 90 (E165). The legs that do
+   * not need each other now start together, and a venue that has not answered when the time is up is reported as not
+   * answering in time, beside the venues that did.
+   */
+  patience?: ComparePatience;
 }): Promise<RouteComparison> {
-  const { owner, inSymbol, outSymbol, amount } = params;
+  const { owner, inSymbol, outSymbol, amount, patience } = params;
   const payToken = VENUE_TOKENS[inSymbol];
   const outToken = VENUE_TOKENS[outSymbol];
   if (!payToken || !outToken) throw new Error(`No token registry entry for ${inSymbol}/${outSymbol}`);
@@ -120,12 +143,48 @@ export async function compareVenues(params: {
   const amountIn = BigInt(Math.round(amount * 10 ** payToken.decimals));
   const outUnits = (raw: bigint) => Number(raw) / 10 ** outToken.decimals;
 
+  const until = patience ? Date.now() + patience.withinMs : undefined;
+  /** `work`, or `LATE` once the comparison's time is up. The work is not cancelled, and a late failure of it is swallowed. */
+  const inTime = async <T>(work: Promise<T>): Promise<T | Late> => {
+    if (until === undefined) return work;
+    try {
+      return await beforeDeadline(work, Math.max(0, until - Date.now()), () => new OutOfTime());
+    } catch (e) {
+      if (e instanceof OutOfTime) return LATE;
+      throw e;
+    }
+  };
+  /** A leg's answer: what it returned, `LATE`, or `undefined` when it failed. */
+  const answer = <T>(work: Promise<T>): Promise<T | Late | undefined> => settled(inTime(work));
+  const price = (symbol: string) => priceOf(symbol, patience?.priceMs).catch(() => undefined);
+
+  /*
+   * Started together, because none of these needs another's answer: the aggregator's quote, the programs shipped, the
+   * books' fill, and what gas costs. SwapVM's floor and the fork's dry run are priced from the aggregator's quote, so
+   * those wait for it below.
+   */
+  const aggQuote = answer(quote({ inSymbol, outSymbol, amount }));
+  const programs = answer(openPrograms());
+  const aquaFill = answer(
+    buildAquaFill({
+      owner,
+      tokenIn: payToken.address,
+      tokenOut: outToken.address,
+      amountIn,
+      slippage: SLIPPAGE.scheduled / 100,
+    }),
+  );
+  const costs = Promise.all([answer(publicClient.getGasPrice()), price('ETH')]);
+  const outPrice = price(outSymbol);
+
   /*
    * The aggregator first, and not only because it usually wins: SwapVM needs a minimum-out, and
    * the only honest source for one is what something else says the trade is worth. Same dependency
    * `settle.ts` has.
    */
-  const agg = await settled(quote({ inSymbol, outSymbol, amount }));
+  const aggAnswer = await aggQuote;
+  const aggLate = aggAnswer === LATE;
+  const agg = aggAnswer === LATE ? undefined : aggAnswer;
 
   /*
    * On a fork, what the route delivers there, not what 1inch quotes on Base (PLAN.md X77).
@@ -133,11 +192,13 @@ export async function compareVenues(params: {
    * A fork's pools stay as they were at its fork block while 1inch prices live Base, so the quote can be a price the
    * fork no longer has — the Railway fork's router refused aggregator buys for it while this table still listed the
    * route as serving. The route is dry-run through the `spend()` that would carry it, and that figure is both the
-   * aggregator's row and what SwapVM's floor is priced from, as in `settle.ts`.
+   * aggregator's row and what SwapVM's floor is priced from, as in `settle.ts`. A dry run that has not answered in time
+   * leaves the aggregator with no figure here: the quote cannot stand in for it on a fork.
    */
-  const forkRoute =
-    PRICES_DRIFT && agg
-      ? await buildSwap({
+  const onFork = PRICES_DRIFT && agg !== undefined;
+  const routeAnswer = onFork
+    ? await inTime(
+        buildSwap({
           inSymbol,
           outSymbol,
           amount,
@@ -158,38 +219,24 @@ export async function compareVenues(params: {
               data: swap.data,
             }),
           }))
-          .catch((e: unknown) => ({ refusal: humanFailure(e instanceof Error ? e.message : String(e)) }))
-      : undefined;
+          .catch((e: unknown) => ({ refusal: humanFailure(e instanceof Error ? e.message : String(e)) })),
+      )
+    : undefined;
+  const routeLate = routeAnswer === LATE;
+  const forkRoute = routeAnswer === LATE ? undefined : routeAnswer;
   /** The aggregator's answer in raw output units: measured on a fork, quoted elsewhere; undefined where it has none. */
-  const aggOutRaw =
-    forkRoute !== undefined
-      ? 'delivered' in forkRoute
-        ? forkRoute.delivered
-        : undefined
-      : agg
-        ? BigInt(Math.round(agg.outAmount * 10 ** outToken.decimals))
-        : undefined;
-  const aggOut = forkRoute !== undefined ? (aggOutRaw === undefined ? undefined : outUnits(aggOutRaw)) : agg?.outAmount;
+  const aggOutRaw = onFork
+    ? forkRoute !== undefined && 'delivered' in forkRoute
+      ? forkRoute.delivered
+      : undefined
+    : agg
+      ? BigInt(Math.round(agg.outAmount * 10 ** outToken.decimals))
+      : undefined;
+  const aggOut = onFork ? (aggOutRaw === undefined ? undefined : outUnits(aggOutRaw)) : agg?.outAmount;
 
-  /*
-   * How many programs exist at all, so a refusal can name its own cause. Counted separately from
-   * the fill attempt because `buildSwapVmFill` collapses "none shipped" and "none fillable" into
-   * the same `undefined`.
-   */
-  const shippedCount = await settled(openPrograms()).then((p) => p?.length ?? 0);
-
-  const [aqua, swapVm] = await Promise.all([
-    settled(
-      buildAquaFill({
-        owner,
-        tokenIn: payToken.address,
-        tokenOut: outToken.address,
-        amountIn,
-        slippage: SLIPPAGE.scheduled / 100,
-      }),
-    ),
+  const swapVmAnswer =
     aggOutRaw !== undefined
-      ? settled(
+      ? await answer(
           buildSwapVmFill({
             owner,
             tokenIn: payToken.address,
@@ -199,8 +246,18 @@ export async function compareVenues(params: {
             quotedOut: aggOutRaw,
           }),
         )
-      : Promise.resolve(undefined),
-  ]);
+      : undefined;
+  const swapVm = swapVmAnswer === LATE ? undefined : swapVmAnswer;
+  const aquaAnswer = await aquaFill;
+  const aqua = aquaAnswer === LATE ? undefined : aquaAnswer;
+
+  /*
+   * How many programs exist at all, so a refusal can name its own cause. Counted separately from
+   * the fill attempt because `buildSwapVmFill` collapses "none shipped" and "none fillable" into
+   * the same `undefined`. Undefined here when the count did not arrive in time.
+   */
+  const programsAnswer = await programs;
+  const shippedCount = programsAnswer === LATE ? undefined : (programsAnswer?.length ?? 0);
 
   /*
    * Cost each fill by estimating the transaction the settlement path would actually send.
@@ -213,27 +270,39 @@ export async function compareVenues(params: {
    * All three are estimates against the live chain, in parallel, and any that fails stays
    * `undefined` rather than defaulting to zero.
    */
+  const [feePerGasAnswer, ethUsd] = await costs;
+  const feePerGas = feePerGasAnswer === LATE ? undefined : feePerGasAnswer;
   const [aquaGas, swapVmGas, aggGas] = await Promise.all([
     aqua
-      ? gasUsdFor(() =>
-          publicClient.estimateContractGas({
-            account: delegateAccount.address,
-            address: DELEGATION_ADDRESS,
-            abi: DELEGATION_ABI,
-            functionName: 'spend',
-            args: [owner, aqua.token, aqua.venue, aqua.amount, aqua.tokenOut, aqua.minOut, aqua.data],
-          }),
+      ? gasUsdFor(
+          () =>
+            answer(
+              publicClient.estimateContractGas({
+                account: delegateAccount.address,
+                address: DELEGATION_ADDRESS,
+                abi: DELEGATION_ABI,
+                functionName: 'spend',
+                args: [owner, aqua.token, aqua.venue, aqua.amount, aqua.tokenOut, aqua.minOut, aqua.data],
+              }),
+            ),
+          feePerGas,
+          ethUsd,
         )
       : Promise.resolve(undefined),
     swapVm
-      ? gasUsdFor(() =>
-          publicClient.estimateContractGas({
-            account: delegateAccount.address,
-            address: DELEGATION_ADDRESS,
-            abi: DELEGATION_ABI,
-            functionName: 'spend',
-            args: [owner, swapVm.token, swapVm.venue, swapVm.amount, swapVm.tokenOut, swapVm.minOut, swapVm.data],
-          }),
+      ? gasUsdFor(
+          () =>
+            answer(
+              publicClient.estimateContractGas({
+                account: delegateAccount.address,
+                address: DELEGATION_ADDRESS,
+                abi: DELEGATION_ABI,
+                functionName: 'spend',
+                args: [owner, swapVm.token, swapVm.venue, swapVm.amount, swapVm.tokenOut, swapVm.minOut, swapVm.data],
+              }),
+            ),
+          feePerGas,
+          ethUsd,
         )
       : Promise.resolve(undefined),
     /*
@@ -244,36 +313,43 @@ export async function compareVenues(params: {
      * leaned toward the aggregator by exactly that much.
      */
     agg && aggOut !== undefined
-      ? gasUsdFor(async () => {
-          // On a fork, the route already measured, at its measured floor; elsewhere the route as 1inch builds it.
-          const measured = forkRoute && 'delivered' in forkRoute ? forkRoute : undefined;
-          const swap =
-            measured?.swap ??
-            (await buildSwap({
-              inSymbol,
-              outSymbol,
-              amount,
-              amountRaw: amountIn,
-              from: DELEGATION_ADDRESS,
-              receiver: owner,
-              slippagePct: SLIPPAGE.scheduled,
-            }));
-          const minOut = measured
-            ? (measured.delivered * BigInt(Math.floor((1 - SLIPPAGE.scheduled / 100) * 1_000_000))) / 1_000_000n
-            : swap.minOut;
-          return publicClient.estimateContractGas({
-            account: delegateAccount.address,
-            address: DELEGATION_ADDRESS,
-            abi: DELEGATION_ABI,
-            functionName: 'spend',
-            args: [owner, payToken.address, swap.to, amountIn, outToken.address, minOut, swap.data],
-          });
-        })
+      ? gasUsdFor(
+          () =>
+            answer(
+              (async () => {
+                // On a fork, the route already measured, at its measured floor; elsewhere the route as 1inch builds it.
+                const measured = forkRoute && 'delivered' in forkRoute ? forkRoute : undefined;
+                const swap =
+                  measured?.swap ??
+                  (await buildSwap({
+                    inSymbol,
+                    outSymbol,
+                    amount,
+                    amountRaw: amountIn,
+                    from: DELEGATION_ADDRESS,
+                    receiver: owner,
+                    slippagePct: SLIPPAGE.scheduled,
+                  }));
+                const minOut = measured
+                  ? (measured.delivered * BigInt(Math.floor((1 - SLIPPAGE.scheduled / 100) * 1_000_000))) / 1_000_000n
+                  : swap.minOut;
+                return publicClient.estimateContractGas({
+                  account: delegateAccount.address,
+                  address: DELEGATION_ADDRESS,
+                  abi: DELEGATION_ABI,
+                  functionName: 'spend',
+                  args: [owner, payToken.address, swap.to, amountIn, outToken.address, minOut, swap.data],
+                });
+              })(),
+            ),
+          feePerGas,
+          ethUsd,
+        )
       : Promise.resolve(undefined),
   ]);
 
   /** Dollar value of an OUT-token amount, for the net comparison. Undefined if it cannot be priced. */
-  const outUsd = await priceOf(outSymbol).catch(() => undefined);
+  const outUsd = await outPrice;
   const net = (out: number, gasUsd: number | undefined) =>
     outUsd !== undefined && gasUsd !== undefined ? out * outUsd - gasUsd : undefined;
 
@@ -291,7 +367,10 @@ export async function compareVenues(params: {
       : {
           venue: 'aqua',
           served: false,
-          reason: 'No maker book is deep enough for this size right now.',
+          reason:
+            aquaAnswer === LATE
+              ? 'The maker books did not answer in time.'
+              : 'No maker book is deep enough for this size right now.',
         },
     swapVm
       ? {
@@ -325,11 +404,18 @@ export async function compareVenues(params: {
            * guesses is worth less than one that admits the difference — "nobody is quoting" and
            * "somebody is quoting and you cannot take it" are opposite facts about the venue.
            */
-          reason: aggOutRaw === undefined
-            ? 'Needs a reference price, and the aggregator did not answer.'
-            : shippedCount === 0
-              ? 'No maker has shipped a program for this pair.'
-              : `${shippedCount} program${shippedCount === 1 ? ' is' : 's are'} shipped, but none can fill this size under your permission right now.`,
+          reason:
+            swapVmAnswer === LATE
+              ? 'The maker programs did not answer in time.'
+              : aggOutRaw === undefined
+                ? aggLate || routeLate
+                  ? 'Needs a reference price, and the aggregator did not answer in time.'
+                  : 'Needs a reference price, and the aggregator did not answer.'
+                : shippedCount === undefined
+                  ? 'No program can fill this size under your permission right now.'
+                  : shippedCount === 0
+                    ? 'No maker has shipped a program for this pair.'
+                    : `${shippedCount} program${shippedCount === 1 ? ' is' : 's are'} shipped, but none can fill this size under your permission right now.`,
         },
     agg && aggOut !== undefined
       ? {
@@ -346,7 +432,7 @@ export async function compareVenues(params: {
           detail:
             (agg.venues.length ? `via ${agg.venues.join(', ')}` : 'direct, no pool hop') +
             // On a fork the amount is what the route delivers there, beside what 1inch quotes on Base (PLAN.md X77).
-            (forkRoute ? `, measured on this fork — 1inch quotes ${Number(agg.outAmount.toPrecision(6))} on Base` : ''),
+            (onFork ? `, measured on this fork — 1inch quotes ${Number(agg.outAmount.toPrecision(6))} on Base` : ''),
           served: true,
           gasUsd: aggGas,
           netUsd: net(aggOut, aggGas),
@@ -355,9 +441,11 @@ export async function compareVenues(params: {
           venue: '1inch',
           served: false,
           reason:
-            forkRoute && 'refusal' in forkRoute
-              ? `1inch's route does not fill on this fork right now: ${forkRoute.refusal}`
-              : 'The aggregator returned no route for this pair.',
+            aggLate || routeLate
+              ? 'The aggregator did not answer in time.'
+              : forkRoute && 'refusal' in forkRoute
+                ? `1inch's route does not fill on this fork right now: ${forkRoute.refusal}`
+                : 'The aggregator returned no route for this pair.',
         },
   ];
 

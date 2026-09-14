@@ -648,7 +648,17 @@ extra.get('/route/compare', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json({ error: 'no_wallet' }, 400);
   try {
-    return c.json(await compareVenues({ owner: w.address as Address, inSymbol, outSymbol, amount }));
+    const patience = screenPatience();
+    return c.json(
+      await compareVenues({
+        owner: w.address as Address,
+        inSymbol,
+        outSymbol,
+        amount,
+        // A screen's patience: a venue that has not answered by then is reported late, beside those that did (E165).
+        patience: { withinMs: patience.routeMs, priceMs: patience.priceMs },
+      }),
+    );
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }

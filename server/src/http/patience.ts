@@ -16,11 +16,14 @@
  *     `/positions` waits for a mark and `/wallet/tokens` for a price;
  *   - `aaveMs`, the Aave reserve, read from Base mainnet over a public endpoint: nothing supplied, logged — what a failed
  *     read of it already gives a screen (`evm/balances.ts`).
+ *   - `routeMs`, every venue asked about one trade (`venues/compare.ts`): the venues that answered, and each that had not
+ *     as not answering in time. Twenty-five seconds, inside the app's forty-five: against the hosted fork one comparison
+ *     took 46 s and another gave no answer inside 90 (E165).
  *
  * Every upstream `/wallet/balance` and `/panic/preview` wait on is inside `chainReadMs`, so each answers in about twenty
  * seconds at worst; `/graph/decision` is inside the subgraphs' five-second deadlines and `priceMs`.
  */
-const DEFAULTS = { chainReadMs: 20_000, priceMs: 4_000, aaveMs: 8_000 };
+const DEFAULTS = { chainReadMs: 20_000, priceMs: 4_000, aaveMs: 8_000, routeMs: 25_000 };
 
 let current: typeof DEFAULTS = { ...DEFAULTS };
 
