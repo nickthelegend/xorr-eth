@@ -211,6 +211,30 @@ export async function logosFor(symbols: readonly string[]): Promise<Record<strin
   return out;
 }
 
+/** How many times the boot warm-up asks for the batch before leaving it to the next request. */
+const WARM_ATTEMPTS = 4;
+/** Between those asks: long enough that the CoinGecko lane has moved on from whatever limited the last one. */
+const WARM_GAP_MS = 15_000;
+
+/**
+ * Fetch the CoinGecko batch at boot, so the first market list after a deploy has every logo.
+ *
+ * The market warm-up walks some thirty CoinGecko requests one at a time through the same host lane, and the image batch
+ * was not among them: after a restart the first ask for BTC's logo queued behind all of them, or took the one 429 it is
+ * allowed and went cold again. Measured on the hosted fork just after a deploy, four asks five seconds apart never
+ * resolved it (docs/qa/ENDPOINTS.md E106). A request still gets one attempt; this is the only thing that asks again,
+ * a bounded number of times, and its waits never hold the process open.
+ *
+ * Resolves true once the batch is held.
+ */
+export async function warmLogos(attempts = WARM_ATTEMPTS, gapMs = WARM_GAP_MS): Promise<boolean> {
+  for (let i = 0; i < attempts; i += 1) {
+    if (await coingeckoImages()) return true;
+    if (i < attempts - 1) await new Promise<void>((resolve) => setTimeout(resolve, gapMs).unref?.());
+  }
+  return false;
+}
+
 /** Testing only. */
 export function resetLogoCache(): void {
   cache.clear();

@@ -22,7 +22,7 @@ vi.mock('../http/get.js', () => ({
   UpstreamUnavailable: class extends Error {},
 }));
 
-const { logoFor, logosFor, resetLogoCache } = await import('./logos.js');
+const { logoFor, logosFor, resetLogoCache, warmLogos } = await import('./logos.js');
 
 const oneInch = (url: string) => url.includes('api.1inch.dev');
 const coingecko = (url: string) => url.includes('coingecko.com');
@@ -129,5 +129,38 @@ describe('what it costs', () => {
     );
     await logosFor(['WETH', 'BTC']);
     for (const call of getJson.mock.calls) expect(call[4]).toEqual({ attempts: 1 });
+  });
+});
+
+describe('warming at boot (E106)', () => {
+  it('asks again after a rate limit, and the next ask for BTC is answered from what it fetched', async () => {
+    let asked = 0;
+    getJson.mockImplementation(async (url: string) => {
+      if (oneInch(url)) throw new Error('404 not a Base token');
+      asked += 1;
+      if (asked === 1) throw new Error('429 after 1 attempts');
+      return [{ id: 'bitcoin', image: 'https://coin-images.coingecko.com/1/bitcoin.png' }];
+    });
+
+    expect(await warmLogos(3, 0)).toBe(true);
+    expect(asked).toBe(2);
+
+    expect(await logoFor('BTC')).toEqual({
+      url: 'https://coin-images.coingecko.com/1/bitcoin.png',
+      source: 'coingecko',
+    });
+    // Answered from the warm batch: nothing more was asked of CoinGecko.
+    expect(asked).toBe(2);
+  });
+
+  it('stops after its attempts, each a single try, rather than asking forever', async () => {
+    getJson.mockImplementation(async () => {
+      throw new Error('429 after 1 attempts');
+    });
+
+    expect(await warmLogos(3, 0)).toBe(false);
+    const calls = getJson.mock.calls.filter((c) => coingecko(String(c[0])));
+    expect(calls).toHaveLength(3);
+    for (const call of calls) expect(call[4]).toEqual({ attempts: 1 });
   });
 });

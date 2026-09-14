@@ -22,7 +22,7 @@ import { CAN_SETTLE, TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js
 import { STOCKS, equitiesFunctional, isStock, observedHistory } from '../venues/stocks.js';
 import { earningsCalendar } from '../market/edgar.js';
 import { aavePoolIsDeployedHere, usdcSupplyYield, usdcReserve } from '../market/yield.js';
-import { logosFor } from '../market/logos.js';
+import { logosFor, warmLogos } from '../market/logos.js';
 import { withdrawCalldata } from '../venues/aave.js';
 import { suppliedUsd } from '../evm/balances.js';
 import { publicClient } from '../evm/client.js';
@@ -609,6 +609,8 @@ async function probeStocks(): Promise<unknown[]> {
  * refuse to start, and the request path already handles a cold cache.
  */
 export function warmMarketCache(): void {
+  // The logo batch ahead of everything: one request every market list shows, and the sweep below never asked for it (E106).
+  void warmLogos();
   // The equities first: the slowest answer the Markets screen waits on, and one probe serves everyone.
   void refreshStocks().catch(() => undefined);
 
