@@ -42,6 +42,7 @@ import {
   space,
   typeScale,
 } from '@/ui';
+import { clock } from '@/format';
 import { api } from '@/data/api';
 import { ApiError, TimedOut, errorRef, errorText, isRetryable } from '@/data/apiError';
 import { useAsync } from '@/data/useAsync';
@@ -268,7 +269,7 @@ export default function Judge() {
                 color={colors.ink55}
                 style={{ marginTop: space.s16, marginBottom: space.s8 }}
               >
-                Run at {new Date(d.at).toLocaleTimeString()} against {d.chain}. Every row above
+                Run at {clock(new Date(d.at).getTime())} against {d.chain}. Every row above
                 is a live read; nothing here is cached from a previous run or written into the
                 app.
               </Text>

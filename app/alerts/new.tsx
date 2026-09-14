@@ -22,6 +22,7 @@ import {
   space,
   typeScale,
 } from '@/ui';
+import { price as fmtPrice } from '@/format';
 import { repos } from '@/data';
 import { DEFAULT_BUY, priceableSymbols, resolvePriceable } from '@/data/tradable';
 import { usePrice } from '@/data/usePrices';
@@ -159,7 +160,7 @@ export default function NewAlert() {
       <Button
         label={
           valid
-            ? `Alert me when ${sym} is above $${level}`
+            ? `Alert me when ${sym} is above ${fmtPrice(Number(level))}`
             : unpriceable
               ? `Nothing prices ${symbol.trim()}`
               : 'Enter a symbol and a price'

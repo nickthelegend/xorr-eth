@@ -38,7 +38,7 @@ import {
   space,
   type TagTone,
 } from '@/ui';
-import { shortAddress } from '@/format';
+import { shortAddress, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { useIntentKeys } from '@/data/useIntentKeys';
 import { errorText } from '@/data/apiError';
@@ -262,7 +262,7 @@ function Outcome({ outcome, pays }: { outcome: LimitFillOutcome | undefined; pay
 /** When an order stops being takeable, from the moment the list was read. */
 function expiry(expiresAt: number | null, readAt: number | undefined): string {
   if (expiresAt === null) return 'Never';
-  if (readAt === undefined) return new Date(expiresAt).toLocaleString();
+  if (readAt === undefined) return when(expiresAt);
   const minutes = Math.floor((expiresAt - readAt) / 60_000);
   if (minutes < 1) return 'Passed';
   if (minutes < 60) return `In ${minutes} min`;

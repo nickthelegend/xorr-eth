@@ -42,6 +42,7 @@ import {
   size,
   space,
 } from '@/ui';
+import { when } from '@/format';
 import { useAuth } from '@/auth/useAuth';
 import { useAsync } from '@/data/useAsync';
 import { useHasHydrated, useStore } from '@/state/store';
@@ -162,7 +163,7 @@ export default function Verify() {
             </View>
 
             <Text variant="footnote" color={colors.ink55}>
-              {data.chain} · {new Date(data.at).toLocaleString('en-US')}
+              {data.chain} · {when(new Date(data.at).getTime())}
             </Text>
 
             {data.checks.map((c) => (

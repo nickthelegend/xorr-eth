@@ -32,7 +32,7 @@ import {
   size,
   space,
 } from '@/ui';
-import { money, quantity } from '@/format';
+import { money, quantity, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { history, unitsOf, type HistoryItem } from '@/data/history';
 import { useRefreshControl } from '@/ui/useRefreshControl';
@@ -98,7 +98,7 @@ function HistoryRow({ item }: { item: HistoryItem }) {
   const usd = item.usd ?? item.run?.usd ?? null;
   const measured = item.usd === null && usd !== null;
   // When, and nothing about which venue: the network and the venues are not named off the money screens (PLAN.md O3).
-  const context = item.at ? new Date(item.at).toLocaleString('en-US') : 'Time not read';
+  const context = item.at ? when(new Date(item.at).getTime()) : 'Time not read';
 
   return (
     <View style={[{ flexDirection: 'row', gap: space.s12, paddingVertical: space.s14 }, divider]}>
@@ -135,7 +135,7 @@ export default function History() {
    * The window, said out loud. The executor reads a bounded stretch of the chain, so "nothing here" only ever means
    * "nothing since then" — and a list that did not say so would claim more than it looked at.
    */
-  const scope = data?.window.since ? `since ${new Date(data.window.since).toLocaleString('en-US')}` : '';
+  const scope = data?.window.since ? `since ${when(new Date(data.window.since).getTime())}` : '';
 
   return (
     <Screen gutter="none">

@@ -29,6 +29,7 @@ import {
   size,
   space,
 } from '@/ui';
+import { clock, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { errorText } from '@/data/apiError';
 import { system } from '@/data/system';
@@ -70,7 +71,7 @@ export default function Catchup() {
             {data.isFirstVisit
               ? 'First visit — this is everything from the last day.'
               : data.since
-                ? `Since ${new Date(data.since).toLocaleString('en-US')}.`
+                ? `Since ${when(new Date(data.since).getTime())}.`
                 : 'Since the beginning.'}
           </Text>
         ) : null}
@@ -114,7 +115,7 @@ export default function Catchup() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <Text variant="rowPrimary">{e.action}</Text>
                   <Text variant="footnote" color={colors.ink55}>
-                    {new Date(e.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    {clock(new Date(e.at).getTime())}
                   </Text>
                 </View>
                 <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>

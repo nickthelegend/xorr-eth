@@ -94,43 +94,46 @@ export default function Briefing() {
                   {n.headline}
                 </Text>
 
-                <View
-                  style={[
-                    {
-                      flexDirection: 'row',
-                      gap: space.s10,
-                      marginTop: space.s14,
-                      paddingTop: space.s14,
-                      borderTopWidth: divider.borderBottomWidth,
-                      borderTopColor: divider.borderBottomColor,
-                    },
-                  ]}
-                >
+                {/*
+                  A take, never a written-in-advance line dressed as one. With no model configured this rendered the same
+                  sentence under three unrelated headlines, and on an empty wallet that sentence ("Everything is inside its
+                  limits") described positions that did not exist. Then the admission that there was none repeated under
+                  every card; it is said once, below the list.
+                */}
+                {n.take ? (
                   <View
-                    style={{
-                      width: DOT,
-                      height: DOT,
-                      borderRadius: radius.full,
-                      backgroundColor: n.take ? colors.up : colors.ink30,
-                      marginTop: space.s4,
-                    }}
-                  />
-                  {/*
-                    A take, or an admission that there is none — never a written-in-advance line
-                    dressed as one. With no model configured this rendered the same sentence under
-                    three unrelated headlines, and on an empty wallet that sentence
-                    ("Everything is inside its limits") described positions that did not exist.
-                  */}
-                  <Text
-                    variant="secondarySm"
-                    color={n.take ? colors.ink45 : colors.ink28}
-                    style={{ flex: 1 }}
+                    style={[
+                      {
+                        flexDirection: 'row',
+                        gap: space.s10,
+                        marginTop: space.s14,
+                        paddingTop: space.s14,
+                        borderTopWidth: divider.borderBottomWidth,
+                        borderTopColor: divider.borderBottomColor,
+                      },
+                    ]}
                   >
-                    {n.take ?? 'No agent comment — this build has no language model configured.'}
-                  </Text>
-                </View>
+                    <View
+                      style={{
+                        width: DOT,
+                        height: DOT,
+                        borderRadius: radius.full,
+                        backgroundColor: colors.up,
+                        marginTop: space.s4,
+                      }}
+                    />
+                    <Text variant="secondarySm" color={colors.ink45} style={{ flex: 1 }}>
+                      {n.take}
+                    </Text>
+                  </View>
+                ) : null}
               </SheetCard>
             ))}
+            {(data ?? []).every((n) => !n.take) ? (
+              <Text variant="footnote" color={colors.ink55} align="center" style={{ marginTop: space.s4 }}>
+                No agent comments: this build has no language model.
+              </Text>
+            ) : null}
           </ScrollView>
         )}
       </Fill>

@@ -3,15 +3,19 @@ import {
   MINUS,
   axisLabel,
   businessDaysFromNow,
+  clock,
   compactMoney,
   countdown,
+  day,
   mmss,
   money,
   percent,
   price,
   quantity,
+  roundsToZero,
   signedMoney,
   toMinus,
+  when,
 } from './index';
 
 describe('3.5 formatting rules — state.md', () => {
@@ -56,6 +60,38 @@ describe('3.5 formatting rules — state.md', () => {
     expect(signedMoney(318.4)).toBe('+$318.40');
     expect(signedMoney(-96)).toBe(`${MINUS}$96.00`);
     expect(signedMoney(1204)).toBe('+$1,204.00');
+  });
+
+  /*
+   * A figure that prints as zero is never negative. USDC's 24-hour change of −0.0001% printed "−0.00%" on the
+   * watchlist: a minus in front of zeros, a fall no digit showed. An explicit sign still reads "+", as every zero
+   * percentage does under the formatting rules.
+   */
+  it('judges the minus on the figure as printed, so zero is never negative', () => {
+    expect(percent(-0.0001, { digits: 2 })).toBe('+0.00%');
+    expect(percent(0.004, { digits: 2 })).toBe('+0.00%');
+    expect(percent(0)).toBe('+0.0%');
+    expect(percent(-0.05)).toBe(`${MINUS}0.1%`);
+    expect(signedMoney(-0.004)).toBe('+$0.00');
+    expect(money(-0.001)).toBe('$0.00');
+    expect(quantity(-0.00001)).toBe('0.0000');
+    expect(roundsToZero(0.0049, 2)).toBe(true);
+    expect(roundsToZero(0.005, 2)).toBe(false);
+  });
+
+  /*
+   * Screens printed `toLocaleString('en-US')` — "9/14/2026, 7:08:08 AM", seconds and all. Built from local components so
+   * the test holds in any zone the suite runs in.
+   */
+  it('says a moment the way a person reads one', () => {
+    const now = new Date(2026, 8, 15, 12, 0).getTime();
+    expect(when(new Date(2026, 8, 14, 7, 8, 8).getTime(), now)).toBe('Sep 14, 7:08 AM');
+    expect(when(new Date(2025, 11, 31, 23, 5).getTime(), now)).toBe('Dec 31, 2025, 11:05 PM');
+    expect(day(new Date(2026, 8, 14).getTime(), now)).toBe('Sep 14');
+    expect(day(new Date(2025, 0, 2).getTime(), now)).toBe('Jan 2, 2025');
+    expect(clock(new Date(2026, 8, 14, 7, 8, 8).getTime())).toBe('7:08 AM');
+    expect(when(Number.NaN, now)).toBe('—');
+    expect(clock(Number.NaN)).toBe('—');
   });
 
   it('compact notional for stat tiles', () => {

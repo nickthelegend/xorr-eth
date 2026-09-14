@@ -29,6 +29,7 @@ import {
   size,
   space,
 } from '@/ui';
+import { clock, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system, type ProposalRow } from '@/data/system';
 
@@ -128,9 +129,9 @@ export default function Proposals() {
                   ) : null}
 
                   <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s8 }}>
-                    {new Date(p.at).toLocaleString('en-US')}
+                    {when(new Date(p.at).getTime())}
                     {p.decidedAt
-                      ? ` · answered ${new Date(p.decidedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+                      ? ` · answered ${clock(new Date(p.decidedAt).getTime())}`
                       : ''}
                   </Text>
                 </SheetCard>

@@ -152,8 +152,12 @@ export interface PriceProps extends TextProps {
  *
  * Every screen that colours a signed figure goes through here, so "what does zero look
  * like" is answered once instead of per screen.
+ *
+ * Zero is judged at the figure's printed precision (`digits`, 2 by default). USDC's 24-hour change of −0.0001% printed
+ * as 0.00% and still took the loss colour, a fall no digit on screen showed.
  */
-export function pnlTone(value: number): PriceTone {
+export function pnlTone(value: number, digits = 2): PriceTone {
+  if (Math.abs(value) < 0.5 * 10 ** -digits) return 'neutral';
   if (value > 0) return 'up';
   if (value < 0) return 'down';
   return 'neutral';

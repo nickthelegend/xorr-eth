@@ -25,8 +25,18 @@ function localise(n: number, min: number, max: number): string {
   });
 }
 
-function sign(n: number, explicit: boolean): string {
-  if (n < 0) return MINUS;
+/** Whether `n` prints as zero at `digits` decimal places. */
+export function roundsToZero(n: number, digits: number): boolean {
+  return Math.abs(n) < 0.5 * 10 ** -digits;
+}
+
+/*
+ * The minus is judged on the figure as printed. A 24-hour change of −0.0001% printed as "−0.00%" — USDC on the
+ * watchlist reading as a fall that no digit on screen shows. A figure that prints as zero is never negative; an explicit
+ * sign still reads "+", as the formatting rules have every zero percentage do.
+ */
+function sign(n: number, explicit: boolean, digits: number): string {
+  if (n < 0 && !roundsToZero(n, digits)) return MINUS;
   return explicit ? '+' : '';
 }
 
@@ -36,7 +46,7 @@ function sign(n: number, explicit: boolean): string {
  */
 export function money(n: number, opts: { fractionDigits?: number; explicitSign?: boolean } = {}): string {
   const { fractionDigits = 2, explicitSign = false } = opts;
-  return `${sign(n, explicitSign)}$${localise(n, fractionDigits, fractionDigits)}`;
+  return `${sign(n, explicitSign, fractionDigits)}$${localise(n, fractionDigits, fractionDigits)}`;
 }
 
 /**
@@ -45,20 +55,54 @@ export function money(n: number, opts: { fractionDigits?: number; explicitSign?:
  */
 export function price(n: number): string {
   const a = Math.abs(n);
-  if (a >= 1000) return `${sign(n, false)}$${localise(n, 0, 0)}`;
-  if (a >= 1) return `${sign(n, false)}$${localise(n, 2, 2)}`;
-  return `${sign(n, false)}$${localise(n, 4, 4)}`;
+  if (a >= 1000) return `${sign(n, false, 0)}$${localise(n, 0, 0)}`;
+  if (a >= 1) return `${sign(n, false, 2)}$${localise(n, 2, 2)}`;
+  return `${sign(n, false, 4)}$${localise(n, 4, 4)}`;
 }
 
-/** Percentage: 1dp with an explicit sign. `+1.0%`, `−1.0%`. */
+/** Percentage: 1dp with an explicit sign. `+1.0%`, `−1.0%`; a change that prints as zero is never negative. */
 export function percent(n: number, opts: { digits?: number; explicitSign?: boolean } = {}): string {
   const { digits = 1, explicitSign = true } = opts;
-  return `${sign(n, explicitSign)}${localise(n, digits, digits)}%`;
+  return `${sign(n, explicitSign, digits)}${localise(n, digits, digits)}%`;
 }
 
 /** Crypto quantity — 4dp by default (SOL), 2dp for display balances. */
 export function quantity(n: number, digits = 4): string {
-  return `${sign(n, false)}${localise(n, digits, digits)}`;
+  return `${sign(n, false, digits)}${localise(n, digits, digits)}`;
+}
+
+/**
+ * A moment as a person reads one: "Sep 14, 7:08 AM", with the year only when it is not this year.
+ *
+ * Screens printed `toLocaleString('en-US')` — "9/14/2026, 7:08:08 AM", seconds and all — beside figures formatted with
+ * care, and a History row read like a log line. In the device's own zone, as every other time on screen. A time that
+ * is not a number is not known, so it is a dash.
+ */
+export function when(ms: number, now: number = Date.now()): string {
+  if (!Number.isFinite(ms)) return '—';
+  const d = new Date(ms);
+  const thisYear = d.getFullYear() === new Date(now).getFullYear();
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(thisYear ? {} : { year: 'numeric' }),
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/** A time of day as a person reads one: "7:08 AM". No seconds, no leading zero. */
+export function clock(ms: number): string {
+  if (!Number.isFinite(ms)) return '—';
+  return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+/** A day as a person reads one: "Sep 14", with the year only when it is not this year. */
+export function day(ms: number, now: number = Date.now()): string {
+  if (!Number.isFinite(ms)) return '—';
+  const d = new Date(ms);
+  const thisYear = d.getFullYear() === new Date(now).getFullYear();
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(thisYear ? {} : { year: 'numeric' }) });
 }
 
 /** A signed P&L amount, e.g. `+$318.40` / `−$96.00`. */
@@ -69,7 +113,7 @@ export function signedMoney(n: number, fractionDigits = 2): string {
 /** Compact notional for stat tiles: $182.4M, $1.06B. */
 export function compactMoney(n: number): string {
   const a = Math.abs(n);
-  const s = sign(n, false);
+  const s = sign(n, false, 2);
   if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(2)}B`;
   if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`;
   if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(1)}K`;

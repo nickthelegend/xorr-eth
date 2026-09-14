@@ -31,7 +31,7 @@ import {
   radius,
   space,
 } from '@/ui';
-import { price as fmtPrice } from '@/format';
+import { price as fmtPrice, when } from '@/format';
 import { ApiError } from '@/data/apiError';
 import { useAsync } from '@/data/useAsync';
 import { system } from '@/data/system';
@@ -106,7 +106,7 @@ export default function Oracle() {
                   style={{ flexDirection: 'row', justifyContent: 'space-between' }}
                 >
                   <Text variant="secondarySm" color={colors.ink55}>
-                    {new Date(p.at).toLocaleString('en-US')}
+                    {when(new Date(p.at).getTime())}
                   </Text>
                   <Text variant="secondarySm">{fmtPrice(p.usd)}</Text>
                 </View>

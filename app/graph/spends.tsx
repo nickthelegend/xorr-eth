@@ -32,7 +32,7 @@ import {
   size,
   space,
 } from '@/ui';
-import { money, shortAddress } from '@/format';
+import { money, shortAddress, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { indexDay, system, type GraphSpend } from '@/data/system';
 
@@ -138,7 +138,7 @@ function SpendRow({ spend }: { spend: GraphSpend }) {
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <Text variant="rowPrimary">{usd(spend.amount)}</Text>
         <Text variant="footnote" color={colors.ink55}>
-          {new Date(Number(spend.timestamp) * 1000).toLocaleString('en-US')}
+          {when(Number(spend.timestamp) * 1000)}
         </Text>
       </View>
       <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
