@@ -84,7 +84,7 @@ export default function CrosschainQuoteScreen() {
   const origin = destinations.data?.from.name;
   const chain = chains.find((d) => d.chainId === picked) ?? chains[0];
 
-  const { quote: price } = usePrice(token);
+  const { quote: price, error: priceError } = usePrice(token);
   const typed = askable(amount);
   // Asked once the amount stops changing. Every keypress would otherwise be a call against the shared 1inch key.
   const debounced = useDebounced(amount);
@@ -156,7 +156,8 @@ export default function CrosschainQuoteScreen() {
               <View style={{ flexShrink: 1 }}>
                 <Price variant="amountLg">{amount}</Price>
                 <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
-                  {price?.price !== undefined ? money((Number(amount) || 0) * price.price) : 'No price'}
+                  {/* A price read that failed is unknown, a dash; "No price" is for a token nothing prices. */}
+                  {price?.price !== undefined ? money((Number(amount) || 0) * price.price) : priceError ? '—' : 'No price'}
                 </Text>
               </View>
               <Segmented

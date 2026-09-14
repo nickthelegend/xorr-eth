@@ -165,7 +165,7 @@ export default function OrderTicket() {
   const maxUsd = side === 'sell' ? (typeof heldRead === 'number' ? heldRead : undefined) : availableUsd;
 
   // The conversion a user acts on must come from the market, not from a design constant.
-  const { quote } = usePrice(symbol);
+  const { quote, error: priceError } = usePrice(symbol);
 
   const [placing, setPlacing] = useState(false);
   const [refusal, setRefusal] = useState<string>();
@@ -236,7 +236,7 @@ export default function OrderTicket() {
           ${orderAmt}
         </Price>
         <Text variant="body" color={colors.sheet.muted}>
-          {unitsFor(amount, quote, symbol)}
+          {unitsFor(amount, quote, symbol, priceError !== undefined)}
         </Text>
       </View>
 

@@ -98,7 +98,7 @@ export default function Swap() {
 
   const typed = Number(amount) || 0;
   const quote = useSwapQuote(pay, receive, typed, slippagePct);
-  const { quote: payPrice } = usePrice(pay);
+  const { quote: payPrice, error: payPriceError } = usePrice(pay);
   const request = swapRequest({ pay, receive, amount, slippagePct });
   const overBalance = spendable !== undefined && typed > spendable;
 
@@ -217,7 +217,8 @@ export default function Swap() {
               <View style={{ flexShrink: 1 }}>
                 <Price variant="amountLg">{amount}</Price>
                 <Text variant="secondarySm" style={{ marginTop: space.s4 }}>
-                  {payPrice?.price !== undefined ? money(typed * payPrice.price) : 'No price'}
+                  {/* A price read that failed is unknown, a dash; "No price" is for a token nothing prices. */}
+                  {payPrice?.price !== undefined ? money(typed * payPrice.price) : payPriceError ? '—' : 'No price'}
                 </Text>
               </View>
               <TokenPill symbol={pay} onPress={() => setPicking(picking === 'pay' ? null : 'pay')} label="Choose the token you pay" />
