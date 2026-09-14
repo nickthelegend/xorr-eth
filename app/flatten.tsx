@@ -42,6 +42,7 @@ import { useSignedOut } from '@/auth/useSignedOut';
 import { repos } from '@/data';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
+import { useIntentKeys } from '@/data/useIntentKeys';
 import { errorText } from '@/data/apiError';
 import { useStore } from '@/state/store';
 import { sellBlocked } from '@/wallet/withdrawEverything';
@@ -75,17 +76,23 @@ export default function Flatten() {
   const storedPermission = useStore((s) => s.delegation);
   const blocked = sellBlocked(permission.data !== undefined ? permission.data : (storedPermission ?? undefined));
 
+  /*
+   * Selling everything is the one press that must never happen twice. It went out with no key, so a timeout followed by a
+   * second press could sell what the first had already sold into. The same press after an unknown outcome now carries the
+   * same key, and the executor answers it with the first attempt instead of a second run.
+   */
+  const keys = useIntentKeys();
   const flatten = useCallback(async () => {
     setBusy(true);
     setError(undefined);
     try {
-      setResult(await api.post<Result>('/panic/flatten', {}));
+      setResult(await keys.send('flatten', (idempotencyKey) => api.post<Result>('/panic/flatten', {}, { idempotencyKey })));
     } catch (e) {
       setError(errorText(e));
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [keys]);
 
   const p = preview.data;
   const nothingToDo = !!p && p.legs.length === 0;

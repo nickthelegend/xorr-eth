@@ -306,6 +306,9 @@ export type StrategyRunRow = {
   error: string | null;
   at: string;
   finishedAt: string | null;
+  /** Which way the run traded and where it filled, as `/runs` sends them; null for a run that never reached a venue. */
+  side?: 'buy' | 'sell' | null;
+  venue?: string | null;
 };
 
 /**

@@ -40,6 +40,7 @@ import {
 } from '@/ui';
 import { shortAddress } from '@/format';
 import { useAsync } from '@/data/useAsync';
+import { useIntentKeys } from '@/data/useIntentKeys';
 import { errorText } from '@/data/apiError';
 import {
   fillLimitOrder,
@@ -76,11 +77,19 @@ export default function LimitOrders() {
     void take(order);
   }
 
+  /*
+   * Taking an order is a trade, and it went out with no key: a timeout and a second press could fill a second time. The
+   * same order pressed again after an unknown outcome now carries the same key.
+   */
+  const keys = useIntentKeys();
+
   async function take(order: LimitOrder) {
     setReviewing(null);
     setTaking(order.hash);
     try {
-      const outcome = await fillLimitOrder(order.hash);
+      const outcome = await keys.send(['take', order.hash], (idempotencyKey) =>
+        fillLimitOrder(order.hash, { idempotencyKey }),
+      );
       setOutcomes((all) => ({ ...all, [order.hash]: outcome }));
       // The order's own state changed on chain; read the list again rather than guess it.
       if (outcome.status === 'filled') reload();

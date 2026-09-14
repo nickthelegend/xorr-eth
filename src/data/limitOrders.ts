@@ -6,6 +6,7 @@
  * they are uint256 values, and a number would round them.
  */
 import { api, ApiError } from './api';
+import type { Keyed } from './intentKey';
 
 /**
  * `open` can be taken now. `filled` was taken through this executor; `invalidated` had its nonce spent elsewhere — filled
@@ -73,9 +74,9 @@ export function limitOrders(): Promise<LimitOrderList> {
  * Take one whole order. A refusal (400, 404, 409) or a failure (502) carries the executor's own sentence in its body, so
  * it is returned for the screen to show rather than thrown as a status code, as `system.swap` does.
  */
-export async function fillLimitOrder(hash: string): Promise<LimitFillOutcome> {
+export async function fillLimitOrder(hash: string, write?: Keyed): Promise<LimitFillOutcome> {
   try {
-    return await api.post<LimitFillOutcome>(`/limit-orders/${encodeURIComponent(hash)}/fill`, {});
+    return await api.post<LimitFillOutcome>(`/limit-orders/${encodeURIComponent(hash)}/fill`, {}, write);
   } catch (e) {
     if (e instanceof ApiError && e.body && typeof e.body === 'object' && 'status' in e.body) {
       return e.body as LimitFillOutcome;

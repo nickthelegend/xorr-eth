@@ -63,6 +63,7 @@ import { repos } from '@/data';
 import { api } from '@/data/api';
 import { system } from '@/data/system';
 import { useAsync } from '@/data/useAsync';
+import { useFreshOnReturn } from '@/data/useFreshOnReturn';
 import { errorText, NotSignedIn } from '@/data/apiError';
 
 /** The state chip's dot. 7pt — screens.md gives this one exactly. */
@@ -224,6 +225,8 @@ export default function Safety() {
    * — or that it could not be read, rather than the row quietly not being there.
    */
   const privy = useAsync(() => repos.wallet.privyPolicy(), []);
+  // Back from a strategy, the roster or the wallet policy, the count and the policy row are read again (FEATURES.md #27).
+  useFreshOnReturn(roster, strategies, privy);
 
   /*
    * The standing allowances, which survive a revoke. Stopping the agents revokes the DELEGATION; the ERC-20 approvals

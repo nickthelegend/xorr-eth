@@ -40,6 +40,7 @@ import { useSignedOut } from '@/auth/useSignedOut';
 import { useStore } from '@/state/store';
 import { useNow } from '@/state/useNow';
 import { useAsync } from '@/data/useAsync';
+import { useIntentKeys } from '@/data/useIntentKeys';
 import { errorText } from '@/data/apiError';
 import { faucetStatus, requestFaucet, type FaucetOutcome } from '@/data/deposit';
 
@@ -71,6 +72,8 @@ export default function Fund() {
   const [copied, setCopied] = useState(false);
   const [asking, setAsking] = useState(false);
   const [outcome, setOutcome] = useState<FaucetOutcome>();
+  // One key per claim, kept through a timeout, as Deposit's claim does: a retry asks after the first, never sends twice.
+  const keys = useIntentKeys();
 
   async function copy() {
     if (!address) return;
@@ -82,7 +85,7 @@ export default function Fund() {
     if (asking) return;
     setAsking(true);
     try {
-      setOutcome(await requestFaucet());
+      setOutcome(await keys.send('faucet', (idempotencyKey) => requestFaucet({ idempotencyKey })));
     } catch (e) {
       setOutcome({ status: 'failed', error: errorText(e) });
     } finally {

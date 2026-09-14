@@ -268,6 +268,8 @@ export type Delegation = {
   delegateIsCurrent?: boolean;
   /** screen 4 "Daily Spend Cap", $200–$5,000 step $200. Enforced outside the client. */
   dailyCapUsd: number;
+  /** What the permission has spent today, as `/delegation` reports it. Absent from an executor older than the field. */
+  spentTodayUsd?: number;
   /** screen 4 "Run For" -> a real expiry, unix ms. */
   expiresAt: number;
   /**

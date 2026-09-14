@@ -49,6 +49,7 @@ import { repos } from '@/data';
 import { NotSignedIn, isRetryable } from '@/data/apiError';
 import { system, type Limits } from '@/data/system';
 import { useAsync } from '@/data/useAsync';
+import { useFreshOnReturn } from '@/data/useFreshOnReturn';
 import { logoProps, useLogos } from '@/data/useLogos';
 import { usePrivyIdentity } from '@/auth/usePrivyIdentity';
 import { useSignedOut } from '@/auth/useSignedOut';
@@ -236,6 +237,8 @@ export default function Home() {
   /* What this deployment trades and watches: nothing to trade beside things to watch is a chain that fills nothing. */
   const tradable = useAsync(() => system.tradable(), []);
   const watchable = useAsync(() => system.watchable(), []);
+  // Coming back to Home reads its figures again (FEATURES.md #27): a sale, a deposit or a stop elsewhere moves every one.
+  useFreshOnReturn(balance, limits, agents, classes, stocks, futures);
 
   /*
    * Today's gainers: instruments on a LIVE feed whose change is up, largest first.

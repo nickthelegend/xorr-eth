@@ -159,7 +159,12 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   del: <T,>(path: string) => request<T>(path, { method: 'DELETE' }),
   async getText(path: string): Promise<string> {
-    if (!isPublicPath(path) && authKnowledge() === 'signed-out') throw new NotSignedIn(path);
+    // Waits for the session as `request` does: on a cold start the answer is briefly unknown, and a file asked for in that
+    // window went out without a token and came back 401 — an export that failed for nothing.
+    if (!isPublicPath(path)) {
+      const know = authKnowledge() === 'unknown' ? await whenAuthKnown() : authKnowledge();
+      if (know === 'signed-out') throw new NotSignedIn(path);
+    }
     const requestId = newRequestId();
     return withDeadline(path, READ_TIMEOUT_MS, requestId, async (signal) => {
       const res = await fetch(`${API_BASE}${path}`, {

@@ -170,6 +170,8 @@ export default function Portfolio() {
    */
   useFreshOnReturn(balance, positions, realised, strategies, runs, activity, history);
   const points = useMemo(() => (history.data?.points ?? []).map((p) => p.totalUsd), [history.data]);
+  // When each point was recorded, so a finger on the line reads the value and the time it was true (FEATURES.md #45).
+  const times = useMemo(() => (history.data?.points ?? []).map((p) => p.at), [history.data]);
   const firstAt = history.data?.points[0]?.at;
   const graphDelta = points.length > 1 ? points[points.length - 1]! - points[0]! : 0;
   const graphPct = points.length > 1 && points[0]! > 0 ? (graphDelta / points[0]!) * 100 : 0;
@@ -262,6 +264,8 @@ export default function Portfolio() {
             <>
               <AreaChart
                 data={points}
+                times={times}
+                formatValue={money}
                 height={GRAPH_H}
                 color={graphDelta < 0 ? colors.down : colors.up}
                 grid

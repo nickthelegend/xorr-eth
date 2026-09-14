@@ -10,6 +10,7 @@ import type { Address } from 'viem';
 import { useAuth } from '@/auth/useAuth';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { withdrawals } from '@/data/withdrawals';
+import { useIntentKeys } from '@/data/useIntentKeys';
 import { initialSteps, withdrawEverything, type Step } from './withdrawEverything';
 
 export function useWithdrawEverything() {
@@ -20,6 +21,12 @@ export function useWithdrawEverything() {
   const [running, setRunning] = useState(false);
   /** Undefined until a run has ended; then whether all three steps finished. */
   const [finished, setFinished] = useState<boolean>();
+  /*
+   * One key per position sold. Each close went out with none, so a run stopped by a timeout and started again could sell
+   * a position the first run had already sold. A close whose outcome is unknown now keeps its key, and the second run's
+   * close of that position is answered with the first one's.
+   */
+  const keys = useIntentKeys();
 
   const run = useCallback(
     async (destination: { address: string; label: string }) => {
@@ -33,7 +40,10 @@ export function useWithdrawEverything() {
             owner: address as Address,
             destination,
             sellPreview: withdrawals.sellPreview,
-            close: withdrawals.close,
+            close: (symbol) =>
+              keys.send(['withdraw-everything', 'close', symbol], (idempotencyKey) =>
+                withdrawals.close(symbol, { idempotencyKey }),
+              ),
             aavePosition: withdrawals.aavePosition,
             aaveWithdrawCall: withdrawals.aaveWithdrawCall,
             prepareAll: withdrawals.prepareAll,
@@ -48,7 +58,7 @@ export function useWithdrawEverything() {
         setRunning(false);
       }
     },
-    [address, sendTransaction],
+    [address, sendTransaction, keys],
   );
 
   return { steps, running, finished, run };

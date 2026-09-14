@@ -10,6 +10,7 @@
  * so it is returned for the caller to show rather than thrown as a status code, as `fillLimitOrder` does.
  */
 import { api, ApiError } from './api';
+import type { Keyed } from './intentKey';
 
 export type WithdrawalAddress = {
   address: string;
@@ -140,7 +141,8 @@ export const withdrawals = {
 
   /* the rest of "withdraw everything", which the executor already served */
   sellPreview: () => api.get<SellPreview>('/panic/preview'),
-  close: (symbol: string) => refusalOr(api.post<CloseOutcome>('/positions/close', { symbol, fraction: 1 })),
+  close: (symbol: string, write?: Keyed) =>
+    refusalOr(api.post<CloseOutcome>('/positions/close', { symbol, fraction: 1 }, write)),
   aavePosition: () => api.get<AavePosition>('/yield/position'),
   // `usd: null` is all of it: Aave's max sentinel, the only way to leave no interest behind.
   aaveWithdrawCall: () => api.post<AaveWithdrawCall>('/yield/withdraw-calldata', { usd: null }),
