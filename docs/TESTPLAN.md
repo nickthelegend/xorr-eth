@@ -502,6 +502,7 @@ Runs are appended here with date, commit, surface and result counts.
 | 2026-09-15 | executors c566f65 | API | `tools/qa-full.mjs`, 221 checks on each executor | Fork 221/221 and Sepolia 221/221. E187 `GET /swap/quote` PASS on both, with no attempt at 45 s or more: the fork quoted 20 USDC → 0.007836 WETH via Uniswap V3, and Sepolia 0.007814 WETH via Best of 3 venues. E082, E128, E149, E165 and E194 held |
 | 2026-09-15 | contracts as deployed, executors c566f65 | Chain | `tools/prove-contract-refusals.ts` (new): each chain read at one block and asked with `eth_call`; the revoke and expiry cases on a local anvil copy of each chain. Nothing sent to a hosted chain | Every check passed on both chains: C04, C05, C06, C07, C09, C11 (section C) |
 | 2026-09-15 | native, Metro main tree at c566f65, fork executor c566f65 | Native | `/order/WETH` by deep link (S031), a consumer of the swap quote | Loaded content and console PASS: `Minimum received 0.0975 WETH`, `Network fee On us · ≈ $0.54`. The fork answered both quote requests `200`, in 10.0 s and 8.0 s while the endpoint QA ran. Taps not possible: the Mac's screen locked again |
+| 2026-09-15 | web c566f65 | Chromium (built in) | `tools/web-sweep.mjs`, all 103 routes signed out (S102's two included) | 103 loaded; 0 console errors, 0 warnings, 0 page errors, 0 failed or 4xx/5xx requests |
 
 ---
 
