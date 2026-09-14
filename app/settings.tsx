@@ -33,6 +33,7 @@ import { useAllowlist } from '@/wallet/allowlist';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
 import { TONES, useTone } from '@/bot/tone';
+import { useVoice } from '@/chat/voice';
 import { NotSignedIn, errorText } from '@/data/apiError';
 import { VersionRow } from '@/about/VersionRow';
 
@@ -55,6 +56,8 @@ export default function Settings() {
   const recoveryBackedUp = useStore((s) => s.recoveryBackedUp);
   const { addresses, loading: allowlistLoading, error: allowlistError } = useAllowlist();
   const { tone, setTone } = useTone();
+  // Whether anything in this build can speak in that tone (`src/chat/voice.ts`, read as the tab shell mounts).
+  const voiceConfigured = useVoice((s) => s.configured);
 
   /*
    * The permission, read from the chain when the screen opens — and judged the way Safety judges it.
@@ -262,7 +265,10 @@ export default function Settings() {
                   height={size.segThumbSm}
                 />
                 <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s12 }}>
-                  {TONES.find((t) => t.id === tone)?.description}
+                  {/* With no language model nothing speaks in any tone: the choice is kept for when one exists, and says so. */}
+                  {voiceConfigured === false
+                    ? 'Used once this build has a language model.'
+                    : TONES.find((t) => t.id === tone)?.description}
                 </Text>
               </SheetCard>
             </>

@@ -28,17 +28,20 @@ import {
   space,
 } from '@/ui';
 import { TONES, useTone } from '@/bot/tone';
+import { useVoice } from '@/chat/voice';
 
 export default function Voice() {
   const goBack = useGoBack();
   const { tone, setTone } = useTone();
+  // With no language model nothing writes in any register yet (`src/chat/voice.ts`); the choice is kept for when one does.
+  const mute = useVoice((s) => s.configured) === false;
 
   return (
     <Screen gutter="none">
       <View style={{ paddingHorizontal: space.gutter }}>
         <HeaderBar onBack={goBack} title={<Text variant="screenTitle">Voice</Text>} />
         <Text variant="secondary" color={colors.ink55} style={{ marginTop: space.s8 }}>
-          How the bot writes to you.
+          {mute ? 'How the bot will write to you, once this build has a language model.' : 'How the bot writes to you.'}
         </Text>
       </View>
 
