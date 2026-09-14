@@ -3,6 +3,8 @@
  *
  * `SETTLEMENT_VENUES` is what the app asks the user to sign and what the safety screen shows. The SwapVM book
  * was missing from it, so no grant made through the app could ever reach the venue settlement tries second.
+ *
+ * And the chain it starts on: one it knows, and real money only by a deliberate decision.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -34,5 +36,25 @@ describe('the venues a grant names', () => {
     const list = await venues();
     expect(list).not.toContain(BOOK);
     expect(list.some((v) => v === 'not-an-address')).toBe(false);
+  });
+});
+
+describe('the chain this executor starts on', () => {
+  it('is refused when the executor does not know it, naming the chains it does', async () => {
+    vi.stubEnv('XORR_CHAIN', 'arbitrum');
+    await expect(import('./chains.js')).rejects.toThrow(
+      'XORR_CHAIN=arbitrum is not a chain this executor knows (base, base-sepolia, base-fork, localnet).',
+    );
+  });
+
+  it('is refused where its money is real, unless ALLOW_MAINNET=yes says that was decided', async () => {
+    vi.stubEnv('XORR_CHAIN', 'base');
+    vi.stubEnv('ALLOW_MAINNET', '');
+    await expect(import('./chains.js')).rejects.toThrow(
+      'Refusing to start against Base mainnet. Set ALLOW_MAINNET=yes only with a deliberate decision.',
+    );
+    vi.resetModules();
+    vi.stubEnv('ALLOW_MAINNET', 'yes');
+    expect((await import('./chains.js')).CHAIN_KEY).toBe('base');
   });
 });

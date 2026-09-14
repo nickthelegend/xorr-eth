@@ -12,9 +12,14 @@ const getBalance = vi.fn();
 const sendTransaction = vi.fn(async () => '0xdrip');
 
 vi.mock('./client.js', () => ({ publicClient: { getBalance: (...a: unknown[]) => getBalance(...a) } }));
+const h = vi.hoisted(() => ({ chain: 'base-sepolia', baseState: false }));
 vi.mock('./chains.js', () => ({
-  IS_BASE_MAINNET_STATE: false,
-  CHAIN_KEY: 'base-sepolia',
+  get IS_BASE_MAINNET_STATE() {
+    return h.baseState;
+  },
+  get CHAIN_KEY() {
+    return h.chain;
+  },
   chain: { id: 84532, name: 'Base Sepolia' },
   rpcUrl: 'http://127.0.0.1:1',
 }));
@@ -35,6 +40,8 @@ beforeEach(() => {
   getBalance.mockReset();
   sendTransaction.mockClear();
   delete process.env.FAUCET_PRIVATE_KEY;
+  h.chain = 'base-sepolia';
+  h.baseState = false;
 });
 afterEach(() => {
   delete process.env.FAUCET_PRIVATE_KEY;
@@ -107,5 +114,14 @@ describe('dripGasIfNeeded', () => {
     });
     await expect(refused).rejects.toThrow('Connection terminated unexpectedly');
     expect(order).toEqual(['recorded', 'send']);
+  });
+
+  it('sends nothing on a chain whose money is real, though it is not Base and the faucet could pay', async () => {
+    process.env.FAUCET_PRIVATE_KEY = FAUCET_KEY;
+    balances(0n, parseEther('0.05'));
+    h.chain = 'arbitrum';
+    expect(await dripGasIfNeeded(NEW_WALLET)).toEqual({ sent: false, reason: 'refusing to send real ETH on arbitrum' });
+    expect(getBalance).not.toHaveBeenCalled();
+    expect(sendTransaction).not.toHaveBeenCalled();
   });
 });

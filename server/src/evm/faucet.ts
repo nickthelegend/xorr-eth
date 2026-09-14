@@ -36,6 +36,7 @@ import {
 } from 'viem';
 import { publicClient } from './client.js';
 import { ADDRESSES, CHAIN_KEY, chain, rpcUrl } from './chains.js';
+import { moneyOn, networkName } from './money.js';
 import { faucetAccount } from './gasDrip.js';
 import { readChain } from '../http/chain-read.js';
 import { markBroadcast } from '../http/request-id.js';
@@ -142,14 +143,18 @@ export function usdcOf(owner: Address): Promise<bigint> {
   return publicClient.readContract({ address: USDC, abi: erc20Abi, functionName: 'balanceOf', args: [owner] });
 }
 
-/** The chain the faucet refuses without reading anything: Base mainnet. */
+/**
+ * The chain the faucet refuses without reading anything: any whose money is real (`evm/money.ts`).
+ *
+ * It named `base`, so a mainnet under any other key went on down the fork's path and was stopped only because its node
+ * does not answer as anvil.
+ */
 export function refusedOutright(): Refused | undefined {
-  if (CHAIN_KEY !== 'base') return undefined;
+  if (moneyOn(CHAIN_KEY) !== 'real') return undefined;
   return {
     available: false,
     reason: 'real_money',
-    detail:
-      'This executor settles on Base mainnet, where USDC is real money, so there is no faucet. Fund the wallet by sending USDC to its address.',
+    detail: `This executor settles on ${networkName(CHAIN_KEY)}, where USDC is real money, so there is no faucet. Fund the wallet by sending USDC to its address.`,
   };
 }
 

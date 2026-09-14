@@ -23,7 +23,34 @@ import { isAddress, type Address, type Chain } from 'viem';
 
 export type ChainKey = 'base' | 'base-sepolia' | 'base-fork' | 'localnet';
 
-export const CHAIN_KEY = (process.env.EXPO_PUBLIC_XORR_CHAIN ?? 'base-sepolia') as ChainKey;
+/**
+ * What money on each chain is, in the executor's three words (`server/src/evm/money.ts`): real on a mainnet, test funds on
+ * a public test network, a copy on a fork. What this file tells a person about their money follows it, never a key:
+ * `testNetwork` was every key but `base`, which would have called a mainnet added under any other key a test network.
+ */
+const MONEY: Record<ChainKey, 'real' | 'test' | 'copy'> = {
+  base: 'real',
+  'base-sepolia': 'test',
+  'base-fork': 'copy',
+  localnet: 'copy',
+};
+
+const ASKED = process.env.EXPO_PUBLIC_XORR_CHAIN ?? 'base-sepolia';
+
+/*
+ * A chain this app does not know is refused where the app is built. It was an unchecked cast, and an unknown key signed on
+ * Base Sepolia under the label "Base fork": the wrong chain for every transaction a person signs.
+ */
+if (!Object.prototype.hasOwnProperty.call(MONEY, ASKED)) {
+  throw new Error(
+    `EXPO_PUBLIC_XORR_CHAIN=${ASKED} is not a chain this app knows (${Object.keys(MONEY).join(', ')}). ` +
+      'Add it here, as the executor adds it to server/src/evm/money.ts.',
+  );
+}
+
+export const CHAIN_KEY = ASKED as ChainKey;
+
+const money = MONEY[CHAIN_KEY];
 
 /**
  * A fork of Base IS Base — same id, same deployed contracts, different node. So the chain is Base
@@ -37,12 +64,15 @@ function withRpc(chain: Chain, rpc: string | undefined): Chain {
 
 const RPC = process.env.EXPO_PUBLIC_CHAIN_RPC;
 
-export const activeChain: Chain =
-  CHAIN_KEY === 'base'
-    ? withRpc(base, RPC)
-    : CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet'
-      ? withRpc({ ...base, name: 'Base fork' }, RPC ?? 'http://127.0.0.1:8545')
-      : withRpc(baseSepolia, RPC);
+/** Each chain as viem knows it. A record, so a chain added to `MONEY` cannot be missing here. */
+const CHAINS: Record<ChainKey, () => Chain> = {
+  base: () => withRpc(base, RPC),
+  'base-sepolia': () => withRpc(baseSepolia, RPC),
+  'base-fork': () => withRpc({ ...base, name: 'Base fork' }, RPC ?? 'http://127.0.0.1:8545'),
+  localnet: () => withRpc({ ...base, name: 'Base fork' }, RPC ?? 'http://127.0.0.1:8545'),
+};
+
+export const activeChain: Chain = CHAINS[CHAIN_KEY]();
 
 /**
  * Every chain the wallet may be asked to switch to.
@@ -53,16 +83,18 @@ export const activeChain: Chain =
 export const supportedChains: Chain[] =
   activeChain.id === base.id ? [activeChain, baseSepolia] : [activeChain, base];
 
-/** For the screens that name the network to the user. */
-export const chainLabel =
-  CHAIN_KEY === 'base'
-    ? 'Base'
-    : CHAIN_KEY === 'base-sepolia'
-      ? 'Base Sepolia'
-      : 'Base fork';
+const LABELS: Record<ChainKey, string> = {
+  base: 'Base',
+  'base-sepolia': 'Base Sepolia',
+  'base-fork': 'Base fork',
+  localnet: 'Base fork',
+};
 
-/** Every network but Base itself is for testing: nothing on it is real money. */
-export const testNetwork = CHAIN_KEY !== 'base';
+/** For the screens that name the network to the user. */
+export const chainLabel = LABELS[CHAIN_KEY];
+
+/** A network whose money is not real is for testing: nothing on it is real money. */
+export const testNetwork = money !== 'real';
 
 /** The one place the network is named on screen: a small chip where money moves — Deposit and Send. */
 export const networkChip = testNetwork ? `${chainLabel} · Test` : chainLabel;
@@ -89,7 +121,7 @@ export const networkChip = testNetwork ? `${chainLabel} · Test` : chainLabel;
  * The bot's own trades never depended on this: the executor signs with its delegate key against the
  * RPC it is given. This is only the transactions a PERSON signs — the grant, the approvals, a withdrawal.
  */
-export const walletSignsOnly = CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'localnet';
+export const walletSignsOnly = money === 'copy';
 
 /**
  * Can a deposit code name the chain this build is on?
@@ -97,9 +129,9 @@ export const walletSignsOnly = CHAIN_KEY === 'base-fork' || CHAIN_KEY === 'local
  * A deposit code encodes `ethereum:<address>@<chainId>` (EIP-681), and a phone wallet that scans it opens on that chain
  * id. On Base and Base Sepolia the id is the chain this build reads. A fork of Base is 8453 too — real Base's id — so on a
  * fork build the same code opens a phone wallet on real Base, where a transfer is real money sent to an address whose
- * balance this build never reads.
+ * balance this build never reads. Any copy of a chain carries the id of the chain it copies, so none has a code.
  */
-export const depositQrWorks = CHAIN_KEY === 'base' || CHAIN_KEY === 'base-sepolia';
+export const depositQrWorks = money !== 'copy';
 
 /** Said where the code would be. A fork build has no code, and its money is test funds. */
 export const depositQrNote = 'Test network. Use test funds.';

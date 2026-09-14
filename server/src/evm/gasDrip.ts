@@ -33,6 +33,7 @@ import { createWalletClient, formatEther, http, parseEther, type Address, type H
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
 import { publicClient } from './client.js';
 import { IS_BASE_MAINNET_STATE, CHAIN_KEY, chain, rpcUrl } from './chains.js';
+import { moneyOn } from './money.js';
 import { markBroadcast } from '../http/request-id.js';
 
 /** Enough for the approvals and the grant on an L2, and not a penny of use beyond that. */
@@ -51,7 +52,11 @@ export function faucetAccount(): PrivateKeyAccount | undefined {
 }
 
 export async function dripGasIfNeeded(to: Address): Promise<DripResult> {
-  if (IS_BASE_MAINNET_STATE) {
+  /*
+   * Never on Base's own state, and never on a chain whose money is real (`evm/money.ts`). Only the first was here, so a
+   * mainnet under any other key, with a faucet key set, would have been sent real ETH from that key.
+   */
+  if (IS_BASE_MAINNET_STATE || moneyOn(CHAIN_KEY) === 'real') {
     return { sent: false, reason: `refusing to send real ETH on ${CHAIN_KEY}` };
   }
 

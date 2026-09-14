@@ -485,6 +485,18 @@ describe('POST /faucet on Base Sepolia and Base', () => {
     expect(h.readContract).not.toHaveBeenCalled();
     expect(h.statements).toEqual([]);
   });
+
+  it('refuses on a chain whose money is real that is not Base, before reading the chain or the database', async () => {
+    h.chainKey = 'arbitrum';
+
+    const res = await post();
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ status: 'blocked', reason: 'real_money' });
+    expect(one).not.toHaveBeenCalled();
+    expect(h.readContract).not.toHaveBeenCalled();
+    expect(h.statements).toEqual([]);
+  });
 });
 
 describe('GET /faucet', () => {
@@ -531,6 +543,18 @@ describe('GET /faucet', () => {
   it('on Base mainnet, reads nothing on chain', async () => {
     h.chainKey = 'base';
     expect(await (await get()).json()).toMatchObject({ available: false, reason: 'real_money', wallet: { canAsk: false } });
+    expect(h.readContract).not.toHaveBeenCalled();
+    expect(h.anvil).not.toHaveBeenCalled();
+  });
+
+  it('on a chain whose money is real that is not Base, reads nothing on chain either', async () => {
+    h.chainKey = 'arbitrum';
+    expect(await (await get()).json()).toMatchObject({
+      available: false,
+      reason: 'real_money',
+      detail: expect.stringContaining('settles on arbitrum, where USDC is real money'),
+      wallet: { canAsk: false },
+    });
     expect(h.readContract).not.toHaveBeenCalled();
     expect(h.anvil).not.toHaveBeenCalled();
   });
