@@ -178,7 +178,13 @@ export function recordObservation(symbol: string, usd: number): void {
   ]).catch(() => undefined);
 }
 
-/** The series we have actually seen, oldest first. Empty until something has looked. */
+/**
+ * The series we have actually seen, oldest first. Empty until something has looked.
+ *
+ * A read that fails throws. It was caught into `[]`, and an empty series is exactly what `/market/stocks/history`
+ * words as "No readings yet" — so a query Postgres refused (`hours=abc` reached it as "NaN hours") told a screen that an
+ * equity with a history had none.
+ */
 export async function observedHistory(
   symbol: string,
   hours = 24 * 30,
@@ -190,7 +196,7 @@ export async function observedHistory(
       WHERE symbol = $1 AND at > now() - ($2 || ' hours')::interval
       ORDER BY at ASC`,
     [key, String(hours)],
-  ).catch(() => []);
+  );
   return rows.map((r) => ({ at: new Date(r.at).getTime(), usd: Number(r.usd) }));
 }
 

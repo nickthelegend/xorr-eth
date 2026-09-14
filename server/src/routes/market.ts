@@ -15,11 +15,13 @@
  */
 import { Hono } from 'hono';
 import { getJson, staleValue } from '../http/get.js';
+import { readChain } from '../http/chain-read.js';
+import { log } from '../http/request-id.js';
 import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../market/ids.js';
 import { CAN_SETTLE, TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
 import { STOCKS, equitiesFunctional, isStock, observedHistory } from '../venues/stocks.js';
 import { earningsCalendar } from '../market/edgar.js';
-import { usdcSupplyYield, usdcReserve } from '../market/yield.js';
+import { aavePoolIsDeployedHere, usdcSupplyYield, usdcReserve } from '../market/yield.js';
 import { logosFor } from '../market/logos.js';
 import { withdrawCalldata } from '../venues/aave.js';
 import { suppliedUsd } from '../evm/balances.js';
@@ -211,12 +213,23 @@ market.get('/market/quotes', async (c) => {
 
 /** GET /market/ohlc?symbol=BTC&days=30 — raw OHLC rows; the client folds them to 12 candles. */
 market.get('/market/ohlc', async (c) => {
-  const symbol = (c.req.query('symbol') ?? '').toUpperCase();
+  // Uppercased: `COINGECKO_IDS` is all-caps crypto with no equities in it, the one lookup rule 3 allows.
+  const symbol = (c.req.query('symbol') ?? '').trim().toUpperCase();
+  /*
+   * Refusals a client can act on, by name.
+   *
+   * These put a sentence where a client reads a code — `{error: "bad days"}` — and a request with no symbol at all got
+   * a 404 reading "no feed for ", with a hole where the symbol should be. Missing is the caller's to fix (400); a
+   * symbol nothing prices is a 404 that says which.
+   */
+  if (!symbol) return c.json({ error: 'missing_symbol', detail: 'Pass ?symbol=, for example ?symbol=BTC.' }, 400);
   const id = COINGECKO_IDS[symbol];
-  if (!id) return c.json({ error: `no feed for ${symbol}` }, 404);
+  if (!id) return c.json({ error: 'no_feed', detail: `No price feed for ${symbol}.` }, 404);
 
   const days = Number(c.req.query('days') ?? 30);
-  if (!Number.isFinite(days) || days <= 0) return c.json({ error: 'bad days' }, 400);
+  if (!Number.isFinite(days) || days <= 0) {
+    return c.json({ error: 'invalid_days', detail: 'days is a number of days above zero.' }, 400);
+  }
 
   try {
     const rows = await getWithStale<[number, number, number, number, number][]>(
@@ -281,6 +294,27 @@ function thin(series: number[], count: number): number[] {
 }
 
 /**
+ * The tokenized equity a request names, or the refusal it has earned.
+ *
+ * Both routes below answered a missing `?symbol` and a symbol that is not an equity with one 404, and put the sentence
+ * in `error` — so a request with no symbol read " is not a tokenized equity". Missing is the caller's to fix (400); a
+ * symbol that is not an equity is a 404 that says which.
+ */
+function equityAsked(
+  raw: string | undefined,
+): { symbol: string } | { status: 400 | 404; body: { error: string; detail: string } } {
+  const asked = raw?.trim();
+  if (!asked) {
+    return { status: 400, body: { error: 'missing_symbol', detail: 'Pass ?symbol=, for example ?symbol=NVDAc.' } };
+  }
+  const symbol = canonicalSymbol(asked);
+  if (!isStock(symbol)) {
+    return { status: 404, body: { error: 'not_an_equity', detail: `${symbol} is not a tokenized equity.` } };
+  }
+  return { symbol };
+}
+
+/**
  * GET /market/stocks/history?symbol=NVDAc — the series we have actually observed.
  *
  * These assets have no feed and no free candle source, so the only honest history is our own
@@ -300,18 +334,46 @@ function thin(series: number[], count: number): number[] {
  * of number someone trades on.
  */
 market.get('/market/earnings', async (c) => {
-  const symbol = canonicalSymbol(c.req.query('symbol') ?? '');
-  if (!isStock(symbol)) return c.json({ error: `${symbol} is not a tokenized equity` }, 404);
-  const cal = await earningsCalendar(symbol).catch(() => null);
-  if (!cal) return c.json({ error: 'no_filings', message: `No EDGAR filings found for ${symbol}.` }, 502);
+  const asked = equityAsked(c.req.query('symbol'));
+  if ('body' in asked) return c.json(asked.body, asked.status);
+  const { symbol } = asked;
+  /*
+   * A record that could not be read is not a record with nothing in it.
+   *
+   * `.catch(() => null)` folded a fetch that failed into "No filings found" — a 502 whose sentence claimed there were
+   * none. No entry for the company is a 404, and stays one until the record changes; a record that could not be read is
+   * a 502, worth asking again. Neither sentence names who publishes the record: the code carries the specifics, and the
+   * screens these reach name no vendor.
+   */
+  let cal: Awaited<ReturnType<typeof earningsCalendar>>;
+  try {
+    cal = await earningsCalendar(symbol);
+  } catch (e) {
+    log.warn(`[earnings] could not read the filings of ${symbol}: ${e instanceof Error ? e.message : String(e)}`);
+    return c.json(
+      { error: 'filings_unavailable', detail: `The filing record for ${symbol} could not be read just now.` },
+      502,
+    );
+  }
+  if (!cal) return c.json({ error: 'no_filings', detail: `No filings were found for ${symbol}.` }, 404);
   return c.json(cal);
 });
 
 market.get('/market/stocks/history', async (c) => {
-  const symbol = canonicalSymbol(c.req.query('symbol') ?? '');
-  if (!isStock(symbol)) return c.json({ error: `${symbol} is not a tokenized equity` }, 404);
-  const hours = Math.min(Math.max(Number(c.req.query('hours') ?? 720), 1), 24 * 365);
-  const points = await observedHistory(symbol, hours);
+  const asked = equityAsked(c.req.query('symbol'));
+  if ('body' in asked) return c.json(asked.body, asked.status);
+  const { symbol } = asked;
+  /*
+   * `hours=abc` is refused, not read as "no readings".
+   *
+   * NaN survived the clamp, reached the interval as "NaN hours", and Postgres refused it — which `observedHistory`
+   * swallowed into an empty series, so an equity with readings answered 200 "No readings yet".
+   */
+  const hours = Number(c.req.query('hours') ?? 720);
+  if (!Number.isFinite(hours) || hours <= 0) {
+    return c.json({ error: 'invalid_hours', detail: 'hours is a number of hours above zero.' }, 400);
+  }
+  const points = await observedHistory(symbol, Math.min(Math.max(hours, 1), 24 * 365));
   return c.json({
     symbol,
     points,
@@ -779,13 +841,37 @@ market.post('/yield/withdraw-calldata', async (c) => {
   if (!w) return c.json({ error: 'no_wallet' }, 400);
   const body = await c.req.json().catch(() => ({}));
   const usd = body?.usd;
+  const all = usd === null || usd === undefined || usd === 'max';
+
+  /*
+   * The amount is checked before it is converted, and before anything is read.
+   *
+   * `BigInt(Math.floor(Number('abc') * 1e6))` threw a RangeError ahead of the zero guard, so a body the caller had to
+   * fix answered 500 — "retry" — instead of naming what was wrong.
+   */
+  const invalidAmount = { error: 'invalid_amount', detail: 'usd is a dollar amount above zero, or null for all of it.' };
+  const asked = typeof usd === 'number' || typeof usd === 'string' ? Number(usd) : NaN;
+  if (!all && !(Number.isFinite(asked) && asked > 0)) return c.json(invalidAmount, 400);
+
+  /*
+   * No pool on this chain, no calldata for one.
+   *
+   * The pool address is Base mainnet's, and this built `withdraw()` against it wherever the executor ran — so on a
+   * chain with no pool at that address the wallet was handed a transaction to an account with no code, while
+   * `/yield/position` on the same executor already said `available: false`. 409: nothing about the request is wrong,
+   * and nothing on this chain can make it right.
+   */
+  if (!(await readChain('the lending pool', () => aavePoolIsDeployedHere()))) {
+    return c.json(
+      { error: 'aave_not_deployed', detail: 'No lending pool is deployed on this network, so there is nothing to withdraw.' },
+      409,
+    );
+  }
 
   const reserve = await usdcReserve();
-  const amountRaw =
-    usd === null || usd === undefined || usd === 'max'
-      ? MAX_UINT256
-      : BigInt(Math.floor(Number(usd) * 1e6));
-  if (amountRaw <= 0n) return c.json({ error: 'invalid_amount' }, 400);
+  const amountRaw = all ? MAX_UINT256 : BigInt(Math.floor(asked * 1e6));
+  // Above zero and still less than a millionth of a dollar: nothing a pool can pay out.
+  if (amountRaw <= 0n) return c.json(invalidAmount, 400);
 
   return c.json({
     to: reserve.pool,
@@ -815,7 +901,8 @@ market.get('/basename', async (c) => {
   if (address && isAddress(address)) {
     return c.json({ address, name: await basenameOf(address as Address) });
   }
-  return c.json({ error: 'pass ?name= or a valid ?address=' }, 400);
+  // A code where a client reads one; the sentence it used to carry in `error` is the detail.
+  return c.json({ error: 'invalid_query', detail: 'Pass ?name=<basename> or a valid ?address=0x….' }, 400);
 });
 
 /**
@@ -831,6 +918,6 @@ market.get('/market/crosscheck', async (c) => {
    * normalising here silently missed every one of them and fell through to a wrong answer.
    */
   const symbol = c.req.query('symbol') ?? '';
-  if (!symbol) return c.json({ error: 'pass ?symbol=' }, 400);
+  if (!symbol) return c.json({ error: 'missing_symbol', detail: 'Pass ?symbol=, for example ?symbol=WETH.' }, 400);
   return c.json(await crossCheck(symbol));
 });
