@@ -6,11 +6,90 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { health, setSubgraphTimeoutForTests, SubgraphUnavailable } = await import('./client.js');
+const { health, resetSubgraphForTests, setSubgraphTimeoutForTests, SubgraphUnavailable } = await import('./client.js');
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   setSubgraphTimeoutForTests(5_000);
+  resetSubgraphForTests();
+});
+
+const META = { data: { _meta: { block: { number: 46829712 }, hasIndexingErrors: false } } };
+
+/** A `fetch` answering each call with the next status in `statuses` (the last one repeats), counting the calls. */
+function answering(statuses: { status: number; retryAfter?: string }[]) {
+  const calls = { n: 0 };
+  vi.stubGlobal('fetch', async () => {
+    const next = statuses[Math.min(calls.n, statuses.length - 1)]!;
+    calls.n += 1;
+    return next.status === 200
+      ? new Response(JSON.stringify(META))
+      : new Response('Too Many Requests', {
+          status: next.status,
+          headers: next.retryAfter ? { 'retry-after': next.retryAfter } : {},
+        });
+  });
+  return calls;
+}
+
+describe('a 429 from The Graph', () => {
+  it('holds every query until its retry-after, asking nothing in the meantime', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-15T00:00:00Z'));
+    const calls = answering([{ status: 429, retryAfter: '60' }, { status: 200 }]);
+
+    await expect(health()).rejects.toThrow('The Graph is unreachable: 429');
+    await expect(health()).rejects.toThrow('The Graph is unreachable: 429, not asked again for another 60s');
+    vi.setSystemTime(new Date('2026-09-15T00:00:45Z'));
+    await expect(health()).rejects.toThrow('not asked again for another 15s');
+    expect(calls.n).toBe(1);
+
+    vi.setSystemTime(new Date('2026-09-15T00:01:01Z'));
+    expect(await health()).toEqual({ block: 46829712, healthy: true });
+    expect(calls.n).toBe(2);
+  });
+
+  it('holds for a minute when it names no retry-after', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-15T00:00:00Z'));
+    const calls = answering([{ status: 429 }, { status: 200 }]);
+    await expect(health()).rejects.toThrow('429');
+    vi.setSystemTime(new Date('2026-09-15T00:00:59Z'));
+    await expect(health()).rejects.toThrow('not asked again for another 1s');
+    vi.setSystemTime(new Date('2026-09-15T00:01:00Z'));
+    expect(await health()).toEqual({ block: 46829712, healthy: true });
+    expect(calls.n).toBe(2);
+  });
+});
+
+describe("the index's health", () => {
+  it('is read once per 30 seconds however often it is asked, and once for callers asking together', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-15T00:00:00Z'));
+    const calls = answering([{ status: 200 }]);
+
+    await Promise.all([health(), health(), health()]);
+    expect(calls.n).toBe(1);
+    vi.setSystemTime(new Date('2026-09-15T00:00:29Z'));
+    await health();
+    expect(calls.n).toBe(1);
+    vi.setSystemTime(new Date('2026-09-15T00:00:31Z'));
+    await health();
+    expect(calls.n).toBe(2);
+  });
+
+  it('is asked again after a read that failed', async () => {
+    let n = 0;
+    vi.stubGlobal('fetch', async () => {
+      n += 1;
+      if (n === 1) throw new TypeError('fetch failed');
+      return new Response(JSON.stringify(META));
+    });
+    await expect(health()).rejects.toThrow(SubgraphUnavailable);
+    expect(await health()).toEqual({ block: 46829712, healthy: true });
+    expect(n).toBe(2);
+  });
 });
 
 describe('a subgraph query', () => {

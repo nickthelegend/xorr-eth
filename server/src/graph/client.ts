@@ -104,7 +104,38 @@ export function setSubgraphTimeoutForTests(ms: number): void {
   timeoutMs = ms;
 }
 
+/*
+ * The Graph limits how fast each client may query, and a 429 is an instruction to wait.
+ *
+ * Nothing here waited. `/health` probed the index with a query on every call, and so did `/verify` and
+ * `/graph/health`, so every poll of an executor's health (a deploy waiting for it, Networks, System, the host's own
+ * checks) was a subgraph query, and queries kept arriving through the 429s. At 35556a1 both executors were refused
+ * with 429 on every subgraph read (docs/TESTPLAN.md: E080, E082, E085 and E190 failed), while the same query from
+ * another address answered 200. So a 429 holds every query until its `retry-after`, or a minute when it names none,
+ * and the index's health is read at most once per `HEALTH_TTL_MS`.
+ */
+const DEFAULT_HOLD_MS = 60_000;
+const HEALTH_TTL_MS = 30_000;
+let heldUntil = 0;
+let healthRead: { at: number; value: Promise<{ block: number; healthy: boolean }> } | undefined;
+
+/** How long a 429 asks us to wait: `retry-after` in seconds or as a date, else a minute. */
+function holdFor(retryAfter: string | null, now: number): number {
+  const seconds = Number(retryAfter);
+  if (retryAfter !== null && Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const until = retryAfter ? Date.parse(retryAfter) : Number.NaN;
+  return Number.isFinite(until) && until > now ? until - now : DEFAULT_HOLD_MS;
+}
+
+/** Testing only: no hold, and no health read kept. */
+export function resetSubgraphForTests(): void {
+  heldUntil = 0;
+  healthRead = undefined;
+}
+
 async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
+  const held = heldUntil - Date.now();
+  if (held > 0) throw new SubgraphUnavailable(`429, not asked again for another ${Math.ceil(held / 1000)}s`);
   const unreachable = (e: unknown) => {
     const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
     return new SubgraphUnavailable(timedOut ? `no answer in ${timeoutMs}ms` : e instanceof Error ? e.message : String(e));
@@ -122,6 +153,10 @@ async function gql<T>(query: string, variables: Record<string, unknown> = {}): P
   }).catch((e: unknown) => {
     throw unreachable(e);
   });
+  if (res.status === 429) {
+    heldUntil = Date.now() + holdFor(res.headers.get('retry-after'), Date.now());
+    throw new SubgraphUnavailable('429');
+  }
   if (!res.ok) throw new SubgraphUnavailable(`${res.status}`);
   /*
    * The deadline covers the body too, and says so in the same words.
@@ -141,11 +176,19 @@ export function unitsToUsd(units: string, decimals = 6): number {
   return Number(units) / 10 ** decimals;
 }
 
+/** The index's block and whether it has indexing errors, read at most once per `HEALTH_TTL_MS` however often asked. */
 export async function health(): Promise<{ block: number; healthy: boolean }> {
-  const d = await gql<{ _meta: { block: { number: number }; hasIndexingErrors: boolean } }>(
+  const now = Date.now();
+  if (healthRead && now - healthRead.at < HEALTH_TTL_MS) return healthRead.value;
+  const value = gql<{ _meta: { block: { number: number }; hasIndexingErrors: boolean } }>(
     `{ _meta { block { number } hasIndexingErrors } }`,
-  );
-  return { block: d._meta.block.number, healthy: !d._meta.hasIndexingErrors };
+  ).then((d) => ({ block: d._meta.block.number, healthy: !d._meta.hasIndexingErrors }));
+  healthRead = { at: now, value };
+  // A read that failed is not kept: the next caller asks again, unless a 429 is holding every query.
+  value.catch(() => {
+    if (healthRead?.value === value) healthRead = undefined;
+  });
+  return value;
 }
 
 export async function policyFor(owner: string): Promise<Policy | null> {
