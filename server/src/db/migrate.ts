@@ -12,9 +12,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pool } from './index.js';
+import { withoutPassword } from './redact.js';
 
 const here = import.meta.dirname;
-const target = process.env.DATABASE_URL ?? 'default local xorr';
+// Without the password: this line printed `DATABASE_URL` whole, into the host's deploy log on every deploy.
+const target = process.env.DATABASE_URL ? withoutPassword(process.env.DATABASE_URL) : 'default local xorr';
 console.log(`migrating ${target}`);
 
 await pool.query(fs.readFileSync(path.join(here, 'schema.sql'), 'utf8'));

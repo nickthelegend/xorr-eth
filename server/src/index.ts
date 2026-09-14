@@ -31,6 +31,7 @@ import { DELEGATION_ADDRESS, delegatePublicKey } from './evm/delegation.js';
 import { authMiddleware } from './auth/middleware.js';
 import { errorResponse } from './http/errors.js';
 import { DATABASE_URL, pool } from './db/index.js';
+import { withoutPassword } from './db/redact.js';
 
 const app = new Hono();
 
@@ -215,7 +216,7 @@ async function shutdown(signal: string) {
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));
 console.log(`xorr executor on :${port}`);
-console.log(`  db      ${DATABASE_URL.replace(/:[^:@]*@/, ':***@')}`);
+console.log(`  db      ${withoutPassword(DATABASE_URL)}`);
 console.log(`  chain    ${CHAIN_KEY} ${rpcUrl}`);
 console.log(`  contract ${DELEGATION_ADDRESS}`);
 console.log(`  delegate ${delegatePublicKey}`);
