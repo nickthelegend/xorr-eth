@@ -289,7 +289,8 @@ export interface YieldRepository {
   /** `estimatedApy` is a FRACTION (0.0388 = 3.88%), not percentage points. */
   staking(): Promise<{
     estimatedApy: number;
-    feed: 'live' | 'unavailable';
+    /** Always live: `/yield/supply` answers a rate it cannot read with 503 `rate_unavailable`, never a stand-in number. */
+    feed: 'live';
     note: string;
     /**
      * Whether this can be supplied on the chain this build trades.

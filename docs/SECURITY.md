@@ -5,55 +5,70 @@ trust boundary. Written against the code as it stands, not against intentions.
 
 ## 1. The delegation primitive — the thing standing between a bug and someone's capital
 
-**What it is.** SPL Token `approve(ownerTokenAccount, delegate, amount)`. Implemented in
-`server/src/solana/delegation.ts`; proven in `delegation.chain.test.ts` against a real Solana
-runtime.
+**What it is.** `XorrDelegation` (`contracts/src/XorrDelegation.sol`), deployed on Base Sepolia at
+`0x6c5528Fd8E74a047A85bAb413856A9239E73540e` (Sourcify exact match) and on the hosted fork. The owner calls
+`grant(delegate, dailyCap, expiresAt, venues)` from their own wallet; the bot's key may then call `spend()` and
+`closePosition()` for that owner, and nothing else.
 
 **What the delegate CAN do**
-- Transfer up to the approved amount, from one specific token account.
+- Spend the settlement token (USDC) at a venue the owner allowlisted, up to what is left of today's cap, for a
+  named output token that must reach the owner.
+- Sell another token the owner holds back to the settlement token (`closePosition`), under the same delegate,
+  expiry, revocation and venue checks, without drawing on the cap.
 
-**What the delegate CANNOT do — enforced by the token program, not by our code**
-- Exceed the approved amount. Proven: an over-cap transfer throws, and the allowance is unchanged.
-- Touch any other token account, mint, or the SOL balance.
-- Close the account or reassign its owner.
-- Survive a revoke. Proven: after `revoke`, a 1-cent transfer fails.
+**What the delegate CANNOT do — enforced by the contract, not by our code**
+- Spend from any address but the delegate's own call: `NotDelegate`.
+- Exceed the day's cap (UTC day): `DailyCapExceeded(requested, remaining)`, checked before anything moves.
+- Reach a venue the owner did not allow: `VenueNotAllowed(venue)`.
+- Trade after expiry or after the owner revokes: `PolicyExpired`, `PolicyRevoked` — for spends and closes alike, so
+  a stop ends stop-losses too.
+- Send the output anywhere but the owner: the owner's balance of the named output must rise by `minOut`
+  (`OutputNotReceived`), and a close cannot sell the settlement token (`SettlementTokenNotClosable`).
+- Prevent a revoke: `revoke()` needs one owner signature and no server.
+
+**How it is proven.** `forge test` (unit and fork suites); `tools/prove-contract-refusals.ts`, which on 2026-09-15 read
+both deployed contracts at one block and got every refusal above from `eth_call`, and the revoke and expiry cases from
+local anvil copies of both chains; `tools/prove-stop-without-server.ts` for a stop confirmed from the chain alone.
 
 **Residual risk**
-- The approved amount is a TOTAL allowance, not a per-day one. The executor enforces the daily
-  boundary (`daily_spend` + `rules/engine.ts`), and that half IS executor-side. An executor
-  compromise could spend the remaining on-chain allowance within a single approval window.
-  *Mitigation in place:* the approval is sized to the daily cap and re-approved per period, so the
-  on-chain exposure equals one day's cap rather than the account balance.
-  *Not yet done:* moving the day boundary itself on-chain would need a custom program (Anchor).
-  Tracked as a known limitation, not a silent one.
+- A stolen delegate key trades badly inside the owner's limits until the owner revokes. It chooses the venue calldata,
+  bounded by the allowlist and by the output check.
+- The cap is in settlement-token units, and `closePosition` is deliberately uncapped: de-risking is not spending.
 
 ## 2. Key storage
 
 | Key | Where it lives | Blast radius if stolen |
 |---|---|---|
-| Owner (user) | The user's device. `expo-secure-store` in the app; `server/.keys` on a dev machine ONLY, gitignored. | Total loss of that wallet. Hence `app/recovery.tsx` states plainly that xorr cannot recover it. |
-| Delegate (bot) | The executor host. | Bounded by §1: at most the remaining approved allowance. Cannot withdraw. |
-| Payer | The executor host. | Transaction fees only. |
+| Owner (user) | Privy's embedded wallet. xorr never holds it. | That user's wallet. `app/recovery.tsx` says plainly that xorr cannot recover it. |
+| Delegate (bot) | `DELEGATE_PRIVATE_KEY` on Railway; locally `server/.keys/delegate.key` (0600, gitignored). | Bounded by §1: trades inside each owner's permission until they revoke. No transfer-out path exists. |
+| Faucet | `FAUCET_PRIVATE_KEY` on Railway. | Test funds. The executor refuses to drip on any chain whose money is real (`server/src/evm/money.ts`). |
+| Privy app secret, authorization key | Railway variables. | The app's server-side Privy calls. The wallet policy is owned by a key quorum, so the app secret alone cannot widen it. |
+| Deployer | `server/.keys`, testnet only. | Testnet ETH. |
 
-`server/.keys` is written `0o600` and is in `.gitignore`. **Before any deployment carrying real
-value, the delegate key must move to a KMS or an HSM** — a file on a host is adequate for a
-localnet/devnet build and is not adequate beyond that. Recorded as a gap, not as done.
+**Before any deployment carrying real value, the delegate key must move to a KMS or an HSM** — a variable on a host
+is adequate for a testnet and a fork and is not adequate beyond that. Recorded as a gap, not as done.
 
 ## 3. Client/server trust boundary
 
-**No limit is enforced client-side.** Verified two ways:
+**No limit is enforced client-side.** Verified three ways:
 - `src/data/repositories.test.ts` fails the build if any screen or component calls `fetch`.
-- `server/src/rules/engine.ts` re-evaluates every limit on the server, and
-  `executor.chain.test.ts` proves an over-cap run is blocked even when the client asks for it.
+- `server/src/rules/engine.ts` re-evaluates every limit on the server. `rules/engine.test.ts` proves a spend that would
+  breach the cap is refused and says by how much, the kill switch refuses before anything else, a revoked or expired
+  permission refuses, and a used-up cap does not silence an exit.
+- The contract refuses the same things again on chain (§1), whatever the executor decided.
 
 The client's stepper sets a *requested* cap; the server decides. A tampered client can ask for
 anything and gets the same answer.
 
 ## 4. Replay and double-spend
 
-`strategy_runs.period_key` is `UNIQUE`. Claiming a run is an INSERT, so there is no window between
-"check" and "act". Proven adversarially: five sequential retries and four concurrent calls against
-the same strategy produce exactly one fill.
+`strategy_runs.period_key` is `UNIQUE` (`server/src/db/schema.sql`). Claiming a run is an INSERT, so there is no
+window between "check" and "act"; a run that obtained no answer releases its period rather than leaving it claimed
+(`executor/failure.test.ts`).
+
+Money writes carry an `Idempotency-Key` (FEATURES.md #29). `http/idempotency.test.ts` proves the same key with the
+same body replays the stored answer and runs nothing, a concurrent duplicate is refused with 409, and a claim that
+already broadcast a transaction is never run again.
 
 Proposal decisions use the same shape — the `UPDATE` matches only an undecided, unexpired row, so
 a double-approve cannot double-fill.
@@ -64,9 +79,13 @@ Append-only via a database trigger (an `UPDATE` or `DELETE` raises). Hash-chaine
 JSON, so a tampered row breaks verification for everything after it. The export carries its own
 verification result, so a recipient does not have to trust the exporter.
 
-*Known limitation:* the chain proves internal consistency, not third-party attestation. A party
-with database superuser rights could drop the trigger and rebuild the chain. Anchoring a periodic
-digest on-chain would close that and is not yet done.
+The head is also published to Base. `XorrAuditAnchor` (`0xB58cB717867988582DcCB7f3155DeD3fC7A76caf` on Base
+Sepolia) holds each commitment, signed by the delegate key and published on an unattended sweep; a count that goes
+backwards reverts (`CountWentBackwards`), and `/audit/anchor` shows what Base holds beside what the executor holds.
+
+*Known limitation:* a party with database superuser rights could still rewrite the trail and anchor a rewrite of equal
+or greater length going forward. What they cannot do is make the new trail hash to a head Base has held since before
+the rewrite; the anchor's timestamp and block carry that weight.
 
 ## 6. Biometrics
 
@@ -134,17 +153,22 @@ Now:
 
 ## 8. Network
 
-- The app talks to exactly one first-party origin (`EXPO_PUBLIC_API_URL`) plus two public price
-  APIs. No user data is sent to either price API.
-- The server refuses to start against `mainnet-beta` without an explicit `ALLOW_MAINNET=yes`.
+- The app talks to one first-party origin, its executor (`EXPO_PUBLIC_API_URL`), plus Privy. Market data, the
+  subgraph and 1inch are read by the executor, not the app.
+- Every route that touches a wallet verifies the caller's Privy access token and answers 401 without one; the endpoint
+  QA checks each of them with no token and with a forged one on both executors.
+- Browsers may call the executors only from `ALLOWED_ORIGINS` (`https://app.xorr.finance` on both deployments); a
+  foreign origin's preflight is refused.
+- The executor refuses to start on a chain whose money is real without an explicit `ALLOW_MAINNET=yes`, and on a chain
+  it does not know at all (`server/src/evm/money.ts`).
 - Certificate pinning is not implemented. Required before a production release.
 
 ## 9. What this review did NOT cover
 
-- A third-party audit of the delegation flow. PLAN.md 13.11 calls for one and it has not happened.
+- A third-party audit of the delegation contract. PLAN.md 13.11 calls for one and it has not happened.
 - Jailbreak/root detection.
-- Rate limiting and authentication on the executor API: the dev server is single-user and has no
-  auth. **This is the largest open item** and is tracked as PLAN.md 11.3 / [G21].
+- Per-client rate limiting across the executor API. Only the routes that spend gas are limited (`/audit/anchor`,
+  `/delegation/record`, 429 with a retry-after).
 
 ---
 
@@ -167,7 +191,8 @@ lesson is worth writing down rather than quietly fixing:
 
 ## Delegate key
 
-`0xe992FE56589d1111d0b7Bb7c4Ca3946d4d53E403` signs scheduled trades. Its blast radius is bounded by
+`0xC38f38f45463f77bD823FebE16b15714Eb98c8A5` signs scheduled trades on both deployments (`/delegation/params`,
+2026-09-15). Its blast radius is bounded by
 `XorrDelegation`: capped per day, venue-allowlisted, time-boxed, and revocable by the user without
 this server's cooperation. **Before any deployment carrying real value it must move to a KMS or an
 HSM** — a file on a host is adequate for a testnet demo and is not adequate beyond that.

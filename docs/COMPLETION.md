@@ -353,3 +353,113 @@ into it.
 | Client tests | 330 |
 | Server tests | 147 |
 | Typecheck | clean, both projects |
+
+---
+
+# Re-measured 2026-09-15 — against what the project claims
+
+A fresh definition of done, taken from what the project says about itself: the README (what is real, the sponsor
+table, the strategy ladder, when it goes wrong), `docs/SUBMISSION.md`, PLAN.md §1's seven bars and sponsor tracks, and
+the screens a person uses. An item counts only when it was verified live on 2026-09-15 — run against a deployment,
+read from a chain, or driven on a screen — never because the code for it exists. Deployed while measuring: both
+executors at `8ffa5cd`, the web at `75fa4a5` (executors moving to `75fa4a5`).
+
+The keyword sweep (mock, stub, TODO, FIXME, fake, dummy, placeholder, simulated, hardcoded, not implemented) finds no
+stand-in logic in shipped code: every hit is a comment about a removed mock, a word in another sense (`nothingToDo`, a
+setup step's `todo` state, "Never mock the user"), the `Placeholder` loading skeleton, an input's placeholder text, or
+test support. The design fixtures are imported by no production file. One dead branch remains: `app/rates.tsx` can
+print "Simulated here" for a feed the executor never sends (it answers an unreadable rate with `503 rate_unavailable`).
+
+## First measurement — 40 of 76 · **53%**
+
+| # | Item | How it was verified | State |
+|---|---|---|---|
+| **A** | **The permission contract** | | **9 of 9** |
+| A1 | `XorrDelegation` deployed on Base Sepolia | `eth_getCode`: 5,207 bytes at `0x6c55…540e` (`tools/prove-contract-refusals.ts`) | ✓ |
+| A2 | Its source is verified | Sourcify v2: `exact_match` for creation and runtime | ✓ |
+| A3 | The daily cap is enforced on chain | C04: `DailyCapExceeded(requested, remaining)` on both chains | ✓ |
+| A4 | Only allowlisted venues | C05: `VenueNotAllowed(0x…dEaD)` on both chains | ✓ |
+| A5 | The permission expires on its own | C06: `PolicyExpired` a minute past expiry, on copies of both chains | ✓ |
+| A6 | Only the bot's delegate can spend | C07: `NotDelegate` on both chains | ✓ |
+| A7 | The owner's revoke stops spends and closes, with no server | C06, C09: `PolicyRevoked` after `revoke()`; C08 without the executor | ✓ |
+| A8 | Bought tokens can only reach the owner | `forge test` fork suites on the verified source (74/74), `OutputNotReceived` | ✓ |
+| A9 | A real embedded wallet signed a grant on a public chain | Receipt of `0xce90642d…`: status 1, from the owner's wallet to the contract | ✓ |
+| **B** | **The audit trail** | | **3 of 3** |
+| B1 | Every row commits to the one before | `/activity/verify` on both executors: no new link break | ✓ |
+| B2 | Its head is published to Base, unattended | Anchors at 23:20 UTC (fork, entry 655) and 23:27 UTC (Sepolia, entry 383) | ✓ |
+| B3 | What Base holds is what `/audit/anchor` shows | C11: equal on both chains; a lower count reverts `CountWentBackwards` | ✓ |
+| **C** | **Anyone can check it** | | **0 of 2** |
+| C1 | `/verify` passes all but its one stated failure | Fork 19/1/1, Sepolia 18/2/1: the subgraph row fails on both (The Graph answers the executors 429) | ✗ |
+| C2 | `/judge` runs on the web, signed out | Not run this pass | ✗ |
+| **D** | **Privy** | | **2 of 5** |
+| D1 | An embedded wallet signs real transactions | A9's grant; the signed-in simulator session | ✓ |
+| D2 | A Privy policy owned by a key quorum refuses a forbidden send | `/verify` `privy-policy` and `privy-refusal` pass on both executors | ✓ |
+| D3 | Approvals and revoke signed in Privy's dialogs, from the app | Not run this pass (the Mac's screen is locked, so no taps) | ✗ |
+| D4 | A completed financial flow: a transfer or withdrawal the embedded wallet signs | None on record; SUBMISSION says the flow is built | ✗ |
+| D5 | A written, working business workflow (Privy B2B track) | Not present (PLAN X52) | ✗ |
+| **E** | **1inch** | | **7 of 7** |
+| E1 | Aggregator quotes and fills through the permission | E187 on both; `/metrics` 53 fills under `1inch` | ✓ |
+| E2 | `XorrAquaBook` fills on official Aqua | `/metrics` 8 fills under `aqua` | ✓ |
+| E3 | `XorrSwapVMBook` fills through the SwapVM router | `/metrics` 12 fills under `swapvm` | ✓ |
+| E4 | Every venue priced for one trade | E165 on both executors | ✓ |
+| E5 | Limit orders | `/limit-orders` checks pass on both | ✓ |
+| E6 | Cross-chain quotes | E061: 100 USDC → 99.900124 on Arbitrum | ✓ |
+| E7 | Token list, balances and logos | E106 and the `/tokens` checks | ✓ |
+| **F** | **The Graph** | | **1 of 3** |
+| F1 | The delegation subgraph is deployed and synced | Direct query: block 46,829,712, no indexing errors | ✓ |
+| F2 | The executor reads it before it acts | Both executors are refused with 429 and holding | ✗ |
+| F3 | The Aqua subgraph is deployed and joined to it | Built and pinned, never deployed (no Studio slug) | ✗ |
+| **G** | **Aave** | | **1 of 1** |
+| G1 | Tier 4 supplies idle USDC through the permission | 2 filled `yield-rotation` runs on the fork | ✓ |
+| **H** | **Base** | | **1 of 2** |
+| H1 | Basenames resolve | `/basename` checks pass; a bad address is a named 400 | ✓ |
+| H2 | Real transactions on Base mainnet (Base Build Camp) | None: mainnet is outside what this run may do | ✗ |
+| **I** | **The strategy ladder, filled on the fork** | | **6 of 7** |
+| I1 | 1 · Recurring buy | 37 fills | ✓ |
+| I2 | 2 · Rebalance | 4 fills | ✓ |
+| I3 | 3 · Take profit / stop loss | 2 fills | ✓ |
+| I4 | 4 · Idle cash to yield | 2 fills | ✓ |
+| I5 | 5 · Range accumulation | 1 fill | ✓ |
+| I6 | 6 · Momentum | 1 fill | ✓ |
+| I7 | 7 · Events and earnings | 0 fills in 134 runs: its five strategies trade NVDAc, which does not function on a fork | ✗ |
+| **J** | **The app, as a person uses it — end to end on a screen** | | **1 of 18** |
+| J1 | Sign in and get a wallet | Not run: a sign-in code is the owner's to type | ✗ |
+| J2 | Fund: test funds arrive, the balance rises | Not run | ✗ |
+| J3 | Grant the permission from the app | Not run | ✗ |
+| J4 | Stop all trading, then resume | Not run | ✗ |
+| J5 | Create a recurring buy that runs and fills | Not run on a screen | ✗ |
+| J6 | Buy and sell from the order ticket | Not run on a screen (the ticket's quote loads, S031) | ✗ |
+| J7 | Swap | Not run on a screen | ✗ |
+| J8 | Sell everything | Not run | ✗ |
+| J9 | Withdraw to an allowlisted address | Not run | ✗ |
+| J10 | Alerts | Not run on a screen | ✗ |
+| J11 | Proposals: approve, skip | Not run on a screen | ✗ |
+| J12 | Agents: hire, backtest | Partly (F23 on the simulator) | ✗ |
+| J13 | Markets, asset, chart ranges | Partly: loads on the web signed out; range pills not driven | ✗ |
+| J14 | Portfolio: total and graph | F19: the graph dips to $0 once (the fork's rebuild, in its data) | ✗ |
+| J15 | Messages drawer | Partly: picker, shortcuts and the drawer's return not driven | ✗ |
+| J16 | Networks: every network and what works on it | Web controls driven in Chrome; native load | ✓ |
+| J17 | Settings and version | Partly: web signed out shows the version | ✗ |
+| J18 | Recovery and key export | Partly | ✗ |
+| **K** | **Infrastructure** | | **6 of 10** |
+| K1 | Postgres persists through a restart | 157 + 52 strategies unchanged across the 35556a1 restart | ✓ |
+| K2 | Every table copied to MongoDB Atlas | 23 tables in each database, synced 23:34–23:35 UTC | ✓ |
+| K3 | Both executors deployed, reporting their commit | `/health` version on both | ✓ |
+| K4 | Web app on Vercel, every route 200, security headers | 103 routes loaded; the five headers | ✓ |
+| K5 | Landing page correct | FAIL: only HSTS, and "Built on Base" copy (`landing/` is the owner's) | ✗ |
+| K6 | CI green on every push | GitHub Actions: every push today `success` | ✓ |
+| K7 | The iOS app runs | Simulator, Metro, fork executor | ✓ |
+| K8 | The Android app builds and runs | Not run this pass | ✗ |
+| K9 | Push notifications arrive | No EAS project id exists | ✗ |
+| K10 | The agents speak through a language model | No `OPENROUTER_API_KEY` exists | ✗ |
+| **L** | **Quality** | | **3 of 6** |
+| L1 | Every endpoint check passes on both executors | 218/221 and 217/221 at 35556a1: the subgraph 429 | ✗ |
+| L2 | Every web route with no console error or failed request | A chart's draw-in logged a negative width (fix shipping) | ✗ |
+| L3 | Unit tests | App 1,588 · executor 886 | ✓ |
+| L4 | Contract tests | `forge test` 74/74 | ✓ |
+| L5 | Live tests pass against the deployments | `npm run test:live` not run against them | ✗ |
+| L6 | No stand-in logic or data in shipped code | Keyword sweep and fixture imports, above | ✓ |
+| **M** | **Documentation and submission** | | **0 of 3** |
+| M1 | README and SUBMISSION figures match the deployments | Stale: fills 36/7/4 (now 53/8/12), `/verify` 19·1·1, 547 tests, 101 routes, "fills from tiers 1 through 7" | ✗ |
+| M2 | The demo shows a real fill (bar 7) | 91 s, no fill | ✗ |
+| M3 | SECURITY and RUNBOOK describe this design | `SECURITY.md` still cites `server/src/solana/delegation.ts` | ✗ |

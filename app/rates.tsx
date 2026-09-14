@@ -6,9 +6,9 @@
  * promise. The distinction matters because a rate presented as a product feature reads as a
  * guarantee, and this one is neither ours to set nor stable.
  *
- * `feed` is rendered. A simulated rate and a live one must never look the same. The rate is read
- * from Base mainnet on every build, so it is real everywhere and can be earned only where the pool
- * is deployed, which `availableHere` says. Where it is not, the card says so, and nothing below
+ * The rate is read from Base mainnet on every build, so it is real everywhere; a rate the executor
+ * cannot read is a 503 with a sentence and a retry, never a number. It can be earned only where the
+ * pool is deployed, which `availableHere` says. Where it is not, the card says so, and nothing below
  * offers to earn it.
  *
  * Distilled 2026-09-14 (PLAN.md O3): no venue or network on the card — Sources names them. Signed out, the rate is
@@ -76,11 +76,6 @@ export default function Rates() {
               <Text variant="secondary" color={colors.ink65} style={{ marginTop: space.s10 }}>
                 It floats. It is not a promise.
               </Text>
-              {rate.data.feed === 'unavailable' ? (
-                <Text variant="secondarySm" color={colors.warn} style={{ marginTop: space.s8 }}>
-                  Simulated here. Not what a supply would earn.
-                </Text>
-              ) : null}
               {earnableHere ? null : (
                 <Text variant="secondarySm" color={colors.warn} style={{ marginTop: space.s8 }}>
                   You can’t earn this here.
