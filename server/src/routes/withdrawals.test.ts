@@ -182,6 +182,18 @@ describe('the book', () => {
     expect(book.addAddress).toHaveBeenCalledTimes(1);
   });
 
+  it('answers the zero address as a malformed body, not as a conflict with what the book holds', async () => {
+    vi.mocked(book.addAddress).mockResolvedValue({
+      status: 'blocked',
+      reason: 'zero_address',
+      detail: 'That is the zero address. Anything sent there is gone for good, so it cannot be a destination.',
+    } as never);
+    expect(await call('/withdrawal-addresses', { label: 'Burn', address: zeroAddress })).toMatchObject({
+      status: 400,
+      body: { status: 'blocked', reason: 'zero_address' },
+    });
+  });
+
   it('removes, and says when there was nothing to remove', async () => {
     vi.mocked(book.removeAddress).mockResolvedValueOnce({ status: 'removed', address: DEST, label: 'Cold storage' });
     expect(await call('/withdrawal-addresses/remove', { address: DEST })).toMatchObject({ status: 200, body: { status: 'removed' } });

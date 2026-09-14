@@ -249,9 +249,21 @@ strategyRoutes.get('/strategies', async (c) => {
  * which is what stops one caller reading another's runs.
  */
 strategyRoutes.get('/runs', async (c) => {
+  /*
+   * Parsed the way `/history` parses it.
+   *
+   * `Number('abc')` survived the clamp as NaN and reached Postgres as `LIMIT 'NaN'`, which answered 500 in the
+   * database's own words for a request only the caller could fix. Floored as well: LIMIT takes a whole number, and
+   * `limit=1.5` failed the same way.
+   */
+  const asked = c.req.query('limit');
+  const n = asked === undefined ? 100 : Number(asked);
+  if (!Number.isFinite(n)) {
+    return c.json({ error: 'bad_limit', detail: 'limit is a number of runs, at most 200.' }, 400);
+  }
+  const limit = Math.min(200, Math.max(1, Math.floor(n)));
   const w = await currentWallet(c);
   if (!w) return c.json([]);
-  const limit = Math.min(200, Math.max(1, Number(c.req.query('limit') ?? 100)));
   const rows = await query<{
     id: string;
     strategy_id: string;

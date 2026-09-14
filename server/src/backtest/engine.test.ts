@@ -1,5 +1,40 @@
-import { describe, expect, it } from 'vitest';
-import { daily, curvePoints, maxDrawdown, sharpeRatio } from './engine.js';
+import { describe, expect, it, vi } from 'vitest';
+import { getJson } from '../http/get.js';
+import {
+  LOOKBACKS,
+  backtestDca,
+  backtestGrid,
+  backtestMomentum,
+  curvePoints,
+  daily,
+  isLookback,
+  maxDrawdown,
+  sharpeRatio,
+  type Lookback,
+} from './engine.js';
+
+// No test here reaches an upstream, and a refused lookback must be refused before any history is asked for.
+vi.mock('../http/get.js', () => ({ getJson: vi.fn() }));
+
+describe('a lookback there is no window for (docs/qa/ENDPOINTS.md E026)', () => {
+  it('is refused before any history is fetched — never replayed as a flat 0% over 0 trades', async () => {
+    const week = '7d' as Lookback;
+    await expect(backtestMomentum({ symbol: 'WETH', lookback: week, usdPerEntry: 500, dailyCapUsd: 1_600 })).rejects.toThrow('7d');
+    await expect(
+      backtestDca({ symbol: 'WETH', lookback: week, perRunUsd: 50, dailyCapUsd: 1_600, everyNDays: 7 }),
+    ).rejects.toThrow('7d');
+    await expect(
+      backtestGrid({ symbol: 'WETH', lookback: week, lower: 1_000, upper: 2_000, steps: 4, usdPerStep: 25 }),
+    ).rejects.toThrow('7d');
+    expect(getJson).not.toHaveBeenCalled();
+  });
+
+  it('knows exactly the four windows a caller may ask for, and nothing that merely looks like one', () => {
+    expect(LOOKBACKS).toEqual(['30d', '90d', '6m', '1y']);
+    expect(LOOKBACKS.every((l) => isLookback(l))).toBe(true);
+    for (const other of ['7d', '2y', '', '90D', 'constructor']) expect(isLookback(other), other).toBe(false);
+  });
+});
 
 describe('12.22 backtest maths', () => {
   it('max drawdown is the worst peak-to-trough, as a negative percentage', () => {

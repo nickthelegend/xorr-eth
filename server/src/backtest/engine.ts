@@ -24,9 +24,27 @@ const COINGECKO = 'https://api.coingecko.com/api/v3';
  */
 const IDS = COINGECKO_IDS;
 
-export type Lookback = '30d' | '90d' | '6m' | '1y';
+/** Every window a backtest can replay. A route that takes one from a caller refuses anything else by name. */
+export const LOOKBACKS = ['30d', '90d', '6m', '1y'] as const;
+export type Lookback = (typeof LOOKBACKS)[number];
+
+export function isLookback(value: string): value is Lookback {
+  return (LOOKBACKS as readonly string[]).includes(value);
+}
 
 const DAYS: Record<Lookback, number> = { '30d': 30, '90d': 90, '6m': 180, '1y': 365 };
+
+/**
+ * The days a lookback spans — or a throw, never NaN.
+ *
+ * `DAYS['7d']` is undefined, and undefined days ran every replay loop zero times: `GET /agents/:id/backtest` published
+ * 0% over 0 trades for a window that does not exist. The routes refuse such a lookback by name; this refuses it for any
+ * caller that did not.
+ */
+function daysOf(lookback: Lookback): number {
+  if (!isLookback(lookback)) throw new Error(`There is no ${String(lookback)} backtest window.`);
+  return DAYS[lookback];
+}
 
 /** design.md §6 "Area / equity curve". */
 /** About this many points survive the downsample — see `curvePoints`. */
@@ -189,7 +207,7 @@ export async function backtestDca(params: {
   dailyCapUsd: number;
   everyNDays: number;
 }): Promise<BacktestResult> {
-  const days = DAYS[params.lookback];
+  const days = daysOf(params.lookback);
   const prices = await history(params.symbol, days);
   const perRun = Math.min(params.perRunUsd, params.dailyCapUsd);
 
@@ -268,7 +286,7 @@ export async function backtestGrid(params: {
   usdPerStep: number;
 }): Promise<GridBacktest> {
   const { lower, upper, steps, usdPerStep } = params;
-  const prices = await history(params.symbol, DAYS[params.lookback]);
+  const prices = await history(params.symbol, daysOf(params.lookback));
   const rungs = Array.from({ length: steps + 1 }, (_, i) => lower + (i * (upper - lower)) / steps);
   const levelOf = (px: number) => rungs.filter((r) => px >= r).length - 1;
 
@@ -457,7 +475,7 @@ export async function backtestMomentum(params: {
    * Asking for 30 days and starting the replay on day 21 would report a "30-day backtest" that
    * looked at nine days. The warm-up is fetched on top of the window and then skipped.
    */
-  const days = DAYS[params.lookback];
+  const days = daysOf(params.lookback);
   const prices = daily(await history(params.symbol, days + window + 1));
   const closes = prices.map(([, p]) => p);
   const { equity, trades } = momentumReplay(closes, { days, window, stopPct, size });

@@ -49,6 +49,7 @@ import { currentWallet, requireWallet, type WalletRow } from './wallet-context.j
 import { erc20Abi, formatUnits, getAddress } from 'viem';
 import type { Address, Hex } from 'viem';
 import { priceOf } from '../market/prices.js';
+import { COINGECKO_IDS } from '../market/ids.js';
 import { totalValueUsd } from '../evm/balances.js';
 import { TOKENS } from '../venues/oneinch.js';
 import { publicClient } from '../evm/client.js';
@@ -1192,10 +1193,22 @@ routes.get('/price/:symbol', async (c) => {
    * simply false for eight of the symbols this route serves.
    */
   const symbol = canonicalSymbol(c.req.param('symbol'));
+  /*
+   * A symbol nothing prices is the caller's mistake, and a 404 says so.
+   *
+   * Every failure answered 502 — "No price feed for NOPE" included — and the app offers a retry on a 5xx, so it offered
+   * to retry a request that can never work. The test is `priceOf`'s own: an equity is priced from its route, anything
+   * else only through a feed id.
+   */
+  if (!isStock(symbol) && !COINGECKO_IDS[symbol]) {
+    return c.json({ error: 'no_feed', detail: `No price feed for ${symbol}.` }, 404);
+  }
   try {
     const price = await priceOf(symbol);
     return c.json({ symbol, price, source: isStock(symbol) ? '1inch' : 'coingecko' });
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+    // A feed or a route that failed: worth asking again, which is what a 502 tells the app. The cause is for the log.
+    log.warn(`[price] could not price ${symbol}: ${e instanceof Error ? e.message : String(e)}`);
+    return c.json({ error: 'price_unavailable', detail: `${symbol} could not be priced just now.` }, 502);
   }
 });

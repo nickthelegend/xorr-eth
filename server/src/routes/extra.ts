@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
 import { THIS_CHAIN } from '../db/chain-scope.js';
 import { append } from '../audit/log.js';
-import { backtestDca, backtestGrid, backtestMomentum, type Lookback } from '../backtest/engine.js';
+import { LOOKBACKS, backtestDca, backtestGrid, backtestMomentum, isLookback } from '../backtest/engine.js';
+import { COINGECKO_IDS } from '../market/ids.js';
 import { leaderboard } from '../agents/leaderboard.js';
 import { PERSONAS } from '../bot/personas.js';
 import { speak } from '../bot/llm.js';
@@ -80,7 +81,17 @@ const NOT_BACKTESTABLE: Record<string, string> = {
 };
 
 extra.get('/agents/:id/backtest', async (c) => {
-  const lookback = (c.req.query('lookback') ?? '90d') as Lookback;
+  /*
+   * A lookback there is no window for is refused, not replayed.
+   *
+   * This cast `?lookback` straight to `Lookback`, so `7d` reached the engine as a window of NaN days: the replay never
+   * ran, and the route answered 200 with a flat result nobody computed — 0% over 0 trades, under a disclaimer about
+   * real history. The four `/strategies/backtest` takes, from the one list the engine keeps.
+   */
+  const lookback = c.req.query('lookback') ?? '90d';
+  if (!isLookback(lookback)) {
+    return c.json({ error: 'invalid_lookback', detail: `lookback is one of ${LOOKBACKS.join(', ')}.` }, 400);
+  }
   // The AGENT, from the path. This was shadowed by the wallet lookup below and never read.
   const agentId = c.req.param('id');
 
@@ -116,7 +127,9 @@ extra.get('/agents/:id/backtest', async (c) => {
    * ones with a real route on Base. Backtesting an asset the strategy could never have bought is
    * the same class of error as backtesting the wrong strategy.
    */
-  const symbol = c.req.query('symbol') ?? 'WETH';
+  const symbol = canonicalSymbol(c.req.query('symbol') ?? 'WETH');
+  // History exists only for a symbol with a feed: without one there is nothing to replay, and no retry changes that.
+  if (!COINGECKO_IDS[symbol]) return noHistory(c, symbol);
   try {
     return c.json(
       await within(
@@ -130,7 +143,8 @@ extra.get('/agents/:id/backtest', async (c) => {
     );
   } catch (e) {
     if (e instanceof TooSlow) return warming(c);
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+    // A fetch that failed, named as `/strategies/backtest` names it rather than as a sentence in `error`.
+    return c.json({ error: 'no_history', message: e instanceof Error ? e.message : String(e) }, 502);
   }
 });
 
@@ -522,23 +536,43 @@ extra.post('/notify/test', async (c) => {
 
 // ── Venues — 1inch ───────────────────────────────────────────────────────────
 
+/**
+ * What is wrong with a pair and an amount, before any venue is asked — or null when nothing is.
+ *
+ * `/swap/quote` and `/route/compare` passed both straight through, so `in=NOPE` came back as "No route for NOPE ->
+ * WETH" and `amount=abc` as a BigInt RangeError: each a 502, which tells the app to retry a request no retry can fix.
+ */
+function tradeRefusal(inSymbol: string, outSymbol: string, amount: number): { error: string; detail: string } | null {
+  const unknown = [...new Set([inSymbol, outSymbol])].filter((symbol) => !VENUE_TOKENS[symbol]);
+  if (unknown.length > 0) {
+    return {
+      error: 'unknown_token',
+      detail: `${unknown.join(' and ')} ${unknown.length === 1 ? 'is not a token' : 'are not tokens'} that can be traded here.`,
+    };
+  }
+  if (!(Number.isFinite(amount) && amount > 0)) {
+    return { error: 'invalid_amount', detail: 'amount is how much of the token you pay, above zero.' };
+  }
+  return null;
+}
+
 extra.get('/swap/quote', async (c) => {
   requireUser(c);
   // The tolerance the screen shows is the one it quotes at, and the one a swap is then sent with (PLAN.md 3.9).
   const slippage = c.req.query('slippage');
   const slippagePct = slippage === undefined ? undefined : Number(slippage);
   if (slippagePct !== undefined && !(slippagePct >= 0.05 && slippagePct <= 3)) {
-    return c.json({ error: 'slippage must be between 0.05 and 3 percent' }, 400);
+    return c.json({ error: 'invalid_slippage', detail: 'slippage is a percentage between 0.05 and 3.' }, 400);
   }
+  // Not `.toUpperCase()`: tokenized equities are `NVDAc`, `TSLAc`, and uppercasing them
+  // produced a symbol the registry has never heard of — every equity quote 502'd.
+  const inSymbol = canonicalSymbol(c.req.query('in') ?? 'ETH');
+  const outSymbol = canonicalSymbol(c.req.query('out') ?? 'USDC');
+  const amount = Number(c.req.query('amount') ?? 1);
+  const refusal = tradeRefusal(inSymbol, outSymbol, amount);
+  if (refusal) return c.json(refusal, 400);
   try {
-    const q = await quote({
-      // Not `.toUpperCase()`: tokenized equities are `NVDAc`, `TSLAc`, and uppercasing them
-      // produced a symbol the registry has never heard of — every equity quote 502'd.
-      inSymbol: canonicalSymbol(c.req.query('in') ?? 'ETH'),
-      outSymbol: canonicalSymbol(c.req.query('out') ?? 'USDC'),
-      amount: Number(c.req.query('amount') ?? 1),
-      slippagePct,
-    });
+    const q = await quote({ inSymbol, outSymbol, amount, slippagePct });
     /*
      * What the route costs to send, and who pays it (PLAN.md 3.13): the gas price — 1inch's Gas Price API on Base,
      * the chain's own anywhere else — times 1inch's estimate for the route. The executor's delegate sends every
@@ -563,19 +597,17 @@ extra.get('/swap/quote', async (c) => {
  * A quote surface: it builds nothing submittable and touches no permission.
  */
 extra.get('/route/compare', async (c) => {
+  // Not `.toUpperCase()`: tokenized equities are `NVDAc`, and uppercasing them names a
+  // symbol the registry has never heard of.
+  const inSymbol = canonicalSymbol(c.req.query('in') ?? 'USDC');
+  const outSymbol = canonicalSymbol(c.req.query('out') ?? 'WETH');
+  const amount = Number(c.req.query('amount') ?? 100);
+  const refusal = tradeRefusal(inSymbol, outSymbol, amount);
+  if (refusal) return c.json(refusal, 400);
   const w = await currentWallet(c);
   if (!w) return c.json({ error: 'no_wallet' }, 400);
   try {
-    return c.json(
-      await compareVenues({
-        owner: w.address as Address,
-        // Not `.toUpperCase()`: tokenized equities are `NVDAc`, and uppercasing them names a
-        // symbol the registry has never heard of.
-        inSymbol: canonicalSymbol(c.req.query('in') ?? 'USDC'),
-        outSymbol: canonicalSymbol(c.req.query('out') ?? 'WETH'),
-        amount: Number(c.req.query('amount') ?? 100),
-      }),
-    );
+    return c.json(await compareVenues({ owner: w.address as Address, inSymbol, outSymbol, amount }));
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
@@ -600,6 +632,16 @@ extra.get('/route/compare', async (c) => {
  * as in name: the decision is about the caller's own wallet.
  */
 extra.get('/graph/decision', async (c) => {
+  /*
+   * A size that is not dollars is refused, not decided.
+   *
+   * `Number('abc')` reached `decide()` as NaN, where `Math.min(NaN, …)` slipped past the minimum-size guard: one
+   * deployment answered `act: true, sizeUsd: null` — a decision to trade an amount that does not exist.
+   */
+  const wantUsd = Number(c.req.query('usd') ?? 100);
+  if (!(Number.isFinite(wantUsd) && wantUsd > 0)) {
+    return c.json({ error: 'invalid_usd', detail: 'usd is a dollar amount above zero.' }, 400);
+  }
   const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
   const w = await one<{ address: string }>(`SELECT address FROM wallets WHERE id=$1`, [id]);
@@ -612,7 +654,6 @@ extra.get('/graph/decision', async (c) => {
    * names what `runStrategy` names: the settlement USDC, our Aqua book, and how much of the bought token the
    * size would need (`symbol`, WETH unless given).
    */
-  const wantUsd = Number(c.req.query('usd') ?? 100);
   const symbol = canonicalSymbol(c.req.query('symbol') ?? 'WETH');
   const outToken = VENUE_TOKENS[symbol];
   try {
@@ -729,16 +770,34 @@ function warming(
   return c.json({ error: 'warming', detail }, 503);
 }
 
+/** The 404 for a symbol with no price history: the caller's to change, where a 502 would say to try again. */
+function noHistory(c: Context, symbol: string) {
+  return c.json(
+    { error: 'no_history', detail: `There is no price history for ${symbol}, so there is nothing to replay.` },
+    404,
+  );
+}
+
 extra.post('/strategies/backtest', async (c) => {
   requireUser(c);
   const body = z
     .object({
       kind: z.enum(['dca', 'grid']),
       symbol: z.string().min(1),
-      lookback: z.enum(['30d', '90d', '6m', '1y']).default('90d'),
+      lookback: z.enum(LOOKBACKS).default('90d'),
       params: z.record(z.string(), z.unknown()).default({}),
     })
     .parse(await c.req.json());
+
+  /*
+   * A symbol with no history is refused before anything is fetched.
+   *
+   * Every throw below answered 502 `no_history` — the engine's "No price history for NOPE" included, which no retry can
+   * change — so the backtest screen offered to try again. The test is the engine's own: history exists only for a
+   * symbol with a feed id. 502 stays for a fetch that failed.
+   */
+  const symbol = canonicalSymbol(body.symbol);
+  if (!COINGECKO_IDS[symbol]) return noHistory(c, symbol);
 
   const p = body.params as Record<string, number>;
   try {
@@ -751,16 +810,14 @@ extra.post('/strategies/backtest', async (c) => {
         return c.json({ error: 'invalid_range', message: 'A range needs a bottom below its top, at least one rung, and a size.' }, 400);
       }
       return c.json(
-        await within(
-          backtestGrid({ symbol: body.symbol, lookback: body.lookback as Lookback, lower, upper, steps, usdPerStep }),
-        ),
+        await within(backtestGrid({ symbol, lookback: body.lookback, lower, upper, steps, usdPerStep })),
       );
     }
     return c.json(
       await within(
         backtestDca({
-          symbol: body.symbol,
-          lookback: body.lookback as Lookback,
+          symbol,
+          lookback: body.lookback,
           perRunUsd: Number(p.usd ?? 50),
           dailyCapUsd: Number(p.dailyCapUsd ?? Number.MAX_SAFE_INTEGER),
           everyNDays: Number(p.everyNDays ?? 7),

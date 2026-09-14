@@ -98,7 +98,11 @@ withdrawalRoutes.post('/withdrawal-addresses', async (c) => {
   const input = AddInput.parse(await c.req.json());
   const out = await addAddress(w.id, input);
   if (out.status === 'added') return c.json({ status: 'added', coolingOffHours: COOLING_OFF_HOURS, entry: out.entry }, 201);
-  const malformed = out.reason === 'invalid_address' || out.reason === 'invalid_label';
+  /*
+   * Malformed is the body's fault whatever the book holds, so 400. The zero address was answered 409 — a conflict with
+   * state — for an address nothing may ever be sent to, which no change of state can make a valid destination.
+   */
+  const malformed = out.reason === 'invalid_address' || out.reason === 'invalid_label' || out.reason === 'zero_address';
   return reply(c, blocked(out.reason, out.detail, malformed ? 400 : 409, out.entry ? { entry: out.entry } : {}));
 });
 
