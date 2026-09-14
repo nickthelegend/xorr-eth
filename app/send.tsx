@@ -29,7 +29,6 @@ import {
   Price,
   RadioCard,
   Screen,
-  Tag,
   Text,
   border,
   colors,
@@ -53,7 +52,7 @@ import { transferCall } from '@/wallet/transfer';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { formatEther, type Address } from 'viem';
 import { shortAddress } from '@/format';
-import { networkChip } from '@/chain';
+import { NetworkChip } from '@/networks/NetworkChip';
 
 const FIELD_H = 52;
 
@@ -144,7 +143,7 @@ export default function Send() {
       <Text variant="screenTitle" style={{ flex: 1 }}>
         Send
       </Text>
-      <Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />
+      <NetworkChip />
     </View>
   );
 

@@ -14,7 +14,8 @@ import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
-import { activeChain, chainLabel, depositQrNote, depositQrWorks, networkChip } from '@/chain';
+import { activeChain, chainLabel, depositQrNote, depositQrWorks } from '@/chain';
+import { NetworkChip } from '@/networks/NetworkChip';
 import { AddressQR } from '@/ui/AddressQR';
 import { useGoBack } from '@/nav/useGoBack';
 import {
@@ -27,7 +28,6 @@ import {
   Screen,
   SheetCard,
   SignInPrompt,
-  Tag,
   Text,
   colors,
   quantity,
@@ -113,8 +113,8 @@ export default function Fund() {
         <Text variant="onboardingTitle" style={{ flexShrink: 1 }}>
           Fund the wallet
         </Text>
-        {/* The network, named where money moves. */}
-        <Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />
+        {/* The network, named where money moves, and the way to every network xorr runs on. */}
+        <NetworkChip />
       </View>
       <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
         Send USDC to your address.

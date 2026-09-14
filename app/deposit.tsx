@@ -23,7 +23,6 @@ import {
   Row,
   Screen,
   SheetCard,
-  Tag,
   Text,
   colors,
   quantity,
@@ -37,7 +36,8 @@ import { RollingNumber } from '@/ui/RollingNumber';
 import { successTap } from '@/ui/haptics';
 import { useAuth } from '@/auth/useAuth';
 import { shortAddress } from '@/format';
-import { activeChain, chainLabel, depositQrNote, depositQrWorks, networkChip } from '@/chain';
+import { activeChain, chainLabel, depositQrNote, depositQrWorks } from '@/chain';
+import { NetworkChip } from '@/networks/NetworkChip';
 import { useStore } from '@/state/store';
 import { useNow } from '@/state/useNow';
 import { ETH_DIGITS, NO_ARRIVALS, USDC_DIGITS, noteFunds } from '@/state/moneyIn';
@@ -130,7 +130,7 @@ export default function Deposit() {
       <HeaderBar
         onBack={goBack}
         title={<Text variant="screenTitle">Deposit</Text>}
-        right={<Tag label={networkChip} sentence radius={radius.full} style={{ alignSelf: 'center' }} />}
+        right={<NetworkChip />}
       />
     </View>
   );

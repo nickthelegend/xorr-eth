@@ -93,6 +93,7 @@ const GROUPS: Group[] = [
     items: [
       { route: '/system', title: 'System', detail: 'Services and their health' },
       { route: '/network', title: 'Network', detail: 'Where this app runs' },
+      { route: '/networks', title: 'Networks', detail: 'Every network xorr runs on' },
       { route: '/metrics', title: 'Metrics', detail: 'What has been done' },
       { route: '/graph', title: 'Index', detail: 'How current it is' },
       { route: '/graph/spends', title: 'Indexed spends', detail: 'The same money, recorded twice' },
