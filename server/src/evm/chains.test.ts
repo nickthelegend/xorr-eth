@@ -57,4 +57,17 @@ describe('the chain this executor starts on', () => {
     vi.stubEnv('ALLOW_MAINNET', 'yes');
     expect((await import('./chains.js')).CHAIN_KEY).toBe('base');
   });
+
+  it.each([
+    ['base', '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'https://basescan.org/tx/0xabc'],
+    ['base-fork', '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'fork:0xabc'],
+    ['base-sepolia', '0x036CbD53842c5426634e7929541eC2318f3dCF7e', 'https://sepolia.basescan.org/tx/0xabc'],
+    ['localnet', '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 'local:0xabc'],
+  ])('on %s, settles in its own USDC and shows a transaction where that chain shows it', async (key, usdc, link) => {
+    vi.stubEnv('XORR_CHAIN', key);
+    vi.stubEnv('ALLOW_MAINNET', key === 'base' ? 'yes' : '');
+    const chains = await import('./chains.js');
+    expect(chains.ADDRESSES.usdcBase).toBe(usdc);
+    expect(chains.explorerTx('0xabc')).toBe(link);
+  });
 });

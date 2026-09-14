@@ -107,9 +107,19 @@ const BASE_SEPOLIA_ADDRESSES = {
 
 /**
  * Addresses for the chain the executor SETTLES on. Follows XORR_CHAIN.
+ *
+ * A record rather than "Sepolia's, else mainnet's": that fallback would have handed a chain added later Base mainnet's
+ * token addresses, where they have no code. A chain added in `evm/money.ts` does not compile until it has a row here.
  */
-export const ADDRESSES =
-  CHAIN_KEY === 'base-sepolia' ? BASE_SEPOLIA_ADDRESSES : BASE_MAINNET_ADDRESSES;
+const ADDRESSES_BY_CHAIN: Record<ChainKey, typeof BASE_MAINNET_ADDRESSES | typeof BASE_SEPOLIA_ADDRESSES> = {
+  base: BASE_MAINNET_ADDRESSES,
+  'base-fork': BASE_MAINNET_ADDRESSES,
+  'base-sepolia': BASE_SEPOLIA_ADDRESSES,
+  // What it read before this was a record: only Base Sepolia had a table of its own.
+  localnet: BASE_MAINNET_ADDRESSES,
+};
+
+export const ADDRESSES = ADDRESSES_BY_CHAIN[CHAIN_KEY];
 
 /**
  * Addresses for the chain 1inch is ASKED about, which is always Base mainnet.
@@ -165,11 +175,16 @@ export const SETTLEMENT_VENUES: readonly `0x${string}`[] = [
   ...(isAddress(SWAPVM_BOOK) ? [SWAPVM_BOOK] : []),
 ];
 
-export function explorerTx(hash: string): string {
+/** Where each chain shows a transaction. A record, so a chain added later says where, or does not compile. */
+const EXPLORER_TX: Record<ChainKey, (hash: string) => string> = {
   // A fork shares mainnet's history up to the fork block, so an explorer link is right for a
   // pre-fork tx and wrong for one we just mined. Label it rather than link to a 404.
-  if (CHAIN_KEY === 'base-fork') return `fork:${hash}`;
-  if (CHAIN_KEY === 'base') return `https://basescan.org/tx/${hash}`;
-  if (CHAIN_KEY === 'base-sepolia') return `https://sepolia.basescan.org/tx/${hash}`;
-  return `local:${hash}`;
+  'base-fork': (hash) => `fork:${hash}`,
+  base: (hash) => `https://basescan.org/tx/${hash}`,
+  'base-sepolia': (hash) => `https://sepolia.basescan.org/tx/${hash}`,
+  localnet: (hash) => `local:${hash}`,
+};
+
+export function explorerTx(hash: string): string {
+  return EXPLORER_TX[CHAIN_KEY](hash);
 }
