@@ -145,7 +145,8 @@ export function Composer({
               />
               <Tool
                 name="sparkle"
-                label={startersOpen ? 'Hide suggested questions' : 'Show suggested questions'}
+                // "Suggestions", not "suggested questions": with no model to answer, they are the agent's screens.
+                label={startersOpen ? 'Hide suggestions' : 'Show suggestions'}
                 active={startersOpen}
                 onPress={onToggleStarters}
                 disabled={busy}
