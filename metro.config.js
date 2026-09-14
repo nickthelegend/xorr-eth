@@ -28,6 +28,13 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
+/*
+ * Agent worktrees live under `.claude/worktrees`, each a full checkout with its own node_modules. Metro crawls and
+ * watches the project root, and with five of them installing at once the dev server died mid-session without a stack
+ * trace. Nothing the app imports lives there.
+ */
+config.resolver.blockList = [...[config.resolver.blockList].flat().filter(Boolean), /[\\/]\.claude[\\/].*/];
+
 config.resolver.unstable_enablePackageExports = true;
 
 const defaultResolveRequest = config.resolver.resolveRequest;
