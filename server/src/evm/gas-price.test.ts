@@ -3,6 +3,7 @@
  * dollars only when both the size and ETH's price are known.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { StillFetching } from '../http/deadline.js';
 
 const h = vi.hoisted(() => ({ chain: 'base-fork' }));
 vi.mock('./chains.js', () => ({
@@ -55,5 +56,20 @@ describe('what a route costs to send', () => {
     expect(await networkCost(undefined)).toEqual({ priceGwei: 2, source: 'chain', units: null, feeUsd: null });
     vi.mocked(priceOf).mockRejectedValue(new Error('no price'));
     expect(await networkCost(200_000)).toMatchObject({ units: 200_000, feeUsd: null });
+  });
+
+  it("prices ETH within the caller's patience, and takes a late price as no fee (E187)", async () => {
+    await networkCost(200_000, { priceMs: 4_000 });
+    expect(priceOf).toHaveBeenCalledWith('WETH', 4_000);
+    vi.mocked(priceOf).mockRejectedValue(new StillFetching('the price of WETH'));
+    expect(await networkCost(200_000, { priceMs: 4_000 })).toMatchObject({ priceGwei: 2, units: 200_000, feeUsd: null });
+  });
+
+  it('uses a gas price the caller already read, rather than asking the chain again', async () => {
+    // 200,000 gas at 1 gwei is 0.0002 ETH, which at $2,500 is $0.50.
+    const cost = await networkCost(200_000, { price: { wei: 1_000_000_000n, source: 'chain' } });
+    expect(cost).toMatchObject({ priceGwei: 1, source: 'chain', units: 200_000 });
+    expect(cost.feeUsd).toBeCloseTo(0.5, 10);
+    expect(publicClient.getGasPrice).not.toHaveBeenCalled();
   });
 });

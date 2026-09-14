@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { waitOutWarming } from './warming';
 
 export type SwapQuoteResult = {
   outAmount: number;
@@ -51,11 +52,16 @@ export function useSwapQuote(inSymbol: string, outSymbol: string, amount: number
     if (!(amount > 0)) return;
     let alive = true;
     const t = setTimeout(() => {
-      api
+      /*
+       * A quote the executor could not get inside a screen's patience is `warming`: the aggregator's answer is still on
+       * its way, and asking again joins it (E187). It is waited out rather than shown as a failure.
+       */
+      waitOutWarming(() =>
         // At the tolerance the screen shows, so the floor it prints is the one a swap would be held to.
-        .get<SwapQuoteResult>(
+        api.get<SwapQuoteResult>(
           `/swap/quote?in=${inSymbol}&out=${outSymbol}&amount=${amount}${slippagePct === undefined ? '' : `&slippage=${slippagePct}`}`,
-        )
+        ),
+      )
         .then((q) => {
           if (alive) setSettled({ key, data: q });
         })

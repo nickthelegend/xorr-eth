@@ -7,7 +7,7 @@
  * app was given is answered as what it names. These drive the real routes with every upstream stood in for.
  */
 import { Hono } from 'hono';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db/index.js', () => ({ one: vi.fn(), query: vi.fn(), tx: vi.fn() }));
 vi.mock('../audit/log.js', () => ({ append: vi.fn(async () => undefined) }));
@@ -28,7 +28,7 @@ vi.mock('../venues/oneinch.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../venues/oneinch.js')>()),
   quote: vi.fn(),
 }));
-vi.mock('../evm/gas-price.js', () => ({ networkCost: vi.fn() }));
+vi.mock('../evm/gas-price.js', () => ({ gasPrice: vi.fn(), networkCost: vi.fn() }));
 vi.mock('../executor/fill-measure.js', () => ({ estimateOutUnits: vi.fn() }));
 vi.mock('../venues/compare.js', () => ({ compareVenues: vi.fn() }));
 vi.mock('../auth/middleware.js', () => ({
@@ -56,7 +56,8 @@ const { append } = await import('../audit/log.js');
 const { placeOrder } = await import('../executor/order.js');
 const engine = await import('../backtest/engine.js');
 const { quote } = await import('../venues/oneinch.js');
-const { networkCost } = await import('../evm/gas-price.js');
+const { gasPrice, networkCost } = await import('../evm/gas-price.js');
+const { setScreenPatienceForTests } = await import('../http/patience.js');
 const { compareVenues } = await import('../venues/compare.js');
 const { currentWallet } = await import('./wallet-context.js');
 const { readPolicy } = await import('../evm/delegation.js');
@@ -225,10 +226,49 @@ describe('GET /swap/quote', () => {
 
   it('quotes a sound request under the registry spelling', async () => {
     vi.mocked(quote).mockResolvedValue({ inSymbol: 'USDC', outSymbol: 'NVDAc', outAmount: 0.55 } as never);
+    vi.mocked(gasPrice).mockResolvedValue({ wei: 2_000_000_000n, source: 'chain' });
     vi.mocked(networkCost).mockRejectedValue(new Error('no gas price'));
     const r = await get('/swap/quote?in=usdc&out=nvdac&amount=100');
     expect(r).toMatchObject({ status: 200, body: { outSymbol: 'NVDAc', gas: null } });
     expect(quote).toHaveBeenCalledWith({ inSymbol: 'USDC', outSymbol: 'NVDAc', amount: 100, slippagePct: undefined });
+  });
+
+  describe("inside a screen's patience (E187)", () => {
+    const QUOTE = { inSymbol: 'USDC', outSymbol: 'WETH', outAmount: 0.008, estimatedGas: 210_000 };
+    const PRICE = { wei: 2_000_000_000n, source: 'chain' as const };
+    afterEach(() => setScreenPatienceForTests());
+
+    it('costs the route at the gas price read alongside it, and prices ETH within a price read’s bound', async () => {
+      vi.mocked(quote).mockResolvedValue(QUOTE as never);
+      vi.mocked(gasPrice).mockResolvedValue(PRICE);
+      vi.mocked(networkCost).mockResolvedValue({ priceGwei: 2, source: 'chain', units: 210_000, feeUsd: 1.05 });
+      const r = await get('/swap/quote?in=USDC&out=WETH&amount=20&slippage=0.5');
+      expect(r).toMatchObject({
+        status: 200,
+        body: { outAmount: 0.008, gas: { priceGwei: 2, units: 210_000, feeUsd: 1.05, paidBy: 'executor' } },
+      });
+      expect(networkCost).toHaveBeenCalledWith(210_000, { price: PRICE, priceMs: 4_000 });
+    });
+
+    it('answers a quote the aggregator has not given in time as warming, not a hang', async () => {
+      setScreenPatienceForTests({ routeMs: 30 });
+      vi.mocked(quote).mockReturnValue(new Promise(() => {}) as never);
+      vi.mocked(gasPrice).mockResolvedValue(PRICE);
+      const res = await app.request('/swap/quote?in=USDC&out=WETH&amount=20&slippage=0.5');
+      expect(res.status).toBe(503);
+      expect(res.headers.get('retry-after')).toBe('5');
+      expect(await res.json()).toMatchObject({ error: 'warming', detail: expect.stringContaining('The quote is still') });
+      expect(networkCost).not.toHaveBeenCalled();
+    });
+
+    it('answers the quote without its cost when the gas price is late', async () => {
+      setScreenPatienceForTests({ chainReadMs: 30 });
+      vi.mocked(quote).mockResolvedValue(QUOTE as never);
+      vi.mocked(gasPrice).mockReturnValue(new Promise(() => {}) as never);
+      const r = await get('/swap/quote?in=USDC&out=WETH&amount=20');
+      expect(r).toMatchObject({ status: 200, body: { outAmount: 0.008, gas: null } });
+      expect(networkCost).not.toHaveBeenCalled();
+    });
   });
 });
 

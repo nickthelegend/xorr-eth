@@ -16,7 +16,7 @@ import { propose } from '../bot/propose.js';
 import { send } from '../notifications/push.js';
 import { quote, canonicalSymbol, TOKENS as VENUE_TOKENS } from '../venues/oneinch.js';
 import { ADDRESSES } from '../evm/chains.js';
-import { networkCost } from '../evm/gas-price.js';
+import { gasPrice, networkCost } from '../evm/gas-price.js';
 import { estimateOutUnits } from '../executor/fill-measure.js';
 import { compareVenues } from '../venues/compare.js';
 import { requireUser } from '../auth/middleware.js';
@@ -24,6 +24,7 @@ import { currentWallet } from './wallet-context.js';
 import { armExits, money, placeOrder } from '../executor/order.js';
 import { readChain } from '../http/chain-read.js';
 import { screenPatience } from '../http/patience.js';
+import { beforeDeadline, StillFetching } from '../http/deadline.js';
 import { readPolicy } from '../evm/delegation.js';
 import type { Address } from 'viem';
 import { decide } from '../graph/decide.js';
@@ -612,17 +613,33 @@ extra.get('/swap/quote', async (c) => {
   const amount = Number(c.req.query('amount') ?? 1);
   const refusal = tradeRefusal(inSymbol, outSymbol, amount);
   if (refusal) return c.json(refusal, 400);
+  /*
+   * Inside a screen's patience (`http/patience.ts`). Nothing here had a deadline, and on the hosted fork one quote
+   * answered after 97 seconds, long after the app had stopped waiting at 45 (docs/qa/ENDPOINTS.md E187); while it
+   * waited, `/verify`'s eight-second price check ran out twice. A quote the aggregator has not given by `routeMs` is
+   * `warming`: the app asks again, and the ask joins the request still on its way rather than starting another.
+   */
+  const patience = screenPatience();
   try {
-    const q = await quote({ inSymbol, outSymbol, amount, slippagePct });
-    /*
-     * What the route costs to send, and who pays it (PLAN.md 3.13): the gas price — 1inch's Gas Price API on Base,
-     * the chain's own anywhere else — times 1inch's estimate for the route. The executor's delegate sends every
-     * swap and order, so this is information rather than a charge: the user pays no gas for either. Null when it
-     * cannot be read, never a zero.
-     */
-    const gas = await networkCost(q.estimatedGas).catch(() => null);
+    const [q, price] = await Promise.all([
+      beforeDeadline(
+        quote({ inSymbol, outSymbol, amount, slippagePct }),
+        patience.routeMs,
+        () => new StillFetching('the quote'),
+      ),
+      /*
+       * What the route costs to send, and who pays it (PLAN.md 3.13): the gas price — 1inch's Gas Price API on Base,
+       * the chain's own anywhere else — times 1inch's estimate for the route. The executor's delegate sends every
+       * swap and order, so this is information rather than a charge: the user pays no gas for either. Null when it
+       * cannot be read in time, never a zero. The price does not depend on the route, so it is read alongside it.
+       */
+      beforeDeadline(gasPrice(), patience.chainReadMs, () => new StillFetching('the gas price')).catch(() => null),
+    ]);
+    const gas = price && (await networkCost(q.estimatedGas, { price, priceMs: patience.priceMs }).catch(() => null));
     return c.json({ ...q, gas: gas && { ...gas, paidBy: 'executor' as const } });
   } catch (e) {
+    // Late is not failed: the error handler answers it as `warming`, which the app waits out.
+    if (e instanceof StillFetching) throw e;
     // No route is a real answer. The screen says so rather than showing a computed guess.
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }

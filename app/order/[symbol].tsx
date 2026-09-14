@@ -44,6 +44,7 @@ import { DEFAULT_BUY } from '@/data/tradable';
 import { useSettleable } from '@/data/useSettleable';
 import { errorText } from '@/data/apiError';
 import type { SwapQuoteResult } from '@/data/useSwapQuote';
+import { waitOutWarming } from '@/data/warming';
 import { sellMax, ticketLimit } from '@/markets/ticket';
 
 type Side = 'buy' | 'sell';
@@ -148,15 +149,18 @@ export default function OrderTicket() {
    */
   const quoted = useDebounced(amount);
   const quoteFor = quoted > 0 && symbol ? `${side}:${symbol}:${quoted}:${held?.mark ?? 0}` : '';
+  // A quote the executor could not get in time is `warming`: waited out, as the swap screen waits it out (E187).
   const routeQuote = useAsync(
     () =>
       quoted > 0 && (side === 'buy' || (held?.mark ?? 0) > 0)
-        ? api.get<{ minimumOut: number; venues: string[]; slippagePct: number; gas?: SwapQuoteResult['gas'] }>(
-            side === 'buy'
-              ? `/swap/quote?in=USDC&out=${encodeURIComponent(symbol)}&amount=${quoted}`
-              : // A sell is entered in dollars; the route is quoted in units, so it needs the
-                // mark. Only a held position can be sold, and a held position has one.
-                `/swap/quote?in=${encodeURIComponent(symbol)}&out=USDC&amount=${quoted / (held?.mark || 1)}`,
+        ? waitOutWarming(() =>
+            api.get<{ minimumOut: number; venues: string[]; slippagePct: number; gas?: SwapQuoteResult['gas'] }>(
+              side === 'buy'
+                ? `/swap/quote?in=USDC&out=${encodeURIComponent(symbol)}&amount=${quoted}`
+                : // A sell is entered in dollars; the route is quoted in units, so it needs the
+                  // mark. Only a held position can be sold, and a held position has one.
+                  `/swap/quote?in=${encodeURIComponent(symbol)}&out=USDC&amount=${quoted / (held?.mark || 1)}`,
+            ),
           )
         : Promise.resolve(null),
     [quoteFor],

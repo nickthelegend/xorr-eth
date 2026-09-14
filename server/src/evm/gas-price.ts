@@ -32,12 +32,21 @@ export type NetworkCost = {
   feeUsd: number | null;
 };
 
-/** The price, and — when the size is known and ETH can be priced — what `units` of gas cost in dollars. */
-export async function networkCost(units: number | undefined): Promise<NetworkCost> {
-  const price = await gasPrice();
+/**
+ * The price, and — when the size is known and ETH can be priced — what `units` of gas cost in dollars.
+ *
+ * `price` is a gas price the caller already read, so a route that reads it alongside something else does not ask twice.
+ * `priceMs` is how long ETH's price may take: past it the fee is unknown, never a guess. Without it the fee waited as
+ * long as the price feed took, and behind a swap quote on the hosted fork that was 97 seconds (docs/qa/ENDPOINTS.md E187).
+ */
+export async function networkCost(
+  units: number | undefined,
+  opts: { price?: GasPrice; priceMs?: number } = {},
+): Promise<NetworkCost> {
+  const price = opts.price ?? (await gasPrice());
   const priceGwei = Number(formatGwei(price.wei));
   if (!units || !(units > 0)) return { priceGwei, source: price.source, units: null, feeUsd: null };
-  const ethUsd = await priceOf('WETH').catch(() => undefined);
+  const ethUsd = await priceOf('WETH', opts.priceMs).catch(() => undefined);
   const feeEth = Number(formatEther(price.wei * BigInt(Math.round(units))));
   return { priceGwei, source: price.source, units, feeUsd: ethUsd === undefined ? null : feeEth * ethUsd };
 }

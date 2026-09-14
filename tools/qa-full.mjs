@@ -3302,11 +3302,12 @@ check(
     auth: 'user',
     kind: 'contract',
     correct:
-      'As the swap screen asks (?in=USDC&out=WETH&amount=20&slippage=0.5, src/data/useSwapQuote.ts:57): 200 {inSymbol "USDC", outSymbol "WETH", inAmount 20, outAmount > 0, minimumOut = outAmount × (1 − slippagePct/100), slippagePct 0.5, venues: string[], route = "Direct" | the one venue | "Best of n venues", priceImpactPct: null or in [0, 5), gas: null or {paidBy "executor", …}}; the implied WETH price is within 3% of /market/quotes; without ?slippage the default 0.3 applies; ?out=nvdac quotes under "NVDAc".',
+      'As the swap screen asks (?in=USDC&out=WETH&amount=20&slippage=0.5, src/data/useSwapQuote.ts:62): 200 {inSymbol "USDC", outSymbol "WETH", inAmount 20, outAmount > 0, minimumOut = outAmount × (1 − slippagePct/100), slippagePct 0.5, venues: string[], route = "Direct" | the one venue | "Best of n venues", priceImpactPct: null or in [0, 5), gas: null or {paidBy "executor", …}}; the implied WETH price is within 3% of /market/quotes; without ?slippage the default 0.3 applies; ?out=nvdac quotes under "NVDAc". Each ask answers inside a screen\'s patience: a quote still on its way is 503 warming with a retry-after, which is waited out, and no attempt takes the app\'s 45s.',
   },
   async () => {
     const r = await get('/swap/quote?in=USDC&out=WETH&amount=20&slippage=0.5');
     expectStatus(r, 200, 'USDC → WETH');
+    must(r.ms < 45_000, `/swap/quote took ${r.ms}ms on its last attempt`);
     const q = r.json;
     must(q.inSymbol === 'USDC' && q.outSymbol === 'WETH' && q.inAmount === 20 && q.outAmount > 0 && q.slippagePct === 0.5, `header ${clip(q)}`);
     must(near(q.minimumOut, q.outAmount * (1 - 0.005), 1e-12, 1e-9), `minimumOut ${q.minimumOut}`);

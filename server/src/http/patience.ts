@@ -18,7 +18,8 @@
  *     read of it already gives a screen (`evm/balances.ts`).
  *   - `routeMs`, every venue asked about one trade (`venues/compare.ts`): the venues that answered, and each that had not
  *     as not answering in time. Twenty-five seconds, inside the app's forty-five: against the hosted fork one comparison
- *     took 46 s and another gave no answer inside 90 (E165).
+ *     took 46 s and another gave no answer inside 90 (E165). The swap screen's quote is one venue asked about one trade,
+ *     and past the same bound it is `warming`: with no bound, one answered after 97 s (`/swap/quote`, E187).
  *
  * Every upstream `/wallet/balance` and `/panic/preview` wait on is inside `chainReadMs`, so each answers in about twenty
  * seconds at worst; `/graph/decision` is inside the subgraphs' five-second deadlines and `priceMs`.
