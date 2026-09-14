@@ -20,6 +20,7 @@ import { useThread } from '@/bot/thread';
 import { CHAT_AGENTS } from '@/chat/agents';
 import { useChatDrawer } from '@/chat/chatDrawer';
 import { summaries, unreadTotal } from '@/chat/conversations';
+import { useVoice } from '@/chat/voice';
 
 const AGENT_NAMES = CHAT_AGENTS.map((a) => a.name);
 
@@ -30,11 +31,16 @@ export default function TabsLayout() {
   const messages = useThread((s) => s.messages);
   const read = useThread((s) => s.read);
   const hydrate = useThread((s) => s.hydrate);
+  const readVoice = useVoice((s) => s.read);
 
   // The count on Messages is the thread's, so the thread is read as the shell mounts rather than when the drawer opens.
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+  // Whether the agents can reply is read as the shell mounts too, so a conversation opens knowing what to offer.
+  useEffect(() => {
+    void readVoice();
+  }, [readVoice]);
   const unread = useMemo(() => unreadTotal(summaries(messages, AGENT_NAMES, read)), [messages, read]);
 
   return (

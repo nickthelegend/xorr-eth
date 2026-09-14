@@ -13,6 +13,14 @@
  * nothing to say; a starter that asserted a position or a number would be putting words in the
  * agent's mouth before it had spoken.
  */
+import type { Href } from 'expo-router';
+
+/** A screen that already shows part of an agent's work from real records. */
+export type Shortcut = {
+  label: string;
+  href: Href;
+};
+
 export type ChatAgent = {
   /** The persona id the server knows. */
   id: string;
@@ -22,6 +30,13 @@ export type ChatAgent = {
   role: string;
   /** Three things worth asking THIS agent, as opposed to any of them. */
   openers: readonly string[];
+  /**
+   * Where its work can be seen without asking, for a build with no language model to answer a question.
+   *
+   * Offered in the openers' place when the executor says nothing can reply (`voice.ts`): its own page, the record its
+   * mandate reads, and every run. Each opens a screen that shows it; none is a line written for the chat.
+   */
+  shortcuts: readonly Shortcut[];
 };
 
 export const CHAT_AGENTS: readonly ChatAgent[] = [
@@ -34,6 +49,11 @@ export const CHAT_AGENTS: readonly ChatAgent[] = [
       'Why did you skip today',
       'What would make you take a position',
     ],
+    shortcuts: [
+      { label: 'How it trades', href: '/agent/momentum-scout' },
+      { label: 'Today’s movers', href: '/movers' },
+      { label: 'All runs', href: '/runs' },
+    ],
   },
   {
     id: 'earnings-desk',
@@ -43,6 +63,11 @@ export const CHAT_AGENTS: readonly ChatAgent[] = [
       'What is on the calendar',
       'Why avoid trading into a print',
       'How do you size around earnings',
+    ],
+    shortcuts: [
+      { label: 'How it trades', href: '/agent/earnings-desk' },
+      { label: 'Earnings dates', href: '/earnings' },
+      { label: 'All runs', href: '/runs' },
     ],
   },
   {
@@ -54,6 +79,11 @@ export const CHAT_AGENTS: readonly ChatAgent[] = [
       'When would you move it',
       'What is the risk in supplying',
     ],
+    shortcuts: [
+      { label: 'How it trades', href: '/agent/yield-keeper' },
+      { label: 'What cash earns', href: '/rates' },
+      { label: 'All runs', href: '/runs' },
+    ],
   },
   {
     id: 'drawdown-guard',
@@ -63,6 +93,11 @@ export const CHAT_AGENTS: readonly ChatAgent[] = [
       'When would you cut',
       'What are you watching for',
       'How do you decide what to sell first',
+    ],
+    shortcuts: [
+      { label: 'How it trades', href: '/agent/drawdown-guard' },
+      { label: 'Agent limits', href: '/risk' },
+      { label: 'All runs', href: '/runs' },
     ],
   },
 ] as const;

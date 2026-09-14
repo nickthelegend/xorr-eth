@@ -11,7 +11,8 @@
  * It holds the list of conversations (`Messages`) and one agent's conversation (`Chat`), switched in place, as a
  * messenger switches between its chat list and a chat. Mounted once at the root (`app/_layout.tsx`) and opened through
  * `useChatDrawer`, so every way in — the tab bar's Messages button, a push, the briefing's link to `/bot` — raises the
- * same drawer over the same thread.
+ * same drawer over the same thread. A screen opened from inside it — your profile, an agent's page — lowers it, and
+ * coming back to the screen it rose over raises it again where it was.
  *
  * Tall rather than half-height: the composer needs the keyboard and the thread needs the height, and a
  * half sheet that grows to full on focus is two layouts to get right for no gain. It stops just short of
@@ -20,6 +21,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { usePathname, useRouter, type Href } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
@@ -132,6 +134,18 @@ export function ChatSheet({ open, onClose }: ChatSheetProps) {
     if (agent) showList();
     else close();
   }, [agent, showList, close]);
+
+  /*
+   * Back on the screen the drawer rose over, from one it opened (`useChatDrawer.leave`): up it comes, where it was.
+   *
+   * The path is what knows a pushed screen has closed, whichever way it closed: a back button, a swipe, a sheet dragged
+   * down. Measured from the path it left, so a screen opened from that screen keeps it down until you are back.
+   */
+  const pathname = usePathname();
+  const returned = useChatDrawer((s) => s.returned);
+  useEffect(() => {
+    returned(pathname);
+  }, [pathname, returned]);
 
   /* Android's back button steps back inside the drawer before it pops the route underneath it. */
   useEffect(() => {
@@ -251,9 +265,18 @@ export function ChatSheet({ open, onClose }: ChatSheetProps) {
 /** The list, or one agent's conversation — and, whichever is showing, what the agents have to say as the drawer opens. */
 function DrawerContent({ onClose, footerInset }: { onClose: () => void; footerInset: number }) {
   useProposalSeed();
+  const router = useRouter();
+  const pathname = usePathname();
   const agentName = useChatDrawer((s) => s.agent);
   const openConversation = useChatDrawer((s) => s.openConversation);
   const showList = useChatDrawer((s) => s.showList);
+  const leave = useChatDrawer((s) => s.leave);
+
+  /* A screen opened from inside the drawer: down it goes, remembering the screen it rose over, and the screen opens. */
+  const openScreen = (href: Href) => {
+    leave(pathname);
+    router.push(href);
+  };
 
   if (agentName) {
     const agent = agentByName(agentName);
@@ -264,9 +287,10 @@ function DrawerContent({ onClose, footerInset }: { onClose: () => void; footerIn
         onBack={showList}
         onClose={onClose}
         onSwitchAgent={(a) => openConversation(a.name)}
+        onOpenScreen={openScreen}
         footerInset={footerInset}
       />
     );
   }
-  return <Messages onClose={onClose} onOpen={openConversation} footerInset={footerInset} />;
+  return <Messages onClose={onClose} onOpen={openConversation} onOpenScreen={openScreen} footerInset={footerInset} />;
 }

@@ -308,7 +308,7 @@ export const LocalRepositories: Repositories = {
     },
     async ask({ agentId, question, tone }) {
       const res = await api
-        .post<{ text: string | null; source: 'model' | 'none' }>('/bot/say', {
+        .post<{ text: string | null; source: 'model' | 'none'; reason?: string }>('/bot/say', {
           persona: agentId,
           situation: `The user asks: "${question}". Answer in one or two sentences, without naming any figure.`,
           tone,
@@ -319,12 +319,14 @@ export const LocalRepositories: Repositories = {
        *
        * `source: 'none'` says the same thing the server says when no model wrote a line, and the
        * text names the actual condition — the request failed — rather than putting words in an
-       * agent's mouth about a market it never looked at.
+       * agent's mouth about a market it never looked at. `reason` says which it was: the chat
+       * showed "no language model is configured" for a request that never arrived.
        */
       return (
         res ?? {
           text: 'I cannot reach my own reasoning right now, so I will not guess.',
           source: 'none' as const,
+          reason: 'unreachable',
         }
       );
     },

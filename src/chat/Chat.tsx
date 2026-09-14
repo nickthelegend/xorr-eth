@@ -15,6 +15,9 @@
  *
  * What is not decoration is the proposal card. It keeps real Approve and Skip buttons and a real
  * countdown, because it is the one message in the thread that spends money.
+ *
+ * A build with no language model cannot answer a question, so it does not offer one (`voice.ts`): the suggestions become
+ * the agent's own screens, which show its work from real records, and a question typed anyway is told why nothing answers.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -27,6 +30,7 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import type { Href } from 'expo-router';
 import { agentGradient } from '@/design/gradients';
 import { Press, Text, duration, space, timing, useReducedMotion } from '@/ui';
 import { mmss } from '@/format';
@@ -53,6 +57,7 @@ import { conversationOf } from './conversations';
 import { AgentAvatar, GLASS, GlassButton } from './parts';
 import { chat, chatShadow, chatType } from './theme';
 import { useDictation } from './useDictation';
+import { useVoice } from './voice';
 
 /** Thread gutter. */
 const THREAD_PAD_H = space.s16;
@@ -64,6 +69,8 @@ const BOT_MAX = '82%' as const;
 /** The hero orb's ceiling: the room's centrepiece, never so large it crowds the composer. */
 const ORB_MAX = 250;
 const DECIDE_H = 44;
+/** What an agent says to a question when this build has no language model to write its reply. */
+const NO_MODEL_REPLY = 'I cannot answer that here: this build has no language model.';
 
 /** A message card. The proposal card is the same card with more in it. */
 const CARD = {
@@ -95,6 +102,11 @@ export interface ChatProps {
   onClose?: () => void;
   /** The roster, opened from the composer or the agent's orb, moves to another agent's conversation. */
   onSwitchAgent?: (agent: ChatAgent) => void;
+  /**
+   * Opens a screen from the conversation: the agent's page, the record its work reads. The drawer goes down for it and
+   * comes back up here when that screen closes (`useChatDrawer.leave`).
+   */
+  onOpenScreen?: (href: Href) => void;
   /** Extra top padding. The sheet puts its drag handle above the header. */
   headerTop?: number;
   /**
@@ -107,7 +119,15 @@ export interface ChatProps {
   footerInset?: number;
 }
 
-export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, footerInset = 0 }: ChatProps) {
+export function Chat({
+  agent,
+  onBack,
+  onClose,
+  onSwitchAgent,
+  onOpenScreen,
+  headerTop = 0,
+  footerInset = 0,
+}: ChatProps) {
   const scroller = useRef<ScrollView>(null);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -129,10 +149,17 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
   const append = useThread((s) => s.append);
   const setDecided = useThread((s) => s.setDecided);
   const markReadFor = useThread((s) => s.markReadFor);
+  const voiceConfigured = useVoice((s) => s.configured);
+  const readVoice = useVoice((s) => s.read);
+  const voiceRefused = useVoice((s) => s.refused);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    void readVoice();
+  }, [readVoice]);
 
   const agentName = agent.name;
   const accent = agentGradient(agentName).c1;
@@ -157,6 +184,12 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
   const dictation = useDictation(setDraft);
   const { listening, stop: stopListening } = dictation;
   const liveProposal = proposal && proposal.agent === agentName && !decided ? proposal : null;
+  /*
+   * Nothing in this build can write a reply, so a question has no one to answer it and the suggestions are the agent's
+   * screens instead. Only once the executor has said so: not knowing yet offers the questions, as it always did.
+   */
+  const mute = voiceConfigured === false;
+  const shortcuts = mute && onOpenScreen ? agent.shortcuts : null;
 
   /*
    * `override` is what lets a suggested question send itself. Routing it through `setDraft` and a
@@ -185,19 +218,17 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
          * the tape is quiet." — a confident non-sequitur in the agent's own voice, which is exactly
          * the canned-content-as-real-output this project refuses everywhere else.
          *
-         * The reply still arrives; it just says what it is.
+         * The reply still arrives; it just says what it is, and why (`unanswered`).
          */
-        .then((reply) =>
+        .then((reply) => {
+          // Told by the reply itself, so an executor too old to publish it on /health still gets the screens offered.
+          if (reply.reason === 'no_key') voiceRefused();
           append(
             botProse(agentName, [
-              voice(
-                reply.source === 'none' || !reply.text
-                  ? 'I cannot answer that here — no language model is configured in this build, and I will not read you a stock line as though it were an answer.'
-                  : reply.text,
-              ),
+              voice(reply.source === 'model' && reply.text ? reply.text : unanswered(reply)),
             ]),
-          ),
-        )
+          );
+        })
         .catch(() =>
           append(
             botProse(agentName, [voice('I could not answer that just now, so I will not guess.')]),
@@ -205,7 +236,7 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
         )
         .finally(() => setThinking(false));
     },
-    [draft, thinking, listening, stopListening, append, agent, agentName, tone],
+    [draft, thinking, listening, stopListening, append, agent, agentName, tone, voiceRefused],
   );
 
   return (
@@ -337,7 +368,7 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
               ),
             )
           ) : (
-            <Hero agent={agent} line={latestLine} />
+            <Hero agent={agent} line={latestLine} mute={mute} />
           )}
 
           {/* Where the answer is about to land, not in the header above it. */}
@@ -361,6 +392,8 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
           Suggested questions for this agent. They are QUESTIONS: a starter that asserted a position or a
           number would put words in the agent's mouth before it had said anything, which on this product is
           the one thing a convenience must not do.
+
+          With no language model they are the agent's screens instead, because a question there has no one to answer it.
         */}
         {startersOpen ? (
           <ScrollView
@@ -374,26 +407,18 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
               paddingBottom: space.s8,
             }}
           >
-            {agent.openers.map((q) => (
-              <Press
-                key={q}
-                onPress={() => send(q)}
-                accessibilityRole="button"
-                accessibilityLabel={`Ask: ${q}`}
-                style={{
-                  borderRadius: 18,
-                  paddingHorizontal: space.s14,
-                  paddingVertical: space.s8,
-                  backgroundColor: chat.glass,
-                  borderWidth: 1,
-                  borderColor: chat.glassBorder,
-                }}
-              >
-                <Text color={chat.inkSoft} style={chatType.chip}>
-                  {q}
-                </Text>
-              </Press>
-            ))}
+            {shortcuts
+              ? shortcuts.map((s) => (
+                  <Chip
+                    key={s.label}
+                    label={s.label}
+                    accessibilityLabel={`Open ${s.label}`}
+                    onPress={() => onOpenScreen?.(s.href)}
+                  />
+                ))
+              : agent.openers.map((q) => (
+                  <Chip key={q} label={q} accessibilityLabel={`Ask: ${q}`} onPress={() => send(q)} />
+                ))}
           </ScrollView>
         ) : null}
 
@@ -415,18 +440,52 @@ export function Chat({ agent, onBack, onClose, onSwitchAgent, headerTop = 0, foo
   );
 }
 
+/** A suggestion under the thread: a question to ask or, with no model to answer one, a screen to open. */
+function Chip({
+  label,
+  accessibilityLabel,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  return (
+    <Press
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={{
+        borderRadius: 18,
+        paddingHorizontal: space.s14,
+        paddingVertical: space.s8,
+        backgroundColor: chat.glass,
+        borderWidth: 1,
+        borderColor: chat.glassBorder,
+      }}
+    >
+      <Text color={chat.inkSoft} style={chatType.chip}>
+        {label}
+      </Text>
+    </Press>
+  );
+}
+
 /**
- * The room before anything has been said: the agent's latest line — or who is listening — the question
- * the room asks, and the orb, lit in the agent's colour so each conversation has its own light.
+ * The room before anything has been said: the agent's latest line — or who is listening, or that nothing here can reply —
+ * the question the room asks, and the orb, lit in the agent's colour so each conversation has its own light.
  */
-function Hero({ agent, line }: { agent: ChatAgent; line?: string }) {
+function Hero({ agent, line, mute }: { agent: ChatAgent; line?: string; mute: boolean }) {
   const { width, height } = useWindowDimensions();
   const orb = Math.round(Math.min(ORB_MAX, width * 0.62, height * 0.3));
 
   return (
     <View style={{ flex: 1, alignItems: 'center', paddingTop: space.s10 }}>
       <Text color={chat.muted} align="center" style={[chatType.subtitle, { maxWidth: 290 }]}>
-        {line ?? `Just type your question — ${agent.name} ${lowerFirst(agent.role)}.`}
+        {line ??
+          (mute
+            ? `${agent.name} can’t reply here yet: this build has no language model.`
+            : `Just type your question — ${agent.name} ${lowerFirst(agent.role)}.`)}
       </Text>
       <Text color={chat.heading} align="center" style={[chatType.heading, { marginTop: space.s12 }]}>
         {'What Can I Do For\nYou Today?'}
@@ -451,6 +510,19 @@ function latestProse(messages: readonly ThreadMessage[]): string | undefined {
     if (m.type === 'prose') return renderSegments(m.segments);
   }
   return undefined;
+}
+
+/**
+ * What the agent says when no model wrote its reply, by why not. None of these is an answer, and none is dressed as one.
+ *
+ * It said "no language model is configured in this build" for all three, including a request that never reached the
+ * server and a model that answered with something the voice gate refused.
+ */
+function unanswered(reply: { text: string | null; reason?: string }): string {
+  if (reply.reason === 'no_key') return NO_MODEL_REPLY;
+  // The request never arrived, and the data layer says so in its own words.
+  if (reply.reason === 'unreachable' && reply.text) return reply.text;
+  return 'I could not answer that just now, so I will not guess.';
 }
 
 /**

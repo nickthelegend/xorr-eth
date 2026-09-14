@@ -222,6 +222,8 @@ export type Health = {
   dependencies: HealthDependency[];
   db?: string;
   publicSurface?: { paths: string[] };
+  /** Whether a language model can write the agents' replies. Absent from an executor older than the field. */
+  voice?: { configured: boolean };
 };
 
 export type CatchupEntry = {

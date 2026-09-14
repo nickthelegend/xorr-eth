@@ -4,14 +4,15 @@
  * Opened from the tab bar's Messages button, in the drawer that rises from the bottom (`ChatSheet`), and drawn to the
  * product owner's reference: you at the top left, search and add at the top right, the agents across the top as large
  * orbs, then one row per conversation — the agent, its last line, when, and a mark when something in it is new. A row
- * or an orb opens that agent's conversation in the same drawer.
+ * or an orb opens that agent's conversation in the same drawer. Your profile opens as its own screen, and the drawer comes
+ * back up on this list when you return from it.
  *
  * Nothing here is written for the screen. The rows are the thread (`conversations.ts`); who is added comes from the
  * executor's `/agents`, and adding an agent hires it there.
  */
 import React, { useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, TextInput, View, type TextStyle } from 'react-native';
-import { useRouter } from 'expo-router';
+import type { Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '@/design/Icon';
 import { agentGradient } from '@/design/gradients';
@@ -27,14 +28,16 @@ import { useThread } from '@/bot/thread';
 import type { ThreadMessage } from '@/bot/message';
 import { CHAT_AGENTS, type ChatAgent } from './agents';
 import { listTime, searchMessages, summaries, type ConversationSummary } from './conversations';
-import { AgentAvatar, GLASS, GlassButton } from './parts';
+import { GLASS, GlassButton } from './parts';
 import { chat, chatShadow, chatType } from './theme';
 
 const AVATAR = GLASS;
 const ORB = 56 as const;
 const ORB_TILE = 84;
-const ROW_AVATAR = 46;
-/** A conversation row's orb: the smallest size the orb is drawn at. */
+/**
+ * A row's orb — a conversation, a search result, an agent to add: the smallest size the orb is drawn at. The same face
+ * in every list, so an agent is one character wherever it appears.
+ */
 const ROW_ORB = 52 as const;
 const DOT = 11;
 const PILL_H = 32;
@@ -49,12 +52,13 @@ export interface MessagesProps {
   onClose: () => void;
   /** Opens one agent's conversation in the drawer. */
   onOpen: (agent: string) => void;
+  /** Opens a screen over the one the drawer rose from, and brings the drawer back when it closes. */
+  onOpenScreen: (href: Href) => void;
   /** Space under the list — the drawer's home-indicator inset. */
   footerInset: number;
 }
 
-export function Messages({ onClose, onOpen, footerInset }: MessagesProps) {
-  const router = useRouter();
+export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: MessagesProps) {
   const signedOut = useSignedOut();
   const { email } = usePrivyIdentity();
   const address = useStore((s) => s.wallet?.address);
@@ -82,10 +86,8 @@ export function Messages({ onClose, onOpen, footerInset }: MessagesProps) {
     onClose();
     signIn();
   };
-  const openProfile = () => {
-    onClose();
-    router.push('/profile');
-  };
+  // And for your profile it comes back up on this list when you return (`useChatDrawer.leave`).
+  const openProfile = () => onOpenScreen('/profile');
 
   return (
     <View style={{ flex: 1 }}>
@@ -386,7 +388,7 @@ function ResultRow({ agent, line, time, onPress }: { agent: string; line: string
       accessibilityLabel={`${agent}. ${line}`}
       style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12, paddingHorizontal: space.gutter, paddingVertical: space.s10 }}
     >
-      <AgentAvatar name={agent} size={36} />
+      <AgentOrb gradient={agentGradient(agent)} size={ROW_ORB} face identity={agent} />
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s8 }}>
           <Text color={chat.ink} style={[chatType.rowTitle, { flex: 1 }]} numberOfLines={1}>
@@ -452,7 +454,7 @@ function AddAgents({
             key={a.id}
             style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12, paddingHorizontal: space.gutter, paddingVertical: space.s10 }}
           >
-            <AgentAvatar name={a.name} size={ROW_AVATAR} />
+            <AgentOrb gradient={agentGradient(a.name)} size={ROW_ORB} face identity={a.name} />
             <View style={{ flex: 1 }}>
               <Text color={chat.ink} style={chatType.rowTitle} numberOfLines={1}>
                 {a.name}

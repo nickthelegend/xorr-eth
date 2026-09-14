@@ -80,7 +80,15 @@ export interface BotRepository {
     question: string;
     tone: 'dry' | 'sharp' | 'flat';
     /** `text` is `null` when no model answered — the caller must say so, never invent one. */
-  }): Promise<{ text: string | null; source: 'model' | 'none' }>;
+  }): Promise<{
+    text: string | null;
+    source: 'model' | 'none';
+    /**
+     * Why no model answered, when none did: `no_key` (this build has none), `rejected` or `error` (one was asked and
+     * nothing usable came back), `unreachable` (the request never arrived).
+     */
+    reason?: string;
+  }>;
 }
 
 export interface StrategyRepository {
