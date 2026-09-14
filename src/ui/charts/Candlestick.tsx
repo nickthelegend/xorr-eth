@@ -191,7 +191,12 @@ export function Candlestick({
     reveal.value = withTiming(1, arrival(duration.draw, reduced));
   }, [drawIn, measured, revealFor, reduced, reveal]);
   const revealWidth = box.width;
-  const clipProps = useAnimatedProps(() => ({ width: reveal.value * revealWidth }));
+  /*
+   * Held to 0–1. On the web a timing's first frame can be stamped a moment before the timing started, and eased there
+   * the progress reads just below zero: the web sweep at 2fa214a logged `<rect> attribute width: A negative value is
+   * not valid` (-26.857 across a 362px chart, -0.074 of it) on the asset screen.
+   */
+  const clipProps = useAnimatedProps(() => ({ width: Math.min(1, Math.max(0, reveal.value)) * revealWidth }));
 
   /* The crossfade, on the interaction scale: a range switch answers a tap. Instant under reduced motion. */
   const fade0 = useSharedValue(1);

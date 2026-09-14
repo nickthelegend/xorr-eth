@@ -182,7 +182,8 @@ export function AreaChart({
     reveal.value = withTiming(1, arrival(duration.draw, reduced));
   }, [drawIn, measured, revealFor, reduced, reveal]);
   const width = box.width;
-  const clipProps = useAnimatedProps(() => ({ width: reveal.value * width }));
+  // Held to 0–1, as Candlestick's is: a first frame stamped before its timing began eases to a negative width on the web.
+  const clipProps = useAnimatedProps(() => ({ width: Math.min(1, Math.max(0, reveal.value)) * width }));
 
   /*
    * The crossfade. The front slot rises to full strength (or to the pending step), the other falls away, on the
