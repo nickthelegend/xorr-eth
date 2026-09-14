@@ -62,6 +62,7 @@ const { compareVenues } = await import('../venues/compare.js');
 const { currentWallet } = await import('./wallet-context.js');
 const { readPolicy } = await import('../evm/delegation.js');
 const { decide } = await import('../graph/decide.js');
+const { dailySpendFor, spendsFor, SubgraphUnavailable } = await import('../graph/client.js');
 const { extra } = await import('./extra.js');
 const { errorResponse } = await import('../http/errors.js');
 
@@ -278,6 +279,23 @@ describe('GET /route/compare', () => {
     refused(await get('/route/compare?in=USDC&out=WETH&amount=abc'), 400, 'invalid_amount');
     refused(await get('/route/compare?in=USDC&out=WETH&amount=Infinity'), 400, 'invalid_amount');
     expect(compareVenues).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /graph/activity', () => {
+  it('answers an index that did not answer as a named 502, never as a 500', async () => {
+    vi.mocked(spendsFor).mockRejectedValue(new SubgraphUnavailable('The Graph is unreachable: 429'));
+    vi.mocked(dailySpendFor).mockResolvedValue([]);
+    const r = await get('/graph/activity');
+    expect(r.status).toBe(502);
+    expect(r.body).toMatchObject({ error: 'subgraph_unavailable', message: expect.stringContaining('429') });
+  });
+
+  it("answers this wallet's spends and days when the index answers", async () => {
+    vi.mocked(spendsFor).mockResolvedValue([]);
+    vi.mocked(dailySpendFor).mockResolvedValue([]);
+    expect(await get('/graph/activity')).toEqual({ status: 200, body: { spends: [], daily: [] } });
+    expect(spendsFor).toHaveBeenCalledWith(OWNER);
   });
 });
 

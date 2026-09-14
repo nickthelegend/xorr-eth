@@ -773,8 +773,18 @@ extra.get('/graph/activity', async (c) => {
   if (!id) return c.json({ spends: [], daily: [] });
   const w = await one<{ address: string }>(`SELECT address FROM wallets WHERE id=$1`, [id]);
   if (!w) return c.json({ spends: [], daily: [] });
-  const [spends, daily] = await Promise.all([spendsFor(w.address), dailySpendFor(w.address)]);
-  return c.json({ spends, daily });
+  try {
+    const [spends, daily] = await Promise.all([spendsFor(w.address), dailySpendFor(w.address)]);
+    return c.json({ spends, daily });
+  } catch (e) {
+    /*
+     * An index that did not answer is named, as `/graph/decision` names it: a 502 the app retries. It fell through to the
+     * error handler as a 500, which says the executor broke, while The Graph was refusing every read with 429 (E080 at
+     * 35556a1).
+     */
+    if (e instanceof SubgraphUnavailable) return c.json({ error: 'subgraph_unavailable', message: e.message }, 502);
+    throw e;
+  }
 });
 
 /**
