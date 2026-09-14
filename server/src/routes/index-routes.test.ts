@@ -147,4 +147,15 @@ describe('GET /price/:symbol', () => {
     expect(r).toMatchObject({ status: 502, body: { error: 'price_unavailable' } });
     expect(JSON.stringify(r.body)).not.toContain('coingecko.com');
   });
+
+  it('waits a screen’s patience, and answers a price still on its way 503 warming with a retry-after (E149)', async () => {
+    const { StillFetching } = await import('../http/deadline.js');
+    const { screenPatience } = await import('../http/patience.js');
+    vi.mocked(priceOf).mockRejectedValueOnce(new StillFetching('the price of BTC'));
+    const res = await app.request('/price/BTC');
+    expect(res.status).toBe(503);
+    expect(res.headers.get('retry-after')).toBe('5');
+    expect(await res.json()).toMatchObject({ error: 'warming', detail: expect.stringContaining('BTC') });
+    expect(priceOf).toHaveBeenCalledWith('BTC', screenPatience().priceMs);
+  });
 });

@@ -24,6 +24,16 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
  */
 export const MODEL = process.env.XORR_MODEL ?? 'liquid/lfm-2.5-2.6b:free';
 
+/**
+ * Whether anything can write a line at all.
+ *
+ * Without a key every `speak` answers `no_key`, so an app offering questions to its agents offers a dead end. `/health`
+ * publishes this, and the conversation offers the agent's own screens instead.
+ */
+export function voiceConfigured(): boolean {
+  return Boolean(process.env.OPENROUTER_API_KEY);
+}
+
 export type LlmResult =
   | { ok: true; text: string; model: string }
   | { ok: false; reason: 'no_key' | 'rejected' | 'error'; detail: string };

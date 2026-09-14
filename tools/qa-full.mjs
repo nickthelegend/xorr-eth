@@ -1656,7 +1656,7 @@ check(
     auth: 'public',
     kind: 'contract',
     correct:
-      'Public. 200 (503 only when a critical dependency is down) {ok = status ≠ "down", status ∈ up|degraded|down = the worst dependency, chain (= QA_EXPECT_CHAIN), version: a commit sha (= QA_EXPECT_VERSION when set), delegation, uptimeSec ≥ 0, dependencies: postgres, rpc, delegation (critical) and gas, subgraph, upstreams (not critical), each {status, ms ≥ 0, detail}, breakers: [{host, failures, openUntil, open}], db, publicSurface: {paths = the server\'s 16 public paths = src/data/publicPaths.ts, prefixes ["/perp/"]}}; headers x-request-id and access-control-allow-origin; status not "down".',
+      'Public. 200 (503 only when a critical dependency is down) {ok = status ≠ "down", status ∈ up|degraded|down = the worst dependency, chain (= QA_EXPECT_CHAIN), version: a commit sha (= QA_EXPECT_VERSION when set), delegation, uptimeSec ≥ 0, dependencies: postgres, rpc, delegation (critical) and gas, subgraph, upstreams (not critical), each {status, ms ≥ 0, detail}, breakers: [{host, failures, openUntil, open}], db, publicSurface: {paths = the server\'s 16 public paths = src/data/publicPaths.ts, prefixes ["/perp/"]}, voice: {configured: boolean}}; headers x-request-id and access-control-allow-origin; status not "down".',
   },
   async () => {
     const r = await get('/health', { auth: false, retry: false });
@@ -1686,6 +1686,7 @@ check(
     must(JSON.stringify(served) === JSON.stringify([...SERVER_PUBLIC_PATHS].sort()), `publicSurface.paths ${clip(served)}`);
     if (appPaths) must(JSON.stringify([...appPaths].sort()) === JSON.stringify(served), `app mirror ${clip([...appPaths].sort())} ≠ server ${clip(served)}`);
     must(JSON.stringify(h.publicSurface.prefixes) === '["/perp/"]', `prefixes ${clip(h.publicSurface.prefixes)}`);
+    must(typeof h.voice?.configured === 'boolean', `voice ${clip(h.voice)}`);
     must(r.headers.get('x-request-id') && r.headers.get('access-control-allow-origin'), 'missing x-request-id or access-control-allow-origin');
     ctx.version = h.version;
     return `${h.status} on ${h.chain} at ${h.version.slice(0, 12)}; ${h.dependencies.map((d) => `${d.name} ${d.status}`).join(', ')}`;
@@ -2734,11 +2735,12 @@ check(
     auth: 'user',
     kind: 'contract',
     correct:
-      '200 {symbol, price > 0, source}: /price/BTC → source "coingecko", within 2% of /market/quotes BTC; /price/nvdac → symbol "NVDAc" (the registry\'s spelling), source "1inch", within 2% of /market/stocks NVDAc.',
+      '200 {symbol, price > 0, source}: /price/BTC → source "coingecko", within 2% of /market/quotes BTC; /price/nvdac → symbol "NVDAc" (the registry\'s spelling), source "1inch", within 2% of /market/stocks NVDAc. Each ask answers inside a screen\'s patience: a price still on its way is 503 warming with a retry-after, which is waited out, and no attempt takes the app\'s 45s.',
   },
   async () => {
     const btc = await get('/price/BTC');
     expectStatus(btc, 200, '/price/BTC');
+    must(btc.ms < 45_000, `/price/BTC took ${btc.ms}ms on its last attempt`);
     const q = await quotes('BTC');
     must(btc.json.symbol === 'BTC' && btc.json.source === 'coingecko' && Math.abs(btc.json.price / q.BTC.price - 1) < 0.02, `BTC ${clip(btc.text)} vs spot ${q.BTC.price}`);
     const nvda = await get('/price/nvdac');

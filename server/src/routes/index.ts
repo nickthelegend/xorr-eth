@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { log } from '../http/request-id.js';
 import { readChain } from '../http/chain-read.js';
 import { screenPatience } from '../http/patience.js';
+import { StillFetching } from '../http/deadline.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query, tx } from '../db/index.js';
@@ -1242,9 +1243,19 @@ routes.get('/price/:symbol', async (c) => {
     return c.json({ error: 'no_feed', detail: `No price feed for ${symbol}.` }, 404);
   }
   try {
-    const price = await priceOf(symbol);
+    /*
+     * Bounded to a screen's patience (`http/patience.ts`).
+     *
+     * With no deadline this waited as the scheduler waits, through every rung of CoinGecko's 429 ladder, and on a cold
+     * cache the hosted Sepolia executor gave no answer inside sixty seconds (docs/TESTPLAN.md E149). Past the bound it
+     * answers the last price within ten minutes, or `503 warming` with a retry-after while the fetch finishes for the
+     * next caller.
+     */
+    const price = await priceOf(symbol, screenPatience().priceMs);
     return c.json({ symbol, price, source: isStock(symbol) ? '1inch' : 'coingecko' });
   } catch (e) {
+    // Late is not failed: the error handler answers it as `warming`, which the app and the endpoint QA wait out.
+    if (e instanceof StillFetching) throw e;
     // A feed or a route that failed: worth asking again, which is what a 502 tells the app. The cause is for the log.
     log.warn(`[price] could not price ${symbol}: ${e instanceof Error ? e.message : String(e)}`);
     return c.json({ error: 'price_unavailable', detail: `${symbol} could not be priced just now.` }, 502);

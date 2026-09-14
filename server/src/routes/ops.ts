@@ -21,6 +21,7 @@ import { gasStatus } from '../evm/gas.js';
 import { publicSurface } from '../auth/middleware.js';
 import { health as graphHealth, indexDescription } from '../graph/client.js';
 import { breakerState } from '../http/get.js';
+import { voiceConfigured } from '../bot/llm.js';
 
 export const ops = new Hono();
 
@@ -138,6 +139,12 @@ ops.get('/health', async (c) => {
        * disagree.
        */
       publicSurface,
+      /*
+       * Whether the agents can reply. With no language model every question is answered with a refusal, and the app
+       * offers each agent's screens instead of questions when this says so. Configuration, not a probe: asking a model
+       * on every health check would spend a request each time.
+       */
+      voice: { configured: voiceConfigured() },
     },
     down ? 503 : 200,
   );
