@@ -10,9 +10,9 @@
  *
  * Built from Row / Segmented / SheetCard on `src/ui`. No new visual language.
  */
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   BackButton,
   Button,
@@ -60,6 +60,21 @@ export default function Strategies() {
   const { data, loading, error, reload } = useAsync(() => repos.strategies.list(), []);
   // Pulling down is the gesture people already try on a list of things that keep changing.
   const refresh = useRefreshControl(reload);
+  /*
+   * Back from setting one up, the list is read again. A recurring buy created on an Android 15 emulator was missing from
+   * it until the screen was opened afresh (2026-09-15): the setup closes back over this screen, which is not mounted
+   * again, so it went on showing the list from before. Not on the first focus, which is the mount and has its own read.
+   */
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      reload();
+    }, [reload]),
+  );
 
   const all = data ?? [];
   const live = all.filter((s) => s.state === 'live' || s.state === 'watch');
