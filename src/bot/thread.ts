@@ -8,7 +8,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { fact, voice, type Segment, type ThreadMessage } from './message';
+import { executorSentence, fact, voice, type Segment, type ThreadMessage } from './message';
 import type { Proposal, ProposalDecision } from '../data/types';
 
 const KEY = 'xorr-thread-v1';
@@ -119,7 +119,7 @@ export function proposalMessage(proposalId: string, agent?: string): ThreadMessa
  * becomes a fill, and every other outcome is shown as what it was. PLAN.md 1.3.
  */
 export function decisionMessage(agent: string, d: ProposalDecision): ThreadMessage {
-  const base = { id: nextId(), at: Date.now(), author: 'bot' as const, agent, segments: [voice(d.message)] };
+  const base = { id: nextId(), at: Date.now(), author: 'bot' as const, agent, segments: executorSentence(d.message, 'executor:decide') };
   switch (d.status) {
     case 'filled':
       return { ...base, type: 'fill' as const, outcome: 'filled' as const };

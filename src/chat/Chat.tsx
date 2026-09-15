@@ -35,8 +35,8 @@ import { agentGradient } from '@/design/gradients';
 import { Press, Text, duration, space, timing, useReducedMotion } from '@/ui';
 import { mmss } from '@/format';
 import { repos } from '@/data';
-import { renderSegments, voice, type ThreadMessage } from '@/bot/message';
-import { apiReason } from '@/data/apiError';
+import { executorSentence, renderSegments, voice, type ThreadMessage } from '@/bot/message';
+import { ApiError, apiReason } from '@/data/apiError';
 import {
   botProse,
   decisionMessage,
@@ -46,7 +46,7 @@ import {
   withDividers,
 } from '@/bot/thread';
 import { useTone } from '@/bot/tone';
-import type { Proposal } from '@/data/types';
+import type { Proposal, ProposalDecision } from '@/data/types';
 import { AgentPicker } from './AgentPicker';
 import { Composer } from './Composer';
 import { GlassOrb } from './GlassOrb';
@@ -332,21 +332,36 @@ export function Chat({
                        */
                       if (!proposal || deciding) return;
                       setDeciding(true);
+                      /*
+                       * Only the request's own failure is said as one, and only a refusal the executor sent says nothing was
+                       * decided. The answer's rendering sat inside this try, so a fill whose sentence carried a number threw in
+                       * `voice()` and was reported as "did not reach the executor, so nothing was decided" about an order that
+                       * had filled (Android emulator, 2026-09-15). A request that timed out or lost its connection may still
+                       * have been decided and placed, so that is said as not known.
+                       */
+                      let res: ProposalDecision;
                       try {
-                        const res = await repos.bot.decideProposal(proposal.id, d);
-                        setDecided(d);
-                        append(decisionMessage(agentName, res));
+                        res = await repos.bot.decideProposal(proposal.id, d);
                       } catch (e) {
+                        const refused = e instanceof ApiError && e.status < 500;
                         const why = apiReason(e);
                         append(
-                          botProse(agentName, [
-                            voice(
-                              why
-                                ? `${why.replace(/[.\s]*$/, '.')} Nothing was decided, so you can try again.`
-                                : 'That did not reach the executor, so nothing was decided. Try again.',
+                          botProse(
+                            agentName,
+                            executorSentence(
+                              refused
+                                ? `${why ? why.replace(/[.\s]*$/, '.') : 'The executor refused that.'} Nothing was decided, so you can try again.`
+                                : 'I could not hear back from the executor, so I do not know whether this was placed. Check All runs before you try again.',
+                              'executor:decide',
                             ),
-                          ]),
+                          ),
                         );
+                        setDeciding(false);
+                        return;
+                      }
+                      try {
+                        setDecided(d);
+                        append(decisionMessage(agentName, res));
                       } finally {
                         setDeciding(false);
                       }

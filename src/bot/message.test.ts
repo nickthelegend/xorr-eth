@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MESSAGE_TYPES,
   VoiceContainsNumberError,
+  executorSentence,
   fact,
   renderFact,
   renderSegments,
@@ -73,6 +74,36 @@ describe('facts are formatted by code, never by the model', () => {
     for (const s of segments.filter((s) => s.kind === 'voice')) {
       expect(s.text).not.toMatch(/\d/);
     }
+  });
+});
+
+describe("an executor's sentence keeps its numbers as facts", () => {
+  const FILLED = 'Bought 0.0020 WETH at $2,517.86. Your existing exit on WETH stays as it is.';
+
+  it('never throws on the fill the executor sends, and reads exactly as it was sent', () => {
+    const segments = executorSentence(FILLED, 'executor:decide');
+    expect(renderSegments(segments)).toBe(FILLED);
+    // voice() refuses the whole sentence — the throw the chat reported as "did not reach the executor".
+    expect(() => voice(FILLED)).toThrow(VoiceContainsNumberError);
+  });
+
+  it('puts every number in a fact that names its source, and no number in voice', () => {
+    const segments = executorSentence('That is half your cap: $800 of $1,600 today.', 'executor:limits');
+    for (const s of segments) {
+      if (s.kind === 'voice') expect(s.text).not.toMatch(/\d|\bhalf\b/i);
+      else expect(s.source).toBe('executor:limits');
+    }
+    expect(segments.filter((s) => s.kind === 'facts').map((s) => (s.kind === 'facts' ? s.value : ''))).toEqual([
+      'half',
+      '$800',
+      '$1,600',
+    ]);
+  });
+
+  it('is all voice when the sentence has no number', () => {
+    expect(executorSentence('That proposal no longer exists.', 'executor:decide')).toEqual([
+      { kind: 'voice', text: 'That proposal no longer exists.' },
+    ]);
   });
 });
 
