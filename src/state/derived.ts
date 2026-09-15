@@ -763,6 +763,19 @@ export const SLEEVE_SYMBOLS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * Whether a sleeve's weight is held as cash on this network because nothing it names settles here: the equities on a
+ * fork or on Base Sepolia. The onboarding screen said "NVDAc, AAPLc and six more tokenized stocks" beside 30% on a fork,
+ * where approving holds that 30% as cash. Not the stable-yield sleeve, which names nothing to swap on any chain; not
+ * where nothing settles at all, which the screen says on its own; and not before the executor has said what settles.
+ */
+export function sleeveHeldAsCash(name: string, tradable: readonly string[] | undefined): boolean {
+  const named = SLEEVE_SYMBOLS[name] ?? [];
+  if (!tradable || tradable.length === 0 || named.length === 0) return false;
+  const settles = new Set(tradable.map((s) => s.toUpperCase()));
+  return !named.some((s) => settles.has(s.toUpperCase()));
+}
+
+/**
  * The onboarding weights as a rebalance holds them (PLAN.md 2.17): each sleeve's percent split evenly across
  * the symbols it names that this chain can settle. What is left — a sleeve with nothing tradable here, like
  * the equities on Base Sepolia, and the stable-yield sleeve — is cash, because a rebalance's untargeted weight

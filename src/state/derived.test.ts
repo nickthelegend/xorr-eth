@@ -798,6 +798,18 @@ describe('what approving the onboarding proposal creates — PLAN.md 3.7', () =>
   it('with nothing to trade or follow, targets nothing — which the screen refuses to create', () => {
     expect(d.proposalRebalance(sleeves, [], [])).toEqual({ state: 'watch', targets: {}, cashPct: 100 });
   });
+
+  it('names a sleeve held as cash where nothing it holds settles — the equities on a fork — and no other', () => {
+    expect(d.sleeveHeldAsCash('Tokenized equities', crypto)).toBe(true);
+    expect(d.sleeveHeldAsCash('Blue-chip crypto', crypto)).toBe(false);
+    // Stable yield names nothing to swap on any chain: that is not this network's doing.
+    expect(d.sleeveHeldAsCash('Stable yield', crypto)).toBe(false);
+    // Where one of the equities settles, the sleeve is not cash.
+    expect(d.sleeveHeldAsCash('Tokenized equities', [...crypto, 'NVDAc'])).toBe(false);
+    // Where nothing settles the screen says so on its own, and before the executor answers nothing is claimed.
+    expect(d.sleeveHeldAsCash('Tokenized equities', [])).toBe(false);
+    expect(d.sleeveHeldAsCash('Tokenized equities', undefined)).toBe(false);
+  });
 });
 
 /*

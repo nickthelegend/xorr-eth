@@ -36,7 +36,7 @@ import {
   timing,
   useReducedMotion,
 } from '@/ui';
-import { canApprove, proposalRebalance, weightBarPct, weightTotal } from '@/state/derived';
+import { canApprove, proposalRebalance, sleeveHeldAsCash, weightBarPct, weightTotal } from '@/state/derived';
 import { sleeveFixtures } from '@/data/fixtures/sleeves';
 import { useStore } from '@/state/store';
 import { repos } from '@/data';
@@ -68,12 +68,16 @@ export default function Proposal() {
    * (PLAN.md 3.7). Undefined until the executor answers.
    */
   const [settles, setSettles] = useState<boolean>();
+  /* What settles here, by symbol: a sleeve that names none of it is held as cash, and its line says so. */
+  const [tradable, setTradable] = useState<string[]>();
   useEffect(() => {
     let live = true;
     system
       .tradable()
       .then((rows) => {
-        if (live) setSettles(rows.length > 0);
+        if (!live) return;
+        setSettles(rows.length > 0);
+        setTradable(rows.map((t) => t.symbol));
       })
       .catch(() => undefined);
     return () => {
@@ -208,9 +212,10 @@ export default function Proposal() {
                   />
                 </View>
                 {/* Indented to the dot's text column, so the rationale reads as belonging to
-                    the sleeve above it rather than to the card. */}
+                    the sleeve above it rather than to the card. A sleeve nothing here can settle, like the
+                    equities on a fork or on Base Sepolia, is held as cash and says that instead. */}
                 <Text variant="secondarySm" color={colors.ink55} style={{ paddingLeft: space.s18 }}>
-                  {s.note}
+                  {sleeveHeldAsCash(s.name, tradable) ? 'Held as cash on this network.' : s.note}
                 </Text>
               </View>
             ))}
