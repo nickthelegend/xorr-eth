@@ -8,9 +8,9 @@
  * Distilled 2026-09-14 (PLAN.md O3): a line per section. Signed out it asks for a sign-in, rather than counting
  * "0 of 0 on" and saying a wallet nobody named has no alerts.
  */
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   BackButton,
   Button,
@@ -81,6 +81,21 @@ export default function Alerts() {
   const prefs = useAsync(() => api.get<Pref[]>('/notifications/prefs'), []);
   // Both halves of this screen come from the server, so both are refreshed by the gesture.
   const refresh = useRefreshControl(() => Promise.all([reload(), prefs.reload()]));
+  /*
+   * Back from adding one, the list is read again. An alert created on an Android 15 emulator was missing from the list it
+   * returned to, which went on saying "No alerts yet." (2026-09-15): the form closes back over this screen, which is not
+   * mounted again. Not on the first focus, which is the mount and has its own read.
+   */
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      reload();
+    }, [reload]),
+  );
   const signedOut = useSignedOut();
 
   /*
