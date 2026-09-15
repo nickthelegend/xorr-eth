@@ -14,9 +14,14 @@ import { Button } from './Button';
 import { Text } from './Text';
 import { space } from './tokens';
 
-/** Where signing in starts. */
+/**
+ * Where signing in starts: the email step itself.
+ *
+ * It opened the splash, so a person who pressed "Sign in" on any screen answered the onboarding questions again before
+ * they could type their email. `returning` sends them Home once they are in, rather than on into funding.
+ */
 export function signIn(): void {
-  router.push('/welcome');
+  router.push({ pathname: '/wallet', params: { returning: '1' } });
 }
 
 /** A line and a button, centred, in place of what the screen would show a signed-in wallet. */

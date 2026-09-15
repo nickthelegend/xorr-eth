@@ -26,6 +26,7 @@ import {
   Press,
   Screen,
   SheetCard,
+  signIn,
   Text,
   colors,
   radius,
@@ -123,6 +124,8 @@ export default function Splash() {
         color={colors.ink}
         onPress={() => router.push('/goals')}
       />
+      {/* A wallet that already exists goes straight to the email step, not through the questions a new one answers. */}
+      <Button label="Sign in" variant="ghost" onPress={signIn} style={{ marginTop: space.s10 }} />
       {/*
         The two documents the sentence names, as links. It was plain text, so the first screen asked for agreement to
         documents it gave no way to read. Each link keeps a full-size touch area without growing the line.

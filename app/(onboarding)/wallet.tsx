@@ -1,5 +1,6 @@
 /**
- * Sign in and get a wallet — Privy.
+ * Sign in and get a wallet — Privy. Every "Sign in" in the app opens this step directly (`returning`), and a person signing
+ * back in goes Home afterwards rather than on into funding.
  *
  * Replaces the handoff's KYC screen (screen 8). Its LAYOUT is reused verbatim — the progress
  * header and four status rows, with the same three circle states (done = filled `up` with a
@@ -17,7 +18,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import { Icon } from '@/design/Icon';
 import {
@@ -56,6 +57,7 @@ const FIELD_H = 48;
 export default function WalletSetup() {
   const router = useRouter();
   const goBack = useGoBack();
+  const { returning } = useLocalSearchParams<{ returning?: string }>();
   const { ready, authenticated, address, createWallet } = useAuth();
   const { sendCode, loginWithCode } = useEmailLogin();
   const setWallet = useStore((s) => s.setWallet);
@@ -254,7 +256,11 @@ export default function WalletSetup() {
       </Fill>
 
       {done ? (
-        <Button label="Continue — add funds" onPress={() => router.push('/fund')} />
+        returning ? (
+          <Button label="Continue" onPress={() => router.replace('/')} />
+        ) : (
+          <Button label="Continue — add funds" onPress={() => router.push('/fund')} />
+        )
       ) : !authenticated ? (
         <Button
           label={codeSent ? 'Verify and create wallet' : 'Email me a code'}
@@ -268,7 +274,7 @@ export default function WalletSetup() {
         <Button label="Try again" onPress={() => setAttempt((n) => n + 1)} />
       ) : (
         /* Registering. The step after this one is not offered until the executor has answered. */
-        <Button label="Continue — add funds" loading />
+        <Button label={returning ? 'Continue' : 'Continue — add funds'} loading />
       )}
     </Screen>
   );

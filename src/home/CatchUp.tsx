@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { Eyebrow, Press, SheetCard, Text, colors, radius, size, space } from '@/ui';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
-import { plainAction } from '@/format/activity';
+import { plainAction, plainDetail } from '@/format/activity';
 
 type Entry = { action: string; detail: string; kind: string; at: string };
 type CatchUpData = {
@@ -85,7 +85,7 @@ export function CatchUp() {
             style={{ marginTop: space.s2 }}
             numberOfLines={2}
           >
-            {e.detail}
+            {plainDetail(e.detail)}
           </Text>
         </View>
       ))}

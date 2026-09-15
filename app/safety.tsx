@@ -16,6 +16,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import {
   BackButton,
   Button,
+  signIn,
   Eyebrow,
   Fill,
   HoldButton,
@@ -454,7 +455,7 @@ export default function Safety() {
             that failed is not "Nothing granted yet": that card is for a wallet something actually answered for.
           */}
           {signedOut ? (
-            <Button label="Sign in" onPress={() => router.push('/welcome')} />
+            <Button label="Sign in" onPress={signIn} />
           ) : asking ? (
             <Placeholder height={110} style={{ borderRadius: radius.panel }} />
           ) : record || chainPolicy ? (

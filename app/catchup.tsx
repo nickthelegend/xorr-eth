@@ -33,7 +33,7 @@ import { clock, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { errorText } from '@/data/apiError';
 import { system } from '@/data/system';
-import { plainAction } from '@/format/activity';
+import { plainAction, plainDetail } from '@/format/activity';
 
 export default function Catchup() {
   const goBack = useGoBack();
@@ -120,7 +120,7 @@ export default function Catchup() {
                   </Text>
                 </View>
                 <Text variant="secondarySm" color={colors.ink55} style={{ marginTop: space.s6 }}>
-                  {e.detail}
+                  {plainDetail(e.detail)}
                 </Text>
               </SheetCard>
             ))}
