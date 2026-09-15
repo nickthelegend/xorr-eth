@@ -148,9 +148,14 @@ describe('13.6 motion audit — animations.md', () => {
     expect(offenders, offenders.join('\n')).toEqual([]);
   });
 
-  it('the tab bar never animates itself — nothing on it moves while you read the screen', () => {
-    const tabBar = fs.readFileSync(path.join(UI, 'TabBar.tsx'), 'utf8');
-    expect(stripComments(tabBar)).not.toMatch(/withRepeat|withTiming|Animated/);
+  it('the tab bar moves only to make way for Messages — nothing on it animates while you read the screen', () => {
+    const tabBar = stripComments(fs.readFileSync(path.join(UI, 'TabBar.tsx'), 'utf8'));
+    // No loop and no spring, and no animated item: the bar's one animated view is the whole bar (2026-09-16).
+    expect(tabBar).not.toMatch(/withRepeat|withSpring/);
+    expect(tabBar.match(/<Animated\.View/g) ?? []).toHaveLength(1);
+    // One property, driven by one input: down while the Messages drawer is up, back when it is not.
+    expect(tabBar).toMatch(/withTiming\(hidden \? travel : 0/);
+    expect(tabBar).toMatch(/transform: \[\{ translateY: y\.value \}\]/);
   });
 
   it('arrival motion honours reduced motion — the builder and the wrapper both ask', () => {

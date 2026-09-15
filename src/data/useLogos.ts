@@ -14,6 +14,16 @@ import { api } from './api';
 
 type LogoResponse = Record<string, { url: string | null }>;
 
+/**
+ * When to ask again for symbols the server left out (2026-09-16).
+ *
+ * A symbol the server could not resolve inside its deadline is absent from its answer, and it goes on resolving there. The
+ * hook asked once, so an absent symbol stayed "still resolving" for as long as the screen was open: NVDAc and TSLAc sat on
+ * Home's Stocks tab with no mark. Three more asks, further apart; after the last, those rows take their gradient for this
+ * visit, and the next screen that asks starts over.
+ */
+const RETRY_MS = [1_500, 4_000, 10_000] as const;
+
 /** Session cache, shared across every screen that asks. */
 const cache = new Map<string, string | null>();
 const inflight = new Map<string, Promise<void>>();
@@ -64,15 +74,31 @@ export function useLogos(symbols: readonly string[]): Record<string, string | nu
   const key = useMemo(() => [...new Set(symbols)].sort().join(','), [symbols]);
   /* Only to re-render once the load lands; the map itself is read straight from the cache. */
   const [, bump] = useState(0);
+  /* Symbols still unresolved after the last ask, shown without a logo for this mount rather than as loading forever. */
+  const [gaveUp, setGaveUp] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
     if (!key) return;
     let alive = true;
-    void load(key.split(',')).then(() => {
-      if (alive) bump((n) => n + 1);
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const symbols = key.split(',');
+    const ask = (attempt: number) => {
+      void load(symbols).then(() => {
+        if (!alive) return;
+        bump((n) => n + 1);
+        const unresolved = symbols.filter((s) => !cache.has(s));
+        if (unresolved.length === 0) return;
+        if (attempt < RETRY_MS.length) {
+          timer = setTimeout(() => ask(attempt + 1), RETRY_MS[attempt]);
+        } else {
+          setGaveUp(new Set(unresolved));
+        }
+      });
+    };
+    ask(0);
     return () => {
       alive = false;
+      if (timer) clearTimeout(timer);
     };
   }, [key]);
 
@@ -92,6 +118,7 @@ export function useLogos(symbols: readonly string[]): Record<string, string | nu
   for (const s of key ? key.split(',') : []) {
     const hit = cache.get(s);
     if (hit !== undefined) out[s] = hit;
+    else if (gaveUp.has(s)) out[s] = null;
   }
   return out;
 }

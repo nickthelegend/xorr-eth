@@ -46,12 +46,15 @@ export function Placeholder({
   height,
   width = '100%',
   pulse = true,
+  color = colors.surfaceAlt,
   style,
   testID,
 }: {
   height: number;
   width?: DimensionValue;
   pulse?: boolean;
+  /** The block's grey: the surface a list sits on by default. A block drawn on that surface itself passes a lighter one. */
+  color?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }) {
@@ -74,7 +77,7 @@ export function Placeholder({
       testID={testID}
       accessibilityLabel="Loading"
       style={[
-        { height, width, borderRadius: radius.square, backgroundColor: colors.surfaceAlt },
+        { height, width, borderRadius: radius.square, backgroundColor: color },
         style,
         anim,
       ]}

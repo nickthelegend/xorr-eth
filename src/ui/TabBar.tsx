@@ -1,23 +1,31 @@
 /**
  * TabBar.tsx — Home, Swap and Messages (2026-09-15).
  *
- * Rebuilt to the product owner's reference, a messenger's bar: one floating capsule, three items, each a glyph over its
- * name. It replaced a solid centre circle that opened the chat, between Home and a grid that opened a blank screen. The
- * chat moved to where the grid was, as Messages, and the centre became Swap.
+ * Rebuilt to the product owner's reference, a messenger's bar: one floating capsule, three glyphs. It replaced a solid
+ * centre circle that opened the chat, between Home and a grid that opened a blank screen. The chat moved to where the
+ * grid was, as Messages, and the centre became Swap.
+ *
+ * Glyphs only (2026-09-16). Three shapes this distinct read at a glance without their names under them, and the names
+ * stay where they are needed — in each item's accessibility label.
  *
  * Home is the one place, and the only item that lights — white, on a raised pill. Swap and Messages are actions: Swap
  * raises the swap sheet from the bottom, and Messages the drawer of conversations with the agents, over whatever is on
  * screen. Messages carries how many of the agents' messages are new, as a messenger does; at zero nothing is drawn.
  *
  * The glyphs are drawn here, solid where the icon set is stroked, because a filled shape is what makes three items read
- * at a glance. Nothing on the bar animates.
+ * at a glance.
+ *
+ * One thing on the bar moves: the bar itself, down out of view while the Messages drawer is up, and back as it goes
+ * down — the drawer takes the bar's place rather than covering it (animations.md, "The tab bar gives way to Messages").
  *
  * The bottom padding is the real inset, floored so a device that reports none still clears the edge.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { duration, timing, useReducedMotion } from './motion';
 import { Press } from './Press';
 import { Text } from './Text';
 import { colors, space } from './tokens';
@@ -29,7 +37,7 @@ export const TAB_ORDER: readonly TabKey[] = ['home'];
 
 const BAR_H = 60;
 const ITEM_H = 50;
-const GLYPH = 24;
+const GLYPH = 26;
 const STROKE = 2.1;
 const BADGE_H = 17;
 
@@ -92,25 +100,42 @@ export interface TabBarProps {
   onMessages: () => void;
   /** The agents' messages that are new. Nothing is drawn at zero. */
   unread?: number;
+  /** The Messages drawer is up: the bar goes down out of its way, and comes back when this turns false. */
+  hidden?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
 
-export function TabBar({ active, onHome, onSwap, onMessages, unread = 0, style, testID }: TabBarProps) {
+export function TabBar({ active, onHome, onSwap, onMessages, unread = 0, hidden = false, style, testID }: TabBarProps) {
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
   const home = active === 'home';
 
+  /** The bar's whole height, padding and inset included: how far it moves to be entirely below the screen. */
+  const travel = space.s6 + BAR_H + Math.max(insets.bottom, space.s12);
+  const y = useSharedValue(hidden ? travel : 0);
+  useEffect(() => {
+    // The drawer's own 250ms and platform easing, so the two move as one; instant under reduced motion.
+    y.value = withTiming(hidden ? travel : 0, timing(duration.slow, reduced));
+  }, [hidden, travel, reduced, y]);
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+
   return (
-    <View
+    <Animated.View
       testID={testID}
+      // Out of view is out of reach: no taps, and nothing for a screen reader to land on behind the drawer.
+      accessibilityElementsHidden={hidden}
+      importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
       style={[
         {
           paddingHorizontal: space.s16,
           paddingTop: space.s6,
           paddingBottom: Math.max(insets.bottom, space.s12),
           backgroundColor: colors.bg,
+          pointerEvents: hidden ? 'none' : 'auto',
         },
         style,
+        slide,
       ]}
     >
       <View
@@ -135,7 +160,7 @@ export function TabBar({ active, onHome, onSwap, onMessages, unread = 0, style, 
           <ChatGlyph color={colors.ink55} />
         </Item>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -147,6 +172,7 @@ function Item({
   onPress,
   children,
 }: {
+  /** Not drawn: the name a screen reader says for the glyph. */
   label: string;
   /** A place is a tab and can be the selected one; an action is a button. */
   place?: boolean;
@@ -173,7 +199,6 @@ function Item({
         borderRadius: ITEM_H / 2,
         alignItems: 'center',
         justifyContent: 'center',
-        gap: space.s2,
         backgroundColor: selected ? colors.control : 'transparent',
       }}
     >
@@ -202,9 +227,6 @@ function Item({
           </View>
         ) : null}
       </View>
-      <Text variant="tabLabel" color={selected ? colors.ink : colors.ink55}>
-        {label}
-      </Text>
     </Press>
   );
 }

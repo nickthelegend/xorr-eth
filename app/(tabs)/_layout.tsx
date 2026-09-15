@@ -28,6 +28,7 @@ export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const show = useChatDrawer((s) => s.show);
+  const drawerOpen = useChatDrawer((s) => s.open);
   const messages = useThread((s) => s.messages);
   const read = useThread((s) => s.read);
   const hydrate = useThread((s) => s.hydrate);
@@ -53,6 +54,7 @@ export default function TabsLayout() {
             onSwap={() => router.push('/swap')}
             onMessages={() => show()}
             unread={unread}
+            hidden={drawerOpen}
           />
         )}
         screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg } }}

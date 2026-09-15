@@ -132,6 +132,7 @@ describe('motion — animations.md', () => {
   //   RollingNumber   digits rising into their slots      420ms  (arrival, 28ms apart — never counting)
   //   AreaChart       the line revealed left to right     700ms  (arrival)
   //   Candlestick     the candles revealed left to right  700ms  (arrival)
+  //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)
   // A new entry here means a primitive started animating something the policy does not sanction.
   // Argue it into motion.ts first, or take the animation out.
   it('only the sanctioned primitives animate', () => {
@@ -147,6 +148,7 @@ describe('motion — animations.md', () => {
       'Segmented.tsx',
       'States.tsx',
       'Switch.tsx',
+      'TabBar.tsx',
       'charts/AreaChart.tsx',
       'charts/Candlestick.tsx',
       'motion.ts',

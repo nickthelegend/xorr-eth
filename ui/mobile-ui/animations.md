@@ -34,6 +34,8 @@ to show that the app registered a tap.
 | Button hover | `background` | default (~150ms) | `#fff → rgba(255,255,255,.88)`; `#1B1C1E → #252629`. |
 | Pressed state | `opacity → .85` | instant | Native `Pressable` feedback; not a CSS transition. |
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
+| Messages drawer | `transform: translateY` (below the screen → open) | 250ms | Rises over the screen it was opened from; follows a drag, and the scrim's opacity follows it. |
+| Tab bar | `transform: translateY` (0 → its own height) | 250ms | Goes down as the Messages drawer comes up, and back as it goes down, in step with it. See below. |
 
 ## Not animated, on purpose
 
@@ -85,3 +87,18 @@ Rules it still obeys:
 
 900ms because the interaction scale does not apply. 150/180/250 is calibrated for a transition the
 user *caused*; nobody pressed a skeleton. At 250 it strobes. At 900 it breathes.
+
+The asset mark stays a skeleton until its logo has drawn — not only until the logo's address is known — and its block is
+one step lighter than the sheet it sits on (`switchOff` on `surfaceAlt`). Drawn in the sheet's own grey, a loading
+mark was invisible, and a row whose logo was still coming looked like a row with no logo at all.
+
+## The tab bar gives way to Messages
+
+Messages is a drawer that rises from the bottom over whatever screen you are on, and the tab bar is what it rises from.
+Left standing, the bar sat under the scrim while the drawer covered it: two things claiming the bottom of the screen at
+once. The bar now goes down as the drawer comes up — one property, the same 250ms, the platform easing — so the drawer
+visibly takes the bar's place, and the bar comes back as the drawer goes.
+
+It is continuity, not an entrance: nothing arrives, one thing makes room for another, and both are already on screen when
+the move starts. While it is down the bar takes no taps and is hidden from a screen reader. Under reduced motion both
+simply appear and disappear.

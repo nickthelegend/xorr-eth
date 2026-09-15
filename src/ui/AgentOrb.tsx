@@ -320,7 +320,7 @@ export function AssetMark({
    *
    * The gradient is not a placeholder to be ashamed of — it is the honest mark for an instrument
    * with no issuer and no token, which is every commodity, index and pre-IPO name in the list. It
-   * also renders underneath while the image loads, so a row never flashes empty.
+   * also stays underneath a logo once it has drawn; while the logo is still on its way, the mark is a skeleton.
    */
   uri?: string | null;
   /**
@@ -338,37 +338,45 @@ export function AssetMark({
 }) {
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const gradientId = `mark-g-${uid}`;
-  // A logo that 404s or is malformed falls back to the gradient rather than leaving a hole.
-  const [failed, setFailed] = React.useState(false);
-  const showLogo = !!uri && !failed;
-
-  // Nothing is known yet, so nothing is claimed: a pulsing disc rather than an identity.
-  if (pending && !showLogo) {
-    return (
-      <Placeholder
-        height={size}
-        width={size}
-        style={[{ borderRadius: size / 2 }, style]}
-        testID={testID}
-      />
-    );
-  }
+  // A logo that 404s or is malformed falls back to the gradient rather than leaving a hole. Kept per address, so a mark
+  // handed a different logo tries it rather than inheriting the last one's failure.
+  const [failedUri, setFailedUri] = React.useState<string>();
+  const [drawnUri, setDrawnUri] = React.useState<string>();
+  const showLogo = !!uri && failedUri !== uri;
+  /*
+   * "Not yet" lasts until the image has drawn, not only until its address is known (2026-09-16).
+   *
+   * The gradient stood in while a logo downloaded, so a slow one read as an instrument with no mark: the conflation
+   * `pending` exists to prevent, one step later. The block is one step lighter than the sheet a list sits on — drawn in
+   * the sheet's own grey it was invisible there, and a row whose logo was still coming looked like a row with none.
+   */
+  const waiting = (pending && !showLogo) || (showLogo && drawnUri !== uri);
 
   return (
     <View testID={testID} style={[{ width: size, height: size }, style]}>
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Defs>
-          <RadialGradient id={gradientId} cx={GRADIENT_CX} cy={GRADIENT_CY} r={GRADIENT_R}>
-            <Stop offset={0} stopColor={gradient.c1} />
-            <Stop offset={GRADIENT_C2_STOP} stopColor={gradient.c2} />
-          </RadialGradient>
-        </Defs>
-        <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={`url(#${gradientId})`} />
-      </Svg>
+      {waiting ? (
+        <Placeholder
+          height={size}
+          width={size}
+          color={colors.switchOff}
+          style={{ position: 'absolute', borderRadius: size / 2 }}
+        />
+      ) : (
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <Defs>
+            <RadialGradient id={gradientId} cx={GRADIENT_CX} cy={GRADIENT_CY} r={GRADIENT_R}>
+              <Stop offset={0} stopColor={gradient.c1} />
+              <Stop offset={GRADIENT_C2_STOP} stopColor={gradient.c2} />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={`url(#${gradientId})`} />
+        </Svg>
+      )}
       {showLogo ? (
         <Image
           source={{ uri }}
-          onError={() => setFailed(true)}
+          onLoad={() => setDrawnUri(uri ?? undefined)}
+          onError={() => setFailedUri(uri ?? undefined)}
           // `contain` rather than `cover`: these are logos with their own padding and a mark
           // cropped to a circle loses the part that identifies it.
           contentFit="contain"
