@@ -67,6 +67,7 @@ vi.mock('../evm/client.js', () => ({
     getBalance: vi.fn(),
     getCode: vi.fn(),
     getBlock: vi.fn(),
+    getBlockNumber: vi.fn(),
     getTransactionCount: vi.fn(),
     estimateFeesPerGas: vi.fn(),
     sendRawTransaction: vi.fn(),
@@ -93,6 +94,7 @@ vi.mock('../evm/delegation.js', async () => {
     DELEGATION_ADDRESS: h.DELEGATION,
     delegatePublicKey: h.DELEGATE,
     readPolicy: vi.fn(),
+    waitForReceipt: vi.fn(),
     usdToUnits: (usd: number) => units(usd.toFixed(6), 6),
   };
 });
@@ -115,7 +117,7 @@ const privy = await import('../auth/privyPolicy.js');
 const { recordGrant, recordRevoke } = await import('../delegation/record.js');
 const { chainAllowance } = await import('../evm/allowances.js');
 const { publicClient } = await import('../evm/client.js');
-const { DELEGATION_ABI, readPolicy } = await import('../evm/delegation.js');
+const { DELEGATION_ABI, readPolicy, waitForReceipt } = await import('../evm/delegation.js');
 const { readFaucetOffer, usdcOf } = await import('../evm/faucet.js');
 const { placeOrder } = await import('../executor/order.js');
 const { TreasuryRefused, transactAsTreasury } = await import('./treasurySigner.js');
@@ -183,6 +185,8 @@ beforeEach(() => {
   vi.mocked(publicClient.getTransactionCount).mockResolvedValue(3);
   vi.mocked(publicClient.estimateFeesPerGas).mockResolvedValue({ maxFeePerGas: 2n, maxPriorityFeePerGas: 1n } as never);
   vi.mocked(readPolicy).mockResolvedValue(null);
+  vi.mocked(waitForReceipt).mockResolvedValue({ blockNumber: 100n, status: 'success' } as never);
+  vi.mocked(publicClient.getBlockNumber).mockResolvedValue(100n);
   vi.mocked(readFaucetOffer).mockResolvedValue({ available: true } as never);
 });
 
@@ -258,8 +262,12 @@ describe('creating a treasury', () => {
   });
 });
 
+/** The permission a $50-a-day, seven-day grant leaves, as the chain reads it back. */
+const granted = livePolicy({ dailyCapUsd: 50, remainingTodayUsd: 50, spentTodayUsd: 0, expiresAt: Number(CHAIN_NOW + 7n * 86_400n) * 1000 });
+
 describe('granting the bot', () => {
   beforeEach(() => {
+    vi.mocked(readPolicy).mockResolvedValue(granted);
     vi.mocked(chainAllowance).mockImplementation(async (token) => (token === h.WETH ? maxUint256 : 0n));
     let n = 0;
     vi.mocked(transactAsTreasury).mockImplementation(async () => ({ hash: hash(++n), broadcastBy: 'executor' as const }));
@@ -322,6 +330,19 @@ describe('granting the bot', () => {
     expect(out).toMatchObject({ status: 502, body: { error: 'grant_not_recorded' } });
     expect(String(out.body.message)).toContain(hash(3));
   });
+
+  it('records a grant only once the chain it reads has reached the block and shows the grant', async () => {
+    // A node a block behind; then one at the block that does not show the grant yet; then the grant.
+    vi.mocked(publicClient.getBlockNumber).mockResolvedValueOnce(99n);
+    vi.mocked(readPolicy).mockResolvedValueOnce(null);
+
+    const out = await T.grantBot(row, 50, 7);
+
+    expect(out.status, JSON.stringify(out.body)).toBe(200);
+    const recordedAt = vi.mocked(recordGrant).mock.invocationCallOrder[0]!;
+    expect(vi.mocked(readPolicy).mock.invocationCallOrder.filter((order) => order < recordedAt)).toHaveLength(2);
+    expect(vi.mocked(publicClient.getBlockNumber).mock.calls.length).toBeGreaterThanOrEqual(3);
+  }, 10_000);
 });
 
 describe('trading and stopping', () => {
@@ -353,7 +374,7 @@ describe('trading and stopping', () => {
   });
 
   it('revokes as the treasury, and records the revoke from its own transaction', async () => {
-    vi.mocked(readPolicy).mockResolvedValue(livePolicy());
+    vi.mocked(readPolicy).mockResolvedValueOnce(livePolicy()).mockResolvedValue(livePolicy({ revoked: true }));
     vi.mocked(transactAsTreasury).mockResolvedValue({ hash: hash(4), broadcastBy: 'executor' });
     vi.mocked(recordRevoke).mockResolvedValue({ status: 200, body: { revoked: true } });
 
@@ -363,6 +384,21 @@ describe('trading and stopping', () => {
     expect(signedFor()).toMatchObject([{ to: h.DELEGATION, fn: 'revoke' }]);
     expect(recordRevoke).toHaveBeenCalledWith({ id: 'wallet-t', address: TREASURY }, hash(4));
   });
+
+  it('records a revoke a lagging node still reads as live, once the node shows it stopped', async () => {
+    vi.mocked(readPolicy)
+      .mockResolvedValueOnce(livePolicy())
+      .mockResolvedValueOnce(livePolicy())
+      .mockResolvedValue(livePolicy({ revoked: true }));
+    vi.mocked(transactAsTreasury).mockResolvedValue({ hash: hash(4), broadcastBy: 'privy' });
+    vi.mocked(recordRevoke).mockResolvedValue({ status: 200, body: { revoked: true } });
+
+    const out = await T.revokeBot(row);
+
+    expect(out.status, JSON.stringify(out.body)).toBe(200);
+    const recordedAt = vi.mocked(recordRevoke).mock.invocationCallOrder[0]!;
+    expect(vi.mocked(readPolicy).mock.invocationCallOrder.filter((order) => order < recordedAt)).toHaveLength(3);
+  }, 10_000);
 
   it('asks Privy for nothing when there is no live permission to stop', async () => {
     vi.mocked(readPolicy).mockResolvedValue(livePolicy({ revoked: true }));

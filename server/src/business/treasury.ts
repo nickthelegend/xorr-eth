@@ -25,6 +25,7 @@ import {
   formatEther,
   formatUnits,
   getAddress,
+  isAddressEqual,
   maxUint256,
   toHex,
   type Address,
@@ -34,7 +35,7 @@ import { one, pool, tx } from '../db/index.js';
 import { THIS_CHAIN } from '../db/chain-scope.js';
 import { append, list as listAudit } from '../audit/log.js';
 import { POLICY_NAME, createPolicyWallet, ensurePolicy, getPolicy, getPrivyWallet, rpcAsWallet } from '../auth/privyPolicy.js';
-import { recordGrant, recordRevoke } from '../delegation/record.js';
+import { recordGrant, recordRevoke, type Recorded } from '../delegation/record.js';
 import { chainAllowance } from '../evm/allowances.js';
 import { ADDRESSES, APPROVABLE_TOKENS, CHAIN_KEY, SETTLEMENT_VENUES, chain } from '../evm/chains.js';
 import { publicClient } from '../evm/client.js';
@@ -44,6 +45,7 @@ import {
   delegatePublicKey,
   readPolicy,
   usdToUnits,
+  waitForReceipt,
   type OnChainPolicy,
 } from '../evm/delegation.js';
 import { readFaucetOffer, usdcOf } from '../evm/faucet.js';
@@ -187,6 +189,37 @@ function failed(e: unknown, steps: unknown[]): TreasuryAnswer {
   const raw = e instanceof Error ? e.message : String(e);
   log.warn(`[treasury] ${raw}`);
   return { status: 502, body: { error: 'treasury_failed', message: humanFailure(raw), raw: raw.slice(0, 400), steps } };
+}
+
+/** How long a record waits for the chain the executor reads to show what just landed. */
+const READ_BACK_MS = 20_000;
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Record a transaction that landed once the chain the executor reads shows it.
+ *
+ * Privy's broadcast returns once Privy's node has the receipt, and the executor reads through its own node, which can be
+ * a block behind. On Base Sepolia on 2026-09-15 the first treasury grant landed and was answered "Could not read your
+ * permission from the chain just now", and its revoke landed and was refused as "still active on-chain": reads from a
+ * node that had not reached the block. So the record waits, bounded, until the node is at the transaction's block and
+ * the permission reads as the transaction left it, and a read that fails inside the record is asked once more. Nothing
+ * the chain does not show is recorded: past the wait, the record refuses as it always did.
+ */
+async function recordWhenRead(hash: Hex, shows: () => Promise<boolean>, record: () => Promise<Recorded>): Promise<Recorded> {
+  const receipt = await waitForReceipt(hash).catch(() => undefined);
+  const deadline = Date.now() + READ_BACK_MS;
+  while (receipt && Date.now() < deadline) {
+    const head = await publicClient.getBlockNumber().catch(() => undefined);
+    if (head !== undefined && head >= receipt.blockNumber && (await shows().catch(() => false))) break;
+    await pause(1_000);
+  }
+  try {
+    return await record();
+  } catch (e) {
+    if (!(e instanceof ChainReadFailed)) throw e;
+    await pause(2_000);
+    return record();
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────── 1. create */
@@ -335,7 +368,17 @@ export async function grantBot(t: TreasuryRow, dailyCapUsd: number, days: number
       );
       steps.push({ call: 'grant', tx: hash, detail: `${money(dailyCapUsd)} a day for ${days} days` });
 
-      const recorded = await recordGrant({ id: t.wallet_id, address: owner }, hash);
+      const expiresAtMs = Number(expiresAt) * 1000;
+      const recorded = await recordWhenRead(
+        hash,
+        async () => {
+          const p = await readPolicy(owner);
+          return (
+            !!p && !p.revoked && isAddressEqual(p.delegate, delegatePublicKey) && p.dailyCapUsd === dailyCapUsd && p.expiresAt === expiresAtMs
+          );
+        },
+        () => recordGrant({ id: t.wallet_id, address: owner }, hash),
+      );
       if (recorded.status !== 200) {
         return {
           status: 502,
@@ -390,7 +433,14 @@ export async function revokeBot(t: TreasuryRow): Promise<TreasuryAnswer> {
         to: DELEGATION_ADDRESS,
         data: encodeFunctionData({ abi: DELEGATION_ABI, functionName: 'revoke' }),
       });
-      const recorded = await recordRevoke({ id: t.wallet_id, address: owner }, hash);
+      const recorded = await recordWhenRead(
+        hash,
+        async () => {
+          const p = await readPolicy(owner);
+          return !p || p.revoked;
+        },
+        () => recordRevoke({ id: t.wallet_id, address: owner }, hash),
+      );
       if (recorded.status !== 200) {
         return {
           status: 502,
