@@ -29,7 +29,7 @@ import {
 } from '../executor/run.js';
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
-import { ADDRESSES, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
+import { ADDRESSES, APPROVABLE_TOKENS, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
 import { allowanceView, chainAllowance, routerAllowance, routerSpender } from '../evm/allowances.js';
 import { delegateAccount } from '../evm/client.js';
 import { basenameOf } from '../evm/basename.js';
@@ -496,9 +496,7 @@ async function approvableTokens(): Promise<{ symbol: string; address: Address }[
    */
   const equities = IS_BASE_MAINNET_STATE && (await equitiesFunctional());
   const settlement: [string, Address][] = [
-    ['USDC', ADDRESSES.usdcBase],
-    ['WETH', ADDRESSES.wethBase],
-    ['CBBTC', ADDRESSES.cbbtcBase],
+    ...APPROVABLE_TOKENS.map((t) => [t.symbol, t.address] as [string, Address]),
     ...(equities ? Object.values(STOCKS).map((st) => [st.symbol, st.address] as [string, Address]) : []),
   ];
   const entries = settlement;

@@ -122,6 +122,18 @@ const ADDRESSES_BY_CHAIN: Record<ChainKey, typeof BASE_MAINNET_ADDRESSES | typeo
 export const ADDRESSES = ADDRESSES_BY_CHAIN[CHAIN_KEY];
 
 /**
+ * The tokens a grant approves for the delegation to pull, before any equities: the one it spends and every one it may
+ * have to sell. `/delegation/params` hands the app's grant this list, kept to what has code on the chain, and the fork's
+ * grant script approves the same one. That script had a shorter list of its own, so a demo wallet a swap had bought into
+ * cbBTC could not be sold out of it: the panic flatten's cbBTC leg reverted with SafeTransferFromFailed (2026-09-15).
+ */
+export const APPROVABLE_TOKENS: readonly { symbol: string; address: `0x${string}` }[] = [
+  { symbol: 'USDC', address: ADDRESSES.usdcBase },
+  { symbol: 'WETH', address: ADDRESSES.wethBase },
+  { symbol: 'CBBTC', address: ADDRESSES.cbbtcBase },
+];
+
+/**
  * Addresses for the chain 1inch is ASKED about, which is always Base mainnet.
  *
  * These are two different things and conflating them is a real bug: 1inch has no deployment or

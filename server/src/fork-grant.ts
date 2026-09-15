@@ -14,7 +14,6 @@ import { base } from 'viem/chains';
 
 const RPC = process.env.FORK_RPC ?? 'http://127.0.0.1:8545';
 const USDC: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const WETH: Address = '0x4200000000000000000000000000000000000006';
 
 const chain = { ...base, rpcUrls: { default: { http: [RPC] }, public: { http: [RPC] } } };
 const pub = createPublicClient({ chain, transport: http(RPC) });
@@ -40,7 +39,7 @@ async function main() {
   if (!owner || !delegation) throw new Error('usage: fork-grant.ts <owner> [capUsd]; DELEGATION_ADDRESS must be set');
 
   const { delegatePublicKey } = await import('./evm/delegation.js');
-  const { SETTLEMENT_VENUES } = await import('./evm/chains.js');
+  const { SETTLEMENT_VENUES, APPROVABLE_TOKENS } = await import('./evm/chains.js');
   const bot = delegate ?? (delegatePublicKey as Address);
 
   await rpc('anvil_impersonateAccount', [owner]);
@@ -78,10 +77,15 @@ async function main() {
    * user is asleep, which is the entire premise. So the approval has to exist before it is needed.
    * The blast radius is unchanged: the delegation can still only move funds to an allowlisted
    * venue and still cannot send anywhere it chooses.
+   *
+   * Every token on the list `/delegation/params` hands the app's grant. This approved WETH alone, so
+   * once a swap had bought the demo wallet cbBTC it could not be sold out of it: the panic flatten's
+   * cbBTC leg reverted with SafeTransferFromFailed (2026-09-15). Equities are not on the list; they do
+   * not function on a fork.
    */
-  for (const asset of [WETH]) {
+  for (const { address } of APPROVABLE_TOKENS.filter((t) => t.address.toLowerCase() !== USDC.toLowerCase())) {
     const h = await w.writeContract({
-      address: asset, abi: erc20Abi, functionName: 'approve', args: [delegation, 2n ** 255n],
+      address, abi: erc20Abi, functionName: 'approve', args: [delegation, 2n ** 255n],
     });
     await pub.waitForTransactionReceipt({ hash: h });
   }
