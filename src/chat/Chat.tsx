@@ -72,8 +72,8 @@ const DECIDE_H = 44;
 /** What an agent says to a question when this build has no language model to write its reply. */
 const NO_MODEL_REPLY = 'I cannot answer that here: this build has no language model.';
 
-/** A message card. The proposal card is the same card with more in it. */
-const CARD = {
+/** A message card. The proposal card is the same card with more in it. Built as it draws, so it follows the theme. */
+const card = () => ({
   backgroundColor: chat.card,
   borderRadius: 18,
   borderWidth: 1,
@@ -81,17 +81,17 @@ const CARD = {
   paddingHorizontal: space.s14,
   paddingVertical: space.s10,
   boxShadow: chatShadow,
-} as const;
+});
 
 /** Your words: the room's accent, on the right, the corner nearest you squared off as a messenger draws it. */
-const YOURS = {
+const yours = () => ({
   backgroundColor: chat.accentDeep,
   borderRadius: 18,
   borderBottomRightRadius: 6,
   paddingHorizontal: space.s14,
   paddingVertical: space.s10,
   boxShadow: chatShadow,
-} as const;
+});
 
 export interface ChatProps {
   /** Who this conversation is with. */
@@ -208,7 +208,12 @@ export function Chat({
       // PLAN.md 11.7: a real question to the real agent. The reply is PROSE ONLY — anything
       // numeric is rejected server-side before it can reach this thread.
       void repos.bot
-        .ask({ agentId: agent.id, question: text, tone })
+        .ask({
+          agentId: agent.persona ?? agent.id,
+          question: text,
+          tone,
+          ...(agent.persona ? { as: { name: agent.name, role: agent.role } } : {}),
+        })
         /*
          * A fallback line is not an answer, and must not be dressed as one.
          *
@@ -564,7 +569,7 @@ function Turn({ message }: { message: ThreadMessage }) {
 
   if (message.type === 'user') {
     return (
-      <View style={[YOURS, { alignSelf: 'flex-end', maxWidth: USER_MAX }]}>
+      <View style={[yours(), { alignSelf: 'flex-end', maxWidth: USER_MAX }]}>
         <Text color="#FFFFFF" style={chatType.message}>
           {message.text}
         </Text>
@@ -586,7 +591,7 @@ function Turn({ message }: { message: ThreadMessage }) {
     <Animated.View style={[{ alignSelf: 'stretch' }, anim]}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.s8 }}>
         {who ? <AgentAvatar name={who} size={AVATAR} /> : <XorrMark size={AVATAR} />}
-        <View style={[CARD, { flexShrink: 1, maxWidth: BOT_MAX, borderBottomLeftRadius: 6 }]}>
+        <View style={[card(), { flexShrink: 1, maxWidth: BOT_MAX, borderBottomLeftRadius: 6 }]}>
           <Text color={color} style={chatType.message}>
             {renderSegments(segments)}
           </Text>
@@ -601,7 +606,7 @@ function ThinkingTurn({ agentName, accent }: { agentName: string; accent: string
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space.s8 }}>
       <AgentAvatar name={agentName} size={AVATAR} />
-      <View style={[CARD, { paddingVertical: space.s14, borderBottomLeftRadius: 6 }]}>
+      <View style={[card(), { paddingVertical: space.s14, borderBottomLeftRadius: 6 }]}>
         <Thinking color={accent} />
       </View>
     </View>
@@ -641,7 +646,7 @@ function ProposalCard({
   const locked = expired || busy;
 
   return (
-    <View style={[CARD, { borderRadius: 22, padding: space.s16 }]}>
+    <View style={[card(), { borderRadius: 22, padding: space.s16 }]}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text color={chat.accentDeep} style={chatType.label}>
           PROPOSED TRADE

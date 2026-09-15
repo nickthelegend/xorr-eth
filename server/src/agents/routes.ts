@@ -1,10 +1,14 @@
 /**
- * Agents — hire, configure, fire.
+ * Agents — hire, make, configure, fire.
  *
  * The roster was `Record<string, boolean>` in zustand: it survived a refresh and nothing else, so
  * the thing trading your money did not exist anywhere durable. These routes make an agent a row
  * that a reinstall cannot forget, that a strategy can belong to, and that can be measured against
  * its own filled trades rather than against a fixture.
+ *
+ * And, since 2026-09-16, an agent a person makes: `POST /agents/custom` — a name, a mandate in their own words, and the
+ * one of the four personas it follows in voice and in the strategies it runs. It is a row like any other: strategies can
+ * belong to it, its limits are enforced on every run, and its record is its own filled trades.
  *
  * Everything is scoped to the caller's wallet. An agent id from another user must read as missing,
  * never as forbidden — the second answer confirms it exists.
@@ -16,7 +20,7 @@ import { one, query } from '../db/index.js';
 import { append } from '../audit/log.js';
 import { currentWallet } from '../routes/wallet-context.js';
 import { PERSONAS, type PersonaId } from '../bot/personas.js';
-import { leaderboard } from './leaderboard.js';
+import { NO_TRADES, agentRecords, type AgentRecord } from './leaderboard.js';
 
 export const agents = new Hono();
 
@@ -28,8 +32,20 @@ type AgentRow = {
   hired: boolean;
   tone: string;
   risk_limits: Record<string, unknown>;
+  /** A made agent's mandate, in its maker's words (migration 027). Null on the four, whose mandate is their persona's. */
+  role?: string | null;
+  /** The persona a made agent follows. Null on the four. */
+  style?: string | null;
   created_at: Date;
 };
+
+/** A made agent's persona id is its own, so the one-row-per-persona rule can never fold two made agents into one. */
+const CUSTOM = 'custom:';
+const isCustom = (personaId: string) => personaId.startsWith(CUSTOM);
+const isPersona = (id: string) => Object.hasOwn(PERSONAS, id);
+
+/** How many agents of its own one wallet may make. */
+export const MAX_CUSTOM_AGENTS = 12;
 
 /*
  * Delegates to `currentWallet` rather than asking again.
@@ -52,30 +68,33 @@ const GRADIENTS: Record<string, { c1: string; c2: string }> = {
   'drawdown-guard': { c1: '#B58CFF', c2: '#7A45E0' },
 };
 
-function toApi(row: AgentRow, metrics?: { pnl30d: number; win: number; trades: number; metric: string }) {
-  const persona = PERSONAS[row.persona_id as PersonaId];
+function toApi(row: AgentRow, record?: AgentRecord) {
+  const custom = isCustom(row.persona_id);
+  const persona = PERSONAS[(custom ? row.style : row.persona_id) as PersonaId];
   return {
     id: row.id,
     personaId: row.persona_id,
     name: row.name,
-    role: persona?.role ?? '',
+    role: row.role ?? persona?.role ?? '',
     hired: row.hired,
     tone: row.tone,
     riskLimits: row.risk_limits,
+    custom,
+    ...(custom && row.style ? { style: row.style } : {}),
     ...(GRADIENTS[row.persona_id] ?? { c1: '#5B93FF', c2: '#1B44CE' }),
     // Zeros with a label, never a borrowed number: an agent that has not traded says so.
-    pnl30d: metrics?.pnl30d ?? 0,
-    win: metrics?.win ?? 0,
-    trades: metrics?.trades ?? 0,
-    metric: metrics?.metric ?? 'No record yet',
+    pnl30d: record?.pnl30d ?? 0,
+    win: record?.win ?? 0,
+    trades: record?.trades ?? 0,
+    metric: record?.metric ?? 'No record yet',
   };
 }
 
 /**
- * GET /agents — the four personas, each marked hired or not, with real metrics for the hired ones.
+ * GET /agents — the four personas, each marked hired or not, then the agents this wallet made, with real metrics.
  *
  * The full roster is returned rather than only what is hired, because the roster screen shows all
- * four and needs to know which are which.
+ * four and needs to know which are which. A made agent follows them, oldest first.
  */
 agents.get('/agents', async (c) => {
   const id = await walletId(c);
@@ -96,35 +115,34 @@ agents.get('/agents', async (c) => {
     );
   }
 
-  const [rows, board] = await Promise.all([
-    query<AgentRow>(`SELECT * FROM agents WHERE wallet_id = $1`, [id]),
-    leaderboard(id),
+  const [rows, records] = await Promise.all([
+    query<AgentRow>(`SELECT * FROM agents WHERE wallet_id = $1 ORDER BY created_at, id`, [id]),
+    agentRecords(id),
   ]);
   const byPersona = new Map(rows.map((r) => [r.persona_id, r]));
-  const metrics = new Map(board.map((b) => [b.id, b]));
 
-  return c.json(
-    Object.values(PERSONAS).map((p) => {
-      const row = byPersona.get(p.id);
-      return toApi(
-        row ?? {
-          id: p.id,
-          wallet_id: id,
-          persona_id: p.id,
-          name: p.name,
-          hired: false,
-          tone: 'dry',
-          risk_limits: {},
-          created_at: new Date(),
-        },
-        metrics.get(p.id),
-      );
-    }),
-  );
+  const personas = Object.values(PERSONAS).map((p) => {
+    const row = byPersona.get(p.id);
+    return toApi(
+      row ?? {
+        id: p.id,
+        wallet_id: id,
+        persona_id: p.id,
+        name: p.name,
+        hired: false,
+        tone: 'dry',
+        risk_limits: {},
+        created_at: new Date(),
+      },
+      records.get(p.id),
+    );
+  });
+  const made = rows.filter((r) => isCustom(r.persona_id)).map((r) => toApi(r, records.get(r.persona_id) ?? NO_TRADES));
+  return c.json([...personas, ...made]);
 });
 
 const HireInput = z.object({
-  personaId: z.string().refine((v) => v in PERSONAS, { message: 'unknown persona' }),
+  personaId: z.string().refine((v) => isPersona(v) || isCustom(v), { message: 'unknown persona' }),
 });
 
 /**
@@ -183,6 +201,24 @@ agents.post('/agents', async (c) => {
   const id = await walletId(c);
   if (!id) return c.json({ error: 'no_wallet' }, 400);
 
+  if (isCustom(body.personaId)) {
+    // An agent this wallet made, hired again after it was let go. Only its own: another wallet's reads as missing.
+    const row = await one<AgentRow>(
+      `UPDATE agents SET hired = true, fired_at = NULL WHERE wallet_id = $1 AND persona_id = $2 RETURNING *`,
+      [id, body.personaId],
+    );
+    if (!row) return c.json({ error: 'not_found' }, 404);
+    await append({
+      walletId: id,
+      agent: row.name,
+      action: `Hired ${row.name}`,
+      detail: `${row.role ?? 'An agent you made'}. It trades only inside the limits you already signed.`,
+      kind: 'risk',
+      payload: { personaId: row.persona_id },
+    });
+    return c.json(toApi(row));
+  }
+
   const persona = PERSONAS[body.personaId as PersonaId]!;
   const row = await one<AgentRow>(
     `INSERT INTO agents (id, wallet_id, persona_id, name)
@@ -222,6 +258,88 @@ const RiskLimits = z
 const PatchInput = z.object({
   tone: z.enum(['dry', 'sharp', 'flat']).optional(),
   riskLimits: RiskLimits.optional(),
+});
+
+/** What a person gives an agent they make. The persona it follows is one of the four; everything else is theirs. */
+const CreateInput = z
+  .object({
+    name: z.string().trim().min(2).max(24),
+    role: z.string().trim().min(3).max(80),
+    style: z.string().refine(isPersona, { message: 'one of the four agents' }),
+    tone: z.enum(['dry', 'sharp', 'flat']).optional(),
+    riskLimits: RiskLimits.optional(),
+  })
+  .strict();
+
+/**
+ * POST /agents/custom — make an agent (2026-09-16).
+ *
+ * A name no other agent on the wallet has, the four's included, because a name is how the roster, a conversation and
+ * the trail tell agents apart; the index in migration 027 holds that against two requests racing. Made hired: making an
+ * agent is choosing it.
+ */
+agents.post('/agents/custom', async (c) => {
+  const body = CreateInput.parse(await c.req.json());
+  const id = await walletId(c);
+  if (!id) return c.json({ error: 'no_wallet' }, 400);
+
+  const nameTaken = () =>
+    c.json(
+      { error: 'name_taken', message: `An agent is already called ${body.name}. Give this one another name.` },
+      409,
+    );
+  const existing = await query<{ name: string; persona_id: string }>(
+    `SELECT name, persona_id FROM agents WHERE wallet_id = $1`,
+    [id],
+  );
+  const lower = body.name.toLowerCase();
+  if (
+    Object.values(PERSONAS).some((p) => p.name.toLowerCase() === lower) ||
+    existing.some((a) => a.name.toLowerCase() === lower)
+  ) {
+    return nameTaken();
+  }
+  if (existing.filter((a) => isCustom(a.persona_id)).length >= MAX_CUSTOM_AGENTS) {
+    return c.json(
+      { error: 'too_many_agents', message: `This wallet already has ${MAX_CUSTOM_AGENTS} agents of its own.` },
+      409,
+    );
+  }
+
+  const agentId = randomUUID();
+  let row: AgentRow | undefined;
+  try {
+    row = await one<AgentRow>(
+      `INSERT INTO agents (id, wallet_id, persona_id, name, role, style, tone, risk_limits)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
+      [
+        agentId,
+        id,
+        `${CUSTOM}${agentId}`,
+        body.name,
+        body.role,
+        body.style,
+        body.tone ?? 'dry',
+        JSON.stringify(body.riskLimits ?? {}),
+      ],
+    );
+  } catch (e) {
+    // The name index: another request made an agent with this name between the check above and this insert.
+    if ((e as { code?: string }).code === '23505') return nameTaken();
+    throw e;
+  }
+
+  const persona = PERSONAS[body.style as PersonaId]!;
+  await append({
+    walletId: id,
+    agent: body.name,
+    action: `Made ${body.name}`,
+    detail: `${body.role}. Works like ${persona.name}, and trades only inside the limits you already signed.`,
+    kind: 'risk',
+    payload: { agentId, style: body.style },
+  });
+
+  return c.json(toApi(row!), 201);
 });
 
 /** PATCH /agents/:id — tone and limits. */

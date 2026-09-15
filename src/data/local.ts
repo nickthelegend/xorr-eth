@@ -219,6 +219,10 @@ export const LocalRepositories: Repositories = {
     async hire(personaId: string): Promise<Agent> {
       return api.post<Agent>('/agents', { personaId });
     },
+    async createAgent(input): Promise<Agent> {
+      // Made on the executor, which refuses a name another agent on the wallet already has.
+      return api.post<Agent>('/agents/custom', input);
+    },
     async fire(agentId: string): Promise<{ pausedStrategies: number }> {
       return api.del<{ pausedStrategies: number }>(`/agents/${agentId}`);
     },
@@ -287,7 +291,7 @@ export const LocalRepositories: Repositories = {
         throw e;
       }
     },
-    async backtest(agentId, lookback): Promise<BacktestResult> {
+    async backtest(agentId, lookback, symbol): Promise<BacktestResult> {
       /*
        * No fallback: a backtest is a performance claim. Showing a designer's numbers when the
        * engine is unreachable would be exactly the overselling copy.md forbids.
@@ -299,18 +303,20 @@ export const LocalRepositories: Repositories = {
        * engine was merely still computing.
        */
       return waitOutWarming(() =>
-        api.get<BacktestResult>(`/agents/${agentId}/backtest?lookback=${lookback}`),
+        api.get<BacktestResult>(
+          `/agents/${agentId}/backtest?lookback=${lookback}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ''}`,
+        ),
       );
     },
     async leaderboard(): Promise<Agent[]> {
       // Same reasoning as backtest: a leaderboard is a performance claim.
       return api.get<Agent[]>('/agents/leaderboard');
     },
-    async ask({ agentId, question, tone }) {
+    async ask({ agentId, question, tone, as }) {
       const res = await api
         .post<{ text: string | null; source: 'model' | 'none'; reason?: string }>('/bot/say', {
           persona: agentId,
-          situation: `The user asks: "${question}". Answer in one or two sentences, without naming any figure.`,
+          situation: `${as ? `You are ${as.name}, an agent the user made to ${as.role.toLowerCase()}. ` : ''}The user asks: "${question}". Answer in one or two sentences, without naming any figure.`,
           tone,
         })
         .catch(() => undefined);

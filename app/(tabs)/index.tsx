@@ -12,10 +12,12 @@
  * reduced motion turns it off.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { AccessibilityInfo, ScrollView, View } from 'react-native';
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { agentGradient, assetGradient } from '@/design/gradients';
 import { Icon } from '@/design/Icon';
+import { useMadeAgents } from '@/chat/agents';
 import {
   AgentOrb,
   AssetMark,
@@ -50,7 +52,7 @@ import { NotSignedIn, isRetryable } from '@/data/apiError';
 import { system, type Limits } from '@/data/system';
 import { useAsync } from '@/data/useAsync';
 import { useFreshOnReturn } from '@/data/useFreshOnReturn';
-import { logoProps, useLogos } from '@/data/useLogos';
+import { logoProps, perpLogoProps, useLogos } from '@/data/useLogos';
 import { usePrivyIdentity } from '@/auth/usePrivyIdentity';
 import { useSignedOut } from '@/auth/useSignedOut';
 import { useHasHydrated, useStore } from '@/state/store';
@@ -83,6 +85,10 @@ const AGENT_SLOTS = 4;
 const GAINERS = 8;
 /** How many futures contracts the sheet lists before handing over to Futures. */
 const FUTURES = 8;
+/** A sideways drag this far, or this fast, moves to the next tab; under the slop it is still a tap or a scroll. */
+const SWIPE_SLOP = 16;
+const SWIPE_AFTER = 56;
+const SWIPE_VELOCITY = 600;
 /** Arrival order: header, balance, sheet — then each row after the sheet. */
 const ROWS_FROM = 3;
 
@@ -221,14 +227,41 @@ export default function Home() {
   const [tab, setTab] = useState<SheetTab>(() => (isSheetTab(params.tab) ? params.tab : 'agents'));
   /* Stocks and futures load the first time their tab opens: Home does not pay for a tab nobody looked at. */
   const [opened, setOpened] = useState<ReadonlySet<SheetTab>>(() => new Set([tab]));
+  const tabsRef = useRef<ScrollView>(null);
   const openTab = (key: SheetTab) => {
     setTab(key);
     setOpened((prev) => (prev.has(key) ? prev : new Set([...prev, key])));
   };
+  // The row of tabs scrolls sideways on a narrow phone, so the one opened — by a swipe too — is brought into view.
+  useEffect(() => {
+    if (TABS.findIndex((t) => t.key === tab) >= TABS.length / 2) tabsRef.current?.scrollToEnd({ animated: false });
+    else tabsRef.current?.scrollTo({ x: 0, animated: false });
+  }, [tab]);
+  /*
+   * Swiping the sheet sideways moves to the next tab or the one before (2026-09-16).
+   *
+   * Horizontal only: `failOffsetY` hands a vertical drag back to the page's scroll before this claims it, and the row of
+   * tabs keeps its own sideways scroll because the gesture is on the content under it. Nothing animates; the tab changes
+   * as a tap on it would.
+   */
+  const swipeTabs = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetX([-SWIPE_SLOP, SWIPE_SLOP])
+    .failOffsetY([-SWIPE_SLOP, SWIPE_SLOP])
+    .onEnd((e) => {
+      const toNext = e.translationX < -SWIPE_AFTER || e.velocityX < -SWIPE_VELOCITY;
+      const toPrevious = e.translationX > SWIPE_AFTER || e.velocityX > SWIPE_VELOCITY;
+      const next = TABS[TABS.findIndex((t) => t.key === tab) + (toNext ? 1 : toPrevious ? -1 : 0)];
+      if ((toNext || toPrevious) && next) openTab(next.key);
+    });
 
   const balance = useAsync(() => repos.portfolio.balance(), []);
   const limits = useAsync(() => system.limits(), []);
   const agents = useAsync(() => repos.bot.listAgents(), []);
+  const rememberAgents = useMadeAgents((st) => st.remember);
+  useEffect(() => {
+    if (agents.data) rememberAgents(agents.data);
+  }, [agents.data, rememberAgents]);
   const classes = useAsync(() => repos.markets.listClasses(), []);
   const stocksOpened = opened.has('stocks');
   const futuresOpened = opened.has('futures');
@@ -494,6 +527,7 @@ export default function Home() {
           >
             {/* Four tabs scroll sideways on a narrow phone rather than crowding the Live dot out. */}
             <ScrollView
+              ref={tabsRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               style={{ flexGrow: 0, flexShrink: 1 }}
@@ -563,167 +597,200 @@ export default function Home() {
             </Press>
           </View>
 
-          <View style={{ paddingHorizontal: space.gutter, marginTop: space.s4 }}>
-            {tab === 'agents' ? (
-              agents.loading && !agents.data ? (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space.s18 }}>
-                  {Array.from({ length: AGENT_SLOTS }, (_, i) => (
-                    <View key={i} style={{ width: TILE_W, alignItems: 'center', gap: space.s8 }}>
-                      <Placeholder width={ORB} height={ORB} style={{ borderRadius: radius.full }} />
-                      <Placeholder width={ORB} height={space.s10} />
-                    </View>
-                  ))}
-                </View>
-              ) : agents.error ? (
-                <TabFailed what="agents" error={agents.error} onRetry={agents.reload} />
-              ) : roster.length === 0 ? (
-                <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
-                  No agents yet.
-                </Text>
-              ) : (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: space.s18, marginTop: space.s18 }}>
-                  {roster.map((a, i) => (
-                    <Rise key={a.id} index={ROWS_FROM + i} style={{ width: TILE_W }}>
+          <GestureDetector gesture={swipeTabs}>
+            <View style={{ flexGrow: 1, paddingHorizontal: space.gutter, marginTop: space.s4 }}>
+              {tab === 'agents' ? (
+                agents.loading && !agents.data ? (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space.s18 }}>
+                    {Array.from({ length: AGENT_SLOTS }, (_, i) => (
+                      <View key={i} style={{ width: TILE_W, alignItems: 'center', gap: space.s8 }}>
+                        <Placeholder width={ORB} height={ORB} style={{ borderRadius: radius.full }} />
+                        <Placeholder width={ORB} height={space.s10} />
+                      </View>
+                    ))}
+                  </View>
+                ) : agents.error ? (
+                  <TabFailed what="agents" error={agents.error} onRetry={agents.reload} />
+                ) : (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: space.s18, marginTop: space.s18 }}>
+                    {roster.map((a, i) => (
+                      <Rise key={a.id} index={ROWS_FROM + i} style={{ width: TILE_W }}>
+                        <Press
+                          onPress={() => router.push(`/agent/${a.id}`)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${a.name}, ${a.hired ? 'hired' : 'not hired'}. ${a.role}`}
+                          style={{ alignItems: 'center', gap: space.s8, paddingHorizontal: space.s4 }}
+                        >
+                          <AgentOrb gradient={agentGradient(a.name)} size={ORB} face />
+                          {/* Two lines reserved for every name, so a short one does not lift its status line. */}
+                          <Text
+                            variant="orbName"
+                            align="center"
+                            numberOfLines={2}
+                            style={{ minHeight: typeScale.orbName.lineHeight * 2 }}
+                          >
+                            {a.name}
+                          </Text>
+                          {/* Grey, never green: hired is a fact about the roster, not a profit. */}
+                          <Text variant="orbStatus" color={a.hired ? colors.ink55 : colors.ink30}>
+                            {a.hired ? 'Hired' : 'Not hired'}
+                          </Text>
+                        </Press>
+                      </Rise>
+                    ))}
+                    {/* Making one of your own, where the agents are (2026-09-16). */}
+                    <Rise index={ROWS_FROM + roster.length} style={{ width: TILE_W }}>
                       <Press
-                        onPress={() => router.push(`/agent/${a.id}`)}
+                        onPress={() => router.push('/agent/new')}
                         accessibilityRole="button"
-                        accessibilityLabel={`${a.name}, ${a.hired ? 'hired' : 'not hired'}. ${a.role}`}
+                        accessibilityLabel="New agent. Make one of your own"
                         style={{ alignItems: 'center', gap: space.s8, paddingHorizontal: space.s4 }}
                       >
-                        <AgentOrb gradient={agentGradient(a.name)} size={ORB} face />
-                        {/* Two lines reserved for every name, so a short one does not lift its status line. */}
+                        <View
+                          style={{
+                            width: ORB,
+                            height: ORB,
+                            borderRadius: ORB / 2,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderWidth: 1.5,
+                            borderStyle: 'dashed',
+                            borderColor: colors.ink28,
+                          }}
+                        >
+                          <Icon name="plus" size={26} color={colors.ink55} strokeWidth={2} />
+                        </View>
                         <Text
                           variant="orbName"
                           align="center"
                           numberOfLines={2}
                           style={{ minHeight: typeScale.orbName.lineHeight * 2 }}
                         >
-                          {a.name}
+                          New agent
                         </Text>
-                        {/* Grey, never green: hired is a fact about the roster, not a profit. */}
-                        <Text variant="orbStatus" color={a.hired ? colors.ink55 : colors.ink30}>
-                          {a.hired ? 'Hired' : 'Not hired'}
+                        <Text variant="orbStatus" color={colors.ink30}>
+                          Make one
                         </Text>
                       </Press>
                     </Rise>
-                  ))}
-                </View>
-              )
-            ) : tab === 'gainers' ? (
-              classes.loading && !classes.data ? (
-                <LoadingRows count={4} height={size.rowLg} spark />
-              ) : classes.error ? (
-                <TabFailed what="prices" error={classes.error} onRetry={classes.reload} />
-              ) : gainers.length === 0 ? (
-                <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
-                  No gainers today.
-                </Text>
-              ) : (
-                gainers.map((g, i) => {
-                  const series = sparks.data?.[g.sym];
-                  return (
-                    <Rise key={g.sym} index={ROWS_FROM + i}>
+                  </View>
+                )
+              ) : tab === 'gainers' ? (
+                classes.loading && !classes.data ? (
+                  <LoadingRows count={4} height={size.rowLg} spark />
+                ) : classes.error ? (
+                  <TabFailed what="prices" error={classes.error} onRetry={classes.reload} />
+                ) : gainers.length === 0 ? (
+                  <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
+                    No gainers today.
+                  </Text>
+                ) : (
+                  gainers.map((g, i) => {
+                    const series = sparks.data?.[g.sym];
+                    return (
+                      <Rise key={g.sym} index={ROWS_FROM + i}>
+                        <Row
+                          height={size.rowLg}
+                          divider={i < gainers.length - 1}
+                          onPress={() => router.push(`/asset/${g.sym}`)}
+                          left={<AssetMark gradient={{ c1: g.c1, c2: g.c2 }} {...logoProps(logos, g.sym)} size={size.mark} />}
+                          title={g.sym}
+                          secondary={g.name}
+                          value={
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}>
+                              {/* No glyph without a series — a flat line would claim the price never moved. */}
+                              {series && series.length > 1 ? (
+                                <Sparkline data={series} width={SPARK_W} height={SPARK_H} />
+                              ) : sparks.loading && !sparks.data ? (
+                                <Placeholder width={SPARK_W} height={SPARK_H} />
+                              ) : null}
+                              <Price variant="rowPrimary" figure="market">
+                                {g.px}
+                              </Price>
+                            </View>
+                          }
+                          delta={g.chg}
+                          deltaTone="up"
+                        />
+                      </Rise>
+                    );
+                  })
+                )
+              ) : tab === 'stocks' ? (
+                !stocks.data ? (
+                  stocks.error ? (
+                    <TabFailed what="stocks" error={stocks.error} onRetry={stocks.reload} />
+                  ) : (
+                    <LoadingRows count={4} height={size.rowLg} />
+                  )
+                ) : stockRows.length === 0 ? (
+                  <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
+                    No stocks yet.
+                  </Text>
+                ) : (
+                  stockRows.map((s, i) => (
+                    <Rise key={s.symbol} index={ROWS_FROM + i}>
                       <Row
                         height={size.rowLg}
-                        divider={i < gainers.length - 1}
-                        onPress={() => router.push(`/asset/${g.sym}`)}
-                        left={<AssetMark gradient={{ c1: g.c1, c2: g.c2 }} {...logoProps(logos, g.sym)} size={size.mark} />}
-                        title={g.sym}
-                        secondary={g.name}
+                        divider={i < stockRows.length - 1}
+                        onPress={() => router.push(`/oracle/${s.symbol}`)}
+                        left={<AssetMark gradient={assetGradient(s.symbol)} {...logoProps(logos, s.symbol)} size={size.mark} />}
+                        title={s.symbol}
+                        secondary={s.name}
                         value={
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10 }}>
-                            {/* No glyph without a series — a flat line would claim the price never moved. */}
-                            {series && series.length > 1 ? (
-                              <Sparkline data={series} width={SPARK_W} height={SPARK_H} />
-                            ) : sparks.loading && !sparks.data ? (
-                              <Placeholder width={SPARK_W} height={SPARK_H} />
-                            ) : null}
-                            <Price variant="rowPrimary" figure="market">
-                              {g.px}
-                            </Price>
-                          </View>
+                          s.price === null ? (
+                            <Text variant="rowPrimary" color={colors.ink55}>
+                              No price
+                            </Text>
+                          ) : (
+                            fmtPrice(s.price)
+                          )
                         }
-                        delta={g.chg}
-                        deltaTone="up"
+                        figure="market"
                       />
                     </Rise>
-                  );
-                })
-              )
-            ) : tab === 'stocks' ? (
-              !stocks.data ? (
-                stocks.error ? (
-                  <TabFailed what="stocks" error={stocks.error} onRetry={stocks.reload} />
+                  ))
+                )
+              ) : !futures.data ? (
+                futures.error ? (
+                  <TabFailed what="futures" error={futures.error} onRetry={futures.reload} />
                 ) : (
                   <LoadingRows count={4} height={size.rowLg} />
                 )
-              ) : stockRows.length === 0 ? (
+              ) : perpRows.length === 0 ? (
+                /* The venue answered with no live contracts: a sentence, not an empty sheet over an "All futures" of nothing. */
                 <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
-                  No stocks yet.
+                  No futures right now.
                 </Text>
               ) : (
-                stockRows.map((s, i) => (
-                  <Rise key={s.symbol} index={ROWS_FROM + i}>
-                    <Row
-                      height={size.rowLg}
-                      divider={i < stockRows.length - 1}
-                      onPress={() => router.push(`/oracle/${s.symbol}`)}
-                      left={<AssetMark gradient={assetGradient(s.symbol)} {...logoProps(logos, s.symbol)} size={size.mark} />}
-                      title={s.symbol}
-                      secondary={s.name}
-                      value={
-                        s.price === null ? (
-                          <Text variant="rowPrimary" color={colors.ink55}>
-                            No price
-                          </Text>
-                        ) : (
-                          fmtPrice(s.price)
-                        )
-                      }
-                      figure="market"
-                    />
-                  </Rise>
-                ))
-              )
-            ) : !futures.data ? (
-              futures.error ? (
-                <TabFailed what="futures" error={futures.error} onRetry={futures.reload} />
-              ) : (
-                <LoadingRows count={4} height={size.rowLg} />
-              )
-            ) : perpRows.length === 0 ? (
-              /* The venue answered with no live contracts: a sentence, not an empty sheet over an "All futures" of nothing. */
-              <Text variant="body" color={colors.ink55} style={{ marginTop: space.s16 }}>
-                No futures right now.
-              </Text>
-            ) : (
-              <>
-                {perpRows.map((m, i) => (
-                  <Rise key={m.symbol} index={ROWS_FROM + i}>
-                    <Row
-                      height={size.rowLg}
-                      onPress={() => router.push(`/perp/${m.symbol}`)}
-                      left={<AssetMark gradient={assetGradient(m.symbol)} {...logoProps(logos, m.symbol)} size={size.mark} />}
-                      title={m.symbol}
-                      secondary={`Up to ${m.maxLeverage}x`}
-                      value={fmtPrice(m.markPx)}
-                      figure="market"
-                      delta={m.change24hPct === null ? undefined : percent(m.change24hPct, 2)}
-                      deltaTone={
-                        m.change24hPct === null || m.change24hPct === 0 ? 'neutral' : m.change24hPct > 0 ? 'up' : 'down'
-                      }
-                    />
-                  </Rise>
-                ))}
-                <Button
-                  label="All futures"
-                  variant="ghost"
-                  onPress={() => router.push('/futures')}
-                  style={{ marginTop: space.s16 }}
-                />
-              </>
-            )}
-          </View>
+                <>
+                  {perpRows.map((m, i) => (
+                    <Rise key={m.symbol} index={ROWS_FROM + i}>
+                      <Row
+                        height={size.rowLg}
+                        onPress={() => router.push(`/perp/${m.symbol}`)}
+                        left={<AssetMark gradient={assetGradient(m.symbol)} {...perpLogoProps(logos, m.symbol)} size={size.mark} />}
+                        title={m.symbol}
+                        secondary={`Up to ${m.maxLeverage}x`}
+                        value={fmtPrice(m.markPx)}
+                        figure="market"
+                        delta={m.change24hPct === null ? undefined : percent(m.change24hPct, 2)}
+                        deltaTone={
+                          m.change24hPct === null || m.change24hPct === 0 ? 'neutral' : m.change24hPct > 0 ? 'up' : 'down'
+                        }
+                      />
+                    </Rise>
+                  ))}
+                  <Button
+                    label="All futures"
+                    variant="ghost"
+                    onPress={() => router.push('/futures')}
+                    style={{ marginTop: space.s16 }}
+                  />
+                </>
+              )}
+            </View>
+          </GestureDetector>
         </Rise>
       </ScrollView>
     </Screen>

@@ -37,9 +37,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { arrival, duration, space, timing, useReducedMotion } from '@/ui';
 import { Chat } from './Chat';
 import { Messages } from './Messages';
-import { agentByName } from './agents';
+import { agentByName, useMadeAgents } from './agents';
+import { useChatTheme } from './chatTheme';
+import { applyChatTheme, chat } from './theme';
 import { useChatDrawer } from './chatDrawer';
-import { chat } from './theme';
 import { useProposalSeed } from './useProposalSeed';
 
 /** Drag past this — or flick faster than the velocity below — and letting go dismisses. */
@@ -67,6 +68,9 @@ export interface ChatSheetProps {
 }
 
 export function ChatSheet({ open, onClose }: ChatSheetProps) {
+  const theme = useChatTheme((s) => s.theme);
+  // Before anything below reads a colour: the room this draw is in.
+  applyChatTheme(theme);
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   /*
@@ -291,7 +295,8 @@ export function ChatSheet({ open, onClose }: ChatSheetProps) {
           </View>
         </GestureDetector>
 
-        <DrawerContent onClose={close} footerInset={Math.max(insets.bottom, space.s14)} />
+        {/* Keyed by the room, so everything inside draws again from the palette just put in place. */}
+        <DrawerContent key={theme} onClose={close} footerInset={Math.max(insets.bottom, space.s14)} />
       </Animated.View>
     </View>
   );
@@ -306,6 +311,8 @@ function DrawerContent({ onClose, footerInset }: { onClose: () => void; footerIn
   const openConversation = useChatDrawer((s) => s.openConversation);
   const showList = useChatDrawer((s) => s.showList);
   const leave = useChatDrawer((s) => s.leave);
+  // Read so a conversation with an agent someone made is drawn again once the roster names it.
+  useMadeAgents((s) => s.made);
 
   /* A screen opened from inside the drawer: down it goes, remembering the screen it rose over, and the screen opens. */
   const openScreen = (href: Href) => {

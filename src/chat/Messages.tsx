@@ -8,9 +8,9 @@
  * back up on this list when you return from it.
  *
  * Nothing here is written for the screen. The rows are the thread (`conversations.ts`); who is added comes from the
- * executor's `/agents`, and adding an agent hires it there.
+ * executor's `/agents`, and the + makes an agent of your own (`app/agent/new.tsx`), which joins the four here.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, TextInput, View, type TextStyle } from 'react-native';
 import type { Href } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,16 +19,16 @@ import { agentGradient } from '@/design/gradients';
 import { AgentOrb, Press, Text, signIn, space } from '@/ui';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { NotSignedIn, errorText } from '@/data/apiError';
 import { usePrivyIdentity } from '@/auth/usePrivyIdentity';
 import { useSignedOut } from '@/auth/useSignedOut';
 import { useStore } from '@/state/store';
 import { useNow } from '@/state/useNow';
 import { useThread } from '@/bot/thread';
 import type { ThreadMessage } from '@/bot/message';
-import { CHAT_AGENTS, type ChatAgent } from './agents';
+import { useChatAgents, useMadeAgents, type ChatAgent } from './agents';
 import { listTime, searchMessages, summaries, type ConversationSummary } from './conversations';
 import { GLASS, GlassButton } from './parts';
+import { useChatTheme } from './chatTheme';
 import { chat, chatShadow, chatType } from './theme';
 
 const AVATAR = GLASS;
@@ -41,11 +41,10 @@ const ORB_TILE = 84;
 const ROW_ORB = 52 as const;
 const DOT = 11;
 const PILL_H = 32;
-const AGENT_NAMES = CHAT_AGENTS.map((a) => a.name);
 /** A browser draws its own focus ring inside the field; the glass pill is the focus here. */
 const NO_WEB_OUTLINE = (Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) as TextStyle;
 
-type Mode = 'list' | 'search' | 'add';
+type Mode = 'list' | 'search';
 
 export interface MessagesProps {
   /** Lowers the drawer. */
@@ -66,18 +65,27 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
   const read = useThread((s) => s.read);
   const now = useNow();
   const roster = useAsync(() => repos.bot.listAgents(), []);
+  const agents = useChatAgents();
+  const remember = useMadeAgents((s) => s.remember);
   const [mode, setMode] = useState<Mode>('list');
+  const theme = useChatTheme((s) => s.theme);
+  const toggleTheme = useChatTheme((s) => s.toggle);
   const [query, setQuery] = useState('');
 
-  const list = useMemo(() => summaries(messages, AGENT_NAMES, read), [messages, read]);
+  useEffect(() => {
+    if (roster.data) remember(roster.data);
+  }, [roster.data, remember]);
+
+  const names = useMemo(() => agents.map((a) => a.name), [agents]);
+  const list = useMemo(() => summaries(messages, names, read), [messages, names, read]);
   const added = useMemo(
     () => new Set((roster.data ?? []).filter((a) => a.hired).map((a) => a.name)),
     [roster.data],
   );
   // Added agents first across the top: they are the ones allowed to act for you.
   const featured = useMemo(
-    () => [...CHAT_AGENTS].sort((a, b) => Number(added.has(b.name)) - Number(added.has(a.name))),
-    [added],
+    () => [...agents].sort((a, b) => Number(added.has(b.name)) - Number(added.has(a.name))),
+    [agents, added],
   );
   const initial = (email ?? address?.replace(/^0x/i, '') ?? '').charAt(0).toUpperCase();
 
@@ -88,6 +96,8 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
   };
   // And for your profile it comes back up on this list when you return (`useChatDrawer.leave`).
   const openProfile = () => onOpenScreen('/profile');
+  // Making one opens as its own screen too, and lands on the new agent's page.
+  const makeAgent = () => onOpenScreen('/agent/new');
 
   return (
     <View style={{ flex: 1 }}>
@@ -106,13 +116,6 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
             setMode('list');
           }}
         />
-      ) : mode === 'add' ? (
-        <View style={HEADER}>
-          <GlassButton icon="back" label="Back to messages" onPress={() => setMode('list')} />
-          <Text color={chat.heading} style={[chatType.title, { flex: 1 }]} numberOfLines={1}>
-            Add an agent
-          </Text>
-        </View>
       ) : (
         <View style={HEADER}>
           <Press
@@ -132,14 +135,19 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
             }}
           >
             {initial ? (
-              <Text color="#FFFFFF" style={chatType.title}>
+              <Text color={chat.onHeading} style={chatType.title}>
                 {initial}
               </Text>
             ) : null}
           </Press>
           <View style={{ flex: 1 }} />
+          <GlassButton
+            icon={theme === 'black' ? 'sun' : 'moon'}
+            label={theme === 'black' ? 'Use the light theme' : 'Use the black theme'}
+            onPress={toggleTheme}
+          />
           <GlassButton icon="search" label="Search agents and messages" onPress={() => setMode('search')} />
-          <GlassButton icon="plus" label="Add an agent" onPress={() => setMode('add')} />
+          <GlassButton icon="plus" label="Make an agent" onPress={signedOut ? goSignIn : makeAgent} />
         </View>
       )}
 
@@ -151,9 +159,7 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
         contentContainerStyle={{ paddingBottom: footerInset + space.s12 }}
       >
         {mode === 'search' ? (
-          <SearchResults query={query} messages={messages} now={now} onOpen={onOpen} />
-        ) : mode === 'add' ? (
-          <AddAgents roster={roster} added={added} onOpen={onOpen} onSignIn={goSignIn} />
+          <SearchResults query={query} agents={agents} messages={messages} now={now} onOpen={onOpen} />
         ) : (
           <>
             <ScrollView
@@ -175,6 +181,31 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
                   </Text>
                 </Press>
               ))}
+              {/* The last orb makes a new one, where the agents are. */}
+              <Press
+                onPress={signedOut ? goSignIn : makeAgent}
+                accessibilityRole="button"
+                accessibilityLabel="New agent. Make one of your own"
+                style={{ width: ORB_TILE, alignItems: 'center', gap: space.s8 }}
+              >
+                <View
+                  style={{
+                    width: ORB,
+                    height: ORB,
+                    borderRadius: ORB / 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: chat.glass,
+                    borderWidth: 1,
+                    borderColor: chat.glassBorder,
+                  }}
+                >
+                  <Icon name="plus" size={22} color={chat.accentDeep} strokeWidth={2.2} />
+                </View>
+                <Text color={chat.inkSoft} style={chatType.small} align="center" numberOfLines={2}>
+                  New agent
+                </Text>
+              </Press>
             </ScrollView>
 
             {signedOut ? (
@@ -184,7 +215,7 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
                 <ConversationRow
                   key={summary.agent}
                   summary={summary}
-                  role={roleOf(summary.agent)}
+                  role={roleOf(agents, summary.agent)}
                   now={now}
                   onPress={() => onOpen(summary.agent)}
                 />
@@ -206,8 +237,8 @@ const HEADER = {
   paddingBottom: space.s6,
 } as const;
 
-function roleOf(name: string): string {
-  return CHAT_AGENTS.find((a) => a.name === name)?.role ?? '';
+function roleOf(agents: readonly ChatAgent[], name: string): string {
+  return agents.find((a) => a.name === name)?.role ?? '';
 }
 
 /** One conversation: the agent, its last line, when it moved, and a mark when something in it is new. */
@@ -328,20 +359,20 @@ function SearchHeader({
 /** Agents by name or mandate, and what was said by its words — each a way into that agent's conversation. */
 function SearchResults({
   query,
+  agents: all,
   messages,
   now,
   onOpen,
 }: {
   query: string;
+  agents: readonly ChatAgent[];
   messages: readonly ThreadMessage[];
   now: number;
   onOpen: (agent: string) => void;
 }) {
   const q = query.trim().toLowerCase();
   const hits = useMemo(() => searchMessages(messages, query).slice(0, 40), [messages, query]);
-  const agents = q
-    ? CHAT_AGENTS.filter((a) => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q))
-    : CHAT_AGENTS;
+  const agents = q ? all.filter((a) => a.name.toLowerCase().includes(q) || a.role.toLowerCase().includes(q)) : all;
 
   if (q && agents.length === 0 && hits.length === 0) {
     return (
@@ -406,116 +437,6 @@ function ResultRow({ agent, line, time, onPress }: { agent: string; line: string
       </View>
     </Press>
   );
-}
-
-/** The four agents, and adding one: `POST /agents` hires it, and its conversation opens. */
-function AddAgents({
-  roster,
-  added,
-  onOpen,
-  onSignIn,
-}: {
-  roster: { data?: unknown; loading: boolean; error?: Error; reload: () => void };
-  added: ReadonlySet<string>;
-  onOpen: (agent: string) => void;
-  onSignIn: () => void;
-}) {
-  const [adding, setAdding] = useState<string>();
-  const [failed, setFailed] = useState<Readonly<Record<string, string>>>({});
-
-  if (roster.error instanceof NotSignedIn) return <SignInCard text="Sign in to add agents." onPress={onSignIn} />;
-
-  async function add(agent: ChatAgent) {
-    if (adding) return;
-    setAdding(agent.name);
-    setFailed((all) => withoutKey(all, agent.name));
-    try {
-      await repos.bot.hire(agent.id);
-      roster.reload();
-      onOpen(agent.name);
-    } catch (e) {
-      setFailed((all) => ({ ...all, [agent.name]: errorText(e) }));
-    } finally {
-      setAdding(undefined);
-    }
-  }
-
-  const reading = roster.loading && roster.data === undefined;
-
-  return (
-    <View style={{ paddingTop: space.s10 }}>
-      <Text color={chat.muted} style={[chatType.body, { paddingHorizontal: space.gutter, paddingBottom: space.s8 }]}>
-        An agent you add can trade inside your limits.
-      </Text>
-      {CHAT_AGENTS.map((a) => {
-        const isAdded = added.has(a.name);
-        return (
-          <View
-            key={a.id}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12, paddingHorizontal: space.gutter, paddingVertical: space.s10 }}
-          >
-            <AgentOrb gradient={agentGradient(a.name)} size={ROW_ORB} face identity={a.name} />
-            <View style={{ flex: 1 }}>
-              <Text color={chat.ink} style={chatType.rowTitle} numberOfLines={1}>
-                {a.name}
-              </Text>
-              <Text color={chat.muted} style={chatType.body} numberOfLines={2}>
-                {a.role}
-              </Text>
-              {failed[a.name] ? (
-                <Text color={chat.down} style={[chatType.small, { marginTop: space.s4 }]}>
-                  {failed[a.name]}
-                </Text>
-              ) : null}
-            </View>
-            {reading ? (
-              <Text color={chat.faint} style={chatType.small}>
-                · · ·
-              </Text>
-            ) : roster.error ? (
-              <Text color={chat.faint} style={chatType.small}>
-                —
-              </Text>
-            ) : isAdded ? (
-              <Press
-                onPress={() => onOpen(a.name)}
-                accessibilityRole="button"
-                accessibilityLabel={`${a.name} is added. Open the conversation`}
-                hitHeight={44}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4 }}
-              >
-                <Icon name="check" size={15} color={chat.accentDeep} strokeWidth={2.2} />
-                <Text color={chat.accentDeep} style={chatType.chip}>
-                  Added
-                </Text>
-              </Press>
-            ) : (
-              <PrimaryPill
-                label={adding === a.name ? 'Adding' : 'Add'}
-                disabled={adding !== undefined}
-                accessibilityLabel={`Add ${a.name}`}
-                onPress={() => void add(a)}
-              />
-            )}
-          </View>
-        );
-      })}
-      {roster.error ? (
-        <View style={{ alignItems: 'center', gap: space.s10, marginTop: space.s14 }}>
-          <Text color={chat.muted} style={chatType.body}>
-            Couldn’t read which agents are added.
-          </Text>
-          <PrimaryPill label="Try again" onPress={roster.reload} />
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function withoutKey(all: Readonly<Record<string, string>>, key: string): Record<string, string> {
-  const next = { ...all };
-  delete next[key];
-  return next;
 }
 
 function SignInCard({ text, onPress }: { text: string; onPress: () => void }) {

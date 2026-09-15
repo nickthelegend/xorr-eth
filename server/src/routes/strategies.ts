@@ -184,6 +184,8 @@ function toApi(r: StrategyRow) {
      * strategy appeared to predate the strategy that made it.
      */
     createdAt: new Date(r.created_at).getTime(),
+    /** The agent that runs it, when one does — how an agent someone made finds its own strategies (2026-09-16). */
+    agentId: r.agent_id ?? undefined,
   };
 }
 

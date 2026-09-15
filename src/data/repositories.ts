@@ -55,6 +55,15 @@ export interface MarketRepository {
 export interface BotRepository {
   /** Hire a persona. Idempotent — hiring twice is the same agent. */
   hire(personaId: string): Promise<Agent>;
+  /** Make an agent of one's own: a name, what it does, and the one of the four it follows. */
+  createAgent(input: {
+    name: string;
+    role: string;
+    /** The persona id of the one of the four it works like. */
+    style: string;
+    tone?: 'dry' | 'sharp' | 'flat';
+    riskLimits?: { maxUsdPerDay?: number; maxUsdPerTrade?: number };
+  }): Promise<Agent>;
   /** Fire one. Its strategies are paused, never deleted. */
   fire(agentId: string): Promise<{ pausedStrategies: number }>;
   /** Tone and per-agent limits. */
@@ -69,7 +78,8 @@ export interface BotRepository {
   generateProposal(): Promise<{ proposal: Proposal | null; declined?: string }>;
   /** Approve places the order for real; the answer says what happened. See `ProposalDecision`. */
   decideProposal(id: string, decision: 'approve' | 'skip'): Promise<ProposalDecision>;
-  backtest(agentId: string, lookback: BacktestResult['lookback']): Promise<BacktestResult>;
+  /** `symbol` is what the replay buys, where the agent trades more than one; the executor defaults to WETH. */
+  backtest(agentId: string, lookback: BacktestResult['lookback'], symbol?: string): Promise<BacktestResult>;
   leaderboard(): Promise<Agent[]>;
   /**
    * Ask the bot something — PLAN.md 11.7. Returns prose only: every figure on screen is rendered
@@ -79,6 +89,8 @@ export interface BotRepository {
     agentId: string;
     question: string;
     tone: 'dry' | 'sharp' | 'flat';
+    /** An agent someone made answers in `agentId`'s voice under its own name and mandate. */
+    as?: { name: string; role: string };
     /** `text` is `null` when no model answered — the caller must say so, never invent one. */
   }): Promise<{
     text: string | null;

@@ -77,6 +77,10 @@ export type Agent = GradientStops & {
   hired?: boolean;
   tone?: 'dry' | 'sharp' | 'flat';
   riskLimits?: Record<string, unknown>;
+  /** Made by this wallet's owner rather than one of the four (`POST /agents/custom`, 2026-09-16). */
+  custom?: boolean;
+  /** For a made agent: the persona id of the one of the four it follows. */
+  style?: string;
 };
 
 export type ActivityKind = 'trade' | 'risk' | 'block' | 'yield';
@@ -318,6 +322,8 @@ export type Strategy = {
   /** Slice of the delegation's daily cap this strategy may consume. PLAN.md 9.2. */
   dailyAllocationUsd: number;
   createdAt: number;
+  /** The agent that runs it, when one does (`POST /strategies` takes it; `GET /strategies` says it). */
+  agentId?: string;
 };
 
 /** A 90x30 sparkline row on screen 5. G5 lifted these out of the prototype. */

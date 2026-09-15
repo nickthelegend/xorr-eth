@@ -14,6 +14,7 @@ import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
+import { Icon } from '@/design/Icon';
 import { agentGradient } from '@/design/gradients';
 import {
   AgentOrb,
@@ -39,6 +40,8 @@ import { errorText } from '@/data/apiError';
 
 /** screens.md gives this one: 40pt, radius 20. Taller than a filter pill — it is a decision. */
 const HIRE_H = 40;
+/** The + that makes an agent: a round control the size of the back button beside the title. */
+const NEW_BUTTON = 36;
 
 export default function Roster() {
   const router = useRouter();
@@ -77,11 +80,32 @@ export default function Roster() {
           <Text variant="screenTitle">Agents</Text>
         </View>
         {/* Counted from the roster the server gave. "0 of 4" before it answered was a count of nothing. */}
-        {data ? (
-          <Text variant="footnote" color={colors.ink55}>
-            {hiredCount} of {agents.length} hired
-          </Text>
-        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s12 }}>
+          {data ? (
+            <Text variant="footnote" color={colors.ink55}>
+              {hiredCount} of {agents.length} hired
+            </Text>
+          ) : null}
+          {signedOut ? null : (
+            <Press
+              onPress={() => router.push('/agent/new')}
+              accessibilityRole="button"
+              accessibilityLabel="Make an agent"
+              hitWidth={44}
+              hitHeight={44}
+              style={{
+                width: NEW_BUTTON,
+                height: NEW_BUTTON,
+                borderRadius: NEW_BUTTON / 2,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.surfaceAlt,
+              }}
+            >
+              <Icon name="plus" size={18} color={colors.ink} strokeWidth={2.2} />
+            </Press>
+          )}
+        </View>
       </View>
 
       {error ? (

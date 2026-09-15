@@ -11,7 +11,7 @@
 import React, { useEffect } from 'react';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '@/ui';
-import { CHAT_AGENTS } from '@/chat/agents';
+import { useChatAgents } from '@/chat/agents';
 import { useChatDrawer } from '@/chat/chatDrawer';
 
 export default function BotChat() {
@@ -19,8 +19,9 @@ export default function BotChat() {
   const { agent } = useLocalSearchParams<{ agent?: string }>();
   const show = useChatDrawer((s) => s.show);
   const cameFromAScreen = router.canGoBack();
+  const agents = useChatAgents();
   // By persona id or by name; a link naming no agent this app has opens the list rather than a conversation with no one.
-  const named = CHAT_AGENTS.find((a) => a.id === agent || a.name === agent)?.name ?? null;
+  const named = agents.find((a) => a.id === agent || a.name === agent)?.name ?? null;
 
   useEffect(() => {
     show(named);

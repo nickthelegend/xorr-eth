@@ -11,7 +11,7 @@ import { View } from 'react-native';
 import { AssetMark, Press, Text } from '@/ui';
 import { Icon } from '@/design/Icon';
 import { agentGradient } from '@/design/gradients';
-import { CHAT_AGENTS, type ChatAgent } from './agents';
+import { useChatAgents, type ChatAgent } from './agents';
 import { chat, chatShadowLg, chatType } from './theme';
 
 const MARK = 32;
@@ -23,6 +23,7 @@ export function AgentPicker({
   selected: ChatAgent;
   onSelect: (agent: ChatAgent) => void;
 }) {
+  const agents = useChatAgents();
   return (
     <View
       style={{
@@ -34,7 +35,7 @@ export function AgentPicker({
         boxShadow: chatShadowLg,
       }}
     >
-      {CHAT_AGENTS.map((a) => {
+      {agents.map((a) => {
         const on = a.id === selected.id;
         return (
           <Press

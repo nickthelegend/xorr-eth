@@ -92,11 +92,12 @@ const NOT_BACKTESTABLE: Record<string, string> = {
 async function personaOf(agentId: string, walletId: string | undefined): Promise<string | undefined> {
   if (Object.hasOwn(PERSONAS, agentId)) return agentId;
   if (!walletId) return undefined;
-  const row = await one<{ persona_id: string }>(`SELECT persona_id FROM agents WHERE id = $1 AND wallet_id = $2`, [
-    agentId,
-    walletId,
-  ]);
-  return row?.persona_id;
+  const row = await one<{ persona_id: string; style: string | null }>(
+    `SELECT persona_id, style FROM agents WHERE id = $1 AND wallet_id = $2`,
+    [agentId, walletId],
+  );
+  // An agent a person made answers for the persona it follows (migration 027).
+  return row ? (row.style ?? row.persona_id) : undefined;
 }
 
 extra.get('/agents/:id/backtest', async (c) => {

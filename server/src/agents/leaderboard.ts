@@ -23,6 +23,12 @@ export type LeaderboardRow = {
   c2: string;
 };
 
+/** One agent's record over the window, whoever the agent is — one of the four or one a person made. */
+export type AgentRecord = Pick<LeaderboardRow, 'pnl30d' | 'win' | 'trades' | 'metric'>;
+
+/** No trades means no record. Saying "no trades yet" is honest; a win rate is not. */
+export const NO_TRADES: AgentRecord = { pnl30d: 0, win: 0, trades: 0, metric: 'No trades yet' };
+
 const AGENTS = [
   { id: 'momentum-scout', name: 'Momentum Scout', role: 'Rides breakouts on liquid majors', c1: '#5B93FF', c2: '#1B44CE' },
   { id: 'earnings-desk', name: 'Earnings Desk', role: 'Trades tokenized equity earnings', c1: '#F0BE55', c2: '#C98518' },
@@ -32,7 +38,11 @@ const AGENTS = [
 
 type RunRow = { kind: string; persona_id: string | null; symbol: string; usd: string; units: string; price: string };
 
-export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
+/**
+ * Every agent's record on this wallet, by persona id: the four always, and every agent a person made that has traded
+ * (`custom:<id>`), credited through the strategies it owns.
+ */
+export async function agentRecords(walletId: string): Promise<Map<string, AgentRecord>> {
   const runs = await query<RunRow>(
     /*
      * Credited by the rule the trail itself records (PLAN.md 2.2): the agent that owns the strategy
@@ -83,16 +93,21 @@ export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
     byAgent.set(agent, acc);
   }
 
-  return AGENTS.map((a) => {
-    const acc = byAgent.get(a.id) ?? { pnl: 0, wins: 0, trades: 0 };
+  const records = new Map<string, AgentRecord>(AGENTS.map((a) => [a.id, NO_TRADES]));
+  for (const [agent, acc] of byAgent) {
     const win = acc.trades > 0 ? Math.round((acc.wins / acc.trades) * 100) : 0;
-    return {
-      ...a,
+    records.set(agent, {
       pnl30d: Number(acc.pnl.toFixed(2)),
       win,
       trades: acc.trades,
-      // No trades means no record. Saying "no trades yet" is honest; a win rate is not.
-      metric: acc.trades === 0 ? 'No trades yet' : `${win}% win rate`,
-    };
-  });
+      metric: acc.trades === 0 ? NO_TRADES.metric : `${win}% win rate`,
+    });
+  }
+  return records;
+}
+
+/** The four personas, each with its record: the leaderboard's rows. */
+export async function leaderboard(walletId: string): Promise<LeaderboardRow[]> {
+  const records = await agentRecords(walletId);
+  return AGENTS.map((a) => ({ ...a, ...(records.get(a.id) ?? NO_TRADES) }));
 }

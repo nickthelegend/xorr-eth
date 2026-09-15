@@ -131,6 +131,21 @@ export function useLogos(symbols: readonly string[]): Record<string, string | nu
  * which is exactly how every list ended up rendering a mid-load row as though every issuer had
  * declined to have a mark. Spreading this instead makes that unrepresentable.
  */
+/**
+ * The mark for a futures contract (2026-09-16): the registry's logo where one resolved, and otherwise the venue's own icon
+ * for the contract it lists.
+ *
+ * The futures come from Hyperliquid, and nearly every contract there (REZ, INJ, SOPH…) is in neither the 1inch registry nor
+ * the CoinGecko batch, so the list was a column of grey gradients. The venue publishes an icon per contract; one it has
+ * none for fails to load and `AssetMark` keeps the gradient, with its skeleton while the icon is on its way.
+ */
+export function perpLogoProps(
+  logos: Record<string, string | null>,
+  symbol: string,
+): { uri: string | null; pending: boolean } {
+  return { uri: logos[symbol] || `https://app.hyperliquid.xyz/coins/${encodeURIComponent(symbol)}.svg`, pending: false };
+}
+
 export function logoProps(
   logos: Record<string, string | null>,
   symbol: string,

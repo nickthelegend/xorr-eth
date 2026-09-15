@@ -46,6 +46,7 @@ import { errorText } from '@/data/apiError';
 import { winRate } from '@/state/derived';
 import { labelFigure, setupFor } from '@/strategies/ladder';
 import type { StrategyKind } from '@/data/types';
+import { CHAT_AGENTS } from '@/chat/agents';
 
 /** The strategy kind each agent's mandate covers. See the header comment. */
 const MANDATE_KINDS: Readonly<Record<string, readonly StrategyKind[]>> = {
@@ -78,10 +79,14 @@ export default function AgentDetail() {
   const strategies = useAsync(() => repos.strategies.list(), []);
 
   const agent = (agents.data ?? []).find((a) => a.id === id || a.personaId === id);
-  const kinds = agent ? (MANDATE_KINDS[agent.name] ?? []) : [];
+  // An agent someone made runs the kind of strategy the one it works like does.
+  const mandateOf = agent?.custom ? CHAT_AGENTS.find((a) => a.id === agent.style)?.name : agent?.name;
+  const kinds = mandateOf ? (MANDATE_KINDS[mandateOf] ?? []) : [];
   // Plain: the React Compiler memoizes this itself, and could not preserve a hand-written memo keyed
   // on a joined string.
-  const mine = (strategies.data ?? []).filter((s) => kinds.includes(s.kind) && s.state !== 'ended');
+  const mine = (strategies.data ?? []).filter(
+    (s) => s.state !== 'ended' && (agent?.custom ? s.agentId === agent.id : kinds.includes(s.kind)),
+  );
   const setup = setupFor(kinds);
 
   const hire = async () => {

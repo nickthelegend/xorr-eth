@@ -29,7 +29,7 @@ import { compactMoney, percent, price as fmtPrice } from '@/format';
 import { assetGradient } from '@/design/gradients';
 import { repos } from '@/data';
 import { useAsync } from '@/data/useAsync';
-import { logoProps, useLogos } from '@/data/useLogos';
+import { perpLogoProps, useLogos } from '@/data/useLogos';
 import type { PerpMarket } from '@/data/repositories';
 
 type Sort = 'top' | 'gainers' | 'losers';
@@ -98,7 +98,7 @@ export default function Futures() {
                 height={size.rowLg}
                 divider={i < rows.length - 1}
                 onPress={() => router.push(`/perp/${m.symbol}`)}
-                left={<AssetMark gradient={assetGradient(m.symbol)} {...logoProps(logos, m.symbol)} size={size.mark} />}
+                left={<AssetMark gradient={assetGradient(m.symbol)} {...perpLogoProps(logos, m.symbol)} size={size.mark} />}
                 title={m.symbol}
                 secondary={`${m.maxLeverage}x · OI ${compactMoney(m.openInterestUsd)}`}
                 value={fmtPrice(m.markPx)}

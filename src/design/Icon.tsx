@@ -37,7 +37,9 @@ export type IconName =
   | 'copy'
   | 'mic'
   | 'waveform'
-  | 'sparkle';
+  | 'sparkle'
+  | 'sun'
+  | 'moon';
 
 export type IconProps = {
   name: IconName;
@@ -213,6 +215,15 @@ function render(name: IconName, c: Common, color: string) {
           <Path d="M18.5 3v3.5M16.75 4.75h3.5" {...c} />
         </>
       );
+    case 'sun':
+      return (
+        <>
+          <Circle cx={12} cy={12} r={4} {...c} />
+          <Path d="M12 2.75v2M12 19.25v2M2.75 12h2M19.25 12h2M5.46 5.46l1.41 1.41M17.13 17.13l1.41 1.41M5.46 18.54l1.41-1.41M17.13 6.87l1.41-1.41" {...c} />
+        </>
+      );
+    case 'moon':
+      return <Path d="M19.5 14.2A7.5 7.5 0 0 1 9.8 4.5a7.75 7.75 0 1 0 9.7 9.7Z" {...c} />;
     case 'send':
       return (
         <>
