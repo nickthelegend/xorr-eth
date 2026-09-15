@@ -76,10 +76,12 @@ describe('the agent roster is persisted', () => {
       await req('/agents', { method: 'POST', body: JSON.stringify({ personaId: 'drawdown-guard' }) })
     ).json()) as { id: string };
 
-    await req(`/agents/${hired.id}`, {
+    // The limit names the executor enforces: an unknown one refuses the whole change, tone included.
+    const patched = await req(`/agents/${hired.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ tone: 'flat', riskLimits: { maxTradeUsd: 250 } }),
+      body: JSON.stringify({ tone: 'flat', riskLimits: { maxUsdPerTrade: 250 } }),
     });
+    expect(patched.status).toBe(200);
 
     const rows = (await (await req('/agents')).json()) as {
       id: string;
@@ -88,7 +90,7 @@ describe('the agent roster is persisted', () => {
     }[];
     const row = rows.find((r) => r.id === hired.id)!;
     expect(row.tone).toBe('flat');
-    expect(row.riskLimits).toEqual({ maxTradeUsd: 250 });
+    expect(row.riskLimits).toEqual({ maxUsdPerTrade: 250 });
   }, 30_000);
 
   it('firing pauses its strategies and leaves everyone else alone', async () => {

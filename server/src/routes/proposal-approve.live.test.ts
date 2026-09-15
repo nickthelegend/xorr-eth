@@ -78,8 +78,9 @@ afterAll(async () => {
 describe('approving a proposal', () => {
   it('cannot be done by another account', async () => {
     const res = await other('POST', `/proposals/${proposalId}/decide`, { decision: 'approve' });
-    // `gone` when the other account has a wallet; `no_wallet` when it has none. Never a decision.
-    if (res.status === 200) expect((res.body as Decision).status).toBe('gone');
+    // A named 404 when the other account has a wallet, read exactly like an unknown id (E160); `no_wallet` when it has
+    // none. Never a decision.
+    if (res.status === 404) expect(res.body).toMatchObject({ error: 'not_found', status: 'gone' });
     else expect(res.status, JSON.stringify(res.body)).toBe(400);
   });
 
