@@ -41,7 +41,8 @@ reads **LIVE** until 2026-10-11.
 
 Fills are the one thing Sepolia cannot show — 1inch has no liquidity there, and the app says so on
 `/network` rather than pretending. Those are real on the Base mainnet fork, counted by the executor
-that made them: **36 through the aggregator, 7 through Aqua and 4 through SwapVM**
+that made them: **76 through the aggregator, 19 through SwapVM, 8 through Aqua and 1 limit order**,
+with 2 supplies to Aave beside them, on 2026-09-15
 (`curl -s https://executor-fork-production.up.railway.app/metrics | jq .fillsByVenue`). The fork
 itself was rebuilt on 2026-09-11: the counts live in Postgres and survived it, the older receipts
 did not, so every fork hash quoted in this repo's submission is from the rebuilt fork.
@@ -139,7 +140,7 @@ published to Base, so the history you check is not a history we hold.
 
 | | |
 |---|---|
-| **The app** | **[`app.xorr.finance`](https://app.xorr.finance)** — open it, sign in, it is the real thing against the Sepolia executor below. Frontend on Vercel; executors, fork and Postgres on Railway |
+| **The app** | **[`app.xorr.finance`](https://app.xorr.finance)** — open it and sign in: it is a build of the Base mainnet fork below, where fills settle. Frontend on Vercel; executors, fork and Postgres on Railway |
 | `XorrDelegation` | [`0x6c5528Fd8E74a047A85bAb413856A9239E73540e`](https://sepolia.basescan.org/address/0x6c5528Fd8E74a047A85bAb413856A9239E73540e) on Base Sepolia — source verified on [Sourcify](https://repo.sourcify.dev/84532/0x6c5528Fd8E74a047A85bAb413856A9239E73540e) (exact match), deployed from `47b1296` ([record](contracts/deployments/base-sepolia.json)). Swap output is bound to the owner on chain; it supersedes `0xb14C…0a4e`, which predated `closePosition` |
 | `XorrAuditAnchor` | [`0xB58cB717867988582DcCB7f3155DeD3fC7A76caf`](https://sepolia.basescan.org/address/0xB58cB717867988582DcCB7f3155DeD3fC7A76caf) on Base Sepolia — holds the audit trail's head, published hourly |
 | Delegation subgraph | [`api.studio.thegraph.com/query/1758741/xorr/v0.0.3`](https://api.studio.thegraph.com/query/1758741/xorr/v0.0.3) — indexes the contract above, closes as well as spends; synced, no indexing errors |
@@ -148,13 +149,13 @@ published to Base, so the history you check is not a history we hold.
 | Executor (Base Sepolia) | [`api.xorr.finance`](https://api.xorr.finance/verify), which is [`executor-production-1659.up.railway.app`](https://executor-production-1659.up.railway.app/verify) — the public, explorer-checkable deployment |
 | Executor (Base mainnet fork) | [`executor-fork-production.up.railway.app`](https://executor-fork-production.up.railway.app/verify) — where fills actually execute |
 
-The hosted app runs on Base Sepolia, and that is a correctness choice rather than a convenience
-one: Privy previews and broadcasts through its own RPC for a chain it knows, and a fork of Base is
-chain 8453 — indistinguishable from real Base — so a hosted fork build would simulate every
-user-signed transaction against mainnet, where the wallet holds nothing. Sepolia is where the
-signing half is real: a real login, a real embedded wallet, a real on-chain permission, real prices,
-and history read from The Graph. Fills are the half that is not, because 1inch has no liquidity
-there — the network screen says so rather than pretending, and the fork below is where they settle.
+The hosted app is a build of the fork. A fork of Base is chain 8453, which Privy takes for real Base,
+so a wallet that broadcast its own transactions would simulate them against mainnet, where it holds
+nothing. On a fork build the wallet only signs, and the app sends the signed transaction to the fork
+itself (`src/wallet/userSigning.ts`) — which is how the Android build of this code granted, bought,
+sold and swapped there on 2026-09-15. Sepolia stays the explorer-checkable deployment: the verified
+contract, the audit anchor, and the grant below, signed when the hosted app ran there. Fills are the
+half Sepolia cannot show, because 1inch has no liquidity on it, and its network screen says so.
 
 A real grant signed by a real Privy embedded wallet is queryable right now:
 [`0xce90642d…`](https://sepolia.basescan.org/tx/0xce90642d65cd970bd17984a06b51791ceaf51997b1ace72cb4c25a6bec6b6a1f)
@@ -274,7 +275,7 @@ the executor has actually run it.
 
 ## Every screen
 
-A curated set below, from the 101 routes the sweep captures at the design canvas (402×874) against a
+A curated set below, from the 103 routes the sweep captures at the design canvas (402×874) against a
 signed-in session. The same sweep checks content, the console and the network on every one of them,
 and fails a screen on any console error or failed request. Regenerate with `node tools/shoot.mjs`.
 
@@ -379,7 +380,7 @@ npm test                                       # 547 — app and executor units
 (cd contracts && forge test)                   # 62 contract: 30 unit (22 delegation, 8 anchor) + 32 fork
 (cd contracts && forge test --match-contract Fork \
    --fork-url $BASE_RPC)                       # 32 fork: 15 Aqua, 10 SwapVM, 7 equities
-node tools/shoot.mjs                           # 101 screens, content + console + network
+node tools/shoot.mjs                           # 103 screens, content + console + network
 ```
 
 Two scripts drive the DEPLOYED executor rather than a local one, because "it works on my machine"

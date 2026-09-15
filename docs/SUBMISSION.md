@@ -131,12 +131,14 @@ more after gas. When the net winner differs from the gross winner, the screen sa
 
 `/metrics` records, for every fill, how far it landed from the market price at the moment the run
 decided to trade — implementation shortfall against the arrival price, the same reference for every
-venue. Every measurement so far:
+venue. Every measurement on 2026-09-15 (69 fills measured; 35 had no arrival price to measure against):
 
 | Venue | Fills | Mean vs arrival price | Range |
 |---|---|---|---|
-| SwapVM | 2 | **+73.2 bps** | +71.1 to +75.2 |
-| Aqua | 2 | **−309.8 bps** | −311.8 to −307.8 |
+| 1inch aggregator | 48, 29 of them sales | **−34.3 bps** | −198.0 to +74.1 |
+| SwapVM | 17 | **−25.0 bps** | −158.8 to +75.2 |
+| Aqua | 3 | **−225.4 bps** | −311.8 to −56.6 |
+| Limit order | 1 | **0.0 bps** | 0.0 |
 
 A supply to Aave is deliberately absent: it converts 1:1, so there is no execution in it to grade.
 It was briefly counted as a perfect aggregator fill, which `013-supply-is-not-a-fill.sql` corrected.
