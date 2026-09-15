@@ -2,7 +2,7 @@
 
 **Live app:** [`app.xorr.finance`](https://app.xorr.finance)
 — open it and sign in. A new wallet is sent testnet gas automatically so the permission is signable,
-and the demo wallet's own permission is live until **2026-10-11**. The frontend is on Vercel; the
+and the demo wallet's own permission on Base Sepolia is live until **2026-10-13**. The frontend is on Vercel; the
 executors, the fork and Postgres are on Railway.
 
 **Demo:** [`docs/demo/demo.mp4`](demo/demo.mp4) — 91 seconds against the hosted app and its public
@@ -62,7 +62,7 @@ by the executor that made them, on the Base mainnet fork:
 
 ```bash
 curl -s https://executor-fork-production.up.railway.app/metrics | jq .fillsByVenue
-{ "swapvm": 4, "1inch": 36, "aqua": 7 }
+{ "aave": 2, "swapvm": 21, "1inch": 93, "lop": 1, "aqua": 9 }   # at 02:24 UTC on 2026-09-15
 ```
 
 The fork was rebuilt on 2026-09-11 — its chain state has no disk, and the service restarted. The
@@ -131,13 +131,13 @@ more after gas. When the net winner differs from the gross winner, the screen sa
 
 `/metrics` records, for every fill, how far it landed from the market price at the moment the run
 decided to trade — implementation shortfall against the arrival price, the same reference for every
-venue. Every measurement on 2026-09-15 (69 fills measured; 35 had no arrival price to measure against):
+venue. Every measurement at 02:24 UTC on 2026-09-15 (89 fills measured; 35 had no arrival price to measure against):
 
 | Venue | Fills | Mean vs arrival price | Range |
 |---|---|---|---|
-| 1inch aggregator | 48, 29 of them sales | **−34.3 bps** | −198.0 to +74.1 |
-| SwapVM | 17 | **−25.0 bps** | −158.8 to +75.2 |
-| Aqua | 3 | **−225.4 bps** | −311.8 to −56.6 |
+| 1inch aggregator | 65, 38 of them sales | **−34.2 bps** | −198.0 to +74.1 |
+| SwapVM | 19 | **−20.5 bps** | −158.8 to +97.6 |
+| Aqua | 4 | **−198.5 bps** | −311.8 to −56.6 |
 | Limit order | 1 | **0.0 bps** | 0.0 |
 
 A supply to Aave is deliberately absent: it converts 1:1, so there is no execution in it to grade.
@@ -188,11 +188,14 @@ wallet's owner to authorise that, and the owner is the user. `/safety` says so o
 | **Granting the bot permission** — token approvals, then `grant()`, each signed by the user's Privy embedded wallet in Privy's own dialogs | `0xf718121116ef61452ee398fe744cbe9cca3a6607a5460b68a4feade02a335c88` on **Base Sepolia**, from the user's wallet to `XorrDelegation` — [explorer](https://sepolia.basescan.org/tx/0xf718121116ef61452ee398fe744cbe9cca3a6607a5460b68a4feade02a335c88). $1,600/day, 30 days. |
 | **A swap through that permission** — USDC into WETH, filled by a maker's Aqua book | `0xe4875211…`, above |
 | **An Earn deposit** — 100 USDC supplied to Aave v3 on the Base mainnet fork, aToken straight to the user (its aUSDC went 0 → 99.999999) | `0x7b2a9e9f29f818f104228ce971bd4df6efd403be7ab2344d3fccb9bdea34f542` |
-| **Stopping everything** — "Stop all agents" sends a `revoke()` the user signs | The contract half, run end to end on the Base mainnet fork on 2026-09-10 with the owner's key impersonated: the chain read `revoked: true`, `/limits` read `$0`, and `spend()` reverted `PolicyRevoked()`. The signing half is the same Privy dialog as the grant above. |
+| **Stopping everything** — "Stop all trading" sends a `revoke()` the user signs | Signed by a Privy embedded wallet from the Android app, on the Base mainnet fork on 2026-09-15: `revoke()` in `0x91ba23c8e061a42b53098bd22242b7045621819b56703f55ac711cded90b14d3` left nothing to spend, and resuming signed a new `grant()` in `0xc14f309c22f2df065704e24655e42cf056966188e25d2906e4423ac4279cdd8a` — both from the user's wallet to `XorrDelegation`, status 1. The contract half was first run end to end on 2026-09-10 with the owner's key impersonated: the chain read `revoked: true`, `/limits` read `$0`, and `spend()` reverted `PolicyRevoked()`. |
 
-A withdrawal flow is built too — USDC to an allowlisted address, signed by the embedded wallet, with a
-24-hour cooling-off on any newly added destination — but it is not listed as completed, because
-there is no transaction from this week to point at.
+A withdrawal, signed: 5 USDC from a Privy embedded wallet to the owner, signed with `eth_signTransaction`
+through the app's own fork-signing path and sent to the fork —
+`0xe196391b4c6e8d2a40f210511c389115eed74a574ef937defb97eb1c172c01d9`, status 1, carrying the wallet's own
+signature from `0x7882…c36a` (`tools/prove-user-signing.ts`, 2026-09-13). In the app, a withdrawal goes only to
+an allowlisted address, after a 24-hour cooling-off on any newly added destination; the Android app added one
+on 2026-09-15, which unlocks at 01:52 UTC the next day.
 
 ---
 

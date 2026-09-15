@@ -37,12 +37,12 @@ It closes on `/safety` reading **EXPIRED**, because the demo wallet's permission
 was recorded. That was the screen behaving correctly — the previous recording showed a green
 **Live** badge on the same expired permission, which was a defect, not a better take. The live app
 has since been renewed through its own grant flow, three Privy signatures by the wallet's owner, and
-reads **LIVE** until 2026-10-11.
+on Base Sepolia reads **LIVE** until 2026-10-13.
 
 Fills are the one thing Sepolia cannot show — 1inch has no liquidity there, and the app says so on
 `/network` rather than pretending. Those are real on the Base mainnet fork, counted by the executor
-that made them: **76 through the aggregator, 19 through SwapVM, 8 through Aqua and 1 limit order**,
-with 2 supplies to Aave beside them, on 2026-09-15
+that made them: **93 through the aggregator, 21 through SwapVM, 9 through Aqua and 1 limit order**,
+with 2 supplies to Aave beside them, at 02:24 UTC on 2026-09-15
 (`curl -s https://executor-fork-production.up.railway.app/metrics | jq .fillsByVenue`). The fork
 itself was rebuilt on 2026-09-11: the counts live in Postgres and survived it, the older receipts
 did not, so every fork hash quoted in this repo's submission is from the rebuilt fork.
@@ -374,7 +374,7 @@ XORR_CHAIN=base-fork FORK_RPC=http://127.0.0.1:8545 npx tsx server/src/fork-e2e.
 ## Tests
 
 ```bash
-npm test                                       # 547 — app and executor units
+npm test                                       # 2,490 — 1,603 app and 887 executor units
 (cd server && npm test)                        # 268 executor on its own
 (cd server && npm run test:live)               # 77 against real APIs, a real chain and the running executor
 (cd contracts && forge test)                   # 62 contract: 30 unit (22 delegation, 8 anchor) + 32 fork

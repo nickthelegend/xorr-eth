@@ -463,3 +463,132 @@ print "Simulated here" for a feed the executor never sends (it answers an unread
 | M1 | README and SUBMISSION figures match the deployments | Stale: fills 36/7/4 (now 53/8/12), `/verify` 19·1·1, 547 tests, 101 routes, "fills from tiers 1 through 7" | ✗ |
 | M2 | The demo shows a real fill (bar 7) | 91 s, no fill | ✗ |
 | M3 | SECURITY and RUNBOOK describe this design | `SECURITY.md` still cites `server/src/solana/delegation.ts` | ✗ |
+
+---
+
+## Final measurement — 64 of 76 · **84%**
+
+Measured again from the top after closing gaps, every item the way the first pass measured it, on 2026-09-15 between
+01:15 and 02:41 UTC. The executors ran `05bbad1` and, after the last ship, `b01c85b` — the same executor code, since
+nothing under `server/` but a live test changed between them — and the web ran `b01c85b` for its final QA and sweep. The
+Android and iOS apps ran from Metro on the tree that became `b01c85b`, the Android one signed in as a Privy test account
+against the fork executor; every flow below was read back from the chain, not taken from the screen alone.
+
+The keyword sweep finds the same classes as before and nothing new: the setup step's `todo` state, the `Placeholder`
+loading component, comments saying a thing is not a mock or cannot be faked, "Never mock the user", and
+`src/test/react-native-stub.ts`, which is test support. The dead "Simulated here" branch is gone (56a0836).
+
+| # | Item | How it was verified | State |
+|---|---|---|---|
+| **A** | **The permission contract** | | **9 of 9** |
+| A1 | `XorrDelegation` deployed on Base Sepolia | `eth_getCode`: 5,207 bytes at `0x6c55…540e` | ✓ |
+| A2 | Its source is verified | Sourcify v2: `exact_match` for creation and runtime | ✓ |
+| A3 | The daily cap is enforced on chain | `tools/prove-contract-refusals.ts`: one unit over what is left reverts `DailyCapExceeded(2131000001, 2131000000)` on the fork and `(1600000001, 1600000000)` on Sepolia | ✓ |
+| A4 | Only allowlisted venues | `VenueNotAllowed(0x…dEaD)` on both chains | ✓ |
+| A5 | The permission expires on its own | On fresh local copies of both chains a minute past expiry, a spend reverts `PolicyExpired()` with nothing revoked | ✓ |
+| A6 | Only the bot's delegate can spend | `NotDelegate()` on both chains | ✓ |
+| A7 | The owner's revoke stops spends and closes, with no server | On local copies of both chains, after `revoke()` a spend and a close both revert `PolicyRevoked()` and nothing is left of the day's cap; on a screen, Safety's held stop signed `revoke()` from the Android wallet and the contract read nothing left to spend | ✓ |
+| A8 | Bought tokens can only reach the owner | `forge test`: 74 of 74, the fork suites included (`OutputNotReceived`) | ✓ |
+| A9 | A real embedded wallet signed a grant on a public chain | Receipt of `0xce90642d…`: status 1, from the owner's wallet to the contract | ✓ |
+| **B** | **The audit trail** | | **3 of 3** |
+| B1 | Every row commits to the one before | `/verify`'s audit-chain row: intact on the fork; on Sepolia the stated break at entry 2 and none since | ✓ |
+| B2 | Its head is published to Base, unattended | `/audit/anchor`: fork entry 799 at 01:37 UTC, Sepolia entry 433 at 01:43 UTC, both signed by the bot's key | ✓ |
+| B3 | What Base holds is what `/audit/anchor` shows | The anchor on chain is the one `/audit/anchor` shows on both (fork entry 799 of 20 anchors, Sepolia 433 of 36); a lower count reverts `CountWentBackwards`, an empty head `EmptyHead` | ✓ |
+| **C** | **Anyone can check it** | | **2 of 2** |
+| C1 | `/verify` passes all but its one stated failure | `?owner=` the demo wallet: fork 20 pass · 0 fail · 1 skip (equities); Sepolia 19 · 1 · 1, the break at entry 2. At 02:32 UTC Sepolia's `oneinch` row failed as well — 1inch's API was answering 500, "gas price oracle failed", to this Mac too | ✓ |
+| C2 | `/judge` runs on the web, signed out | Headless Chromium on `app.xorr.finance/judge`: "14/21 claims verified", the 7 wallet checks skipped with a reason each, no console errors | ✓ |
+| **D** | **Privy** | | **4 of 5** |
+| D1 | An embedded wallet signs real transactions | The Android build's Privy wallet signed six transactions on the fork, nonce 0 → 6: three approvals and a grant, a revoke, a new grant | ✓ |
+| D2 | A Privy policy owned by a key quorum refuses a forbidden send | `/verify` `privy-policy` and `privy-refusal` among the passes on both executors | ✓ |
+| D3 | Approvals and revoke signed in Privy's dialogs, from the app | From the Android app: the permission's four signatures, the stop's revoke and the resume's grant, each read back from the contract. The native SDK signs with no dialog on screen | ✓ |
+| D4 | A completed financial flow: a transfer or withdrawal the embedded wallet signs | Read from the fork: a 5 USDC withdrawal to the owner, `0xe196391b…` (block 51,242,365), a type-2 transaction from the Privy wallet `0x7882…c36a` with its own signature (not an impersonated send), signed through the app's fork-signing path; status 1 | ✓ |
+| D5 | A written, working business workflow (Privy B2B track) | Not built (PLAN.md X52, 4.14) | ✗ |
+| **E** | **1inch** | | **7 of 7** |
+| E1 | Aggregator quotes and fills through the permission | QA E187 on both, at 05bbad1 and at b01c85b (on Sepolia after a first run met 1inch answering 500); `/metrics` 93 fills under `1inch`; the Android order ticket, swap and approve filled through it | ✓ |
+| E2 | `XorrAquaBook` fills on official Aqua | `/metrics` 9 fills under `aqua`, one of them today | ✓ |
+| E3 | `XorrSwapVMBook` fills through the SwapVM router | `/metrics` 21 fills under `swapvm`; `swapvm-settle` live 3/3 against the fork: a buy settled through a fresh maker program shipped on official Aqua (tx `0x595e5703…`), and was sold back | ✓ |
+| E4 | Every venue priced for one trade | QA E165 on both | ✓ |
+| E5 | Limit orders | QA's `/limit-orders` checks on both; 1 fill under `lop` | ✓ |
+| E6 | Cross-chain quotes | QA E061: 100 USDC → 99.88 on Arbitrum | ✓ |
+| E7 | Token list, balances and logos | QA E106 and the `/tokens` checks | ✓ |
+| **F** | **The Graph** | | **2 of 3** |
+| F1 | The delegation subgraph is deployed and synced | Direct query: block 46,834,636 with the chain at 46,834,638, no indexing errors | ✓ |
+| F2 | The executor reads it before it acts | Once The Graph lifted its 429: `/verify`'s subgraph row and QA's subgraph checks pass on both | ✓ |
+| F3 | The Aqua subgraph is deployed and joined to it | Built and pinned, never deployed: no Studio slug exists | ✗ |
+| **G** | **Aave** | | **1 of 1** |
+| G1 | Tier 4 supplies idle USDC through the permission | `/metrics` 2 supplies under `aave` | ✓ |
+| **H** | **Base** | | **1 of 2** |
+| H1 | Basenames resolve | QA's `/basename` checks on both | ✓ |
+| H2 | Real transactions on Base mainnet (Base Build Camp) | None: mainnet spends real money, outside what this run may do | ✗ |
+| **I** | **The strategy ladder, filled on the fork** | | **6 of 7** |
+| I1 | 1 · Recurring buy | 43 filled `dca` runs in the demo wallet's `/runs`, and the Android app's $20 | ✓ |
+| I2 | 2 · Rebalance | 10 filled, a partial sale through the planner among them; and the Android onboarding rebalance's $275 | ✓ |
+| I3 | 3 · Take profit / stop loss | 2 filled `exit-rules` runs: a ladder exit and a trailing 5% stop that breached | ✓ |
+| I4 | 4 · Idle cash to yield | 2 filled `yield-rotation` supplies to Aave | ✓ |
+| I5 | 5 · Range accumulation | 1 filled grid rung | ✓ |
+| I6 | 6 · Momentum | 1 filled momentum entry | ✓ |
+| I7 | 7 · Events and earnings | 0 fills in its 5 runs on the demo wallet: its strategies trade tokenized equities, which do not function on a fork | ✗ |
+| **J** | **The app, as a person uses it — end to end on a screen** | | **15 of 18** |
+| J1 | Sign in and get a wallet | Not run: a sign-in code is the owner's to type | ✗ |
+| J2 | Fund: test funds arrive, the balance rises | Android: 1,000 USDC and 0.05 ETH arrived, read on chain | ✓ |
+| J3 | Grant the permission from the app | Android: four signatures, nonce 0 → 4, $1,600 a day read back from the contract | ✓ |
+| J4 | Stop all trading, then resume | Android: the held stop signed a revoke (nonce 5, nothing left to spend); the held resume, one grant (nonce 6) | ✓ |
+| J5 | Create a recurring buy that runs and fills | Android: created $20 of WETH weekly; Run now filled 0.0079 WETH | ✓ |
+| J6 | Buy and sell from the order ticket | Android: bought $10; sold 0.00398 WETH for $10.01; both on chain | ✓ |
+| J7 | Swap | Android: 10 USDC for 0.0040 WETH, on chain | ✓ |
+| J8 | Sell everything | Android: 0.126419 WETH sold for $317.48; WETH 0 on chain | ✓ |
+| J9 | Withdraw to an allowlisted address | A destination added; the cooling-off holds it until 2026-09-16 01:52 UTC and Withdraw says none is unlocked | ✗ |
+| J10 | Alerts | Android: two price alerts created and listed | ✓ |
+| J11 | Proposals: approve, skip | Android: approve filled $5 and says so; skip recorded | ✓ |
+| J12 | Agents: hire, backtest | Android: hired; a cold one-year cbBTC backtest rendered | ✓ |
+| J13 | Markets, asset, chart ranges | Android: Crypto and Commodities; ETH at 1D, 1W, 1M and 1Y; BTC's candles and line | ✓ |
+| J14 | Portfolio: total and graph | Android: $997.96, the graph since Sep 15, one position with its entry, stop and target | ✓ |
+| J15 | Messages drawer | Android: a conversation, suggestions, the agent picker, a shortcut and back, close | ✓ |
+| J16 | Networks: every network and what works on it | Android: the fork ("Trades settle here") and Sepolia ("Watch only"), both at live blocks | ✓ |
+| J17 | Settings and version | Android: every section; the version reads "Development build" | ✓ |
+| J18 | Recovery and key export | Recovery reviewed and marked done on Android; key export runs on the web, signed in with a code the owner types | ✗ |
+| **K** | **Infrastructure** | | **7 of 10** |
+| K1 | Postgres persists through a restart | Every strategy and run from before the `b01c85b` restart is still there: 3 paused and 13 live; 124 filled runs before it and 126 after, the two added being the SwapVM test's own | ✓ |
+| K2 | Every table copied to MongoDB Atlas | mongo-mirror live 3/3 against the fork executor | ✓ |
+| K3 | Both executors deployed, reporting their commit | `/health` on both names `b01c85b` | ✓ |
+| K4 | Web app on Vercel, every route 200, security headers | 103 routes in the sweep; the hosted bundle names `b01c85b` and pins the fork's delegation; the five security headers | ✓ |
+| K5 | Landing page correct | Not re-measured: `landing/` is the owner's | ✗ |
+| K6 | CI green on every push | GitHub Actions: `success` on every push today, `b01c85b` included | ✓ |
+| K7 | The iOS app runs | The iPhone 17 Pro Simulator launched the app from the same Metro bundle and rendered Networks against the fork, both networks at live blocks | ✓ |
+| K8 | The Android app builds and runs | Built with Gradle, installed on an Android 15 emulator; every J flow above ran on it | ✓ |
+| K9 | Push notifications arrive | No EAS project id exists | ✗ |
+| K10 | The agents speak through a language model | No `OPENROUTER_API_KEY` exists; the conversation says the agent cannot reply | ✗ |
+| **L** | **Quality** | | **5 of 6** |
+| L1 | Every endpoint check passes on both executors | Final QA at `b01c85b`: Sepolia 221 of 221 — a first run at 02:28 UTC met 1inch's own API answering 500 on E187 and E190; run again at 02:35, once 1inch answered, it passed; fork 219 of 221 — E064 and E096 read $839 spent today by the executor's tally and $834 by the chain's — $5 apart, as they have been all day, because a $5 buy logged at 00:00:23 UTC landed in a block stamped 23:55:12 the day before: the fork's clock runs 13 minutes behind real time, and every spend since has been counted the same on both sides | ✗ |
+| L2 | Every web route with no console error or failed request | Sweep at `b01c85b`: 103 routes, 0 with a console error, a page error or a failed or 4xx/5xx request, 0 with a console warning | ✓ |
+| L3 | Unit tests | Gates at `b01c85b`: app 1,603 of 1,603 in 162 files, executor 887 of 887 in 98 files; lint and both typechecks clean | ✓ |
+| L4 | Contract tests | `forge test` 74/74 | ✓ |
+| L5 | Live tests pass against the deployments | Sepolia: 26 files passed and 4 skipped (they need a chain 1inch settles on), 121 tests, none failed. Fork: 21 files passed; the 9 that Privy's token endpoint refused with 429 were run one at a time and passed, but for SwapVM settlement, whose maker program earlier fills had priced out — it passed 3/3 once a fresh program was shipped | ✓ |
+| L6 | No stand-in logic or data in shipped code | The keyword sweep, above | ✓ |
+| **M** | **Documentation and submission** | | **2 of 3** |
+| M1 | README and SUBMISSION figures match the deployments | Fills 93 · 21 · 9 · 1 and the fill-quality table from `/metrics`; `/verify` 19 · 1 · 1 on Sepolia; 103 routes; tier 7 without a fill; the hosted app described as the fork build it is; `npm test` 2,490 (1,603 app, 887 executor) | ✓ |
+| M2 | The demo shows a real fill (bar 7) | Not re-recorded: `tools/demo.mjs` signs in by typing a Privy code into the login form, which is the owner's to do | ✗ |
+| M3 | SECURITY and RUNBOOK describe this design | `SECURITY.md` rewritten for `XorrDelegation` (56a0836); `RUNBOOK.md` names no Solana piece and describes the fork on Railway | ✓ |
+
+### What moved, and why
+
+- **C, 0 → 2.** The Graph lifted the 429 it had been answering Railway's egress with; the executors held off rather than ask again, and `/verify` then passed everything but its stated failure. `/judge` was run on the web, signed out.
+- **D, 2 → 4.** D3: approvals, a revoke and a new grant were signed from the Android app by its Privy wallet, each read back from the contract. D4: the first pass looked for a withdrawal and found none on record; PLAN.md 4.1 names one, and the fork still holds it — a Privy-signed 5 USDC transfer to the owner.
+- **F, 1 → 2.** F2: the subgraph row passes once The Graph answers.
+- **J, 1 → 15.** Every signed-in flow but sign-in, the withdrawal and key export was driven on an Android emulator against the fork, and each outcome read from the chain. Driving them found five defects, each fixed and run again there: an approve that filled was told "That did not reach the executor, so nothing was decided" (132103f); Strategies and Alerts kept the list from before a setup closed over them (8aec6ad, 192c0b7); onboarding offered 30% in equities on a network that holds that weight as cash (e4dc41b); the backtest made the person retry through a cold history fetch (b0ab09d).
+- **K, 6 → 7.** K8: the Android app was built and ran every flow; on the way, its charts were blank, because react-native-svg on Android keeps a clip's first shape (5b5d54d).
+- **L, 3 → 5.** L2: the chart's negative-width console error is fixed (47359c0) and the sweep is clean. L5: both deployments' live suites pass, after their stale assumptions were corrected (a named 404, a limit's name, a shared account's balance, a rebalance's starting holding). Running them found a real executor defect: a partial sale reverted in 42% of cases on a one-wei split between the router's rounding and the delegation's (2899479). And the fork's grant approved WETH alone, so cbBTC could be bought and not sold (4a503ac).
+- **M, 0 → 2.** M1: the README and SUBMISSION figures were brought to the deployments (f32dabb, b1a7051, the commit that records this measurement). M3: `SECURITY.md` was rewritten for this design (56a0836), and `RUNBOOK.md` checked.
+
+### What is left, and why
+
+- **J9 — a withdrawal on a screen.** The allowlist holds a new destination for 24 hours by design, on the database's clock. The one added from the Android app on 2026-09-15 unlocks at 2026-09-16 01:52 UTC; Withdraw everything can then send to it.
+- **D5 — the Privy B2B workflow.** Not built. PLAN.md 4.14 describes it: an operator managing agent policy for a business wallet, shown in the app and written up.
+- **F3 — the Aqua venue subgraph.** Built and pinned; deploying it needs a Studio slug that does not exist.
+- **H2 — transactions on Base mainnet.** They spend real money, which this run may not do.
+- **I7 — a tier-7 fill.** Its strategies trade tokenized equities, which do not function on a fork; they can fill only where the equities do, on Base mainnet.
+- **J1, J18's key export, M2's recording.** Each needs a Privy sign-in code typed into the login form, which is the owner's to do.
+- **K5 — the landing page.** `landing/` is the owner's.
+- **K9 — push notifications.** No EAS project id exists.
+- **K10 — the agents' language model.** No `OPENROUTER_API_KEY` exists; the conversation says the agent cannot reply.
+- **L1 — the fork's two spend tallies.** On the fork alone, E064 and E096 read $839 spent today by the executor's tally and $834 by the chain's — $5 apart, as they have been all day, because a $5 buy logged at 00:00:23 UTC landed in a block stamped 23:55:12 the day before: the fork's clock runs 13 minutes behind real time, and every spend since has been counted the same on both sides. The Limits screen already shows the stricter of the two. Setting the fork's clock to real time stops a spend near midnight from landing on different days in the two tallies, and today's pair agrees again from the next UTC day.

@@ -365,28 +365,29 @@ describing a mock that was removed. **The real ones are not marked in the code a
 
 ---
 
-## 4. Current measured state — 2026-09-14
+## 4. Current measured state — 2026-09-15
 
-Measured after batch 4a shipped. Rows that were not measured again were dropped rather than carried forward.
+Measured after the completion pass's final ship; the item-by-item record is `docs/COMPLETION.md`, "Final measurement". Rows
+that were not measured again were dropped rather than carried forward.
 
 | Check | Result |
 |---|---|
-| Deployed | executors `8c05266` (both); web app `e3d0169` (`dpl_Hh7862hvTfqvjRybViMZ661vB5DV`) — re-measured after the fifth design pass and features #1 and #24 |
-| `https://app.xorr.finance` | the fork build at `e3d0169`: its bundle names the fork executor and the Railway fork's RPC, pins the delegation contract `0xc32d…63f4` (checked at build against the executor, the deployment record and the chain), carries "Sign in to see this." and not "Positions and stop-losses stay"; every response carries X-Frame-Options DENY, nosniff, a strict-origin referrer policy, HSTS and a permissions policy. Signed out, 60 routes checked in Chrome: sign-in prompts where a wallet is needed, public screens render, no console warnings, every executor request 200 |
-| `api.xorr.finance` | up · base-sepolia · `8c05266` |
-| Fork executor | up · base-fork · `8c05266` |
+| Deployed | executors `b01c85b` (both); web app `b01c85b` (`dpl_4rsbJbRf1K3rryDQYYcaApBaEThu`) |
+| `https://app.xorr.finance` | the fork build at `b01c85b`: its bundle names the fork executor and pins the delegation contract `0xc32d…63f4`; every response carries X-Frame-Options DENY, nosniff, a strict-origin referrer policy, HSTS and a permissions policy. Signed out, 103 routes swept in Chromium: 0 with an error, 0 with a warning |
+| `api.xorr.finance` | up · base-sepolia · `b01c85b` |
+| Fork executor | up · base-fork · `b01c85b` |
+| QA (`tools/qa-full.mjs`, 221 checks) | Sepolia 221/221 (a first run at 02:28 UTC met 1inch's own API answering 500 on E187 and E190; run again at 02:35, once 1inch answered, it passed) · fork 219/221 (E064, E096: the fork's clock runs 13 minutes behind, so a buy at 00:00:23 UTC counts on different days in the executor's tally and the chain's) |
 | Sepolia `/verify?owner=0x95A0…e615` | 19 pass · 1 fail (the permanent audit fork) · 1 skip |
 | Fork `/verify?owner=0x95A0…e615` | 20 pass · 0 fail · 1 skip |
-| Regression (strategy ownership, wallet takeover, read failures) | 14/14 on both executors |
-| Fork `/metrics` | fills 1inch 51 · SwapVM 10 · Aqua 8 · Aave 2 · LOP 1; quality against quotes 1inch −16.8 bps (23 measured) · SwapVM +26.6 bps (8) · Aqua −225.4 bps (3) |
-| MongoDB Atlas | `xorr_base_sepolia` 23 tables / 2,217 rows · `xorr_base_fork` 23 / 1,377 · no document differing from Postgres |
-| CI | push run 34788494348 green for `8c05266`, after push run 34785132946 failed on `a86d8a0` (its custom bezier broke the motion policy); push run 34789462196 for `e3d0169`; dispatch run 34781696958: checks, contracts and fork-contracts green, `live-1inch` red (X79) |
-| Unit tests (`npm test`, app and executor) | 116 files · 1,102 tests |
-| Executor tests (`cd server && npm test`) | 84 files · 740 tests |
-| iOS | runs on the iPhone 17 Pro simulator (Xcode 26.5) through `xcrun simctl`; the simulator integration needs `xcode-select` pointed at Xcode |
-| Deployer `0x364d…2581` | Base Sepolia 0.0890 ETH · Base mainnet 0 ETH |
-| Credentials present (names) | root `.env`: `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `EXPO_PUBLIC_PRIVY_APP_ID`, `ONEINCH_API_KEY`, `GRAPH_DEPLOY_KEY`, `BASE_RPC`, `BASE_SEPOLIA_RPC`, `DATABASE_URL`, `FAUCET_PRIVATE_KEY`, `MONGODB_URI`; `server/.keys`: delegate, deployer, faucet; on Railway also `DELEGATE_PRIVATE_KEY`, `PRIVY_AUTHORIZATION_KEY`, `PRIVY_KEY_QUORUM_ID`, `OPERATOR_TOKEN`, `MONGO_MIRROR_DB` |
-| Credentials absent | any LLM key, `ETHERSCAN_API_KEY`, an Expo/EAS project id (the app logs its absence), Firebase config |
+| Contract refusals (`tools/prove-contract-refusals.ts`) | every check on both chains |
+| Live tests | Sepolia: 26 files passed, 4 skipped, 121 tests. Fork: every file passed, SwapVM settlement after a fresh maker program |
+| Fork `/metrics` | fills 1inch 93 · SwapVM 21 · Aqua 9 · Aave 2 · LOP 1; against the arrival price 1inch −34.2 bps (65 measured) · SwapVM −20.5 bps (19) · Aqua −198.5 bps (4) |
+| MongoDB Atlas | the mirror's live test 3/3 against the fork executor |
+| CI | the push run for `b01c85b` green |
+| Tests | app 162 files · 1,603 tests; executor 98 files · 887 tests; `forge test` 74/74 |
+| iOS | runs on the iPhone 17 Pro simulator through `xcrun simctl`, against the fork |
+| Android | runs on an Android 15 emulator; every signed-in flow driven there against the fork |
+| Credentials absent | any LLM key, `ETHERSCAN_API_KEY`, an Expo/EAS project id, Firebase config |
 
 ---
 
