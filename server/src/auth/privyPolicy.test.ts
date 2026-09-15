@@ -124,3 +124,29 @@ describe('what the policy lets the wallet sign', () => {
     expect(allowedDestinations().map((d) => d.address)).not.toContain(AAVE.toLowerCase());
   });
 });
+
+describe('signing is never wider than sending (a fork build signs, and the executor broadcasts)', () => {
+  it('names every call twice, to send and to sign, with the same conditions', async () => {
+    const { policyRules } = await import('./privyPolicy.js');
+    const all = policyRules();
+    const send = all.filter((r) => r.method === 'eth_sendTransaction');
+    const sign = all.filter((r) => r.method === 'eth_signTransaction');
+    expect(send).toEqual(desiredRules());
+    expect(sign).toHaveLength(send.length);
+    for (const s of sign) {
+      expect(send.some((r) => JSON.stringify(r.conditions) === JSON.stringify(s.conditions))).toBe(true);
+    }
+    expect(all).toHaveLength(send.length + sign.length);
+  });
+
+  it('refuses to sign what it refuses to send', async () => {
+    const { policyRules } = await import('./privyPolicy.js');
+    const signRules = policyRules().filter((r) => r.method === 'eth_signTransaction');
+    const signs = (tx: { to: string; data?: Hex }) => signRules.some((r) => matches(r, tx));
+    const transfer = encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [STRANGER, 1n] });
+    const approve = encodeFunctionData({ abi: erc20Abi, functionName: 'approve', args: [DELEGATION, 1n] });
+    expect(signs({ to: USDC, data: transfer })).toBe(false);
+    expect(signs({ to: STRANGER })).toBe(false);
+    expect(signs({ to: USDC, data: approve })).toBe(true);
+  });
+});

@@ -60,7 +60,7 @@ type CalldataCondition = {
 
 export type PrivyRule = {
   name: string;
-  method: 'eth_sendTransaction';
+  method: 'eth_sendTransaction' | 'eth_signTransaction';
   action: 'ALLOW';
   conditions: (ToCondition | CalldataCondition)[];
 };
@@ -280,6 +280,22 @@ export function desiredRules(): PrivyRule[] {
   return rules;
 }
 
+/**
+ * The rules as Privy stores them: every call above allowed to be sent, and the same call allowed to be signed.
+ *
+ * Privy broadcasts only to chains it knows. A wallet on a fork of Base therefore signs with `eth_signTransaction` and the
+ * executor sends the bytes to the fork, as the app already does for an embedded wallet on a fork build. Privy's engine
+ * denies any method no rule names, so without these the fork's business treasury could sign nothing at all. Each twin
+ * carries its send rule's conditions exactly: signing is never wider than sending.
+ */
+export function policyRules(): PrivyRule[] {
+  const send = desiredRules();
+  return [
+    ...send,
+    ...send.map((r) => ({ ...r, method: 'eth_signTransaction' as const, name: `${r.name}, signed for the executor to send` })),
+  ];
+}
+
 /** The same rules, as a person reads them — what `/privy/policy` reports under "would allow". */
 export function allowedDestinations(): { label: string; address: string; call: string }[] {
   return desiredRules().map((r) => {
@@ -294,9 +310,11 @@ export function allowedDestinations(): { label: string; address: string; call: s
 }
 
 /** What a rule enforces, independent of the ids and ordering Privy hands back. */
-function rulesKey(rules: { conditions?: { field_source?: string; field?: string; operator?: string; value?: unknown }[] }[]): string {
+function rulesKey(rules: { method?: string; conditions?: { field_source?: string; field?: string; operator?: string; value?: unknown }[] }[]): string {
   return rules
     .map((r) =>
+      // The method is part of what a rule allows: a send rule is not a sign rule with the same conditions.
+      `${r.method ?? ''}=` +
       (r.conditions ?? [])
         .map((c) => `${c.field_source}:${c.field}:${c.operator}:${String(c.value).toLowerCase()}`)
         .sort()
@@ -364,7 +382,7 @@ export function ensurePolicy(): Promise<PrivyPolicy> {
 }
 
 async function ensurePolicyFresh(): Promise<PrivyPolicy> {
-  const wanted = desiredRules();
+  const wanted = policyRules();
   const knownId = await rememberedPolicyId();
   // A remembered id that Privy no longer recognises is a deleted policy, not a fatal error: fall
   // through and mint a new one rather than leaving every wallet unprotected over a stale row.
@@ -509,7 +527,7 @@ export async function proveAuthorizationKey(): Promise<{ signed: boolean; detail
     // A no-op write: the same rules it already has. It still has to be signed.
     await privyFetch(`/policies/${policy.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ rules: desiredRules() }),
+      body: JSON.stringify({ rules: policyRules() }),
     });
     return { signed: true, detail: `signed write accepted on ${policy.id} (owner ${policy.owner_id})` };
   } catch (e) {
