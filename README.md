@@ -243,7 +243,8 @@ every day is noise that trains people to stop reading.
 
 Ordered by how much the bot has to be right about the future, not by how impressive it sounds. All
 seven rungs are built and registered in `PLANNERS`; the fork's run log carries fills from tiers 1
-through 7.
+through 6. Tier 7 trades tokenized equities around earnings, and equities do not function on a fork, so
+it has run there without a fill.
 
 | | What it does | Why it sits here |
 |---|---|---|
