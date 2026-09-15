@@ -41,6 +41,7 @@ import {
 import { money, percent } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system } from '@/data/system';
+import { waitOutWarming } from '@/data/warming';
 import { RECURRING_BUY_SYMBOLS, type RecurringBuySymbol } from '@/strategies/ladder';
 
 const LOOKBACKS = ['30d', '90d', '6m', '1y'] as const;
@@ -58,17 +59,24 @@ export default function Backtest() {
   const [usd, setUsd] = useState<number>(SIZES[1]);
 
   const [asked, setAsked] = useState<Inputs | null>(null);
+  /*
+   * A cold price history takes the executor up to two minutes to fetch, and it answers 503 while the fetch goes on. On an
+   * Android emulator this screen said "try again in a moment" twice in a row with the answer on its way (2026-09-15); the
+   * agent backtest already waits that out, and so does this.
+   */
   const result = useAsync(
     async () =>
       asked
-        ? system.backtestStrategy({
-            kind: 'dca',
-            symbol: asked.symbol,
-            lookback: asked.lookback,
-            // Weekly, which is what the DCA creator defaults to — a backtest of a cadence nobody
-            // would choose answers a question nobody asked.
-            params: { usd: asked.usd, everyNDays: 7 },
-          })
+        ? waitOutWarming(() =>
+            system.backtestStrategy({
+              kind: 'dca',
+              symbol: asked.symbol,
+              lookback: asked.lookback,
+              // Weekly, which is what the DCA creator defaults to — a backtest of a cadence nobody
+              // would choose answers a question nobody asked.
+              params: { usd: asked.usd, everyNDays: 7 },
+            }),
+          )
         : null,
     [asked],
   );
