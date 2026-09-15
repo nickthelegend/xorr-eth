@@ -22,6 +22,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import { Icon } from '@/design/Icon';
 import {
+  BackButton,
   Button,
   Eyebrow,
   Fill,
@@ -167,15 +168,18 @@ export default function WalletSetup() {
 
   return (
     <Screen>
-      <Progress step={2} total={3} onBack={() => goBack()} />
+      {/* Signing back in is not step two of a setup, so it carries no setup progress. */}
+      {returning ? <BackButton onPress={() => goBack()} /> : <Progress step={2} total={3} onBack={() => goBack()} />}
 
       <Text variant="onboardingTitle" style={{ marginTop: space.s26 }}>
-        Your wallet, your keys
+        {returning ? 'Welcome back' : 'Your wallet, your keys'}
       </Text>
-      <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
-        xorr never holds your money. You keep the wallet; the bot gets a separate, limited
-        permission to trade inside it — which you can take back at any time.
-      </Text>
+      {returning ? null : (
+        <Text variant="body" color={colors.ink55} style={{ marginTop: space.s10 }}>
+          xorr never holds your money. You keep the wallet; the bot gets a separate, limited
+          permission to trade inside it — which you can take back at any time.
+        </Text>
+      )}
 
       <Fill style={{ marginTop: space.s22 }}>
         {STEPS.map((s, i) => {
