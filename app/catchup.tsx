@@ -33,6 +33,7 @@ import { clock, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { errorText } from '@/data/apiError';
 import { system } from '@/data/system';
+import { plainAction } from '@/format/activity';
 
 export default function Catchup() {
   const goBack = useGoBack();
@@ -113,7 +114,7 @@ export default function Catchup() {
             {entries.map((e, i) => (
               <SheetCard key={`${e.at}-${i}`} bordered borderRadius={radius.panel} padding={space.s14}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <Text variant="rowPrimary">{e.action}</Text>
+                  <Text variant="rowPrimary">{plainAction(e.action)}</Text>
                   <Text variant="footnote" color={colors.ink55}>
                     {clock(new Date(e.at).getTime())}
                   </Text>

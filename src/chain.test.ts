@@ -41,7 +41,7 @@ describe('the chain a build signs on', () => {
       id: 84532,
       label: 'Base Sepolia',
       test: true,
-      chip: 'Base Sepolia · Test',
+      chip: 'Test network',
       code: true,
       signsOnly: false,
     });
@@ -54,7 +54,7 @@ describe('the chain a build signs on', () => {
         id: 8453,
         label: 'Base fork',
         test: true,
-        chip: 'Base fork · Test',
+        chip: 'Test network',
         code: false,
         signsOnly: true,
       });

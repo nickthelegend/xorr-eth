@@ -96,8 +96,13 @@ export const chainLabel = LABELS[CHAIN_KEY];
 /** A network whose money is not real is for testing: nothing on it is real money. */
 export const testNetwork = money !== 'real';
 
-/** The one place the network is named on screen: a small chip where money moves — Deposit and Send. */
-export const networkChip = testNetwork ? `${chainLabel} · Test` : chainLabel;
+/**
+ * The one place a money screen shows the network: a small chip on Deposit, Send and Fund.
+ *
+ * Chain-agnostic: on a network whose money is not real it says only that, "Test network", and the chain's own name lives
+ * in Networks, one tap away. Where money is real it names the chain, because that is where a deposit has to be sent.
+ */
+export const networkChip = testNetwork ? 'Test network' : chainLabel;
 
 /**
  * Where a transaction the USER signs is broadcast (PLAN.md 4.1).

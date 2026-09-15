@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "start:fork": "sh -c 'set -a; . ./server/.env.fork; set +a; EXPO_PUBLIC_API_URL=https://executor-fork-production.up.railway.app exec expo start --port 8081'",
     "ios": "expo run:ios",
     "android": "expo run:android",
     "web": "expo start --web",

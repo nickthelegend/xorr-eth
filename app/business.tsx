@@ -18,6 +18,7 @@ import { useAsync } from '@/data/useAsync';
 import { errorText } from '@/data/apiError';
 import { newIdempotencyKey, outcomeKnown, type Keyed } from '@/data/intentKey';
 import { business, type TreasuryAnswer, type TreasuryView } from '@/data/business';
+import { plainAction } from '@/format/activity';
 
 /** What a grant from here allows: a small daily cap, for a week. The contract enforces both. */
 const CAP_USD = 50;
@@ -226,7 +227,7 @@ function Treasury({ t, busy, act, message }: { t: TreasuryView; busy: Action | u
               style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.s12, marginTop: space.s12 }}
             >
               <Text variant="rowPrimary" style={{ flex: 1 }}>
-                {a.action}
+                {plainAction(a.action)}
               </Text>
               <Text variant="secondarySm" color={colors.ink55}>
                 {when(a.at)}

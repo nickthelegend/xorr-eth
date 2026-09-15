@@ -48,6 +48,7 @@ import { useRefreshControl } from '@/ui/useRefreshControl';
 import { useStore } from '@/state/store';
 import { useGoBack } from '@/nav/useGoBack';
 import { errorText } from '@/data/apiError';
+import { plainAction } from '@/format/activity';
 
 const DOT = 8;
 
@@ -201,7 +202,7 @@ export default function Activity() {
                     }}
                   />
                   <View style={{ flex: 1, gap: space.s2 }}>
-                    <Text variant="rowPrimary">{r.action}</Text>
+                    <Text variant="rowPrimary">{plainAction(r.action)}</Text>
                     <Text variant="secondarySm">{r.detail}</Text>
                     <Text variant="footnote" color={colors.ink55}>
                       {r.agent} · {r.t}

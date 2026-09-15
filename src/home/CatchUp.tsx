@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { Eyebrow, Press, SheetCard, Text, colors, radius, size, space } from '@/ui';
 import { api } from '@/data/api';
 import { useAsync } from '@/data/useAsync';
+import { plainAction } from '@/format/activity';
 
 type Entry = { action: string; detail: string; kind: string; at: string };
 type CatchUpData = {
@@ -76,7 +77,7 @@ export function CatchUp() {
       {d.entries.slice(0, 3).map((e) => (
         <View key={`${e.at}${e.action}`} style={{ marginTop: space.s10 }}>
           <Text variant="body" color={e.kind === 'block' ? colors.warn : colors.ink}>
-            {e.action}
+            {plainAction(e.action)}
           </Text>
           <Text
             variant="footnote"
