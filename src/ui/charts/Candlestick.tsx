@@ -28,7 +28,7 @@
  * The axis labels and the last-price chip are prices, and a price never animates: they change with the answer, at once.
  */
 import React, { useEffect } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { ClipPath, Defs, FeDropShadow, Filter, G, Line, Path, Rect } from 'react-native-svg';
 import { arrival, timing, useReducedMotion } from '../motion';
@@ -179,17 +179,25 @@ export function Candlestick({
    * with one it runs once, and a later series crossfades in instead.
    */
   const reduced = useReducedMotion();
-  const reveal = useSharedValue(drawIn ? 0 : 1);
+  /*
+   * Android draws the candles at once, and unclipped. react-native-svg there caches a clip's shape the first time it is
+   * used, and a new width on the rect inside a <ClipPath> never clears that cache: the rect is never drawn itself, so
+   * its invalidate returns early. The clip kept the width it mounted with, 0 from a first render that had measured no
+   * box, and on an Android 15 emulator the asset screen showed its last-price rule and no candles (2026-09-15). The clip
+   * exists only for the reveal; web and iOS reveal as before.
+   */
+  const revealing = drawIn && Platform.OS !== 'android';
+  const reveal = useSharedValue(revealing ? 0 : 1);
   const measured = box.width > 0;
   const revealFor =
     seriesKey === undefined
       ? `${series.length}:${series[0]?.close ?? ''}:${series[series.length - 1]?.close ?? ''}`
       : series.length > 0;
   useEffect(() => {
-    if (!drawIn || !measured) return;
+    if (!revealing || !measured) return;
     reveal.value = 0;
     reveal.value = withTiming(1, arrival(duration.draw, reduced));
-  }, [drawIn, measured, revealFor, reduced, reveal]);
+  }, [revealing, measured, revealFor, reduced, reveal]);
   const revealWidth = box.width;
   /*
    * Held to 0–1. On the web a timing's first frame can be stamped a moment before the timing started, and eased there
@@ -337,9 +345,11 @@ export function Candlestick({
                   floodOpacity={BLOOM_OPACITY_DOWN}
                 />
               </Filter>
-              <ClipPath id={clipId}>
-                <AnimatedRect x={0} y={0} height={height} animatedProps={clipProps} />
-              </ClipPath>
+              {revealing ? (
+                <ClipPath id={clipId}>
+                  <AnimatedRect x={0} y={0} height={height} animatedProps={clipProps} />
+                </ClipPath>
+              ) : null}
             </Defs>
 
             {grid
@@ -356,7 +366,7 @@ export function Candlestick({
                 ))
               : null}
 
-            <G clipPath={`url(#${clipId})`}>
+            <G clipPath={revealing ? `url(#${clipId})` : undefined}>
               <AnimatedG animatedProps={slot0}>{drawLayer(0)}</AnimatedG>
               <AnimatedG animatedProps={slot1}>{drawLayer(1)}</AnimatedG>
             </G>

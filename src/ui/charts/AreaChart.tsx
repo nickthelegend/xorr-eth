@@ -31,7 +31,7 @@
  *   the box and the grid hold still, and `pending` steps the line back while the next series loads.
  */
 import React, { useEffect, useState } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, ClipPath, Defs, G, LinearGradient, Line, Path, Rect, Stop } from 'react-native-svg';
@@ -172,15 +172,17 @@ export function AreaChart({
    * the chart reloading.
    */
   const reduced = useReducedMotion();
-  const reveal = useSharedValue(drawIn ? 0 : 1);
+  // Android draws the line at once and unclipped, as Candlestick explains: there a clip keeps the shape it first drew with.
+  const revealing = drawIn && Platform.OS !== 'android';
+  const reveal = useSharedValue(revealing ? 0 : 1);
   const measured = box.width > 0;
   const revealFor =
     seriesKey === undefined ? `${data.length}:${data[0] ?? ''}:${data[data.length - 1] ?? ''}` : data.length > 0;
   useEffect(() => {
-    if (!drawIn || !measured) return;
+    if (!revealing || !measured) return;
     reveal.value = 0;
     reveal.value = withTiming(1, arrival(duration.draw, reduced));
-  }, [drawIn, measured, revealFor, reduced, reveal]);
+  }, [revealing, measured, revealFor, reduced, reveal]);
   const width = box.width;
   // Held to 0–1, as Candlestick's is: a first frame stamped before its timing began eases to a negative width on the web.
   const clipProps = useAnimatedProps(() => ({ width: Math.min(1, Math.max(0, reveal.value)) * width }));
@@ -318,9 +320,11 @@ export function AreaChart({
                 </LinearGradient>
               );
             })}
-            <ClipPath id={clipId}>
-              <AnimatedRect x={0} y={0} height={height} animatedProps={clipProps} />
-            </ClipPath>
+            {revealing ? (
+              <ClipPath id={clipId}>
+                <AnimatedRect x={0} y={0} height={height} animatedProps={clipProps} />
+              </ClipPath>
+            ) : null}
           </Defs>
 
           {grid &&
@@ -336,7 +340,7 @@ export function AreaChart({
               />
             ))}
 
-          <G clipPath={`url(#${clipId})`}>
+          <G clipPath={revealing ? `url(#${clipId})` : undefined}>
             <AnimatedG animatedProps={slot0}>{drawLayer(0)}</AnimatedG>
             <AnimatedG animatedProps={slot1}>{drawLayer(1)}</AnimatedG>
           </G>
