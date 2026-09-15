@@ -3,7 +3,7 @@
  *
  * Every control on it does something; this codebase closes dead controls rather than drawing them.
  *
- *   ×        clears what you typed
+ *   ×        clears what you typed — there only once there is something to clear, beside send (2026-09-16)
  *   bot      chooses which agent answers
  *   sparkle  shows questions worth asking this agent
  *   mic      dictates into the draft, only where the platform can hear (`useDictation`)
@@ -15,6 +15,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon, type IconName } from '@/design/Icon';
 import { Press, Text } from '@/ui';
+import { useChatTheme } from './chatTheme';
 import { chat, chatShadowLg, chatType } from './theme';
 import type { Dictation } from './useDictation';
 
@@ -66,6 +67,7 @@ export function Composer({
   dictation,
   footerInset,
 }: ComposerProps) {
+  const theme = useChatTheme((s) => s.theme);
   const empty = draft.trim().length === 0;
   const canSend = !empty && !busy;
 
@@ -80,7 +82,8 @@ export function Composer({
           boxShadow: chatShadowLg,
         }}
       >
-        <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
+        {/* The blur takes the room's own tint: a light one over the black room drew the card grey. */}
+        <BlurView intensity={40} tint={theme === 'black' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: chat.glass }]} />
 
         <View style={ABOVE}>
@@ -132,12 +135,6 @@ export function Composer({
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Tool
-                name="close"
-                label="Clear what you typed"
-                onPress={() => onChangeDraft('')}
-                disabled={empty || busy}
-              />
-              <Tool
                 name="bot"
                 label={agentsOpen ? 'Close the list of agents' : 'Choose who answers'}
                 active={agentsOpen}
@@ -154,6 +151,14 @@ export function Composer({
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {/*
+                Only with something to clear (2026-09-16). It sat first in the row, dimmed and dead whenever the box was
+                empty — which is most of the time — and an × that does nothing reads as a close button that is broken.
+                Here, beside send, it arrives with the draft without moving the tools on the left.
+              */}
+              {draft.length > 0 ? (
+                <Tool name="close" label="Clear what you typed" onPress={() => onChangeDraft('')} disabled={busy} />
+              ) : null}
               {dictation.supported ? (
                 <Tool
                   name="mic"

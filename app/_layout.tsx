@@ -133,6 +133,7 @@ export default function RootLayout() {
           <Stack.Screen name="bot/[id]/intro" options={{ presentation: 'modal' }} />
           <Stack.Screen name="bot/[id]/settings" options={{ presentation: 'modal' }} />
           <Stack.Screen name="strategy/dca" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="agent/strategies" options={{ presentation: 'modal' }} />
           {/* Swap rises from the bottom, from the tab bar's centre: a sheet over the screen it was asked from. */}
           <Stack.Screen name="swap" options={{ presentation: 'modal' }} />
         </Stack>
