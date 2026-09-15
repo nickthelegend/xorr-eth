@@ -178,9 +178,14 @@ export async function chooseSettlement(params: {
       // In the INPUT token's units. Passing dollars here scaled a position into wei and the
       // router refused a trade orders of magnitude too large.
       amount: intent.amountIn,
-      // On a whole-position close the planner has the chain's own figure; the delegation and
-      // the router have to be handed the same one or the router reverts for the difference.
-      amountRaw: intent.amountInRaw,
+      /*
+       * The delegation and the router have to be handed the same figure, or the router reverts for the difference.
+       * On a whole-position close that is the chain's own balance; on any close it is what `closePosition` will send.
+       * A partial sale arrives as a float of coins, which the router rounded to wei and the close floored, so in 42%
+       * of $10 WETH sales the router pulled a wei more than it had been approved for: SafeTransferFromFailed, on a
+       * rebalance's sell leg on the fork (2026-09-15).
+       */
+      amountRaw: send.via === 'closePosition' ? send.amount : intent.amountInRaw,
       from: delegationFrom,
       receiver: owner,
       slippagePct,

@@ -4,7 +4,8 @@
  * The one strategy onboarding creates — "Rebalance to targets" on `PORTFOLIO` — was refused by the executor.
  * On any chain: the impossible versions are refused and a real one is created with its targets stored under
  * the registry's names. On the fork, where fills settle: a watched one reports the leg its own planner would
- * trade, and a live one buys it — $10 of WETH toward a 0.05% target — which is then sold back.
+ * trade, a live one buys it — $10 of WETH toward a 0.05% target — which is then sold back, and a live one
+ * holding more than its target sells part of the position.
  *
  * Run: EXPO_PUBLIC_API_URL=<executor> LIVE=1 npx vitest run portfolio-rebalance.live
  */
@@ -88,6 +89,22 @@ describe(`a portfolio rebalance, created (this is ${health.chain})`, () => {
 });
 
 describe.skipIf(!SETTLES)(`a portfolio rebalance, run (needs a chain 1inch settles on; this is ${health.chain})`, () => {
+  /*
+   * What the planner trades depends on what the wallet already holds, and the account is shared with every other live
+   * test. So each run below sets its holding up rather than assuming it: on 2026-09-15 the wallet held $486 of WETH, the
+   * planner rightly sold toward a 0.05% target, and a case that expected a buy failed for it.
+   */
+  const wethHeld = async () => {
+    const list = (await call('GET', '/positions')).body as unknown as { symbol: string; chainUnits: number | null }[];
+    return Number(list.find((p) => p.symbol === 'WETH')?.chainUnits ?? 0);
+  };
+  const sellAllWeth = async () => {
+    if ((await wethHeld()) <= 0) return;
+    const sold = await call('POST', '/positions/close', { symbol: 'WETH', fraction: 1 });
+    // What the executor will not sell as dust is below every target this file sets.
+    if (sold.status !== 200) expect(sold.body?.reason, JSON.stringify(sold.body)).toBe('dust');
+  };
+
   it('watched, reports the leg its planner would trade — priced by that leg, never as PORTFOLIO', async () => {
     const res = await rebalance('watch', { WETH: 0.05 });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -99,17 +116,50 @@ describe.skipIf(!SETTLES)(`a portfolio rebalance, run (needs a chain 1inch settl
   }, 120_000);
 
   it('live, buys toward its target — and the WETH is sold back', async () => {
+    await sellAllWeth();
     const res = await rebalance('live', { WETH: 0.05 });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     created.push(String(res.body?.id));
     const run = await call('POST', `/strategies/${res.body?.id}/run`);
     expect(run.body, JSON.stringify(run.body)).toMatchObject({ status: 'filled' });
     expect(String(run.body?.signature)).toMatch(/^0x[0-9a-fA-F]{64}$/);
-    // The planner sizes to the smaller of the drift (~$12.50 of a ~$25,000 portfolio) and the $10 allocation.
+    // The planner sizes to the smaller of the drift (~$13 of a ~$26,000 portfolio) and the $10 allocation.
     const runs = (await call('GET', '/runs?limit=5')).body as unknown as { signature: string; usd: number; kind: string }[];
     const filled = runs.find((r) => r.signature === run.body?.signature);
     expect(filled?.kind).toBe('rebalance');
     expect(filled?.usd).toBeLessThanOrEqual(10);
+    expect(await wethHeld()).toBeGreaterThan(0);
+
+    const sold = await call('POST', '/positions/close', { symbol: 'WETH', fraction: 1 });
+    expect(sold.status, JSON.stringify(sold.body)).toBe(200);
+  }, 300_000);
+
+  it('live, sells toward its target: part of the position, for exactly what the delegation sends', async () => {
+    /*
+     * A sell leg is sized in coins worked out from dollars, a float, and the router and the delegation each scaled it
+     * to wei. They rounded differently, so in 42% of $10 sales the router asked for one wei more than it was approved
+     * for and reverted with SafeTransferFromFailed. $20 of WETH against a 0.01% target: the planner sells $10 of it.
+     */
+    await sellAllWeth();
+    const bought = await call('POST', '/orders', { symbol: 'WETH', usd: 20 });
+    expect(bought.status, JSON.stringify(bought.body)).toBe(200);
+    expect(bought.body?.status).toBe('filled');
+    const before = await wethHeld();
+
+    const res = await rebalance('live', { WETH: 0.01 });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    created.push(String(res.body?.id));
+    const run = await call('POST', `/strategies/${res.body?.id}/run`);
+    expect(run.body, JSON.stringify(run.body)).toMatchObject({ status: 'filled' });
+    expect(String(run.body?.signature)).toMatch(/^0x[0-9a-fA-F]{64}$/);
+    const runs = (await call('GET', '/runs?limit=5')).body as unknown as { signature: string; usd: number; kind: string }[];
+    const filled = runs.find((r) => r.signature === run.body?.signature);
+    expect(filled?.kind).toBe('rebalance');
+    expect(filled?.usd).toBeLessThanOrEqual(10);
+    // Part of the position: less than before, and not all of it.
+    const after = await wethHeld();
+    expect(after).toBeLessThan(before);
+    expect(after).toBeGreaterThan(0);
 
     const sold = await call('POST', '/positions/close', { symbol: 'WETH', fraction: 1 });
     expect(sold.status, JSON.stringify(sold.body)).toBe(200);

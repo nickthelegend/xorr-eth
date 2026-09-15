@@ -452,6 +452,30 @@ describe('on a fork, where 1inch prices Base and the pools hold their fork block
     expect(s.floor).toEqual({ tokenOut: USDC, minOut: 97_663_500n });
   });
 
+  it('routes a partial close for exactly the wei the delegation sends, never a second scaling of the float', async () => {
+    /*
+     * A rebalance sells $10 of WETH in coins worked out from dollars. Rounded to wei that float is one more than the
+     * close floors it to, and a router built for the rounded figure pulled a wei more than the delegation had approved:
+     * SafeTransferFromFailed on the fork (2026-09-15), in 42% of such sales.
+     */
+    const amountIn = 0.0030908927998572837;
+    expect(BigInt(Math.round(amountIn * 1e18))).toBe(3_090_892_799_857_284n);
+    const sends = 3_090_892_799_857_283n;
+    vi.mocked(deliveredOnChain).mockResolvedValue(9_900_000n);
+    const partial: TradeIntent = {
+      inSymbol: 'WETH',
+      outSymbol: 'USDC',
+      amountIn,
+      usd: 10,
+      because: 'WETH is 1.8% over its target weight.',
+    };
+
+    await settle(partial, { isClose: true, send: { via: 'closePosition', amount: sends } });
+
+    expect(vi.mocked(buildSwap).mock.calls[0]![0]).toMatchObject({ amount: amountIn, amountRaw: sends });
+    expect(deliveredOnChain).toHaveBeenCalledWith(expect.objectContaining({ via: 'closePosition', amount: sends }));
+  });
+
   it('takes a book that serves when the route cannot run on the fork, whatever the quote says', async () => {
     vi.mocked(deliveredOnChain).mockRejectedValue(new Error(REFUSED));
     vi.mocked(buildAquaFill).mockResolvedValue({ ...AQUA_SHORT, quotedOut: 30_000_000_000_000_000n });
