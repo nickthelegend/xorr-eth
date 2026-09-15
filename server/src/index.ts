@@ -21,6 +21,7 @@ import { limitOrderRoutes } from './routes/limit-orders.js';
 import { mirrorRoutes, startMirrorSchedule } from './routes/mirror.js';
 import { faucetRoutes } from './routes/faucet.js';
 import { withdrawalRoutes } from './routes/withdrawals.js';
+import { businessRoutes } from './routes/business.js';
 import { guardRequests } from './http/guards.js';
 import { requestId, currentRequestId, log } from './http/request-id.js';
 import { startScheduler } from './executor/scheduler.js';
@@ -169,6 +170,7 @@ app.route('/', limitOrderRoutes);
 app.route('/', mirrorRoutes);
 app.route('/', faucetRoutes);
 app.route('/', withdrawalRoutes);
+app.route('/', businessRoutes);
 
 const port = Number(process.env.PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port });

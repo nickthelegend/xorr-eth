@@ -578,8 +578,24 @@ export async function demoWalletId(): Promise<string | undefined> {
   ]);
   if (row?.value) return row.value;
 
+  const created = await createPolicyWallet();
+  await query(
+    `INSERT INTO app_config (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [DEMO_WALLET_KEY, created.id],
+  );
+  return created.id;
+}
+
+/**
+ * A new wallet Privy holds under this deployment's policy, owned by the quorum that owns the policy.
+ *
+ * The demo wallet above and every business treasury (PLAN.md 4.14) are made here. Owned at creation, as the policy is:
+ * an unowned wallet is one the app secret alone could point at another policy.
+ */
+export async function createPolicyWallet(): Promise<PrivyWallet> {
   const policy = await ensurePolicy();
-  const created = await privyFetch<PrivyWallet>('/wallets', {
+  return privyFetch<PrivyWallet>('/wallets', {
     method: 'POST',
     body: JSON.stringify({
       chain_type: 'ethereum',
@@ -587,10 +603,9 @@ export async function demoWalletId(): Promise<string | undefined> {
       ...(policy.owner_id ? { owner_id: policy.owner_id } : {}),
     }),
   });
-  await query(
-    `INSERT INTO app_config (key, value) VALUES ($1, $2)
-     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-    [DEMO_WALLET_KEY, created.id],
-  );
-  return created.id;
+}
+
+/** One wallet by Privy's id, read now — not from the app-wide list `findWallet` keeps for a minute. */
+export async function getPrivyWallet(id: string): Promise<PrivyWallet> {
+  return privyFetch<PrivyWallet>(`/wallets/${id}`);
 }

@@ -104,6 +104,7 @@ const GROUPS: Group[] = [
     title: 'Account',
     items: [
       { route: '/profile', title: 'This wallet', detail: 'Address and activity' },
+      { route: '/business', title: 'Business', detail: 'A treasury the bot trades' },
       { route: '/basename', title: 'Names', detail: 'Names for addresses' },
       { route: '/notifications', title: 'Notifications', detail: 'What interrupts you' },
     ],
