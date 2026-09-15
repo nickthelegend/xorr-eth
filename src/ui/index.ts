@@ -55,7 +55,7 @@ export {
   type MaskedLine,
 } from './mask';
 export { Press, hitSlopFor, PRESSED_OPACITY, type PressProps } from './Press';
-export { easing, timing, useReducedMotion } from './motion';
+export { arrival, easing, timing, useReducedMotion } from './motion';
 
 export { Screen, Fill, type ScreenProps } from './Screen';
 export { PhoneFrame } from './PhoneFrame';

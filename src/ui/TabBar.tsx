@@ -25,7 +25,7 @@ import { View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { duration, timing, useReducedMotion } from './motion';
+import { arrival, duration, timing, useReducedMotion } from './motion';
 import { Press } from './Press';
 import { Text } from './Text';
 import { colors, space } from './tokens';
@@ -115,8 +115,8 @@ export function TabBar({ active, onHome, onSwap, onMessages, unread = 0, hidden 
   const travel = space.s6 + BAR_H + Math.max(insets.bottom, space.s12);
   const y = useSharedValue(hidden ? travel : 0);
   useEffect(() => {
-    // The drawer's own 250ms and platform easing, so the two move as one; instant under reduced motion.
-    y.value = withTiming(hidden ? travel : 0, timing(duration.slow, reduced));
+    // The drawer's own curves, so the two move as one: down on its rise, back on its fall; instant under reduced motion.
+    y.value = withTiming(hidden ? travel : 0, hidden ? arrival(duration.enter, reduced) : timing(duration.slow, reduced));
   }, [hidden, travel, reduced, y]);
   const slide = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
 

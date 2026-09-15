@@ -18,6 +18,11 @@ export const RETURN_WITHIN_MS = 10 * 60_000;
 
 type ChatDrawerState = {
   open: boolean;
+  /**
+   * The drawer is rising or up: set by the drawer itself once it has laid out and starts to rise, and cleared the moment
+   * it starts down. The tab bar goes down on this rather than on `open`, so the two move together.
+   */
+  raised: boolean;
   /** The agent whose conversation is showing, or null for the list. */
   agent: string | null;
   /** The screen the drawer went down from to open another, or null. */
@@ -27,6 +32,7 @@ type ChatDrawerState = {
   /** Raise the drawer, on the list or on one agent's conversation. */
   show: (agent?: string | null) => void;
   hide: () => void;
+  setRaised: (raised: boolean) => void;
   openConversation: (agent: string) => void;
   showList: () => void;
   /**
@@ -43,11 +49,13 @@ type ChatDrawerState = {
 
 export const useChatDrawer = create<ChatDrawerState>((set) => ({
   open: false,
+  raised: false,
   agent: null,
   leftFrom: null,
   leftAt: null,
   show: (agent = null) => set({ open: true, agent, leftFrom: null, leftAt: null }),
   hide: () => set({ open: false, leftFrom: null, leftAt: null }),
+  setRaised: (raised) => set({ raised }),
   openConversation: (agent) => set({ agent }),
   showList: () => set({ agent: null }),
   leave: (from, now = Date.now()) => set({ open: false, leftFrom: from, leftAt: now }),

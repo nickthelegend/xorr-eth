@@ -34,7 +34,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { duration, space, timing, useReducedMotion } from '@/ui';
+import { arrival, duration, space, timing, useReducedMotion } from '@/ui';
 import { Chat } from './Chat';
 import { Messages } from './Messages';
 import { agentByName } from './agents';
@@ -104,6 +104,33 @@ export function ChatSheet({ open, onClose }: ChatSheetProps) {
   if (open && !mounted) setMounted(true);
 
   /*
+   * The rise starts once the drawer has laid out, not when it is asked for (2026-09-16).
+   *
+   * Opening mounts the whole conversation list, and on a phone that took longer than the slide: the animation ran on the
+   * UI thread while the JS thread was still building the views, so by the time the drawer could be drawn it had already
+   * arrived, and Messages appeared in one cut (a screen recording caught it changing in 40ms). Mounted at its closed
+   * position first, it rises once that commit is done and a frame has been drawn with the drawer below the screen: two
+   * animation frames after the effect, which React runs after the commit. (The drawer's `onLayout` was tried first; on
+   * iOS the drawer mounted and never rose.)
+   */
+  const [drawnClosed, setDrawnClosed] = useState(false);
+  if (!mounted && drawnClosed) setDrawnClosed(false);
+  // Closed again before it ever laid out: nothing is on screen to slide away, so it simply unmounts.
+  if (!open && mounted && !drawnClosed) setMounted(false);
+  const rising = open && mounted && drawnClosed;
+  useEffect(() => {
+    if (!open || !mounted || drawnClosed) return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => setDrawnClosed(true));
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [open, mounted, drawnClosed]);
+
+  /*
    * Built here, on the JS thread, and captured by the worklets below.
    *
    * `timing()` lives in `src/ui/motion.ts` and is not a worklet, so calling it from inside the reaction or
@@ -112,19 +139,27 @@ export function ChatSheet({ open, onClose }: ChatSheetProps) {
    */
   const slideCfg = useMemo(() => timing(duration.slow, reduced), [reduced]);
   const snapCfg = useMemo(() => timing(duration.fast, reduced), [reduced]);
+  /** Up on the arrival curve — a sheet coming to rest over the whole height of the screen; down on the interaction one. */
+  const riseCfg = useMemo(() => arrival(duration.enter, reduced), [reduced]);
 
-  const target = useDerivedValue(() => (open && mounted ? 0 : travel), [open, mounted, travel]);
+  const target = useDerivedValue(() => (rising ? 0 : travel), [rising, travel]);
 
   useAnimatedReaction(
     () => target.value,
     (to, from) => {
       if (to === from) return;
-      y.value = withTiming(to, slideCfg, (finished) => {
+      y.value = withTiming(to, to === 0 ? riseCfg : slideCfg, (finished) => {
         if (finished && to === travel) runOnJS(setMounted)(false);
       });
     },
-    [slideCfg, travel],
+    [riseCfg, slideCfg, travel],
   );
+
+  // The tab bar reads this: down as the drawer starts up, back as it starts down.
+  const setRaised = useChatDrawer((s) => s.setRaised);
+  useEffect(() => {
+    setRaised(rising);
+  }, [rising, setRaised]);
 
   const close = useCallback(() => onClose(), [onClose]);
   const agent = useChatDrawer((s) => s.agent);

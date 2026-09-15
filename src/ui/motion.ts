@@ -4,13 +4,16 @@
  * Rewritten 2026-09-12 to the product owner's reference video. There are two kinds of motion now,
  * with different rules:
  *
- *   INTERACTION — a control the user touched: Switch, Segmented, the chat sheet. Platform default
+ *   INTERACTION — a control the user touched: Switch, Segmented, the chat sheet going down. Platform default
  *   easing, the 150/180/250 scale, no overshoot. Unchanged.
  *
  *   ARRIVAL — a screen appearing. Sections rise into place one after another, a chart draws itself
  *   left to right, a figure's digits roll in. Ease-out, `duration.enter` / `duration.draw`, staggered
  *   so the eye reads top to bottom. Screens get it from `<Rise>` and `<RollingNumber>`, never from
  *   reanimated's builders directly.
+ *
+ * The Messages drawer rises on the arrival curve over `duration.enter` (2026-09-16): the one sheet that crosses the whole
+ * height of the screen, where 250ms on the interaction curve read as a cut. The tab bar moves with it.
  *
  * And, since 2026-09-14, one gesture with a motion of its own:
  *
