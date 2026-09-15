@@ -161,11 +161,57 @@ independent second price source on `/market/crosscheck`.
 **The bar:** Privy as a core part, at least one wallet, a business workflow, and **at least one Privy
 control** — policies, signers, key quorums or intents.
 
-**A policy owned by a key quorum, and its refusal proven live.** Both are among the 21 checks above:
+### The workflow: a company's treasury the bot trades, and nobody can send out of
+
+A company wants an agent to trade its treasury, and wants no one — the person operating it, this server, or a
+compromised deploy of it — able to move that money anywhere else. **Business** (Explore → Account → Business) is that
+workflow, built on three Privy controls together: a **server wallet** Privy holds, the **policy** attached to it, and
+the **key quorum** that owns both.
+
+1. **Create.** A signed-in operator creates a treasury. Privy mints a wallet owned by the deployment's key quorum, with
+   the deployment's policy attached, and the executor registers it as an owner in its own right, filed apart from the
+   operator's own wallets (`server/src/business/treasury.ts`, migration 026).
+2. **Fund.** On a test network the faucet sends it USDC and gas.
+3. **Let the bot trade.** The treasury signs its approvals and `grant()` itself, through Privy: a daily cap and an
+   expiry, to this executor's key, at the allowlisted venues. On the fork Privy signs (`eth_signTransaction`) and the
+   executor sends the bytes only once they are shown to be the call it asked for, signed by the treasury; on Base
+   Sepolia Privy broadcasts. The grant is recorded from its own `Granted` event by the code a person's grant is
+   (`server/src/delegation/record.ts`).
+4. **Trade.** The bot buys inside the grant through the one order path, and the contract holds it to the cap.
+5. **Stop.** The treasury signs `revoke()`, and every trade after it is refused on-chain.
+6. **Try to send it out.** The operator asks Privy to sign a transfer of the treasury's USDC. The policy allows
+   approving the delegation, granting this executor and revoking, and nothing else — so Privy refuses before a
+   signature exists.
+
+**Run from the Android app against the fork on 2026-09-15, 04:31–04:37 UTC**, and read back from the chain:
+
+| Step | On the fork |
+|---|---|
+| Create a treasury | `0xE7866722352cb0d7698C44fb800e6631Ccec1469` — Privy wallet `e1j6orf4fin0l25mcz3i0c66`, owned by key quorum `zixx49ik3ngslu9oay54q4li`, under policy `ine1szwjix36pl6lazhymftu`, which the same quorum owns |
+| Add test funds | 1,000 USDC in `0xbffc82f31178f8308880b67f42573324e0fa9bc99ddc5daf43a3540f427a23cf` |
+| Let the bot trade · $50 a day | From the treasury, signed through Privy: `approve` for USDC `0xdadaa2df…`, WETH `0xb3bed0d4…` and cbBTC `0xde341ac5…` (nonces 0–2), then `grant()` `0x1a6e66a676c01bb832b957fb0ad95ed12f5e10b561c2d0a4dfc69e0e93e9d299` (nonce 3) |
+| Buy $5 of WETH | 0.0020 WETH at $2,491.96 against a maker's SwapVM program, `0xceb3abb646f1b7aef8f016681f16c3f0c05fabc94132e36fedb3d0aec1501caf`, sent by the bot's key; the WETH is in the treasury |
+| Stop trading | `revoke()` `0x049c696308365f0e6efdc83027ac55d62314995ae394dd018b0575949e96504e`, from the treasury (nonce 4) |
+| Try to send it out | "Privy refused to sign a transfer of $995 out of the treasury." Privy's answer: `RPC request denied due to policy violation`. No transaction exists |
+
+The chain agrees with the screen: the treasury has sent exactly those five transactions, and holds 995 USDC and
+0.001997 WETH. `business-treasury.live.test.ts` runs the same workflow against the fork, 6 of 6.
+
+**On Base Sepolia**, where Privy broadcasts, a treasury (`0x7437862D8DF75d48e18f6eD1595848D9Adf97701`, under the
+Sepolia policy) refused the transfer out, and Privy broadcast its approvals, a `grant()` and a `revoke()`. Running it
+found a defect: the executor read the chain through a node a block behind Privy's, and could not record the first grant
+(`0x9d2d8394…`) or revoke (`0xacf00d2b…`). With the record waiting for its node to show the transaction (`bdb85d0`),
+the next `grant()` (`0x728bf11d9e2af06c3aeec52e61d611921e56dd04545a90ce73ed6bfa384139aa`) and `revoke()`
+(`0x88641cc4277daf9793116573f620439a1005af22e4905981907f30b664ba8f94`), both broadcast by Privy from the treasury, are
+in its trail.
+
+### The control underneath: a policy owned by a key quorum, and its refusal proven live
+
+Both are among the 21 checks above:
 
 | Check | Observed |
 |---|---|
-| `privy-policy` | 4 rules over 4 destinations, owned by key quorum `zixx49ik3ngslu9oay54q4li` |
+| `privy-policy` | The fork's 26 rules over 13 destinations and Sepolia's 10 over 5 — each allowed call named once to send and once to sign — owned by key quorum `zixx49ik3ngslu9oay54q4li` |
 | `privy-refusal` | refused: `"RPC request denied due to policy violation"` |
 
 The second is the one worth looking at. It does not assert that a policy exists — it attempts a
@@ -177,8 +223,10 @@ compromising the server does not widen what the wallet may do.
 query scoped to the authenticated Privy DID. Checked with two real accounts on 2026-09-10: the
 second sees none of the first's wallet, limits, strategies or trail.
 
-**Stated plainly:** the policy is not attached to a user's own embedded wallet. Privy requires the
-wallet's owner to authorise that, and the owner is the user. `/safety` says so on screen.
+**Stated plainly:** the policy is not attached to a person's own embedded wallet. Privy requires the
+wallet's owner to authorise that, and the owner is the person; `/safety` says so on screen. The business
+treasury is the wallet where the policy governs everything it may sign. A treasury exists only on a test network —
+the executor refuses one where money is real — and belongs to the one operator who created it.
 
 ---
 

@@ -61,7 +61,7 @@ The claim the project serves, unchanged:
 | Track | Official bar, summarised | State | Closed by |
 |---|---|---|---|
 | **1inch — Build an Aqua App** ($5k) | Custom Aqua app using official Aqua/SwapVM contracts; on-chain token transfers shown in the final demo (forks allowed); real commit history; positions shown via scripts or UI | **Met on the fork, fragile.** Books are shipped by hand-run scripts; the app's grants cannot reach SwapVM; the demo shows no transfer; ~80 files uncommitted | 0.1, 3.1–3.3, 7.6 |
-| **Privy — Best B2B Financial Product** ($2.5k) | Privy core with a wallet; a business use case; a working B2B workflow; at least one Privy control | **Partial.** Key-quorum policy proven with a live refusal, but only on a server-owned demo wallet; no business use case or workflow is written | 4.13, 4.14, 7.2 |
+| **Privy — Best B2B Financial Product** ($2.5k) | Privy core with a wallet; a business use case; a working B2B workflow; at least one Privy control | **Built.** A business treasury: a Privy server wallet owned by the key quorum, under the policy, grants the bot a capped permission, the bot trades inside it, its operator stops it, and Privy refuses to sign a transfer out — run from the Android app on the fork, by a live test on the fork, and on Base Sepolia | 4.13, 4.14, 7.2 |
 | **Privy — Best Financial Flow** ($2.5k) | One completed flow with a GA Privy feature (transfer, swap, onramp…) | **Partial.** User-signed approvals and grant only; no withdrawal on record | 4.4, 4.9, 7.2 |
 | **The Graph — Composable / Standardized** ($5k) | Two or more Graph products, or a standardized schema; live data | **Not met, not claimed.** One subgraph; the Aqua slug needs a Studio login | 8.3 |
 | **Base Build Camp** | Real transactions on Base | **Not met.** Nothing on mainnet | 8.1 |
@@ -187,7 +187,7 @@ Ordered by dependency and by what does the most damage if left.
 | 4.11 | Login copy matches reality (the passkey comment promises a login that is not built) | **DONE** — live since `e13d54a`. Login is an email code on web and on the phone; the comments that promised a passkey login, and a wallet type that described passkey recovery, now say so. Enabling passkeys still needs Privy's dashboard and associated domains (8.9) |
 | 4.12 | Privy wallet selection and caching (with 2.1) | NOT STARTED |
 | 4.13 | Privy policy on the user's own wallet: find the owner-authorised attach path; if none exists, remove "Ready, and yours to switch on" (`app/safety.tsx:436-441`) | NOT STARTED |
-| 4.14 | **The B2B workflow.** A concrete, working business flow built on the key-quorum policy (operator manages agent policy for a business wallet), shown in-app and written up | NOT STARTED |
+| 4.14 | **The B2B workflow.** A concrete, working business flow built on the key-quorum policy (operator manages agent policy for a business wallet), shown in-app and written up | **DONE** — live at `4e6f80a`. Business (Explore → Account) makes a treasury: a Privy server wallet owned by key quorum `zixx49…` with the deployment's policy attached, registered as an owner apart from its operator's wallets (migration 026), which signs its own approvals, grant and revoke through Privy and can sign nothing else. From the Android app on the fork: created `0xE786…1469`, funded 1,000 USDC, granted $50 a day (three approvals and `grant()` `0x1a6e66a6…`, nonces 0–3), the bot bought 0.0020 WETH through a maker's SwapVM program (`0xceb3abb6…`), stopped (`revoke()` `0x049c6963…`), and Privy refused to sign a transfer of the $995 out. Live: `business-treasury.live.test.ts` 6/6 on the fork. Unit: `treasury.test.ts` 21, `business.test.ts` 7, `treasurySigner.test.ts` 8. On Base Sepolia Privy broadcast a treasury's approvals, grant and revoke, and the executor could not record them while its node lagged a block; fixed in `bdb85d0`, after which Privy's next `grant()` (`0x728bf11d…`) and `revoke()` (`0x88641cc4…`) were both recorded |
 
 ## Phase 5 — UI: simpler and cooler
 
@@ -226,7 +226,7 @@ Ordered by dependency and by what does the most damage if left.
 | # | Task | Status |
 |---|---|---|
 | 7.1 | README: setup runs migrations (`npm --prefix server run migrate`), counts refreshed, screenshot gallery refreshed, architecture linked, a judge walkthrough, claims corrected (fork receipts for tiers 1–6, one live subgraph, policy proven on a demo wallet) | NOT STARTED |
-| 7.2 | `docs/SUBMISSION.md`: the Privy B2B use case and workflow, financial-flow transaction hashes, track claims matching the code | NOT STARTED |
+| 7.2 | `docs/SUBMISSION.md`: the Privy B2B use case and workflow, financial-flow transaction hashes, track claims matching the code | **DONE** — the B2B section is the treasury workflow, each step with its transaction, beside the policy checks as `/verify` reads them now |
 | 7.3 | `docs/RUNBOOK.md` and `docs/SECURITY.md` rewritten for the EVM design (they still describe Solana), with deploy and migrate steps | NOT STARTED |
 | 7.4 | Stale docs corrected or dated as historical: TESTPLAN-*, DEMO.md counts, COMPLETION.md, ARCHITECTURE (7 kinds), e2e README, BASE-BUILD-CAMP (62 contract tests, not on mainnet) | NOT STARTED |
 | 7.5 | 107 code comments cite section numbers from a different project's plan (`xorr-dev/PLAN.md`) — re-point them; remove the three `docs/QA-UI-PLAN.md` references (the file never existed) | NOT STARTED |
@@ -328,7 +328,7 @@ Every gap found, tied to the task that closes it. Severity is for the product an
 | X49 | Withdrawal allowlist and cooling-off live only on the device; USDC only | `allowlist.ts`; `useWithdraw.ts` | 4.9 | **High** |
 | X50 | No wallet export; onboarding asks for a backup nothing offers | `recovery.tsx`; `wallet.tsx` | 4.10 | Medium |
 | X51 | Privy policy not on any user wallet; copy implies a switch that does not exist | `privyPolicy.ts`; `safety.tsx:436-441` | 4.13 | Medium |
-| X52 | No written or working B2B workflow | SUBMISSION | 4.14, 7.2 | **High** (Privy track) |
+| X52 | No written or working B2B workflow | SUBMISSION | 4.14, 7.2 | **High** (Privy track) — **closed** by 4.14 and 7.2 (live at `4e6f80a`) |
 | X53 | More tab blank; 41 screens behind Explore; 13 orphaned | `app/` | 5.1, 5.2 | **High** (bar 6) |
 | X54 | Fixture agents, goals, sleeves and 27 unpriced instruments on screen | `local.ts`; fixtures | 5.3 | **High** (bar 3) |
 | X55 | Failures render as empty states or endless skeletons | Home, Portfolio, inbox, alerts | 5.4 | Medium |

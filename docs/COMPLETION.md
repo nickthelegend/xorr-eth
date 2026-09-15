@@ -595,3 +595,44 @@ loading component, comments saying a thing is not a mock or cannot be faked, "Ne
 - **K9 — push notifications.** No EAS project id exists.
 - **K10 — the agents' language model.** No `OPENROUTER_API_KEY` exists; the conversation says the agent cannot reply.
 - **L1 — the fork's two spend tallies.** On the fork alone, E064 and E096 read $839 spent today by the executor's tally and $834 by the chain's — $5 apart, as they have been all day, because a $5 buy logged at 00:00:23 UTC landed in a block stamped 23:55:12 the day before: the fork's clock runs 13 minutes behind real time, and every spend since has been counted the same on both sides. The Limits screen already shows the stricter of the two. The fork's clock was set to real time at 02:58 UTC (its new blocks had been stamped 313 s behind), so a spend near midnight no longer lands on different days in the two tallies; today's pair agrees again from the next UTC day.
+
+## After the final measurement — 66 of 76 · **87%**
+
+D5 was built after the final measurement and measured the way every other item was: on a screen, against a deployment,
+and read back from the chain. The executors and the web ran `4e6f80a` from 04:31 UTC on 2026-09-15, and `bdb85d0` from 04:55 UTC; the Android app ran
+from Metro on the same tree, signed in as a Privy test account against the fork executor. Nothing else moved, so the ten
+items left are the ten the final measurement left, for the same reasons.
+
+| # | Item | How it was verified | State |
+|---|---|---|---|
+| D5 | A written, working business workflow (Privy B2B track) | Business, on the Android app against the fork: a treasury created as a Privy server wallet owned by key quorum `zixx49…` under the quorum-owned policy (`0xE786…1469`); funded with 1,000 USDC; granted $50 a day by the treasury's own signatures through Privy — three approvals and `grant()` `0x1a6e66a6…`; traded by the bot, 0.0020 WETH through a maker's SwapVM program (`0xceb3abb6…`); stopped, `revoke()` `0x049c6963…`; and Privy refused to sign a transfer of its $995 out, with no transaction made. The fork holds exactly those five transactions from the treasury. `business-treasury.live.test.ts` 6/6 against the fork. Written up in SUBMISSION's B2B section | ✓ |
+
+**D, 4 → 5.** Every other group stands as the final measurement found it.
+
+### Found on the way
+
+- **Privy refused the policy's new signing rules.** A treasury on a fork needs Privy to *sign* what Privy cannot send
+  there, so `97ef98d` named every allowed call a second time for `eth_signTransaction`, as "…, signed for the executor
+  to send". Privy refuses a rule name of 50 characters or more, and refuses the whole write with it: from 03:29 UTC both
+  executors' `privy-policy` check failed, `rules.13.name: Rule name must be fewer than 50 characters` on the fork and
+  `rules.5.name` on Sepolia. `0e193f1` names them "Sign: …", refuses a name Privy would refuse before Privy is asked,
+  and tests the fork's full list. The fork's check passed from 03:40 UTC, and Sepolia's — after Railway failed its first
+  upload with a 500 — from 03:44 UTC. `privy-refusal` passed throughout: the refused write changed nothing, so the policy
+  in force never did.
+- **A treasury's record raced the chain on Base Sepolia.** Privy broadcast a grant and a revoke a block apart. The
+  executor, reading through a node a block behind, answered the grant "Could not read your permission from the chain
+  just now" and refused the revoke as still active. `bdb85d0` records once its node is at the transaction's block and
+  shows the permission as the transaction left it; on it, Privy's next `grant()` (`0x728bf11d…`) and `revoke()`
+  (`0x88641cc4…`) on Sepolia were both recorded.
+
+### What is left — ten
+
+- **J9** — a withdrawal on a screen: the Android app's allowlisted destination unlocks at 2026-09-16 01:52 UTC.
+- **F3** — the Aqua subgraph: Studio refuses the deploy until the slug is created in its dashboard by the account's wallet.
+- **H2** — transactions on Base mainnet spend real money.
+- **I7** — tier 7 trades tokenized equities, which fill only on Base mainnet.
+- **J1, J18** — each needs a Privy sign-in code typed by the owner.
+- **K5** — `landing/` is the owner's.
+- **K9** — no EAS project id exists.
+- **K10** — no `OPENROUTER_API_KEY` exists.
+- **L1** — today's two spend tallies on the fork stay $5 apart until the UTC day turns; the fork's clock was set right at 02:58 UTC.
