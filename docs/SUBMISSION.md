@@ -7,7 +7,10 @@ executors, the fork and Postgres are on Railway.
 
 **Demo:** [`docs/demo/demo.mp4`](demo/demo.mp4) — 91 seconds against the hosted app and its public
 executor, not a local dev server. Script in [`DEMO-SCRIPT.md`](DEMO-SCRIPT.md); regenerate with
-`node tools/demo.mjs`.
+`node tools/demo.mjs`. A second, on the Base mainnet fork where fills land:
+[`docs/demo/android-fork-demo.mp4`](demo/android-fork-demo.mp4) — 99 seconds on the Android build: a recurring buy
+fills through a maker's SwapVM program, the activity trail shows its transaction, `/judge` re-runs the
+claims, and the kill switch ends it.
 
 **Repo:** https://github.com/nickthelegend/xorr-eth
 

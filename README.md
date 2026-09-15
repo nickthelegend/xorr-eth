@@ -39,6 +39,12 @@ was recorded. That was the screen behaving correctly — the previous recording 
 has since been renewed through its own grant flow, three Privy signatures by the wallet's owner, and
 on Base Sepolia reads **LIVE** until 2026-10-13.
 
+A second recording, 99 seconds on the Android build against the Base mainnet fork where fills settle:
+[`docs/demo/android-fork-demo.mp4`](docs/demo/android-fork-demo.mp4). A recurring buy is created and
+run, and fills 0.0200 WETH for $50 through a maker's SwapVM program; the activity trail shows it with
+its transaction; `/judge` re-runs the claims with one row failing, 1inch's own API not answering at
+the time; and Stop all trading ends on **STOPPED**.
+
 Fills are the one thing Sepolia cannot show — 1inch has no liquidity there, and the app says so on
 `/network` rather than pretending. Those are real on the Base mainnet fork, counted by the executor
 that made them: **93 through the aggregator, 21 through SwapVM, 9 through Aqua and 1 limit order**,

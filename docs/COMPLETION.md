@@ -466,13 +466,16 @@ print "Simulated here" for a feed the executor never sends (it answers an unread
 
 ---
 
-## Final measurement — 64 of 76 · **84%**
+## Final measurement — 65 of 76 · **86%**
 
 Measured again from the top after closing gaps, every item the way the first pass measured it, on 2026-09-15 between
 01:15 and 02:41 UTC. The executors ran `05bbad1` and, after the last ship, `b01c85b` — the same executor code, since
 nothing under `server/` but a live test changed between them — and the web ran `b01c85b` for its final QA and sweep. The
 Android and iOS apps ran from Metro on the tree that became `b01c85b`, the Android one signed in as a Privy test account
 against the fork executor; every flow below was read back from the chain, not taken from the screen alone.
+
+M2 was recorded afterwards, from 03:02 to 03:09 UTC, and the fork's clock was set to real time at 02:58 UTC; both are
+in the rows below.
 
 The keyword sweep finds the same classes as before and nothing new: the setup step's `todo` state, the `Placeholder`
 loading component, comments saying a thing is not a mock or cannot be faked, "Never mock the user", and
@@ -514,7 +517,7 @@ loading component, comments saying a thing is not a mock or cannot be faked, "Ne
 | **F** | **The Graph** | | **2 of 3** |
 | F1 | The delegation subgraph is deployed and synced | Direct query: block 46,834,636 with the chain at 46,834,638, no indexing errors | ✓ |
 | F2 | The executor reads it before it acts | Once The Graph lifted its 429: `/verify`'s subgraph row and QA's subgraph checks pass on both | ✓ |
-| F3 | The Aqua subgraph is deployed and joined to it | Built and pinned, never deployed: no Studio slug exists | ✗ |
+| F3 | The Aqua subgraph is deployed and joined to it | Built and uploaded (`QmctadHC…`); Studio answered `Subgraph not found` to a deploy with the project's key, because the slug is created in Studio's dashboard by the wallet that owns the account | ✗ |
 | **G** | **Aave** | | **1 of 1** |
 | G1 | Tier 4 supplies idle USDC through the permission | `/metrics` 2 supplies under `aave` | ✓ |
 | **H** | **Base** | | **1 of 2** |
@@ -565,9 +568,9 @@ loading component, comments saying a thing is not a mock or cannot be faked, "Ne
 | L4 | Contract tests | `forge test` 74/74 | ✓ |
 | L5 | Live tests pass against the deployments | Sepolia: 26 files passed and 4 skipped (they need a chain 1inch settles on), 121 tests, none failed. Fork: 21 files passed; the 9 that Privy's token endpoint refused with 429 were run one at a time and passed, but for SwapVM settlement, whose maker program earlier fills had priced out — it passed 3/3 once a fresh program was shipped | ✓ |
 | L6 | No stand-in logic or data in shipped code | The keyword sweep, above | ✓ |
-| **M** | **Documentation and submission** | | **2 of 3** |
+| **M** | **Documentation and submission** | | **3 of 3** |
 | M1 | README and SUBMISSION figures match the deployments | Fills 93 · 21 · 9 · 1 and the fill-quality table from `/metrics`; `/verify` 19 · 1 · 1 on Sepolia; 103 routes; tier 7 without a fill; the hosted app described as the fork build it is; `npm test` 2,490 (1,603 app, 887 executor) | ✓ |
-| M2 | The demo shows a real fill (bar 7) | Not re-recorded: `tools/demo.mjs` signs in by typing a Privy code into the login form, which is the owner's to do | ✗ |
+| M2 | The demo shows a real fill (bar 7) | `docs/demo/android-fork-demo.mp4`, 99 s on the Android build against the fork: a recurring buy created and run fills 0.0200 WETH for $50 through a maker's SwapVM program (`0x54ff6977…`), on Strategies and in the activity row; `/judge` with one row failing, 1inch's API not answering at the time; Stop all trading ending on STOPPED. Recorded without a sign-in: the emulator's session was already signed in | ✓ |
 | M3 | SECURITY and RUNBOOK describe this design | `SECURITY.md` rewritten for `XorrDelegation` (56a0836); `RUNBOOK.md` names no Solana piece and describes the fork on Railway | ✓ |
 
 ### What moved, and why
@@ -578,17 +581,17 @@ loading component, comments saying a thing is not a mock or cannot be faked, "Ne
 - **J, 1 → 15.** Every signed-in flow but sign-in, the withdrawal and key export was driven on an Android emulator against the fork, and each outcome read from the chain. Driving them found five defects, each fixed and run again there: an approve that filled was told "That did not reach the executor, so nothing was decided" (132103f); Strategies and Alerts kept the list from before a setup closed over them (8aec6ad, 192c0b7); onboarding offered 30% in equities on a network that holds that weight as cash (e4dc41b); the backtest made the person retry through a cold history fetch (b0ab09d).
 - **K, 6 → 7.** K8: the Android app was built and ran every flow; on the way, its charts were blank, because react-native-svg on Android keeps a clip's first shape (5b5d54d).
 - **L, 3 → 5.** L2: the chart's negative-width console error is fixed (47359c0) and the sweep is clean. L5: both deployments' live suites pass, after their stale assumptions were corrected (a named 404, a limit's name, a shared account's balance, a rebalance's starting holding). Running them found a real executor defect: a partial sale reverted in 42% of cases on a one-wei split between the router's rounding and the delegation's (2899479). And the fork's grant approved WETH alone, so cbBTC could be bought and not sold (4a503ac).
-- **M, 0 → 2.** M1: the README and SUBMISSION figures were brought to the deployments (f32dabb, b1a7051, the commit that records this measurement). M3: `SECURITY.md` was rewritten for this design (56a0836), and `RUNBOOK.md` checked.
+- **M, 0 → 3.** M1: the README and SUBMISSION figures were brought to the deployments (f32dabb, b1a7051, the commit that records this measurement). M2: a second recording, on the Android build against the fork, shows a real fill and its transaction. M3: `SECURITY.md` was rewritten for this design (56a0836), and `RUNBOOK.md` checked.
 
 ### What is left, and why
 
 - **J9 — a withdrawal on a screen.** The allowlist holds a new destination for 24 hours by design, on the database's clock. The one added from the Android app on 2026-09-15 unlocks at 2026-09-16 01:52 UTC; Withdraw everything can then send to it.
 - **D5 — the Privy B2B workflow.** Not built. PLAN.md 4.14 describes it: an operator managing agent policy for a business wallet, shown in the app and written up.
-- **F3 — the Aqua venue subgraph.** Built and pinned; deploying it needs a Studio slug that does not exist.
+- **F3 — the Aqua venue subgraph.** Built and uploaded; Studio refuses the deploy with `Subgraph not found` until the slug is created in its dashboard, which takes the wallet that owns the Studio account.
 - **H2 — transactions on Base mainnet.** They spend real money, which this run may not do.
 - **I7 — a tier-7 fill.** Its strategies trade tokenized equities, which do not function on a fork; they can fill only where the equities do, on Base mainnet.
-- **J1, J18's key export, M2's recording.** Each needs a Privy sign-in code typed into the login form, which is the owner's to do.
+- **J1, J18's key export.** Each needs a Privy sign-in code typed into the login form, which is the owner's to do.
 - **K5 — the landing page.** `landing/` is the owner's.
 - **K9 — push notifications.** No EAS project id exists.
 - **K10 — the agents' language model.** No `OPENROUTER_API_KEY` exists; the conversation says the agent cannot reply.
-- **L1 — the fork's two spend tallies.** On the fork alone, E064 and E096 read $839 spent today by the executor's tally and $834 by the chain's — $5 apart, as they have been all day, because a $5 buy logged at 00:00:23 UTC landed in a block stamped 23:55:12 the day before: the fork's clock runs 13 minutes behind real time, and every spend since has been counted the same on both sides. The Limits screen already shows the stricter of the two. Setting the fork's clock to real time stops a spend near midnight from landing on different days in the two tallies, and today's pair agrees again from the next UTC day.
+- **L1 — the fork's two spend tallies.** On the fork alone, E064 and E096 read $839 spent today by the executor's tally and $834 by the chain's — $5 apart, as they have been all day, because a $5 buy logged at 00:00:23 UTC landed in a block stamped 23:55:12 the day before: the fork's clock runs 13 minutes behind real time, and every spend since has been counted the same on both sides. The Limits screen already shows the stricter of the two. The fork's clock was set to real time at 02:58 UTC (its new blocks had been stamped 313 s behind), so a spend near midnight no longer lands on different days in the two tallies; today's pair agrees again from the next UTC day.
