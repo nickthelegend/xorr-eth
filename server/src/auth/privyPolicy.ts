@@ -287,13 +287,23 @@ export function desiredRules(): PrivyRule[] {
  * executor sends the bytes to the fork, as the app already does for an embedded wallet on a fork build. Privy's engine
  * denies any method no rule names, so without these the fork's business treasury could sign nothing at all. Each twin
  * carries its send rule's conditions exactly: signing is never wider than sending.
+ *
+ * Named "Sign: …" and no longer. Privy refuses a rule name of 50 characters or more, and refuses the whole write with it:
+ * the twins first shipped as "…, signed for the executor to send", and on 2026-09-15 both executors' policy writes came
+ * back 400 until the names were cut down. A name that would be refused is refused here, before Privy is asked.
  */
+export const PRIVY_RULE_NAME_LIMIT = 50;
+
 export function policyRules(): PrivyRule[] {
   const send = desiredRules();
-  return [
-    ...send,
-    ...send.map((r) => ({ ...r, method: 'eth_signTransaction' as const, name: `${r.name}, signed for the executor to send` })),
-  ];
+  const rules = [...send, ...send.map((r) => ({ ...r, method: 'eth_signTransaction' as const, name: `Sign: ${r.name}` }))];
+  const tooLong = rules.filter((r) => r.name.length >= PRIVY_RULE_NAME_LIMIT);
+  if (tooLong.length > 0) {
+    throw new Error(
+      `Privy refuses rule names of ${PRIVY_RULE_NAME_LIMIT} characters or more: ${tooLong.map((r) => `"${r.name}"`).join(', ')}.`,
+    );
+  }
+  return rules;
 }
 
 /** The same rules, as a person reads them — what `/privy/policy` reports under "would allow". */
