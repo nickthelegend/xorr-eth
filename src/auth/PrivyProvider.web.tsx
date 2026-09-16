@@ -25,7 +25,9 @@ export function AppPrivyProvider({ children }: { children: React.ReactNode }) {
         // A wallet is created on login for anyone who does not already have one, which is what
         // makes "sign in and you own a wallet" a single step rather than two.
         embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' } },
-        loginMethods: ['email', 'wallet'],
+        // The same ways in as the onboarding screen offers (`src/auth/socialLogins.ts`); each is switched on per app in
+        // Privy's dashboard, and one that is not simply does not appear here.
+        loginMethods: ['email', 'google', 'twitter', 'wallet'],
         // Follows EXPO_PUBLIC_XORR_CHAIN — see src/chain.ts for what hardcoding this cost.
         defaultChain: activeChain,
         supportedChains,

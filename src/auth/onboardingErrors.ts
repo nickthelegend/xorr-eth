@@ -53,6 +53,22 @@ export function verifyFailure(e: unknown): string {
   return stated(e, 'That did not go through. Ask for a new code and try again.');
 }
 
+/**
+ * Signing in with Google, X or a wallet (2026-09-16).
+ *
+ * Backing out of the provider's sheet is the commonest outcome of all and is not a failure: it answers '', as
+ * `verifyFailure` does for a wallet that already exists. A method the Privy dashboard has not switched on is the one
+ * refusal nobody can act on from here, so it says which method, plainly, instead of quoting the SDK.
+ */
+export function oauthFailure(e: unknown, method: string): string {
+  const m = message(e);
+  if (/cancel|dismiss|abort|closed|user (rejected|denied)/i.test(m)) return '';
+  if (/not (enabled|configured|allowed)|disabled|unsupported|unknown provider|invalid.?app/i.test(m)) {
+    return `${method} sign-in is not switched on for this app yet. Use an email code for now.`;
+  }
+  return stated(e, `Signing in with ${method} did not go through. Try again, or use an email code.`);
+}
+
 /** Registering the address with the executor. */
 export function connectFailure(e: unknown): string {
   if (e instanceof ApiError && e.status >= 500) {

@@ -7,9 +7,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { ApiError, NotSignedIn, TimedOut } from '@/data/apiError';
-import { codeFailure, connectFailure, verifyFailure } from './onboardingErrors';
+import { codeFailure, connectFailure, oauthFailure, verifyFailure } from './onboardingErrors';
 
-const ALL = [codeFailure, connectFailure, verifyFailure];
+const withGoogle = (e: unknown) => oauthFailure(e, 'Google');
+const ALL = [codeFailure, connectFailure, verifyFailure, withGoogle];
 
 describe('nothing reaches the user in developer words', () => {
   it('never leaks an endpoint path, whatever threw', () => {
@@ -58,5 +59,25 @@ describe('the cases a user can act on', () => {
 
   it('says the wallet is fine when it is the executor that is down', () => {
     expect(connectFailure(new ApiError(503, '/wallet/connect', {}))).toMatch(/wallet is fine/i);
+  });
+});
+
+describe('signing in with Google, X or a wallet', () => {
+  it('says nothing when the person simply backed out of the provider', () => {
+    for (const e of [new Error('The user canceled the authorization'), new Error('Flow was dismissed')]) {
+      expect(oauthFailure(e, 'Google')).toBe('');
+    }
+  });
+
+  it('names the method that is not switched on for this app, and offers the way that is', () => {
+    const said = oauthFailure(new Error('OAuth provider twitter is not enabled for this app'), 'X');
+    expect(said).toMatch(/^X sign-in is not switched on/);
+    expect(said).toMatch(/email code/i);
+  });
+
+  it('falls back to what failed, naming the method, rather than the SDK\'s words', () => {
+    expect(oauthFailure(new Error('AuthSession request failed: ERR_1042'), 'Google')).toMatch(
+      /Signing in with Google did not go through/,
+    );
   });
 });

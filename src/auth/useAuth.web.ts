@@ -2,8 +2,9 @@
  * The web half of the auth surface. Same shape as useAuth.native.ts, so screens are identical
  * across platforms — see PrivyProvider.web.tsx for why the split exists.
  */
-import { useCallback, useMemo } from 'react';
-import { usePrivy, useLoginWithEmail, useWallets, useCreateWallet } from '@privy-io/react-auth';
+import { useCallback, useMemo, useState } from 'react';
+import { usePrivy, useLogin, useLoginWithEmail, useLoginWithOAuth, useWallets, useCreateWallet } from '@privy-io/react-auth';
+import type { SocialProvider } from './socialLogins';
 import { pickEmbedded } from './embeddedWallet';
 import { alreadyHasWallet } from './alreadyHasWallet';
 
@@ -63,3 +64,32 @@ export function useEmailLogin() {
   const { sendCode, loginWithCode, state } = useLoginWithEmail();
   return { sendCode, loginWithCode, state };
 }
+
+/** Google or X on the web — the same accounts as native, through the web SDK's headless OAuth. See useAuth.native.ts. */
+export function useSocialLogin(): { login: (provider: SocialProvider) => Promise<void>; busy: boolean } {
+  const { initOAuth } = useLoginWithOAuth();
+  const [busy, setBusy] = useState(false);
+  const start = useCallback(
+    async (provider: SocialProvider) => {
+      setBusy(true);
+      try {
+        await initOAuth({ provider });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [initOAuth],
+  );
+  return { login: start, busy };
+}
+
+/**
+ * Bringing a wallet of your own: Privy's modal, opened on its wallet list — MetaMask, Coinbase Wallet, Rainbow and the
+ * rest of what the browser offers, plus WalletConnect. The wallet signs in; Privy still makes the embedded wallet this
+ * app trades from, so the rest of onboarding is unchanged.
+ */
+export function useWalletLogin(): { login?: () => void } {
+  const { login } = useLogin();
+  return { login: () => login({ loginMethods: ['wallet'] }) };
+}
+

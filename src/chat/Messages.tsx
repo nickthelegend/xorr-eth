@@ -59,7 +59,7 @@ export interface MessagesProps {
 
 export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: MessagesProps) {
   const signedOut = useSignedOut();
-  const { email } = usePrivyIdentity();
+  const { name } = usePrivyIdentity();
   const address = useStore((s) => s.wallet?.address);
   const messages = useThread((s) => s.messages);
   const read = useThread((s) => s.read);
@@ -87,7 +87,7 @@ export function Messages({ onClose, onOpen, onOpenScreen, footerInset }: Message
     () => [...agents].sort((a, b) => Number(added.has(b.name)) - Number(added.has(a.name))),
     [agents, added],
   );
-  const initial = (email ?? address?.replace(/^0x/i, '') ?? '').charAt(0).toUpperCase();
+  const initial = (name?.replace(/^@/, '') ?? address?.replace(/^0x/i, '') ?? '').charAt(0).toUpperCase();
 
   /* The drawer goes down first, so the screen it opens is not underneath it. */
   const goSignIn = () => {

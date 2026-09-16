@@ -4,9 +4,10 @@
  * Wraps Privy so the rest of the app never imports its SDK directly — the same reason every
  * screen goes through a repository rather than calling fetch.
  */
-import { useCallback, useMemo } from 'react';
-import { usePrivy, useEmbeddedEthereumWallet, useLoginWithEmail } from '@privy-io/expo';
+import { useCallback, useMemo, useState } from 'react';
+import { usePrivy, useEmbeddedEthereumWallet, useLoginWithEmail, useLoginWithOAuth } from '@privy-io/expo';
 import { alreadyHasWallet } from './alreadyHasWallet';
+import type { SocialProvider } from './socialLogins';
 
 export type AuthState = {
   ready: boolean;
@@ -62,3 +63,38 @@ export function useEmailLogin() {
   const { sendCode, loginWithCode, state } = useLoginWithEmail();
   return { sendCode, loginWithCode, state };
 }
+
+/**
+ * Google or X (2026-09-16): Privy's own OAuth flow opens the browser, and the account that comes back carries the same
+ * embedded wallet an emailed code would have made — the executor knows a person by their Privy id, never by an email.
+ *
+ * Each method has to be switched on for this app in Privy's dashboard; one that is not says so (`oauthFailure`).
+ */
+export function useSocialLogin(): { login: (provider: SocialProvider) => Promise<void>; busy: boolean } {
+  const { login } = useLoginWithOAuth();
+  const [busy, setBusy] = useState(false);
+  const start = useCallback(
+    async (provider: SocialProvider) => {
+      setBusy(true);
+      try {
+        await login({ provider });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [login],
+  );
+  return { login: start, busy };
+}
+
+/**
+ * Bringing a wallet of your own — web only, so this answers with nothing here.
+ *
+ * The Expo SDK has no connector for a wallet living in another app: reaching one means WalletConnect or a deep link into
+ * it, neither of which this build carries. A button that cannot finish is worse than no button, so the screen shows it
+ * only where there is something behind it (`useAuth.web.ts`).
+ */
+export function useWalletLogin(): { login?: () => void } {
+  return {};
+}
+

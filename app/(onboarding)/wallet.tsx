@@ -7,8 +7,9 @@
  * check in `upInk`; current = 2pt white ring; pending = 2pt `pending` ring and dimmed text)
  * — because that pattern reads correctly for any sequential setup. Only the steps change.
  *
- * The product point: identity and wallet are one object. The user signs in with an email
- * code and comes out the other side owning a wallet xorr cannot spend from. The bot's
+ * The product point: identity and wallet are one object. The user signs in — an email code, a Google account, an X
+ * account, or a wallet they already have (web) — and comes out the other side owning a wallet xorr cannot spend from.
+ * Whichever way they came, Privy's account is the same object and the executor knows them by its id, never by an email. The bot's
  * authority over it is a separate on-chain permission, granted on the next screen.
  *
  * Every tick is a fact. The third row read "Network ready · Connected" and was ticked the moment
@@ -38,12 +39,13 @@ import {
 } from '@/ui';
 import { repos } from '@/data';
 import { useStore } from '@/state/store';
-import { useAuth, useEmailLogin } from '@/auth/useAuth';
-import { codeFailure, connectFailure, verifyFailure } from '@/auth/onboardingErrors';
+import { useAuth, useEmailLogin, useSocialLogin, useWalletLogin } from '@/auth/useAuth';
+import { SOCIAL_LOGINS, type SocialProvider } from '@/auth/socialLogins';
+import { codeFailure, connectFailure, oauthFailure, verifyFailure } from '@/auth/onboardingErrors';
 import { NotSignedIn } from '@/data/api';
 
 const STEPS = [
-  { label: 'Signed in', detail: 'An email code, no password to lose' },
+  { label: 'Signed in', detail: 'A code, Google, X or your own wallet' },
   { label: 'Wallet created', detail: 'Only you can sign' },
   { label: 'Connected', detail: 'The app can read this wallet' },
   { label: 'Ready to fund', detail: 'Nothing is deposited yet' },
@@ -61,12 +63,16 @@ export default function WalletSetup() {
   const { returning } = useLocalSearchParams<{ returning?: string }>();
   const { ready, authenticated, address, createWallet } = useAuth();
   const { sendCode, loginWithCode } = useEmailLogin();
+  const social = useSocialLogin();
+  const walletLogin = useWalletLogin();
   const setWallet = useStore((s) => s.setWallet);
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** Which way in is mid-flight, so only that button spins. */
+  const [pending, setPending] = useState<string>();
   const [error, setError] = useState<string>();
 
   /*
@@ -120,6 +126,23 @@ export default function WalletSetup() {
       alive = false;
     };
   }, [address, authenticated, attempt, setWallet]);
+
+  /**
+   * Google or X. Backing out of the provider's sheet is the commonest outcome and answers '' — nothing went wrong, so
+   * nothing is said. The wallet is created by the effect above, as it is for an emailed code.
+   */
+  async function withSocial(provider: SocialProvider, label: string) {
+    setPending(provider);
+    setError(undefined);
+    try {
+      await social.login(provider);
+      await createWallet();
+    } catch (e) {
+      setError(oauthFailure(e, label) || undefined);
+    } finally {
+      setPending(undefined);
+    }
+  }
 
   async function send() {
     setBusy(true);
@@ -228,6 +251,37 @@ export default function WalletSetup() {
 
         {!authenticated ? (
           <View style={{ gap: space.s10, marginTop: space.s8 }}>
+            {/* The ways in that need nothing typed, first — and gone once a code is on its way to an address. */}
+            {!codeSent ? (
+              <>
+                {SOCIAL_LOGINS.map((s) => (
+                  <Button
+                    key={s.id}
+                    label={`Continue with ${s.label}`}
+                    variant="ghost"
+                    loading={pending === s.id}
+                    disabled={!ready || busy || (!!pending && pending !== s.id)}
+                    onPress={() => void withSocial(s.id, s.label)}
+                  />
+                ))}
+                {/* Only where a wallet in another app can actually be reached — web today. */}
+                {walletLogin.login ? (
+                  <Button
+                    label="Continue with a wallet"
+                    variant="ghost"
+                    disabled={!ready || busy || !!pending}
+                    onPress={() => walletLogin.login?.()}
+                  />
+                ) : null}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s10, marginVertical: space.s2 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+                  <Text variant="secondarySm" color={colors.ink40}>
+                    or an email code
+                  </Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.hairline }} />
+                </View>
+              </>
+            ) : null}
             <Field
               label="Email"
               value={email}
@@ -249,7 +303,7 @@ export default function WalletSetup() {
         ) : null}
 
         <NoteStrip kind={authenticated ? 'acted' : 'risk'} style={{ marginTop: space.s16 }}>
-          Your email is how you get back to this wallet.
+          However you sign in is how you get back to this wallet.
         </NoteStrip>
 
         {shownError ? (
@@ -269,7 +323,7 @@ export default function WalletSetup() {
         <Button
           label={codeSent ? 'Verify and create wallet' : 'Email me a code'}
           loading={busy || !ready}
-          disabled={codeSent ? code.trim().length < 4 : !email.includes('@')}
+          disabled={!!pending || (codeSent ? code.trim().length < 4 : !email.includes('@'))}
           onPress={codeSent ? verify : send}
         />
       ) : !address ? (
