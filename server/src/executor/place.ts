@@ -18,7 +18,7 @@ import { ataFor, tokenProgramForMint, readMintScale, toUiAmount, fromUiAmount } 
 import { DEFAULT_MINTS } from '../solana/clusters.js';
 import { evaluate, type RuleContext } from '../rules/engine.js';
 import { xStockPriceUsd, XSTOCKS, xStockKey } from '../venues/xstocks.js';
-import { quote, swap, resolveMint } from '../venues/jupiter.js';
+import { quote, swap, resolveMint, type FillVenue } from '../venues/jupiter.js';
 
 export type SpendIntent = {
   walletId: string;
@@ -35,6 +35,8 @@ export type SpendReceipt = {
   placed: true;
   signature: string;
   slot: number;
+  /** Which venue actually filled this. Never call a `venue-vault` fill a Jupiter swap. */
+  venue: FillVenue;
   inUnits: bigint;
   outUnits: bigint;
   filledUnits: number;
@@ -184,6 +186,7 @@ export async function guardAndSpend(intent: SpendIntent): Promise<SpendOutcome> 
 
     return {
       placed: true,
+      venue: swapRes.venue,
       signature: swapRes.signature || spendRes.signature,
       slot: swapRes.slot || spendRes.slot,
       inUnits: wantedUnits,
@@ -217,6 +220,7 @@ export async function guardAndSpend(intent: SpendIntent): Promise<SpendOutcome> 
     const outUsd = baseUnitsToUsd(swapRes.outAmount, 6);
     return {
       placed: true,
+      venue: swapRes.venue,
       signature: swapRes.signature,
       slot: swapRes.slot,
       inUnits,
