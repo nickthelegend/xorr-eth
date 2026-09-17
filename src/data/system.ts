@@ -300,6 +300,14 @@ export type SwapOutcome =
  * Every numeric is nullable because a run that never reached a fill has no price and no size, and
  * zero would be a different claim.
  */
+/** The regulator's own classification of a listed company. */
+export type SectorClassification = {
+  /** The SEC's wording for the SIC code — e.g. "Semiconductors & Related Devices". */
+  sector: string;
+  /** The four-digit Standard Industrial Classification code it came from. */
+  sic: string;
+};
+
 export type StrategyRunRow = {
   id: string;
   strategyId: string;
@@ -545,6 +553,37 @@ export type StockRow = {
   feed: 'live' | 'unavailable';
 };
 
+/**
+ * One tokenized equity in the xStocks catalog, with both prices that exist for it.
+ *
+ * `price` is what one token costs in the Solana pools — what a buy actually pays. `underlyingPrice`
+ * is what the issuer's feed marks the listed share at. They are near each other and not equal, and
+ * the gap is the spread the pool charges, so the screen shows which is which rather than picking one.
+ *
+ * `price: null` with `feed: 'unavailable'` is a row the catalog renders, not one it drops.
+ */
+export type XStockRow = {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  sector: string;
+  price: number | null;
+  underlyingPrice: number | null;
+  /** Null is "not reported". Zero is "did not move". The screen must not render them the same. */
+  change24hPct: number | null;
+  liquidityUsd: number | null;
+  underlyingAt: string | null;
+  feed: 'live' | 'unavailable';
+};
+
+export type XStockCatalog = {
+  rows: XStockRow[];
+  /** The sectors present, in the order the filter should offer them. The server derives these. */
+  sectors: string[];
+  unpriced: number;
+};
+
 /** One push kind, its explanation, and whether it is on. Labels come from the server. */
 export type NotificationPref = {
   kind: string;
@@ -646,6 +685,8 @@ export const system = {
     ),
   flattenPreview: () => api.get<FlattenPreview>('/panic/preview'),
   stocks: () => api.get<StockRow[]>('/market/stocks'),
+  /** The tokenized-equity catalog: every mint, its sector, and what it costs (PLAN.md §8.4). */
+  xstocks: () => api.get<XStockCatalog>('/market/xstocks'),
   symbols: () => api.get<string[]>('/market/symbols'),
   backtestStrategy: (body: {
     kind: 'dca' | 'grid';
@@ -662,6 +703,16 @@ export const system = {
   /** What the wallet was worth over time, from snapshots read on the chain (PLAN.md 2.10). */
   portfolioHistory: (range: '1D' | '1W' | '1M' | 'ALL') =>
     api.get<PortfolioHistory>(`/portfolio/history?range=${range}`),
+  /**
+   * What the SEC says each company does, for the allocation donut.
+   *
+   * A symbol maps to `null` when the regulator has no classification on record for it, or when the record could not be
+   * read. Both mean "this build cannot say", and the chart draws that as Unclassified rather than guessing.
+   */
+  classification: (symbols: string[]) =>
+    api.get<Record<string, SectorClassification | null>>(
+      `/market/classification?symbols=${encodeURIComponent(symbols.join(','))}`,
+    ),
   // POST: the executor registers GET and POST on this path, and the PATCH that was sent here 404'd, so a
   // toggle looked saved and was not (PLAN.md 2.12).
   setNotificationPref: (kind: string, enabled: boolean) =>

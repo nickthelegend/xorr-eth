@@ -20,7 +20,7 @@ import { log } from '../http/request-id.js';
 import { COINGECKO_IDS, COINGECKO_PRICE_URL, type CoingeckoPrices } from '../market/ids.js';
 import { CAN_SETTLE, TOKENS, canonicalSymbol, quote } from '../venues/oneinch.js';
 import { STOCKS, equitiesFunctional, isStock, observedHistory } from '../venues/stocks.js';
-import { earningsCalendar } from '../market/edgar.js';
+import { classificationFor, earningsCalendar } from '../market/edgar.js';
 import { aavePoolIsDeployedHere, usdcSupplyYield, usdcReserve } from '../market/yield.js';
 import { logosFor, warmLogos } from '../market/logos.js';
 import { withdrawCalldata } from '../venues/aave.js';
@@ -358,6 +358,38 @@ market.get('/market/earnings', async (c) => {
   }
   if (!cal) return c.json({ error: 'no_filings', detail: `No filings were found for ${symbol}.` }, 404);
   return c.json(cal);
+});
+
+/**
+ * What the regulator says each of these companies does — the sectors behind the allocation donut.
+ *
+ * Several symbols at once because the chart asks about a whole portfolio, and one request per holding would be a round
+ * trip per slice. Each answer is independent: one symbol the SEC has no classification for does not cost the others
+ * theirs, so the response is a map with `null` where there is no answer.
+ *
+ * **`null` is a real answer and the client keeps it as one.** A filer with no SIC on record — some trusts, index ETFs
+ * among them — genuinely has none, and the donut draws that as Unclassified rather than guessing from the ticker. A
+ * lookup that merely failed is also null here; both mean "this build cannot say", which is exactly what the chart shows.
+ */
+market.get('/market/classification', async (c) => {
+  const asked = (c.req.query('symbols') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+  if (asked.length === 0) {
+    return c.json({ error: 'no_symbols', detail: 'symbols is a comma-separated list of tickers.' }, 400);
+  }
+  if (asked.length > 50) {
+    return c.json({ error: 'too_many_symbols', detail: 'At most 50 symbols in one request.' }, 400);
+  }
+  const unique = [...new Set(asked)];
+  const found = await Promise.all(
+    unique.map(async (symbol) => {
+      const hit = await classificationFor(symbol).catch(() => null);
+      return [symbol, hit === null ? null : { sector: hit.description, sic: hit.sic }] as const;
+    }),
+  );
+  return c.json(Object.fromEntries(found));
 });
 
 market.get('/market/stocks/history', async (c) => {

@@ -30,6 +30,7 @@ import {
 } from '../executor/run.js';
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
+import { backingFor } from '../venues/proof-of-reserves.js';
 import { ADDRESSES, APPROVABLE_TOKENS, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
 import { allowanceView, chainAllowance, routerAllowance, routerSpender } from '../evm/allowances.js';
 import { delegateAccount } from '../evm/client.js';
@@ -660,6 +661,37 @@ routes.get('/positions', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json([]);
   return c.json(await listPositions(w));
+});
+
+/**
+ * Whether an xStock is actually backed by the share it claims to represent.
+ *
+ * Backed's attestor publishes shares held against tokens in circulation; the ratio is the whole
+ * badge. The answer is deliberately two-shaped — `verified` with a measured ratio, or `unverified`
+ * with the reason — because the failure mode worth designing against is a tokenized-equity app
+ * rendering a confident "1:1" it never actually read. Callers that want a number must handle not
+ * getting one.
+ *
+ * 200 either way: "we could not reach the attestor" is an answer about the asset, not an error in
+ * the request.
+ */
+routes.get('/xstocks/:symbol/backing', async (c) => {
+  const symbol = c.req.param('symbol');
+  const status = await backingFor(symbol);
+  if (status.status === 'unverified') {
+    return c.json({ symbol, verified: false, reason: status.reason });
+  }
+  const b = status.backing;
+  return c.json({
+    symbol: b.symbol,
+    verified: true,
+    ratio: b.ratio,
+    fullyBacked: b.ratio >= 1,
+    sharesHeld: b.sharesHeld,
+    circulatingSupply: b.circulatingSupply,
+    custodians: b.custodians,
+    asOf: b.asOf,
+  });
 });
 
 /**

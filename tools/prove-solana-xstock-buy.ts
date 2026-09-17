@@ -2,16 +2,31 @@
  * End-to-end demo proof: ONE real on-chain USDC -> xStock buy on a Solana mainnet fork
  * (PLAN.md §6.3, §8.2, §11, §14).
  *
+ * Two different things wear Jupiter's name here, and the distinction is the whole point:
+ *
+ *   PRICE is always a live quote from Jupiter's off-chain quote API. No on-chain program is
+ *         involved in a quote. It is a number over HTTP.
+ *   FILL  is one of two on-chain paths, and `venue` on the receipt says which:
+ *           `jupiter-route`  the Jupiter v6 program is invoked on-chain, CPIs into the AMM,
+ *                            and the pool's own reserves move.
+ *           `venue-vault`    a capped SPL delegate transfer, with the asset delivered from the
+ *                            venue/maker account at the quoted price (PLAN.md §6.2 option A).
+ *                            Legitimate, and NOT a Jupiter swap — no route executes.
+ *
+ * A reader should never have to infer which one happened, so this tool asserts it and prints it.
+ *
  * Proves, against a real solana-test-validator with mainnet state cloned into it:
- *   1. The real mainnet USDC mint, the NVDAx xStock mint (Token-2022) and the Jupiter v6
- *      program are present on the fork — not stand-ins.
+ *   1. The real mainnet USDC mint and the NVDAx xStock mint (Token-2022) are on the fork — not
+ *      stand-ins. The Jupiter v6 program is cloned too, but cloning is not execution: whether it
+ *      ran is decided in step 4, from the ledger.
  *   2. The owner grants the bot delegate a capped SPL approval. The SPL Token program is the
  *      authority; no custody moves.
  *   3. A buy through the executor's single spend chokepoint (`guardAndSpend`), where the
  *      DELEGATE signs the transfer out of the owner's account.
- *   4. The fill is a REAL Jupiter route: the Jupiter program is invoked, it CPIs into the AMM,
- *      and the pool's own reserves move. A run that settled through the venue vault instead
- *      fails here rather than being described as a Jupiter swap.
+ *   4. The fill path, read from the transaction's own logs rather than from a label: a
+ *      `jupiter-route` run must show the Jupiter program invoked, `Instruction: Route`, and an
+ *      AMM swap. Anyone can check the same claim in ten seconds with
+ *      `getSignaturesForAddress(JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4)`.
  *   5. The filled size the executor reports equals the on-chain balance change, scaled-UI
  *      multiplier included — the split/dividend-safe P&L property.
  *
@@ -62,11 +77,11 @@ async function main() {
   line('delegate', delegate.publicKey.toBase58());
   line('venue vault', vault.publicKey.toBase58());
 
-  console.log('\n=== 1. Real mainnet state on the fork ===');
+  console.log('\n=== 1. Real mainnet state cloned onto the fork ===');
   for (const [name, mint] of [
     ['USDC mint', USDC],
     ['NVDAx mint', NVDAX],
-    ['Jupiter v6', new PublicKey(DEFAULT_MINTS.JUPITER_V6)],
+    ['Jupiter v6 (cloned)', new PublicKey(DEFAULT_MINTS.JUPITER_V6)],
   ] as const) {
     const info = await conn.getAccountInfo(mint);
     if (!info) throw new Error(`${name} (${mint.toBase58()}) is not present on the fork.`);
@@ -113,7 +128,13 @@ async function main() {
 
   line('BUY SIGNATURE', outcome.signature);
   line('BUY SLOT', outcome.slot);
-  line('FILL VENUE', outcome.venue);
+  line('PRICE SOURCE', 'live Jupiter v6 quote API (off-chain HTTP; no program invoked)');
+  line(
+    'FILL PATH',
+    outcome.venue === 'jupiter-route'
+      ? 'jupiter-route — Jupiter v6 invoked on-chain, CPI into the AMM'
+      : 'venue-vault — capped SPL delegate transfer, asset from the venue/maker account (NOT a Jupiter swap)',
+  );
   line('filled', `${outcome.filledUnits} NVDAx`);
   line('fill price', `$${outcome.fillPrice.toFixed(2)}`);
   line('out units (raw)', outcome.outUnits.toString());
@@ -131,8 +152,10 @@ async function main() {
    */
   if (outcome.venue !== 'jupiter-route') {
     throw new Error(
-      `Filled through '${outcome.venue}', not a Jupiter route. That is a capped SPL delegate ` +
-        'transfer settled by the venue vault and must not be called a Jupiter swap.',
+      `Filled through '${outcome.venue}': a capped SPL delegate transfer with the asset delivered ` +
+        'from the venue/maker account, priced off a Jupiter quote. That is PLAN.md §6.2 option A ' +
+        'and a defensible design, but it is NOT a Jupiter swap — no on-chain route executed. ' +
+        'Describe it accordingly, or clone the route accounts so a real route can run.',
     );
   }
   const logs = tx.meta?.logMessages ?? [];

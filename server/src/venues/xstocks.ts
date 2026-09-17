@@ -10,6 +10,20 @@
 import { PublicKey } from '@solana/web3.js';
 import { query } from '../db/index.js';
 
+/**
+ * What the underlying listing is, in GICS sector names.
+ *
+ * `Index funds` is not a GICS sector and is not pretending to be one. SPYx and QQQx track baskets
+ * that span every sector on this list, so filing them under any single one would be a claim about
+ * their holdings that is simply false. They get a bucket that says what they are.
+ */
+export type XStockSector =
+  | 'Technology'
+  | 'Communication Services'
+  | 'Consumer Discretionary'
+  | 'Financials'
+  | 'Index funds';
+
 export type XStockToken = {
   /** The on-chain symbol (e.g. NVDAx, TSLAx). */
   symbol: string;
@@ -18,6 +32,14 @@ export type XStockToken = {
   /** Solana mint base58 address. */
   address: string;
   decimals: number;
+  /**
+   * The sector of the company this token tracks.
+   *
+   * Reference data about the listing, like `name` beside it — not a market observation. It is the
+   * one fact a browsable catalog needs that no price feed carries, and it never goes stale in the
+   * way a number does.
+   */
+  sector: XStockSector;
 };
 
 export const XSTOCKS: Record<string, XStockToken> = {
@@ -26,66 +48,77 @@ export const XSTOCKS: Record<string, XStockToken> = {
     name: 'NVIDIA Corporation xStock',
     address: 'Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh',
     decimals: 8,
+    sector: 'Technology',
   },
   TSLAx: {
     symbol: 'TSLAx',
     name: 'Tesla Inc. xStock',
     address: 'XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB',
     decimals: 8,
+    sector: 'Consumer Discretionary',
   },
   AAPLx: {
     symbol: 'AAPLx',
     name: 'Apple Inc. xStock',
     address: 'XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp',
     decimals: 8,
+    sector: 'Technology',
   },
   MSFTx: {
     symbol: 'MSFTx',
     name: 'Microsoft Corporation xStock',
     address: 'XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX',
     decimals: 8,
+    sector: 'Technology',
   },
   AMZNx: {
     symbol: 'AMZNx',
     name: 'Amazon.com Inc. xStock',
     address: 'Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg',
     decimals: 8,
+    sector: 'Consumer Discretionary',
   },
   GOOGLx: {
     symbol: 'GOOGLx',
     name: 'Alphabet Inc. xStock',
     address: 'XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN',
     decimals: 8,
+    sector: 'Communication Services',
   },
   METAx: {
     symbol: 'METAx',
     name: 'Meta Platforms Inc. xStock',
     address: 'Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu',
     decimals: 8,
+    sector: 'Communication Services',
   },
   MSTRx: {
     symbol: 'MSTRx',
     name: 'MicroStrategy Inc. xStock',
     address: 'XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ',
     decimals: 8,
+    sector: 'Technology',
   },
   COINx: {
     symbol: 'COINx',
     name: 'Coinbase Global Inc. xStock',
     address: 'Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu',
     decimals: 8,
+    sector: 'Financials',
   },
   SPYx: {
     symbol: 'SPYx',
     name: 'SPDR S&P 500 ETF Trust xStock',
     address: 'XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W',
     decimals: 8,
+    sector: 'Index funds',
   },
   QQQx: {
     symbol: 'QQQx',
     name: 'Invesco QQQ Trust xStock',
     address: 'Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ',
     decimals: 8,
+    sector: 'Index funds',
   },
 };
 
