@@ -200,6 +200,22 @@ export function scaledUiMultiplier(mintInfo: Mint, atUnixSeconds = Date.now() / 
     : config.multiplier;
 }
 
+export type MintScale = { decimals: number; multiplier: number };
+
+/*
+ * Decimals never change for a mint, so they are safe to remember. The multiplier does change —
+ * that is the entire point of the extension — so it is cached only briefly: long enough that a
+ * single trade does not re-read the same mint several times, short enough that a split shows up
+ * in seconds rather than at the next restart.
+ */
+const MULTIPLIER_TTL_MS = 10_000;
+const scaleCache = new Map<string, { scale: MintScale; readAt: number }>();
+
+/** Drop the memo. Tests that move a multiplier need the next read to see it. */
+export function clearMintScaleCache(): void {
+  scaleCache.clear();
+}
+
 /**
  * Read a mint's actual decimals and its current Scaled UI multiplier.
  */
@@ -207,11 +223,37 @@ export async function readMintScale(
   mint: PublicKey | string,
   conn: Connection = defaultConnection,
   programId?: PublicKey,
-): Promise<{ decimals: number; multiplier: number }> {
+): Promise<MintScale> {
   const mintPk = toPublicKey(mint);
+  const key = mintPk.toBase58();
+  const hit = scaleCache.get(key);
+  if (hit && Date.now() - hit.readAt < MULTIPLIER_TTL_MS) {
+    return hit.scale;
+  }
+
   const prog = programId ?? tokenProgramForMint(mintPk);
   const mintInfo = await getMint(conn, mintPk, 'confirmed', prog);
-  return { decimals: mintInfo.decimals, multiplier: scaledUiMultiplier(mintInfo) };
+  const scale: MintScale = {
+    decimals: mintInfo.decimals,
+    multiplier: scaledUiMultiplier(mintInfo),
+  };
+  scaleCache.set(key, { scale, readAt: Date.now() });
+  return scale;
+}
+
+/**
+ * Raw base units -> the amount a holder is actually shown, scaled UI multiplier included.
+ *
+ * Use this anywhere a raw token amount becomes a number a person reads or a P&L line divides by.
+ * `Number(raw) / 10 ** decimals` is the version that goes wrong after a split.
+ */
+export function toUiAmount(raw: bigint, scale: MintScale): number {
+  return (Number(raw) / 10 ** scale.decimals) * scale.multiplier;
+}
+
+/** The inverse: a displayed amount back to the raw base units that represent it. */
+export function fromUiAmount(ui: number, scale: MintScale): bigint {
+  return BigInt(Math.floor((ui / scale.multiplier) * 10 ** scale.decimals));
 }
 
 /**
@@ -239,7 +281,7 @@ export async function getTokenBalance(
     const acc = await getAccount(conn, ata, 'confirmed', prog);
     return {
       amount: acc.amount,
-      uiAmount: (Number(acc.amount) / 10 ** decimals) * multiplier,
+      uiAmount: toUiAmount(acc.amount, { decimals, multiplier }),
       decimals,
       ata,
     };
