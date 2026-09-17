@@ -13,7 +13,6 @@ import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
-  AreaChart,
   BackButton,
   Button,
   Eyebrow,
@@ -39,6 +38,9 @@ import {
 import { useSignedOut } from '@/auth/useSignedOut';
 import { PositionCard, PositionCardSkeleton, type PositionLevel } from '@/ui/PositionCard';
 import { AllocationDonut } from '@/ui/charts/AllocationDonut';
+import { TimelineNotYet, ValueTimeline } from '@/ui/charts/ValueTimeline';
+import { continuityWindowMs, netInvestedSteps, observedRuns, recordedCount } from '@/ui/charts/timeline';
+import { useMeasuredBox } from '@/ui/charts/useMeasuredBox';
 import { allocationBySector } from '@/ui/charts/allocation';
 import { Rise } from '@/ui/Rise';
 import { RollingNumber } from '@/ui/RollingNumber';
@@ -172,8 +174,6 @@ export default function Portfolio() {
    */
   useFreshOnReturn(balance, positions, realised, strategies, runs, activity, history);
   const points = useMemo(() => (history.data?.points ?? []).map((p) => p.totalUsd), [history.data]);
-  // When each point was recorded, so a finger on the line reads the value and the time it was true (FEATURES.md #45).
-  const times = useMemo(() => (history.data?.points ?? []).map((p) => p.at), [history.data]);
   const firstAt = history.data?.points[0]?.at;
   const graphDelta = points.length > 1 ? points[points.length - 1]! - points[0]! : 0;
   const graphPct = points.length > 1 && points[0]! > 0 ? (graphDelta / points[0]!) * 100 : 0;
@@ -195,6 +195,32 @@ export default function Portfolio() {
       ),
     [book, sectors.data],
   );
+
+  /*
+   * The history, as the things that were actually recorded (`timeline.ts`).
+   *
+   * Two series, true in two different ways. NET INVESTED steps at each recorded fill and is flat between them because
+   * it WAS flat between them — exactly, not approximately — so joining two fills claims nothing. VALUE WHEN RECORDED is
+   * the snapshots, drawn as the readings they are and joined only across stretches recorded continuously; where nothing
+   * was recorded for a while there is a gap, because a line across it would be a claim about time nobody looked at.
+   *
+   * Neither is interpolated, smoothed or extended to the edges.
+   */
+  const investedSteps = useMemo(
+    () =>
+      netInvestedSteps(
+        (runs.data ?? [])
+          .filter((r) => r.status === 'filled' && r.usd !== null)
+          .map((r) => ({ at: Date.parse(r.finishedAt ?? r.at), usd: r.usd as number, side: r.side ?? null })),
+      ),
+    [runs.data],
+  );
+  const valueRuns = useMemo(
+    () => observedRuns(history.data?.points ?? [], continuityWindowMs(history.data?.everyMinutes)),
+    [history.data],
+  );
+  const recorded = recordedCount(investedSteps, valueRuns);
+  const [graphBox, onGraphLayout] = useMeasuredBox();
 
   /* Fills per symbol — how many trades built each position. */
   const trades = useMemo(() => {
@@ -281,29 +307,35 @@ export default function Portfolio() {
             <Text variant="footnote" color={colors.ink55}>
               Couldn’t load the past week.
             </Text>
-          ) : points.length > 1 && firstAt !== undefined ? (
-            <>
-              <AreaChart
-                data={points}
-                times={times}
-                formatValue={money}
-                height={GRAPH_H}
-                color={graphDelta < 0 ? colors.down : colors.up}
-                grid
-                drawIn
-              />
+          ) : recorded < 2 ? (
+            /* Nothing, or one reading. Neither is a trend, and a line along zero would claim we watched and it held. */
+            <TimelineNotYet count={recorded} />
+          ) : (
+            <View onLayout={onGraphLayout}>
+              <ValueTimeline steps={investedSteps} runs={valueRuns} width={graphBox.width} height={GRAPH_H} />
               <View
                 style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.s8 }}
               >
                 <Text variant="footnote" color={colors.ink55}>
-                  {historyCaption(firstAt)}
+                  {firstAt !== undefined ? historyCaption(firstAt) : 'Every reading recorded so far'}
                 </Text>
-                <Price variant="footnote" tone={pnlTone(graphDelta)}>
-                  {`${signedMoney(graphDelta)} · ${percent(graphPct)}`}
-                </Price>
+                {points.length > 1 ? (
+                  <Price variant="footnote" tone={pnlTone(graphDelta)}>
+                    {`${signedMoney(graphDelta)} · ${percent(graphPct)}`}
+                  </Price>
+                ) : null}
               </View>
-            </>
-          ) : null}
+              {/* What the two series are. Without this the dimmer step line is an unexplained second line. */}
+              <View style={{ flexDirection: 'row', gap: space.s14, marginTop: space.s6 }}>
+                <Text variant="footnote" color={colors.ink55}>
+                  Value when recorded
+                </Text>
+                <Text variant="footnote" color={colors.ink45}>
+                  Net invested
+                </Text>
+              </View>
+            </View>
+          )}
         </Rise>
 
         <Rise

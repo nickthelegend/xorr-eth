@@ -139,6 +139,7 @@ describe('motion — animations.md', () => {
   //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)
   //   FillReceipt     a confirmed fill's receipt arriving   420ms  (arrival; once, on the signature — never on mount)
   //   AllocationDonut the ring sweeping clockwise on load    700ms  (arrival, the chart reveal beat — revealed, never resized)
+  //   ValueTimeline   the recorded history revealed L→R     700ms  (arrival; no point ever moves to a new value)
   //   AgentOrb        the agent's stage: breathe / settle  3600ms (thinking) · 900ms (executing) · 250ms (decided, filled)
   //   StopCurtain     the kill switch's own screen         420ms  (the curtain down) · 250ms (the confirm badge)
   // A new entry here means a primitive started animating something the policy does not sanction.
@@ -163,6 +164,7 @@ describe('motion — animations.md', () => {
       'charts/AllocationDonut.tsx',
       'charts/AreaChart.tsx',
       'charts/Candlestick.tsx',
+      'charts/ValueTimeline.tsx',
       'motion.ts',
     ]);
   });
