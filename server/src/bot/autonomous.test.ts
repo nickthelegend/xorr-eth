@@ -12,6 +12,7 @@ const earningsCalendarMock = vi.fn();
 const xStockPriceMock = vi.fn<(symbol: string) => Promise<number | null>>();
 const referencePriceMock = vi.fn<(symbol: string) => Promise<number | null>>();
 const readMintScaleMock = vi.fn();
+const appendMock = vi.fn();
 
 /*
  * Four xStocks rather than main's eleven, so a test asserting "it picked NVDAx" is asserting a
@@ -55,11 +56,11 @@ vi.mock('../notifications/alerts.js', () => ({
 vi.mock('../market/edgar.js', () => ({
   earningsCalendar: (...a: unknown[]) => earningsCalendarMock(...a),
 }));
+vi.mock('../audit/log.js', () => ({ append: (...a: unknown[]) => appendMock(...a) }));
 vi.mock('./llm.js', () => ({ speak: vi.fn(async () => ({ ok: true, text: 'Optimal entry setup.' })) }));
 
-const { evaluateBestSetup, runAutonomousCycle, autonomousAgentSweep } = await import(
-  './autonomous.js'
-);
+const { evaluateBestSetup, runAutonomousCycle, autonomousAgentSweep, AGENT_DECISION } =
+  await import('./autonomous.js');
 
 const OWNER = Keypair.generate().publicKey.toBase58();
 
@@ -104,6 +105,7 @@ describe('autonomous xStocks trading agent', () => {
     xStockPriceMock.mockResolvedValue(238);
     referencePriceMock.mockResolvedValue(238);
     readMintScaleMock.mockResolvedValue({ decimals: 8, multiplier: 1, pending: null });
+    appendMock.mockResolvedValue({ seq: '1' });
   });
 
   afterEach(() => {
@@ -369,6 +371,66 @@ describe('autonomous xStocks trading agent', () => {
     });
 
     /*
+     * A fill that never reaches `audit_log` did not happen as far as the app is concerned:
+     * Activity is the one screen whose whole promise is showing what the agents did, and
+     * `/agent/explain` starts from a row on it. `guardAndSpend` does not write one.
+     */
+    it('puts the fill on the audit trail, carrying the signature', async () => {
+      oneMock.mockResolvedValue({ id: 'wallet-1', address: OWNER, agents_stopped: false });
+      readDelegationMock.mockResolvedValue({ delegatedUsd: 1000, isRevoked: false });
+      evaluateMock.mockResolvedValue({ allowed: true, spentTodayUsd: 0, remainingUsd: 800 });
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+      guardAndSpendMock.mockResolvedValue(FILL);
+      armExitsMock.mockResolvedValue({ strategyId: 'exit-1', sentence: 'Exit set' });
+
+      await runAutonomousCycle('wallet-1', { fixedUsd: 25 });
+
+      expect(appendMock).toHaveBeenCalledTimes(1);
+      const entry = appendMock.mock.calls[0]?.[0];
+      expect(entry).toMatchObject({
+        walletId: 'wallet-1',
+        kind: 'trade',
+        signature: FILL.signature,
+        amount: '$25.00',
+      });
+      expect(entry.action).toContain(FILL.symbol);
+      // The whole decision record rides along, so explaining the trade needs no second lookup.
+      expect(entry.payload).toMatchObject({
+        symbol: FILL.symbol,
+        strategyKind: 'momentum',
+        signature: FILL.signature,
+        slippageBps: 50,
+        exitStrategyId: 'exit-1',
+      });
+      expect(typeof entry.payload.proposalId).toBe('string');
+    });
+
+    /*
+     * `proposals.decision` is a CHECK column. Writing a word it does not allow means Postgres
+     * refuses the row, and the refusal was being logged and stepped over — so the record this
+     * whole feature reads back was never there, and the sweep's cooldown never matched.
+     */
+    it('stores the decision under a word the proposals constraint accepts', async () => {
+      oneMock.mockResolvedValue({ id: 'wallet-1', address: OWNER, agents_stopped: false });
+      readDelegationMock.mockResolvedValue({ delegatedUsd: 1000, isRevoked: false });
+      evaluateMock.mockResolvedValue({ allowed: true, spentTodayUsd: 0, remainingUsd: 800 });
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+      guardAndSpendMock.mockResolvedValue(FILL);
+      armExitsMock.mockResolvedValue({ strategyId: 'exit-1', sentence: 'Exit set' });
+
+      await runAutonomousCycle('wallet-1', { fixedUsd: 25 });
+
+      const insert = queryMock.mock.calls.find(([sql]) => sql.includes('INSERT INTO proposals'));
+      if (!insert) throw new Error('expected a proposal insert');
+      expect(insert[0]).not.toContain("'approved'");
+      expect(insert[1]).toContain(AGENT_DECISION);
+    });
+
+    /*
      * `guardAndSpend` answers with a refusal as readily as a receipt, and a refusal is not a fill:
      * nothing downstream of it — exits, proposal, notification — may run.
      */
@@ -407,6 +469,8 @@ describe('autonomous xStocks trading agent', () => {
       oneMock.mockImplementation(async (sql: string, params?: unknown[]) => {
         const id = Array.isArray(params) ? params[0] : undefined;
         if (sql.includes('FROM proposals')) {
+          // Parameterised on the decision word now, so the cooldown matches what the agent writes.
+          expect(params).toContain(AGENT_DECISION);
           return id === 'wallet-active-1' ? { id: 'recent-prop-id' } : null;
         }
         if (sql.includes('FROM wallets')) {

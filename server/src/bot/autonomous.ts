@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { PublicKey } from '@solana/web3.js';
 import { one, query } from '../db/index.js';
+import { append } from '../audit/log.js';
 import { log } from '../http/request-id.js';
 import { evaluate } from '../rules/engine.js';
 import { XSTOCKS, xStockPriceUsd, type XStockToken } from '../venues/xstocks.js';
@@ -66,6 +67,95 @@ const RANGE_HOURS = 24 * 30;
 
 /** A multiplier change this close is a split or a dividend landing mid-trade. */
 const CORPORATE_ACTION_WINDOW_MS = 48 * 3_600_000;
+
+/**
+ * What this agent writes into `proposals.decision`.
+ *
+ * The column is `CHECK (decision IN ('approve','skip','expired'))` and this used to write
+ * `'approved'`, which Postgres refused on every single autonomous trade. The insert was wrapped in
+ * a `.catch` that logged and moved on, so nothing failed loudly: no decision record was ever
+ * stored, and `autonomousAgentSweep`'s cooldown — which asks for rows with this exact value —
+ * matched nothing, leaving the agent free to trade on every tick.
+ *
+ * A constant rather than a literal in two places, and `decision-vocabulary.test.ts` holds it
+ * against the CHECK clause in `schema.sql` so the two cannot drift apart again silently.
+ */
+export const AGENT_DECISION = 'approve';
+
+/**
+ * Why the agent did what it did, in the shape `/agent/explain` reads back.
+ *
+ * Written once and stored twice — as the proposal payload and on the audit row — because they are
+ * read for different reasons and neither should have to join to the other to answer. Every field
+ * is something the agent actually observed at decision time; there is nothing here it would have
+ * to recompute later, which is the point. A rationale reconstructed after the fact is a guess
+ * about the past dressed up as a record of it.
+ */
+export type DecisionRecord = {
+  symbol: string;
+  strategyKind: StrategyKind;
+  persona: PersonaId;
+  personaName: string;
+  score: number;
+  usd: number;
+  units: number;
+  price: number;
+  stopPrice: number;
+  targetPrice: number;
+  signature: string;
+  slot: number;
+  /** The persona's sentence, model-written where the model answered and deterministic where not. */
+  opening: string;
+  reason: string;
+  marketCondition: string;
+  /** The Scaled UI multiplier in force at the moment of the trade. */
+  multiplier: number;
+  /** A multiplier change that was already published when this was decided, if there was one. */
+  pendingMultiplier: number | null;
+  pendingEffectiveAtMs: number | null;
+  nasdaqSession: string;
+  /** Null when no independent price was available to measure drift against. */
+  spreadBps: number | null;
+  slippageBps: number;
+  exitStrategyId: string | null;
+  decidedAtMs: number;
+};
+
+function decisionRecord(p: {
+  setup: CandidateSetup;
+  usd: number;
+  receipt: SpendReceipt;
+  opening: string;
+  exitStrategyId: string | null;
+}): DecisionRecord {
+  const { setup, receipt } = p;
+  return {
+    symbol: setup.symbol,
+    strategyKind: setup.strategyKind,
+    persona: setup.persona,
+    personaName: setup.personaName,
+    score: setup.score,
+    usd: p.usd,
+    units: receipt.filledUnits,
+    price: receipt.fillPrice,
+    stopPrice: setup.stopPrice,
+    targetPrice: setup.targetPrice,
+    signature: receipt.signature,
+    slot: receipt.slot,
+    opening: p.opening,
+    reason: setup.reason,
+    marketCondition: setup.marketCondition,
+    multiplier: setup.corporateAction.multiplier,
+    pendingMultiplier: setup.corporateAction.pending?.nextMultiplier ?? null,
+    pendingEffectiveAtMs: setup.corporateAction.pending?.effectiveAtMs ?? null,
+    nasdaqSession: setup.offHoursGuard.session,
+    /* Null rather than 0: nothing measured is not the same as measured at zero. */
+    spreadBps: setup.offHoursGuard.spreadBps,
+    slippageBps: setup.suggestedSlippageBps,
+    exitStrategyId: p.exitStrategyId,
+    decidedAtMs: Date.now(),
+  };
+}
 
 export type CorporateActionSignal = {
   /** The multiplier the mint is scaling by right now. 1 on a mint with no extension. */
@@ -412,37 +502,44 @@ export async function runAutonomousCycle(
     log.error('[autonomous] failed to arm exits:', e instanceof Error ? e.message : e);
   }
 
-  // 8. Record it as a proposal the agent approved itself, so it shows up where every other one does.
+  // 8. Write down what it decided and why, then put it on the trail with everything else.
   const proposalId = randomUUID();
+  const record = decisionRecord({
+    setup: bestSetup,
+    usd: sizeUsd,
+    receipt,
+    opening: openingLine,
+    exitStrategyId,
+  });
+
   await query(
     `INSERT INTO proposals (id, wallet_id, agent, payload, decision, decided_at, expires_at)
-     VALUES ($1, $2, $3, $4, 'approved', now(), now() + interval '1 hour')`,
-    [
-      proposalId,
-      walletId,
-      bestSetup.personaName,
-      JSON.stringify({
-        symbol: bestSetup.symbol,
-        strategyKind: bestSetup.strategyKind,
-        usd: sizeUsd,
-        units: receipt.filledUnits,
-        price: receipt.fillPrice,
-        stopPrice: bestSetup.stopPrice,
-        targetPrice: bestSetup.targetPrice,
-        signature: receipt.signature,
-        slot: receipt.slot,
-        opening: openingLine,
-        reason: bestSetup.reason,
-        marketCondition: bestSetup.marketCondition,
-        multiplier: bestSetup.corporateAction.multiplier,
-        pendingMultiplier: bestSetup.corporateAction.pending?.nextMultiplier ?? null,
-        nasdaqSession: bestSetup.offHoursGuard.session,
-        /* Null rather than 0: nothing measured is not the same as measured at zero. */
-        spreadBps: bestSetup.offHoursGuard.spreadBps,
-        suggestedSlippageBps: bestSetup.suggestedSlippageBps,
-      }),
-    ],
+     VALUES ($1, $2, $3, $4, $5, now(), now() + interval '1 hour')`,
+    [proposalId, walletId, bestSetup.personaName, JSON.stringify(record), AGENT_DECISION],
   ).catch((e) => log.error('[autonomous] failed to insert proposal:', e));
+
+  /*
+   * The audit row, without which the trade did not happen as far as the app is concerned.
+   *
+   * `guardAndSpend` places the swap and returns a receipt; it does not write to `audit_log`, and
+   * nothing else on this path did either. So an autonomous fill reached the chain, moved real
+   * money, sent a push — and then did not appear on Activity, which is the one screen whose entire
+   * promise is that it shows what the agents did. The trail is also where `/agent/explain` starts
+   * from, so a trade missing from it cannot be asked about.
+   *
+   * Not fatal if it fails. The money has already moved and throwing here would turn a bookkeeping
+   * failure into a second one, but it is logged loudly rather than swallowed.
+   */
+  await append({
+    walletId,
+    agent: bestSetup.personaName,
+    action: `Bought ${bestSetup.symbol}`,
+    detail: openingLine,
+    amount: `$${sizeUsd.toFixed(2)}`,
+    kind: 'trade',
+    signature: receipt.signature,
+    payload: { proposalId, ...record },
+  }).catch((e) => log.error('[autonomous] failed to write the audit row:', e));
 
   // 9. Tell the user, with the signature they can go and check.
   await notifyEntry({
@@ -476,9 +573,9 @@ export async function autonomousAgentSweep(_now: Date = new Date()): Promise<num
       // One autonomous entry per wallet per ten minutes. The tick is faster than any thesis is.
       const recent = await one<{ id: string }>(
         `SELECT id FROM proposals
-          WHERE wallet_id = $1 AND decision = 'approved' AND decided_at > now() - interval '10 minutes'
+          WHERE wallet_id = $1 AND decision = $2 AND decided_at > now() - interval '10 minutes'
           LIMIT 1`,
-        [w.id],
+        [w.id, AGENT_DECISION],
       ).catch(() => null);
       if (recent) continue;
 
