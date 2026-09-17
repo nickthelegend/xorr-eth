@@ -36,6 +36,7 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Messages room | `opacity` (the room being left, over the one that arrived) | 250ms | A theme change dissolving instead of flashing. Both rooms are complete; one becomes transparent. See below. |
 | Tab bar mark | `transform: scale` (0 ↔ 1) | 150ms | The raised pill under the open place, growing into shape on arrival and shrinking away on leaving. The glyph's colour still snaps. |
 | Sparkline, `live` | `opacity` (.9 → 1 → .9, the whole glyph) | 150ms up · 250ms back | One breath when the series it was handed actually changed. The line itself still redraws instantly. See below. |
 | Stop curtain | `opacity` (the blackout) · `transform: translateY` (the curtain) · `transform: scale` (the badge) | 420ms ease-out · 420ms ease-out · 250ms | The kill switch's own screen, up while the revoke is signed and confirmed. See below. |
@@ -64,6 +65,28 @@ Two places would genuinely benefit, both currently unbuilt:
   in the chat's `Turn`, and again as `stage="filled"` on the orb.
 
 Anything beyond those two, don't.
+
+## One room dissolving into the other
+
+Messages comes in two rooms — the light lavender one it was designed from, and the app's own true black — and it now
+**follows the phone** unless someone has chosen here. Someone whose phone is in light mode has already answered the
+question, in the one place the whole OS asks; opening at black over that is the app choosing for them, having been told.
+A tap on the sun/moon button is an answer about this room specifically, so it outranks the phone from then on.
+
+A change used to land whole between two frames: ground, cards, words and handle, all at once. On the brightest change
+this app can make, that is a flash — and on a phone that switches itself at dusk, a flash nobody asked for.
+
+So the room being **left** stays for a moment, painted over the room that has **arrived**, and fades out over 250ms.
+Both rooms are complete at every frame: the new one is fully drawn underneath, and the old one is simply becoming
+transparent. Nothing is half-built and nothing assembles itself.
+
+- **One property.** Opacity, on one pane of colour. The palette itself still swaps in place, instantly.
+- **250ms**, the interaction scale, whether a finger or the phone made the change: a dissolve slower than that reads as
+  the app catching up rather than answering.
+- **No touches, no screen-reader focus.** For a quarter of a second it is a pane of colour, not a surface.
+- **Off under reduced motion**, where the room simply changes — which is the whole of the information.
+
+The rest of the app is true black and has no second palette to cross-fade to; this is the one themed surface it has.
 
 ## The sparkline's breath
 
