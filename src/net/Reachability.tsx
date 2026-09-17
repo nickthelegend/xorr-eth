@@ -18,7 +18,13 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Text, colors, radius, space } from '@/ui';
-import { executorReachable } from '@/data/health';
+import { useNow } from '@/state/useNow';
+import { executorHealth } from '@/data/health';
+import { CHAIN_KEY, chainMoney, chainSentenceName } from '@/chain';
+import { compareChains, type ChainMatch } from './chainMatch';
+import { openBreakers, throttleBanner, type ThrottleState } from './throttle';
+import { useThrottle } from './throttleStore';
+import { ChainMismatchScreen } from './ChainMismatch';
 
 /** How often to re-check while down. Slow enough not to hammer a server that may be struggling. */
 const RETRY_MS = 5_000;
@@ -34,17 +40,38 @@ export function useExecutorReachable(): boolean {
 
 export function ReachabilityProvider({ children }: { children: React.ReactNode }) {
   const [reachable, setReachable] = useState(true);
+  /*
+   * Whether the executor serves the chain this build signs on, from the same heartbeat.
+   *
+   * Starts `unknown` rather than `match`: the app has not asked yet, and starting at a verdict it has not
+   * earned is how a check like this ends up being decorative. `unknown` renders exactly as `match` does.
+   */
+  const [chain, setChain] = useState<ChainMatch>({ state: 'unknown' });
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  /** Bumped by the mismatch screen's recheck, which restarts the heartbeat rather than waiting out its interval. */
+  const [askedAgain, setAskedAgain] = useState(0);
 
   useEffect(() => {
     let alive = true;
 
     const check = async () => {
       // The request itself lives in the data layer, where network access belongs.
-      const ok = await executorReachable();
+      const beat = await executorHealth();
       if (!alive) return;
-      setReachable(ok);
-      timer.current = setTimeout(check, ok ? HEARTBEAT_MS : RETRY_MS);
+      setReachable(beat.reachable);
+      // Which upstreams the executor is routing around right now, from the report it already answers with.
+      useThrottle.getState().reportBreakers(beat.breakers);
+      setChain(
+        compareChains({
+          app: CHAIN_KEY,
+          server: beat.chain,
+          appName: chainSentenceName,
+          appMoney: chainMoney,
+          // The executor's own word for its money is not on `/health`, so it is left unsaid rather than
+          // guessed — `compareChains` reads an unsaid one as real, which is the safe direction.
+        }),
+      );
+      timer.current = setTimeout(check, beat.reachable ? HEARTBEAT_MS : RETRY_MS);
     };
 
     void check();
@@ -52,12 +79,29 @@ export function ReachabilityProvider({ children }: { children: React.ReactNode }
       alive = false;
       if (timer.current) clearTimeout(timer.current);
     };
-  }, []);
+  }, [askedAgain]);
+
+  /*
+   * A mismatch replaces the app rather than sitting over it.
+   *
+   * Every other failure in this provider is a banner, deliberately: cached screens still work and the kill
+   * switch is signed on chain, so covering the app would take that away at the moment it matters. A chain
+   * mismatch is the one case where that reasoning inverts — the kill switch would be signed on the wrong
+   * chain too, and there is no screen whose numbers mean anything. Nothing here is worth keeping reachable.
+   */
+  if (chain.state === 'mismatch')
+    return <ChainMismatchScreen mismatch={chain} onRecheck={() => setAskedAgain((n) => n + 1)} />;
 
   return (
     <ReachabilityContext.Provider value={reachable}>
       {children}
-      {reachable ? null : <OfflineBanner />}
+      {/*
+        One banner at a time, in order of how much it takes away.
+
+        Unreachable first: nothing is loading at all, and a sentence about a throttle would be about a
+        smaller problem than the one in front of the reader.
+      */}
+      {reachable ? <ThrottleBanner /> : <OfflineBanner />}
     </ReachabilityContext.Provider>
   );
 }
@@ -93,6 +137,66 @@ function OfflineBanner() {
         Screens may be out of date, and anything you start will not go through. Your funds and your
         permission are on chain and unaffected — stopping your agents still works, because that is
         signed by you, not by us.
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Being rate limited, or an upstream being routed around.
+ *
+ * Same shape as the offline banner and for the same reason: it does not block anything. Both of these are
+ * temporary, neither is the user's fault, and neither is worth taking the app away over — a throttle that
+ * covered the screen would be a worse outage than the throttle.
+ *
+ * It re-renders on a timer while one is live, because the sentence carries a number of seconds and the whole
+ * point of that number is that it goes down. `useNow` is the app's existing clock for exactly this.
+ */
+function ThrottleBanner() {
+  const limitedUntil = useThrottle((s) => s.limitedUntil);
+  const breakers = useThrottle((s) => s.breakers);
+  /*
+   * The clock only runs while there is a number counting down.
+   *
+   * `limitedUntil` clears itself when its window closes (`throttleStore.ts`), so this mounts for the length
+   * of a limit and not for the rest of the session. A breaker banner names no seconds, so it ticks at the
+   * default minute — enough to notice `/health` has stopped reporting one.
+   */
+  if (limitedUntil === 0 && openBreakers(breakers).length === 0) return null;
+  return <LiveThrottleBanner limitedUntil={limitedUntil} breakers={breakers} />;
+}
+
+function LiveThrottleBanner({
+  limitedUntil,
+  breakers,
+}: {
+  limitedUntil: number;
+  breakers: ThrottleState['breakers'];
+}) {
+  const now = useNow(limitedUntil > 0 ? 1_000 : 60_000);
+  const banner = throttleBanner({ limitedUntil, breakers }, now);
+  if (!banner) return null;
+  return (
+    <View
+      style={{
+        pointerEvents: 'none',
+        position: 'absolute',
+        left: space.s16,
+        right: space.s16,
+        bottom: space.s26,
+        backgroundColor: colors.surfaceAlt,
+        borderRadius: radius.card,
+        paddingHorizontal: space.s16,
+        paddingVertical: space.s12,
+        gap: space.s4,
+      }}
+      accessibilityLiveRegion="polite"
+    >
+      <Text variant="rowPrimary" color={colors.ink}>
+        {banner.title}
+      </Text>
+      <Text variant="footnote" color={colors.ink40}>
+        {banner.detail}
       </Text>
     </View>
   );

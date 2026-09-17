@@ -15,6 +15,7 @@ import { base, baseSepolia, foundry } from 'viem/chains';
 import type { Chain } from 'viem';
 import 'dotenv/config';
 import { KNOWN_CHAINS, isKnownChain, moneyOn, networkName, type KnownChain } from './money.js';
+import { isSolanaCluster } from '../solana/clusters.js';
 
 /** Every chain this executor knows. A chain is added in `evm/money.ts` first, saying what its money is. */
 export type ChainKey = KnownChain;
@@ -24,16 +25,18 @@ export type ChainKey = KnownChain;
 const ASKED = process.env.XORR_CHAIN ?? 'localnet';
 
 /*
- * A chain this executor does not know is refused at start. It was an unchecked cast, with no RPC and no chain behind it,
- * and every guard that must not hand out real value asked about a key that meant nothing to it.
+ * When XORR_CHAIN is a Solana cluster (PLAN.md §0.2), EVM chains are inactive.
+ * For any unknown chain outside of Solana, refuse start.
  */
-if (!isKnownChain(ASKED)) {
+if (isSolanaCluster(ASKED)) {
+  // Active chain is Solana. EVM chain definitions fall back to localnet as a stub.
+} else if (!isKnownChain(ASKED)) {
   throw new Error(
     `XORR_CHAIN=${ASKED} is not a chain this executor knows (${KNOWN_CHAINS.join(', ')}). ` +
       'Add it to server/src/evm/money.ts, saying what its money is, then give it an RPC and a chain in server/src/evm/chains.ts.',
   );
 }
-export const CHAIN_KEY: ChainKey = ASKED;
+export const CHAIN_KEY: ChainKey = isKnownChain(ASKED) ? ASKED : 'localnet';
 
 /** Guardrail: real money needs a deliberate, reviewed decision, never a default. */
 if (moneyOn(CHAIN_KEY) === 'real' && process.env.ALLOW_MAINNET !== 'yes') {

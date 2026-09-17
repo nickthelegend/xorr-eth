@@ -208,6 +208,36 @@ export const colors = Object.freeze({
 export type AgentGradientName = keyof typeof agent;
 export type Gradient = { readonly c1: string; readonly c2: string };
 
+/**
+ * The categorical palette, for a chart whose slices are CATEGORIES rather than outcomes.
+ *
+ * Every entry is an existing agent-identity hue, and the set deliberately excludes the yield green — because the one
+ * product rule is that green and red mean profit and loss, and a sector drawn in `up` green reads as the sector that
+ * made money. A donut is the easiest place in an app to break that rule by accident: it wants eight distinct colours,
+ * and the two most distinct ones left are the two that are spoken for.
+ *
+ * Ordered so neighbours differ in hue family rather than in shade. Eight consecutive slices of nearly the same purple is
+ * a legend nobody reads, and a ring nobody can match to it.
+ */
+export const allocationPalette = Object.freeze([
+  agent.momentum.c1,
+  agent.earnings.c1,
+  agent.drawdown.c1,
+  agent.momentum.c2,
+  agent.earnings.c2,
+  agent.strategist.c1,
+  agent.drawdown.c2,
+  agent.strategist.c2,
+] as const);
+
+/**
+ * What the not-known slice is drawn in: the switch's off grey, and never a hue.
+ *
+ * Unclassified is the absence of an answer, not a category, and giving it a colour of its own would put it in the
+ * legend as a peer of the real sectors.
+ */
+export const allocationUnknown = surfaces.switchOff;
+
 /** Width + colour pairs, because RN has no `border: 1px solid rgba(...)` shorthand. */
 export const border = Object.freeze({
   hairline: { borderWidth: 1, borderColor: colors.hairline },
@@ -306,6 +336,15 @@ export const duration = Object.freeze({
    * saying "still coming" without asking to be looked at.
    */
   pulse: 900,
+  /**
+   * One breath of an agent's orb while it is thinking (2026-09-17).
+   *
+   * animations.md's own "If you add motion" names this one: "a slow 3–4s scale breathe (1.0 → 1.015)".
+   * It is the slowest thing in the app by an order of magnitude, and that is the point — it has to read
+   * as a thing being alive rather than a thing signalling. At `pulse` it is a heartbeat under stress;
+   * at this it is breathing, and the eye stops going back to it.
+   */
+  breathe: 3600,
 } as const);
 
 /**

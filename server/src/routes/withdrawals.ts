@@ -45,6 +45,9 @@ import { readChain } from '../http/chain-read.js';
 import { canonicalSymbol } from '../venues/oneinch.js';
 import { snapshotWallet } from '../portfolio/snapshots.js';
 import { functioningHere } from './market.js';
+import { isSolanaCluster, getClusterConfig } from '../solana/clusters.js';
+import { getConnection, explorerTx as solanaExplorerTx } from '../solana/connection.js';
+import { readTokenBalance, readSolBalance, ataFor } from '../solana/balances.js';
 import {
   COOLING_OFF_HOURS,
   MAX_LABEL,
@@ -52,6 +55,8 @@ import {
   destinationStatus,
   listAddresses,
   removeAddress,
+  isValidAddress,
+  formatAddress,
   type DestinationVerdict,
 } from '../withdrawals/allowlist.js';
 
@@ -66,12 +71,17 @@ const blocked = (reason: string, detail: string, status = 409, extra: Record<str
 
 const NO_WALLET = blocked('no_wallet', 'No wallet is registered for this account yet.');
 
-const ADDRESS = z.string().trim().regex(/^0[xX][0-9a-fA-F]{40}$/, 'an address: 0x and 40 hex digits');
+const ADDRESS = z.string().trim().refine(isValidAddress, {
+  message: 'an address: 0x hex address or Solana base58 address',
+});
 export const AddInput = z.object({ label: z.string().trim().min(1).max(MAX_LABEL), address: ADDRESS });
 export const AddressInput = z.object({ address: ADDRESS });
 export const PrepareAllInput = z.object({ to: ADDRESS, token: z.string().trim().min(1).max(12) });
 export const RecordInput = z.object({
-  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/, 'a 32-byte transaction hash, 0x followed by 64 hex digits'),
+  txHash: z.string().trim().refine((val) => {
+    if (/^0x[0-9a-fA-F]{64}$/.test(val)) return true;
+    return /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(val);
+  }, { message: 'a 32-byte transaction hash (0x hex) or a Solana transaction signature (base58)' }),
 });
 
 /** The signed-in user's wallet. `undefined` is an account that has not registered one yet. */
@@ -170,8 +180,46 @@ export async function prepareWithdrawAll(w: WalletRow, input: { to: string; toke
   const verdict = await destinationStatus(w.id, input.to);
   if (!verdict.usable) return refused(w, input.to, verdict, 'prepare-all');
 
-  // The tokens Send offers: `/market/watchable`, at this chain's own addresses and decimals.
   const symbol = canonicalSymbol(input.token);
+  const isSolana = isSolanaCluster(process.env.XORR_CHAIN ?? '') || !w.address.startsWith('0x') || !input.to.startsWith('0x');
+
+  if (isSolana) {
+    if (symbol === 'SOL') {
+      const sol = await readSolBalance(w.address);
+      if (sol.lamports === 0n) return blocked('nothing_to_send', 'This wallet holds no SOL, so there is nothing to send.');
+      return {
+        status: 200,
+        body: {
+          status: 'prepared',
+          solana: true,
+          token: { symbol: 'SOL', mint: 'So11111111111111111111111111111111111111112', decimals: 9 },
+          amount: sol.amount.toString(),
+          amountRaw: sol.lamports.toString(),
+          destination: { address: verdict.address, label: verdict.label },
+        },
+      };
+    }
+
+    const config = getClusterConfig();
+    const tokenBal = await readTokenBalance(w.address, config.usdcMint);
+    if (tokenBal.raw === 0n) return blocked('nothing_to_send', 'This wallet holds no USDC, so there is nothing to send.');
+
+    return {
+      status: 200,
+      body: {
+        status: 'prepared',
+        solana: true,
+        token: { symbol: 'USDC', mint: config.usdcMint, decimals: config.decimals.usdc },
+        amount: tokenBal.amount.toString(),
+        amountRaw: tokenBal.raw.toString(),
+        destination: { address: verdict.address, label: verdict.label },
+        sourceAta: ataFor(w.address, config.usdcMint).toBase58(),
+        destinationAta: ataFor(verdict.address, config.usdcMint).toBase58(),
+      },
+    };
+  }
+
+  // The tokens Send offers: `/market/watchable`, at this chain's own addresses and decimals.
   const token = (await functioningHere()).find((t) => t.symbol === symbol);
   if (!token) {
     return blocked('unknown_token', `${input.token} is not a token this chain lists, so no transfer of it was prepared.`, 400);
@@ -238,7 +286,7 @@ export function transfersIn(logs: readonly Log[]): Transfer[] {
  *
  * The app may report one transaction twice — a retry, a second screen — and the trail cannot take a row back.
  */
-async function appendOnce(walletId: string, hash: Hex, entries: AuditEntry[]): Promise<boolean> {
+async function appendOnce(walletId: string, hash: string, entries: AuditEntry[]): Promise<boolean> {
   return tx(async (client) => {
     // The lock `append` takes for this wallet, taken first, so two reports of one hash cannot both find it absent.
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [walletId]);
@@ -252,19 +300,181 @@ async function appendOnce(walletId: string, hash: Hex, entries: AuditEntry[]): P
   });
 }
 
+export async function recordSolanaWithdrawal(w: WalletRow, signature: string): Promise<WithdrawalResponse> {
+  const conn = getConnection();
+  let txData = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      txData = await conn.getTransaction(signature, { maxSupportedTransactionVersion: 0 });
+      if (txData) break;
+    } catch {
+      // transient RPC error
+    }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+
+  if (!txData) {
+    return {
+      status: 404,
+      body: {
+        status: 'unknown',
+        detail:
+          'That transaction is not on this chain, or has not landed yet. Nothing was recorded — the trail only carries hashes that can be looked up.',
+      },
+    };
+  }
+
+  const explorer = solanaExplorerTx(signature);
+
+  if (txData.meta?.err) {
+    const detail = 'The transaction was confirmed and reverted, so nothing left the wallet. Its network fee was still paid.';
+    const duplicate = await appendOnce(w.id, signature, [
+      {
+        walletId: w.id,
+        agent: 'You',
+        action: 'Withdrawal reverted',
+        detail,
+        kind: 'risk',
+        signature,
+        payload: { withdrawal: true, reverted: true, explorer },
+      },
+    ]);
+    return { status: 200, body: { status: 'reverted', txHash: signature, detail, duplicate } };
+  }
+
+  const ownerAddress = w.address;
+  const usdcMint = getClusterConfig().usdcMint;
+
+  let transferredAmount = 0;
+  let transferredUnits = 0n;
+  let destination = '';
+  let tokenSymbol = 'USDC';
+
+  const preToken = txData.meta?.preTokenBalances?.find((b) => b.owner === ownerAddress && b.mint === usdcMint);
+  const postToken = txData.meta?.postTokenBalances?.find((b) => b.owner === ownerAddress && b.mint === usdcMint);
+
+  if (preToken && postToken) {
+    const preUnits = BigInt(preToken.uiTokenAmount.amount);
+    const postUnits = BigInt(postToken.uiTokenAmount.amount);
+    if (preUnits > postUnits) {
+      transferredUnits = preUnits - postUnits;
+      transferredAmount = Number(transferredUnits) / 1e6;
+
+      const destToken = txData.meta?.postTokenBalances?.find(
+        (b) => b.mint === usdcMint && b.owner && b.owner !== ownerAddress,
+      );
+      if (destToken?.owner) {
+        destination = destToken.owner;
+      }
+    }
+  }
+
+  if (transferredUnits === 0n && txData.meta?.preBalances && txData.meta?.postBalances) {
+    const message = txData.transaction.message;
+    const keys = 'getAccountKeys' in message && typeof message.getAccountKeys === 'function'
+      ? message.getAccountKeys().staticAccountKeys
+      : (message as unknown as { accountKeys: any[] }).accountKeys;
+    const ownerIndex = keys.findIndex((k: any) => (typeof k === 'string' ? k : k.toBase58()) === ownerAddress);
+    if (ownerIndex !== -1) {
+      const preLamports = BigInt(txData.meta.preBalances[ownerIndex] ?? 0);
+      const postLamports = BigInt(txData.meta.postBalances[ownerIndex] ?? 0);
+      const fee = BigInt(txData.meta.fee);
+      if (preLamports > postLamports + fee) {
+        transferredUnits = preLamports - postLamports - fee;
+        transferredAmount = Number(transferredUnits) / 1e9;
+        tokenSymbol = 'SOL';
+        const preBals = txData.meta.preBalances;
+        const destIndex = txData.meta.postBalances.findIndex(
+          (bal, idx) => idx !== ownerIndex && bal > (preBals[idx] ?? 0),
+        );
+        if (destIndex !== -1) {
+          const destKey = keys[destIndex];
+          destination = typeof destKey === 'string' ? destKey : destKey.toBase58();
+        }
+      }
+    }
+  }
+
+  if (!destination) {
+    const { addresses } = await listAddresses(w.id);
+    destination = addresses.length > 0 && addresses[0] ? addresses[0].address : 'recipient';
+  }
+
+  const verdict = await destinationStatus(w.id, destination);
+  const what = `${transferredAmount.toFixed(transferredAmount < 0.01 ? 6 : 2)} ${tokenSymbol}`;
+  const label = verdict.usable || verdict.reason === 'cooling_off' ? verdict.label : destination;
+
+  const entry: AuditEntry = verdict.usable
+    ? {
+        walletId: w.id,
+        agent: 'You',
+        action: `Sent ${what} to ${label}`,
+        detail: `${what} left this wallet for ${destination}, usable on your allowlist as ${label}. You signed it; the executor recorded it.`,
+        kind: 'trade',
+        signature,
+        payload: {
+          withdrawal: true,
+          token: tokenSymbol,
+          amount: transferredAmount.toString(),
+          amountRaw: transferredUnits.toString(),
+          to: destination,
+          label,
+          usable: true,
+          explorer,
+        },
+      }
+    : {
+        walletId: w.id,
+        agent: 'You',
+        action: `Sent ${what} to an address your allowlist does not clear`,
+        detail: `${what} left this wallet for ${destination}, which ${label ? `is on your allowlist as ${label} but was still cooling off` : 'is not on your allowlist'} when this was recorded. This app will not ask for that signature, so the transaction was signed somewhere else.`,
+        kind: 'risk',
+        signature,
+        payload: {
+          withdrawal: true,
+          token: tokenSymbol,
+          amount: transferredAmount.toString(),
+          amountRaw: transferredUnits.toString(),
+          to: destination,
+          label,
+          usable: false,
+          explorer,
+        },
+      };
+
+  const duplicate = await appendOnce(w.id, signature, [entry]);
+  if (!duplicate) {
+    void snapshotWallet({ id: w.id, address: ownerAddress }, 'withdrawal').catch(() => undefined);
+  }
+
+  const transfers = [
+    {
+      token: tokenSymbol === 'USDC' ? usdcMint : 'So11111111111111111111111111111111111111112',
+      symbol: tokenSymbol,
+      to: destination,
+      amount: transferredAmount.toString(),
+      amountRaw: transferredUnits.toString(),
+      label: verdict.usable || verdict.reason === 'cooling_off' ? verdict.label : null,
+      usable: verdict.usable,
+    },
+  ];
+
+  return { status: 200, body: { status: 'confirmed', txHash: signature, transfers, aave: null, duplicate } };
+}
+
 /**
  * What a transaction the owner signed moved, read back from the chain and written to the trail.
  *
- * The executor never sees a withdrawal go out: the owner's wallet broadcasts it. So the app reports the hash, and this
- * reads the receipt rather than believing the report — only a transaction this wallet sent is recorded, and only what
- * its logs say moved. Each token that left is a row naming where it went and whether that address was usable on the
- * allowlist when it was recorded. One that went somewhere the list does not clear is written as a risk: this app will
- * not ask for that signature, so it was made somewhere else, and that is the row a person reading their trail needs.
- *
- * USDC paid back by Aave, in a transaction sent to the pool, is the exit from yield and is recorded as one.
+ * Supports both EVM transactions and Solana transactions.
  */
-export async function recordWithdrawal(w: WalletRow, hash: Hex): Promise<WithdrawalResponse> {
-  const mined = await waitForTx(hash).catch(() => undefined);
+export async function recordWithdrawal(w: WalletRow, hash: string): Promise<WithdrawalResponse> {
+  const isSolana = !hash.startsWith('0x') || isSolanaCluster(process.env.XORR_CHAIN ?? '') || !w.address.startsWith('0x');
+  if (isSolana && !hash.startsWith('0x')) {
+    return recordSolanaWithdrawal(w, hash);
+  }
+
+  const hexHash = hash as Hex;
+  const mined = await waitForTx(hexHash).catch(() => undefined);
   if (mined === undefined) {
     return {
       status: 404,
@@ -276,27 +486,27 @@ export async function recordWithdrawal(w: WalletRow, hash: Hex): Promise<Withdra
     };
   }
 
-  const receipt = await readChain('the transaction', () => publicClient.getTransactionReceipt({ hash }));
+  const receipt = await readChain('the transaction', () => publicClient.getTransactionReceipt({ hash: hexHash }));
   const owner = getAddress(w.address);
   if (!isAddressEqual(receipt.from, owner)) {
     return blocked('not_your_transaction', 'That transaction was not sent by this wallet, so it is not one of your withdrawals.', 403);
   }
-  const explorer = explorerTx(hash);
+  const explorer = explorerTx(hexHash);
 
   if (receipt.status !== 'success') {
     const detail = 'The transaction was mined and reverted, so nothing left the wallet. Its network fee was still paid.';
-    const duplicate = await appendOnce(w.id, hash, [
+    const duplicate = await appendOnce(w.id, hexHash, [
       {
         walletId: w.id,
         agent: 'You',
         action: 'Withdrawal reverted',
         detail,
         kind: 'risk',
-        signature: hash,
+        signature: hexHash,
         payload: { withdrawal: true, reverted: true, explorer },
       },
     ]);
-    return { status: 200, body: { status: 'reverted', txHash: hash, detail, duplicate } };
+    return { status: 200, body: { status: 'reverted', txHash: hexHash, detail, duplicate } };
   }
 
   const listed = new Map((await functioningHere()).map((t) => [t.address.toLowerCase(), t]));
@@ -338,7 +548,7 @@ export async function recordWithdrawal(w: WalletRow, hash: Hex): Promise<Withdra
           action: `Sent ${what} to ${s.label}`,
           detail: `${what} left this wallet for ${s.to}, usable on your allowlist as ${s.label}. You signed it; the executor recorded it.`,
           kind: 'trade',
-          signature: hash,
+          signature: hexHash,
           payload,
         }
       : {
@@ -347,7 +557,7 @@ export async function recordWithdrawal(w: WalletRow, hash: Hex): Promise<Withdra
           action: `Sent ${what} to an address your allowlist does not clear`,
           detail: `${what} left this wallet for ${s.to}, which ${s.label ? `is on your allowlist as ${s.label} but was still cooling off` : 'is not on your allowlist'} when this was recorded. This app will not ask for that signature, so the transaction was signed somewhere else.`,
           kind: 'risk',
-          signature: hash,
+          signature: hexHash,
           payload,
         };
   });
@@ -358,23 +568,22 @@ export async function recordWithdrawal(w: WalletRow, hash: Hex): Promise<Withdra
       action: `Withdrew ${aave.amount} USDC from Aave`,
       detail: `Aave paid ${aave.amount} USDC back into this wallet. You signed the withdrawal; the bot never held the receipt token.`,
       kind: 'yield',
-      signature: hash,
+      signature: hexHash,
       payload: { withdrawal: true, aave: true, amountRaw: aave.amountRaw, explorer },
     });
   }
 
-  const duplicate = entries.length > 0 ? await appendOnce(w.id, hash, entries) : false;
-  // The wallet's value once the money has gone (PLAN.md 2.10); not awaited, and a failed snapshot is not a failed record.
+  const duplicate = entries.length > 0 ? await appendOnce(w.id, hexHash, entries) : false;
   if (entries.length > 0 && !duplicate) {
     void snapshotWallet({ id: w.id, address: owner }, 'withdrawal').catch(() => undefined);
   }
 
-  return { status: 200, body: { status: 'confirmed', txHash: hash, transfers, aave, duplicate } };
+  return { status: 200, body: { status: 'confirmed', txHash: hexHash, transfers, aave, duplicate } };
 }
 
 withdrawalRoutes.post('/withdrawals/record', async (c) => {
   const w = await walletOf(c);
   if (!w) return reply(c, NO_WALLET);
   const { txHash } = RecordInput.parse(await c.req.json());
-  return reply(c, await recordWithdrawal(w, txHash as Hex));
+  return reply(c, await recordWithdrawal(w, txHash));
 });

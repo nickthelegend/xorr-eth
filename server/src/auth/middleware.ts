@@ -27,6 +27,8 @@ const PUBLIC_PATHS = new Set([
   '/market/tradable',
   '/market/watchable',
   '/market/stocks',
+  /** The tokenized-equity catalog: what is listed and what it costs. Not user data. */
+  '/market/xstocks',
   // Same reasoning as the rest of `/market/*`: an observed price series is not user data, and
   // gating it means an unauthenticated visitor sees an equity with a number and no shape.
   '/market/stocks/history',
@@ -46,8 +48,21 @@ const PUBLIC_PATHS = new Set([
   '/metrics',
   /** A second opinion on a public price is still a public price. */
   '/market/crosscheck',
+  /**
+   * A split or dividend, read off a public Token-2022 mint.
+   *
+   * The same argument as the rest of `/market/*`: the multiplier and the timestamp it starts
+   * applying are on the chain, where anyone can read them without asking us. Gating it would
+   * mean a signed-out visitor sees an asset screen with a price, a chart and no mention of the
+   * corporate action that is about to restate every unit of it.
+   */
+  '/market/corporate-action',
   /** A futures venue's public market data — the Futures screens' list. */
   '/market/futures',
+  /** MoonPay dev sandbox public configuration. */
+  '/deposit/moonpay/config',
+  /** MoonPay webhook callbacks from MoonPay servers. */
+  '/deposit/moonpay/webhook',
 ]);
 
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */

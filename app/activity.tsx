@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import {
   BackButton,
   Button,
-  EmptyState,
+  EmptyList,
   ErrorState,
   Fill,
   LoadingRows,
@@ -172,21 +172,29 @@ export default function Activity() {
         ) : rows.length === 0 ? (
           (data ?? []).length > 0 ? (
             /* The trail has rows, just none of this kind: "Nothing yet." and a push to start buying would deny the rest. */
-            <EmptyState text={NONE_UNDER[actFilter] ?? 'Nothing here.'} />
+            <EmptyList list="activity" text={NONE_UNDER[actFilter] ?? 'Nothing here.'} />
           ) : (
-            <EmptyState
-              text="Nothing yet."
-              actionLabel="Set up a recurring buy"
-              onAction={() => router.push('/strategy/dca')}
-            />
+            <EmptyList list="activity" />
           )
         ) : (
           <ScrollView refreshControl={refresh} showsVerticalScrollIndicator={false}>
             {rows.map((r) => {
               const credit = activityAmountIsCredit(r.amount);
               return (
-                <View
+                /*
+                  Every row opens its own explanation, including the ones with nothing to explain.
+
+                  Tapping only the agent's trades would mean the rows that ANSWER are the rows that
+                  respond to touch, so a person learns what the agent did by discovering which rows
+                  move. Nothing on this list says which is which, and the honest answer — "no
+                  reasoning was stored for this one" — is worth arriving at deliberately rather
+                  than by finding a row that does not react.
+                */
+                <Press
                   key={r.id}
+                  onPress={() => router.push(`/explain/${r.id}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Why: ${plainAction(r.action)}`}
                   style={[
                     { flexDirection: 'row', gap: space.s12, paddingVertical: space.s14 },
                     divider,
@@ -221,7 +229,7 @@ export default function Activity() {
                       {r.amount}
                     </Price>
                   ) : null}
-                </View>
+                </Press>
               );
             })}
           </ScrollView>

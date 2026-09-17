@@ -61,9 +61,20 @@ describe('the chain a build signs on', () => {
     },
   );
 
+  it('on solana-fork, is a test network with no EVM deposit code, and the wallet only signs', async () => {
+    expect(facts(await buildFor('solana-fork'))).toEqual({
+      id: 8453,
+      label: 'Solana fork',
+      test: true,
+      chip: 'Test network',
+      code: false,
+      signsOnly: true,
+    });
+  });
+
   it('refuses a chain the app does not know, naming the ones it does', async () => {
     await expect(buildFor('arbitrum')).rejects.toThrow(
-      'EXPO_PUBLIC_XORR_CHAIN=arbitrum is not a chain this app knows (base, base-sepolia, base-fork, localnet).',
+      'EXPO_PUBLIC_XORR_CHAIN=arbitrum is not a chain this app knows (base, base-sepolia, base-fork, localnet, solana-fork, solana-devnet, solana-localnet, solana-mainnet).',
     );
   });
 

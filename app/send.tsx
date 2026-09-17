@@ -53,6 +53,8 @@ import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { formatEther, type Address } from 'viem';
 import { shortAddress } from '@/format';
 import { NetworkChip } from '@/networks/NetworkChip';
+import { isSolana } from '@/chain';
+import { isSolanaAddress } from '@/wallet/allowlist';
 
 const FIELD_H = 52;
 
@@ -120,6 +122,9 @@ export default function Send() {
       : '';
   const fee = useAsync(async () => {
     if (!feeFor || !token || !entry) return undefined;
+    if (isSolana || isSolanaAddress(entry.address)) {
+      return { gas: 5000n, gasPrice: 1n, isSolana: true };
+    }
     let call: ReturnType<typeof transferCall>;
     try {
       call = transferCall(token, entry.address as Address, settledAmount);
@@ -130,9 +135,11 @@ export default function Send() {
   }, [feeFor]);
   const { quote: ethPrice } = usePrice('WETH');
   const feeUsd =
-    fee.data && ethPrice?.price !== undefined
-      ? Number(formatEther(fee.data.gas * fee.data.gasPrice)) * ethPrice.price
-      : undefined;
+    fee.data && (fee.data as any).isSolana
+      ? 0.001
+      : fee.data && ethPrice?.price !== undefined
+        ? Number(formatEther(fee.data.gas * fee.data.gasPrice)) * ethPrice.price
+        : undefined;
 
   const ready = Boolean(entry) && typed > 0 && !overBalance && Boolean(token);
   const signedOut = useSignedOut();

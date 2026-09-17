@@ -15,6 +15,7 @@ import {
   encodeEventTopics,
   erc20Abi,
   getAddress,
+  isAddress,
   keccak256,
   toHex,
   zeroAddress,
@@ -45,6 +46,8 @@ vi.mock('../withdrawals/allowlist.js', () => ({
   removeAddress: vi.fn(),
   listAddresses: vi.fn(),
   destinationStatus: vi.fn(),
+  isValidAddress: (addr: string) => isAddress(addr.trim(), { strict: false }) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr.trim()),
+  formatAddress: (addr: string) => (isAddress(addr.trim(), { strict: false }) ? getAddress(addr.trim()) : addr.trim()),
 }));
 vi.mock('../db/index.js', () => ({
   one: vi.fn(),

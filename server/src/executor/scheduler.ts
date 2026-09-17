@@ -12,13 +12,31 @@ import { query } from '../db/index.js';
 import { THIS_CHAIN } from '../db/chain-scope.js';
 import { log } from '../http/request-id.js';
 import { runStrategy, type StrategyRow } from './run.js';
+import { autonomousAgentSweep } from '../bot/autonomous.js';
 import { evaluateAlerts } from '../alerts/evaluate.js';
 import { anchorSweep } from '../audit/anchor-sweep.js';
 import { snapshotSweep } from '../portfolio/snapshots.js';
 
-const TICK_MS = Number(process.env.SCHEDULER_TICK_MS ?? 30_000);
+export const TICK_MS = Number(process.env.SCHEDULER_TICK_MS ?? 30_000);
+
+/**
+ * When the last tick started, for this process.
+ *
+ * The schedule screen wants to say when the next sweep is, and the only honest source for that is
+ * the loop itself — `setInterval` keeps no record anyone can read, so anything derived from the
+ * wall clock alone would be a guess dressed as a time. Undefined until the first tick, which is
+ * the true state after a restart and is reported as such rather than smoothed over.
+ *
+ * Per-process by design. It describes THIS executor's loop, which is the one the app is talking to.
+ */
+let lastTickAt: number | undefined;
+
+export function schedulerHeartbeat(): { tickMs: number; lastTickAt: number | null } {
+  return { tickMs: TICK_MS, lastTickAt: lastTickAt ?? null };
+}
 
 export async function tick(now: Date = new Date()): Promise<number> {
+  lastTickAt = now.getTime();
   const due = await query<StrategyRow>(
     `SELECT * FROM strategies
      WHERE state IN ('live','watch') AND next_run_at IS NOT NULL AND next_run_at <= $1
@@ -42,6 +60,24 @@ export async function tick(now: Date = new Date()): Promise<number> {
     } catch (e) {
       log.error(`[scheduler] ${s.label} threw:`, e instanceof Error ? e.message : e);
     }
+  }
+
+  /*
+   * The autonomous agent, once per tick (PLAN.md §8.6).
+   *
+   * Scores momentum, event-driven and DCA entries across the xStocks registry from what is
+   * actually readable — a Jupiter quote, the readings this app has recorded, EDGAR's filing
+   * cadence, the mint's Scaled UI multiplier, the Nasdaq clock — and sends the best one through
+   * the same `guardAndSpend` chokepoint every other spend goes through. Wallets past their
+   * cooldown only, and none at all while the kill switch is on.
+   *
+   * It contributes to `ran` because a sweep that placed a trade is work this tick did.
+   */
+  try {
+    const autoExecuted = await autonomousAgentSweep(now);
+    ran += autoExecuted;
+  } catch (e) {
+    log.error('[scheduler] autonomous agent sweep failed:', e instanceof Error ? e.message : e);
   }
 
   /*

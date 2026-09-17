@@ -8,7 +8,8 @@ import { accessToken } from '@/auth/token';
 import { isPublicPath } from './publicPaths';
 import { authKnowledge, whenAuthKnown } from '@/auth/authState';
 import { API_BASE } from './apiBase';
-import { ApiError, NotSignedIn, TimedOut } from './apiError';
+import { ApiError, NotSignedIn, TimedOut, markReplayed, retryAfterSeconds } from './apiError';
+import { noteRateLimited } from '@/net/throttleStore';
 import { keyHeaders, type Keyed } from './intentKey';
 /*
  * Re-exported, not redefined.
@@ -21,7 +22,7 @@ import { keyHeaders, type Keyed } from './intentKey';
 export { NotSignedIn, TimedOut } from './apiError';
 
 export { API_BASE };
-export { ApiError, apiReason } from './apiError';
+export { ApiError, apiReason, REPLAYED, markReplayed, wasReplayed } from './apiError';
 
 /**
  * Every request carries the Privy access token. The executor rejects anything without one, so a
@@ -142,9 +143,32 @@ async function send<T>(path: string, signal: AbortSignal, requestId: string, ini
     } catch {
       parsed = undefined;
     }
-    throw new ApiError(res.status, `${res.status} ${res.statusText}${text ? `: ${text}` : ''}`, parsed, requestId);
+    // Both headers are on the CORS expose list (`server/src/index.ts`), so they are readable from the app.
+    const retryAfterSec = retryAfterSeconds(res.headers.get('retry-after'));
+    /*
+     * A 429 is not one screen's problem.
+     *
+     * Every screen that reads a market polls, so walking into the limiter fails all of them at once, and
+     * each one rendering its own "that did not load" composes into "the app is broken" — a much worse
+     * description of a sixty-second window than the truth. Recorded here, where every request passes, so
+     * one banner can say it once (`net/throttle.ts`).
+     */
+    if (res.status === 429) noteRateLimited(retryAfterSec);
+    throw new ApiError(
+      res.status,
+      `${res.status} ${res.statusText}${text ? `: ${text}` : ''}`,
+      parsed,
+      requestId,
+      retryAfterSec,
+      res.headers.get('idempotent-replay') === 'true',
+    );
   }
-  return (await res.json()) as T;
+  /*
+   * A replayed success is still a success, and the screen has to be able to tell the two apart: the executor
+   * answered this key once already, so nothing happened a second time. Carried as a property on the parsed
+   * body rather than thrown, because nothing went wrong.
+   */
+  return markReplayed((await res.json()) as T, res.headers.get('idempotent-replay') === 'true');
 }
 
 export const api = {
