@@ -30,6 +30,8 @@ import {
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { backingFor } from '../venues/proof-of-reserves.js';
+import { checkEligibility } from '../solana/eligibility.js';
+import { XSTOCKS, xStockKey } from '../venues/xstocks.js';
 import { ADDRESSES, APPROVABLE_TOKENS, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
 import { allowanceView, chainAllowance, routerAllowance, routerSpender } from '../evm/allowances.js';
 import { delegateAccount } from '../evm/client.js';
@@ -674,6 +676,29 @@ routes.get('/positions', async (c) => {
  * 200 either way: "we could not reach the attestor" is an answer about the asset, not an error in
  * the request.
  */
+/**
+ * Whether a wallet may hold this xStock, asked before a buy is offered.
+ *
+ * xStocks are jurisdiction-restricted and Token-2022 gives the issuer several independent ways to
+ * refuse a transfer. The screen needs this before it draws a buy button, because the alternative
+ * is a user signing a transaction that fails on-chain for reasons nobody explained.
+ *
+ * `eligible: false` with `indeterminate: true` means a gate could not be read — which is NOT a
+ * pass, and must not be drawn as one.
+ */
+routes.get('/xstocks/:symbol/eligibility', async (c) => {
+  const symbol = c.req.param('symbol');
+  const wallet = c.req.query('wallet');
+  const stock = XSTOCKS[xStockKey(symbol) ?? symbol];
+  if (!stock) {
+    return c.json({ error: 'unknown_symbol', message: `${symbol} is not an xStock this executor knows.` }, 404);
+  }
+  if (!wallet) {
+    return c.json({ error: 'wallet_required', message: 'Pass ?wallet= to check eligibility.' }, 400);
+  }
+  return c.json({ symbol: stock.symbol, ...(await checkEligibility(wallet, stock.address)) });
+});
+
 routes.get('/xstocks/:symbol/backing', async (c) => {
   const symbol = c.req.param('symbol');
   const status = await backingFor(symbol);
