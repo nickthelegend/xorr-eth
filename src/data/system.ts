@@ -300,6 +300,14 @@ export type SwapOutcome =
  * Every numeric is nullable because a run that never reached a fill has no price and no size, and
  * zero would be a different claim.
  */
+/** The regulator's own classification of a listed company. */
+export type SectorClassification = {
+  /** The SEC's wording for the SIC code — e.g. "Semiconductors & Related Devices". */
+  sector: string;
+  /** The four-digit Standard Industrial Classification code it came from. */
+  sic: string;
+};
+
 export type StrategyRunRow = {
   id: string;
   strategyId: string;
@@ -662,6 +670,16 @@ export const system = {
   /** What the wallet was worth over time, from snapshots read on the chain (PLAN.md 2.10). */
   portfolioHistory: (range: '1D' | '1W' | '1M' | 'ALL') =>
     api.get<PortfolioHistory>(`/portfolio/history?range=${range}`),
+  /**
+   * What the SEC says each company does, for the allocation donut.
+   *
+   * A symbol maps to `null` when the regulator has no classification on record for it, or when the record could not be
+   * read. Both mean "this build cannot say", and the chart draws that as Unclassified rather than guessing.
+   */
+  classification: (symbols: string[]) =>
+    api.get<Record<string, SectorClassification | null>>(
+      `/market/classification?symbols=${encodeURIComponent(symbols.join(','))}`,
+    ),
   // POST: the executor registers GET and POST on this path, and the PATCH that was sent here 404'd, so a
   // toggle looked saved and was not (PLAN.md 2.12).
   setNotificationPref: (kind: string, enabled: boolean) =>

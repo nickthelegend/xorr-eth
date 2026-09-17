@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { FONTS } from './fonts';
-import { colors, duration, radius, size, space } from './tokens';
+import { allocationPalette, allocationUnknown, colors, duration, radius, size, space } from './tokens';
 import { type as typeScale, numericVariants, type TypeVariant } from './type';
 import { MINUS, money, percent, price, quantity, wholeMoney } from './format';
 import {
@@ -138,6 +138,7 @@ describe('motion — animations.md', () => {
   //   Candlestick     the candles revealed left to right  700ms  (arrival)
   //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)
   //   FillReceipt     a confirmed fill's receipt arriving   420ms  (arrival; once, on the signature — never on mount)
+  //   AllocationDonut the ring sweeping clockwise on load    700ms  (arrival, the chart reveal beat — revealed, never resized)
   //   AgentOrb        the agent's stage: breathe / settle  3600ms (thinking) · 900ms (executing) · 250ms (decided, filled)
   //   StopCurtain     the kill switch's own screen         420ms  (the curtain down) · 250ms (the confirm badge)
   // A new entry here means a primitive started animating something the policy does not sanction.
@@ -159,6 +160,7 @@ describe('motion — animations.md', () => {
       'StopCurtain.tsx',
       'Switch.tsx',
       'TabBar.tsx',
+      'charts/AllocationDonut.tsx',
       'charts/AreaChart.tsx',
       'charts/Candlestick.tsx',
       'motion.ts',
@@ -539,5 +541,30 @@ describe('the fill receipt — a signature is not an event until it says where',
   it('arrives on the fill, not on the mount', () => {
     expect(src).toMatch(/arrivedFor\.current === signature/);
     expect(/setTimeout|setInterval|withRepeat|withSequence/.test(src)).toBe(false);
+  });
+});
+
+describe('the allocation palette — a sector is not an outcome', () => {
+  /*
+   * The one product rule, in the one chart most likely to break it by accident. A donut wants eight distinct colours,
+   * and the two most distinct ones left in this palette are the P&L pair — so a sector drawn in `up` green would read
+   * as "the sector that made money", which is a claim the chart is not making.
+   */
+  it('never reaches for a P&L colour', () => {
+    const pnl = [colors.up, colors.down, colors.candleUp, colors.candleDown];
+    for (const hue of allocationPalette) {
+      expect(pnl, `allocation palette uses a P&L colour: ${hue}`).not.toContain(hue);
+    }
+    expect(pnl).not.toContain(allocationUnknown);
+  });
+
+  it('is all distinct — two sectors the same colour is a legend that cannot be read', () => {
+    expect(new Set(allocationPalette).size).toBe(allocationPalette.length);
+  });
+
+  /* Unclassified is the absence of an answer. A hue of its own would seat it in the legend as a peer of real sectors. */
+  it('draws the not-known slice in a grey, not a hue', () => {
+    expect(allocationUnknown).toBe(colors.switchOff);
+    expect(allocationPalette).not.toContain(allocationUnknown);
   });
 });

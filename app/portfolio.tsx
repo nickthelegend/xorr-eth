@@ -38,12 +38,14 @@ import {
 } from '@/ui';
 import { useSignedOut } from '@/auth/useSignedOut';
 import { PositionCard, PositionCardSkeleton, type PositionLevel } from '@/ui/PositionCard';
+import { AllocationDonut } from '@/ui/charts/AllocationDonut';
+import { allocationBySector } from '@/ui/charts/allocation';
 import { Rise } from '@/ui/Rise';
 import { RollingNumber } from '@/ui/RollingNumber';
 import { STAGGER } from '@/ui/motion';
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
-import { system } from '@/data/system';
+import { system, type SectorClassification } from '@/data/system';
 import { useAsync } from '@/data/useAsync';
 import { useFreshOnReturn } from '@/data/useFreshOnReturn';
 import type { Strategy } from '@/data/types';
@@ -176,6 +178,24 @@ export default function Portfolio() {
   const graphDelta = points.length > 1 ? points[points.length - 1]! - points[0]! : 0;
   const graphPct = points.length > 1 && points[0]! > 0 ? (graphDelta / points[0]!) * 100 : 0;
 
+  /*
+   * What each held company does, from the SEC (`/market/classification`). Asked only for what is actually held, and
+   * re-asked when the book changes; a symbol the regulator has no classification for comes back null and stays null.
+   */
+  const heldSymbols = useMemo(() => [...new Set(book.map((p) => p.symbol))].sort(), [book]);
+  const sectors = useAsync<Record<string, SectorClassification | null>>(
+    () => (heldSymbols.length === 0 ? Promise.resolve({}) : system.classification(heldSymbols)),
+    [heldSymbols.join(',')],
+  );
+  /* The donut's arithmetic, from real position values and real classifications. */
+  const allocation = useMemo(
+    () =>
+      allocationBySector(
+        book.map((p) => ({ symbol: p.symbol, valueUsd: p.notional, sector: sectors.data?.[p.symbol]?.sector ?? null })),
+      ),
+    [book, sectors.data],
+  );
+
   /* Fills per symbol — how many trades built each position. */
   const trades = useMemo(() => {
     if (!runs.data) return undefined;
@@ -298,7 +318,31 @@ export default function Portfolio() {
           </View>
         </Rise>
 
-        <Rise index={3} style={{ marginTop: space.s26, paddingHorizontal: space.gutter, gap: space.s12 }}>
+        {/*
+          What the book is made of, by sector — the SEC's own classification of each underlying company, never a
+          mapping of ours (`/market/classification`). A holding the regulator has no answer for is drawn and labelled
+          Unclassified; it is never guessed from the ticker and never dropped, because dropping it would renormalise
+          every other slice and the chart would look right while being wrong by exactly that much.
+
+          Nothing is drawn until the classifications have answered: a donut whose every slice says Unclassified
+          because the read is still in flight is a chart telling a story about the read rather than the portfolio.
+        */}
+        {book.length > 0 ? (
+          <Rise index={3} style={{ marginTop: space.s26, paddingHorizontal: space.gutter, gap: space.s12 }}>
+            <Text variant="cardTitle">Allocation</Text>
+            {sectors.loading && !sectors.data ? (
+              <Placeholder height={168} style={{ borderRadius: radius.panel }} />
+            ) : sectors.error ? (
+              <Text variant="body" color={colors.ink55}>
+                Couldn’t read what these companies do, so the split by sector isn’t shown.
+              </Text>
+            ) : (
+              <AllocationDonut slices={allocation.slices} total={money(allocation.totalUsd)} totalLabel="In positions" />
+            )}
+          </Rise>
+        ) : null}
+
+        <Rise index={4} style={{ marginTop: space.s26, paddingHorizontal: space.gutter, gap: space.s12 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <Text variant="cardTitle">Positions</Text>
             {positions.data ? (
@@ -358,7 +402,7 @@ export default function Portfolio() {
           })}
         </Rise>
 
-        <Rise index={4} style={card}>
+        <Rise index={5} style={card}>
           <Text variant="cardTitle">Profit</Text>
           <Row
             height={size.rowSm}
@@ -390,7 +434,7 @@ export default function Portfolio() {
           />
         </Rise>
 
-        <Rise index={5} style={[card, { flexDirection: 'row', gap: space.s12 }]}>
+        <Rise index={6} style={[card, { flexDirection: 'row', gap: space.s12 }]}>
           <View style={{ flex: 1, gap: space.s4 }}>
             <Text variant="eyebrowSm">Cash</Text>
             {balance.data ? (

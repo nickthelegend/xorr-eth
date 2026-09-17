@@ -100,8 +100,44 @@ export async function cikFor(symbol: string): Promise<number | null> {
 }
 
 type Submissions = {
+  /** The SEC's own industrial classification for the filer. Present on an operating company; absent on some trusts. */
+  sic?: string;
+  sicDescription?: string;
   filings: { recent: { form: string[]; filingDate: string[]; items?: string[] } };
 };
+
+/** What the regulator says a company does. */
+export type SecClassification = {
+  /** The four-digit Standard Industrial Classification code, as the SEC records it. */
+  sic: string;
+  /** The SEC's own wording for that code — e.g. "Semiconductors & Related Devices". */
+  description: string;
+};
+
+/**
+ * What sector a tokenized equity's underlying company is in, according to the SEC.
+ *
+ * The regulator, not a vendor and not us. Every alternative was worse: a commercial sector API wants a key this project
+ * does not have, and a mapping typed out by hand is a developer's opinion about a company dressed as data — which is the
+ * one thing this product refuses to do everywhere else and must not start doing on a chart.
+ *
+ * It costs no extra request. `reportDates` already fetches and caches this exact document per CIK for the earnings
+ * calendar; `sicDescription` is sitting at the top of it, and has been the whole time.
+ *
+ * **Null is a real answer**, and callers must keep it as one. A filer with no SIC on record — some trusts, including
+ * index ETFs, genuinely have none — is unclassified, and unclassified is a thing the donut draws and labels rather than
+ * something it guesses its way out of.
+ */
+export async function classificationFor(symbol: string): Promise<SecClassification | null> {
+  const cik = await cikFor(symbol);
+  if (cik === null) return null;
+  const url = `https://data.sec.gov/submissions/CIK${String(cik).padStart(10, '0')}.json`;
+  const data = await getJson<Submissions>(url, FILINGS_TTL_MS, 20_000, UA).catch(() => null);
+  const sic = data?.sic?.trim();
+  const description = data?.sicDescription?.trim();
+  if (!sic || !description) return null;
+  return { sic, description };
+}
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
