@@ -19,6 +19,7 @@ import { DEFAULT_MINTS } from '../solana/clusters.js';
 import { evaluate, type RuleContext } from '../rules/engine.js';
 import { xStockPriceUsd, XSTOCKS, xStockKey } from '../venues/xstocks.js';
 import { quote, swap, resolveMint, type FillVenue } from '../venues/jupiter.js';
+import { checkEligibility } from '../solana/eligibility.js';
 
 export type SpendIntent = {
   walletId: string;
@@ -130,6 +131,37 @@ export async function guardAndSpend(intent: SpendIntent): Promise<SpendOutcome> 
         status: 'blocked',
         reason: verdict.reason,
         detail: verdict.detail,
+      };
+    }
+  }
+
+  /*
+   * 3b. The issuer's own transfer gates, asked before any capital moves.
+   *
+   * xStocks are jurisdiction-restricted, and Token-2022 lets the issuer pause the token, freeze an
+   * individual account, or create new accounts frozen. Any of those makes the delivery leg fail
+   * on-chain — after the user's USDC has already left their account, since the spend and the
+   * delivery are separate transactions. Asking first turns a stuck position and an unexplained
+   * failure into a sentence.
+   *
+   * `indeterminate` blocks too. A gate we could not read is not a gate we passed, and clearing
+   * someone to buy a restricted security on the strength of a failed RPC call is the worst
+   * available outcome.
+   */
+  if (stock) {
+    const eligibility = await checkEligibility(intent.ownerPubkey, stock.address).catch((err) => ({
+      eligible: false,
+      indeterminate: true,
+      summary: `Could not check this token's transfer restrictions: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    }));
+    if (!eligibility.eligible) {
+      return {
+        placed: false,
+        status: 'blocked',
+        reason: eligibility.indeterminate ? 'eligibility_unknown' : 'not_eligible',
+        detail: eligibility.summary,
       };
     }
   }
