@@ -200,6 +200,33 @@ export function scaledUiMultiplier(mintInfo: Mint, atUnixSeconds = Date.now() / 
     : config.multiplier;
 }
 
+/** The issuer's scheduled next multiplier, where one is pending. */
+export type PendingMultiplier = { multiplier: number; effectiveAt: string };
+
+/**
+ * A mint's scaled-UI configuration as stated on-chain, including any scheduled change.
+ *
+ * `effectiveAt` is when the CURRENT multiplier took effect; `pending` is the next one, and is
+ * absent once its time has passed (at which point it has become the current one).
+ */
+export function readScaledUiConfig(mintInfo: Mint, atUnixSeconds = Date.now() / 1000): {
+  multiplier: number;
+  effectiveAt: string;
+  pending?: PendingMultiplier;
+} | null {
+  const config = getScaledUiAmountConfig(mintInfo);
+  if (!config) return null;
+
+  const switchAt = Number(config.newMultiplierEffectiveTimestamp);
+  const inForce = atUnixSeconds >= switchAt;
+  return {
+    multiplier: inForce ? config.newMultiplier : config.multiplier,
+    // Once the new multiplier is in force, the switch time is when it took effect.
+    effectiveAt: new Date((inForce ? switchAt : 0) * 1000).toISOString(),
+    ...(inForce ? {} : { pending: { multiplier: config.newMultiplier, effectiveAt: new Date(switchAt * 1000).toISOString() } }),
+  };
+}
+
 export type MintScale = {
   decimals: number;
   multiplier: number;

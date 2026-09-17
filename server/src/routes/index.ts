@@ -30,6 +30,7 @@ import {
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
 import { backingFor } from '../venues/proof-of-reserves.js';
+import { backingDetail } from '../venues/backing-detail.js';
 import { checkEligibility } from '../solana/eligibility.js';
 import { XSTOCKS, xStockKey } from '../venues/xstocks.js';
 import { ADDRESSES, APPROVABLE_TOKENS, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
@@ -686,6 +687,22 @@ routes.get('/positions', async (c) => {
  * `eligible: false` with `indeterminate: true` means a gate could not be read — which is NOT a
  * pass, and must not be drawn as one.
  */
+/**
+ * Everything a position can say about what backs it, for the backing drawer.
+ *
+ * Every field is a recorded value or `null`, and `null` means "we have no record of this" rather
+ * than zero — the screen renders that difference in words. The attestation carries its own age
+ * so the drawer can say how stale it is instead of implying it is current.
+ */
+routes.get('/xstocks/:symbol/backing/detail', async (c) => {
+  const symbol = c.req.param('symbol');
+  const detail = await backingDetail(symbol);
+  if (!detail) {
+    return c.json({ error: 'unknown_symbol', message: `${symbol} is not an xStock this executor knows.` }, 404);
+  }
+  return c.json(detail);
+});
+
 routes.get('/xstocks/:symbol/eligibility', async (c) => {
   const symbol = c.req.param('symbol');
   const wallet = c.req.query('wallet');
