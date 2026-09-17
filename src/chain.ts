@@ -88,16 +88,21 @@ const money = MONEY[CHAIN_KEY];
 export const chainMoney: 'real' | 'test' | 'copy' = money;
 
 /**
- * How this build's chain is named inside a sentence, as `networkName` names it on the executor.
+ * How this build's chain is named inside a sentence, as the executor names it.
  *
- * `chainLabel` is a title — "Base fork" — and reads wrong mid-sentence. These are the same four strings the
- * executor writes, so a sentence naming both sides of a mismatch names them the same way.
+ * `chainLabel` is a title — "Base fork" — and reads wrong mid-sentence. The EVM strings are the ones
+ * `evm/money.ts` writes and the Solana ones are the ones `solana/clusters.ts` writes, so a sentence naming
+ * both sides of a mismatch names them the same way whichever side of the app the chain belongs to.
  */
 const SENTENCE_NAMES: Record<ChainKey, string> = {
   base: 'Base mainnet',
   'base-sepolia': 'Base Sepolia',
   'base-fork': 'a fork of Base mainnet',
   localnet: 'a local fork of Base Sepolia',
+  'solana-fork': 'Solana Mainnet Fork',
+  'solana-devnet': 'Solana Devnet',
+  'solana-localnet': 'Solana Localnet',
+  'solana-mainnet': 'Solana Mainnet',
 };
 
 export const chainSentenceName = SENTENCE_NAMES[CHAIN_KEY];
