@@ -34,6 +34,7 @@ import type { Context } from 'hono';
 import { findPerp, perpMetrics, PriceTooSlow } from '../market/perp.js';
 import { PERP_RANGES, perpCandles, perpMarkets, type PerpRange } from '../market/hyperliquid.js';
 import { crossCheck } from '../market/crosscheck.js';
+import { corporateAction } from '../market/corporate-action.js';
 
 export const market = new Hono();
 
@@ -914,6 +915,22 @@ market.get('/basename', async (c) => {
  * round trip to a rate-limited API, and paying that for every symbol on a list screen to answer a
  * question only the asset screen asks would be a poor trade.
  */
+/**
+ * The split or dividend this equity has queued, from its own mint.
+ *
+ * Always 200, including when nothing can be read: `status: 'unavailable'` is a real answer the
+ * asset screen renders, and a 404 here would make "we could not check" indistinguishable from a
+ * bad request on a screen that has to tell the two apart.
+ */
+market.get('/market/corporate-action', async (c) => {
+  // Mixed-case, for the same reason `/market/crosscheck` is: the registry spells them `NVDAx`.
+  const symbol = c.req.query('symbol') ?? '';
+  if (!symbol) {
+    return c.json({ error: 'missing_symbol', detail: 'Pass ?symbol=, for example ?symbol=NVDAx.' }, 400);
+  }
+  return c.json(await corporateAction(symbol));
+});
+
 market.get('/market/crosscheck', async (c) => {
   /*
    * Not uppercased. The tokenized equities are registered mixed-case — `NVDAc`, not `NVDAC` — so

@@ -65,7 +65,19 @@ const MIN_OBSERVATIONS = 6;
 /** How far back a range is drawn. A month of readings, matching what the asset screen charts. */
 const RANGE_HOURS = 24 * 30;
 
-/** A multiplier change this close is a split or a dividend landing mid-trade. */
+/**
+ * How close a scheduled multiplier change has to be before the agent stands down on that symbol.
+ *
+ * A new position is a stop price and a target price, and both are stated in today's per-unit terms.
+ * When the multiplier moves, every holding is restated — units multiplied, price divided — and the
+ * levels the setup was written with stop describing the thing they were chosen for. The exits
+ * `armExits` attaches are checked daily, so a change inside a day or two lands between one check
+ * and the next and the first thing to notice is a stop firing at a price nobody chose.
+ *
+ * Forty-eight hours covers that gap with a margin. It is a reason not to OPEN something; an
+ * existing position is left alone, because closing on a corporate action would be the same
+ * mistake pointed the other way.
+ */
 const CORPORATE_ACTION_WINDOW_MS = 48 * 3_600_000;
 
 /**
@@ -300,15 +312,21 @@ export async function evaluateBestSetup(): Promise<CandidateSetup | null> {
      * a reason to prefer accumulating over chasing: the displayed balance is about to move for a
      * reason that has nothing to do with the trade.
      */
-    const pendingSoon =
+    /*
+     * A corporate action already on the chain is a reason not to open anything here at all.
+     *
+     * This used to be a 40-point markdown, which is a way of saying "worse, but still allowed" —
+     * and a scored-down candidate still wins whenever the alternatives are worse, so on a quiet
+     * day the agent would take exactly the entry the markdown was warning about. The stop and the
+     * target cannot survive the multiplier moving, so there is no size at which this is a good
+     * trade and nothing for a score to express.
+     */
+    if (
       corporateAction.pending &&
       corporateAction.pending.effectiveAtMs - Date.now() <= CORPORATE_ACTION_WINDOW_MS
-        ? corporateAction.pending
-        : null;
-    const caPenalty = pendingSoon ? -40 : 0;
-    const caNote = pendingSoon
-      ? ` The mint scales by ${pendingSoon.nextMultiplier} in about ${corporateAction.hoursUntil} hours, so this is not the moment to chase it.`
-      : '';
+    ) {
+      continue;
+    }
     const offHoursPenalty = offHoursGuard.session === 'closed' ? 15 : 0;
 
     // 1. Event-driven: a projected report, far enough out to enter and be flat before the print.
@@ -319,11 +337,11 @@ export async function evaluateBestSetup(): Promise<CandidateSetup | null> {
         strategyKind: 'event-driven',
         persona: 'earnings-desk',
         personaName: 'Earnings Desk',
-        score: Math.max(10, 95 - Math.abs(earnings.days - 6) + caPenalty),
+        score: Math.max(10, 95 - Math.abs(earnings.days - 6)),
         currentPrice: price,
         stopPrice: price * 0.94,
         targetPrice: price * 1.12,
-        reason: `${stock.symbol} is projected to report in about ${earnings.days} days, give or take ${earnings.errorDays}, from its own filing cadence. Entering the run-up and flat before the print.${caNote}`,
+        reason: `${stock.symbol} is projected to report in about ${earnings.days} days, give or take ${earnings.errorDays}, from its own filing cadence. Entering the run-up and flat before the print.`,
         marketCondition: `Pre-earnings window, ${earnings.days}d out`,
         corporateAction,
         offHoursGuard,
@@ -343,11 +361,11 @@ export async function evaluateBestSetup(): Promise<CandidateSetup | null> {
         strategyKind: 'momentum',
         persona: 'momentum-scout',
         personaName: 'Momentum Scout',
-        score: Math.max(10, Math.round(75 + position * 20) + caPenalty - offHoursPenalty),
+        score: Math.max(10, Math.round(75 + position * 20) - offHoursPenalty),
         currentPrice: price,
         stopPrice: stop,
         targetPrice: target,
-        reason: `${stock.symbol} is trading in the top quarter of the $${range.low.toFixed(2)}-$${range.high.toFixed(2)} band this app has recorded over the past month.${caNote}`,
+        reason: `${stock.symbol} is trading in the top quarter of the $${range.low.toFixed(2)}-$${range.high.toFixed(2)} band this app has recorded over the past month.`,
         marketCondition: `Upper band, ${(position * 100).toFixed(0)}th percentile of observed range`,
         corporateAction,
         offHoursGuard,
@@ -363,11 +381,11 @@ export async function evaluateBestSetup(): Promise<CandidateSetup | null> {
         strategyKind: 'dca',
         persona: 'yield-keeper',
         personaName: 'Yield Keeper',
-        score: Math.round(70 + (0.4 - position) * 20 + (pendingSoon ? 10 : 0)),
+        score: Math.round(70 + (0.4 - position) * 20),
         currentPrice: price,
         stopPrice: price * 0.92,
         targetPrice: price * 1.1,
-        reason: `${stock.symbol} is in the lower part of the $${range.low.toFixed(2)}-$${range.high.toFixed(2)} band this app has recorded over the past month. Accumulating.${caNote}`,
+        reason: `${stock.symbol} is in the lower part of the $${range.low.toFixed(2)}-$${range.high.toFixed(2)} band this app has recorded over the past month. Accumulating.`,
         marketCondition: `Lower band, ${(position * 100).toFixed(0)}th percentile of observed range`,
         corporateAction,
         offHoursGuard,

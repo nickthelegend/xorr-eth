@@ -46,6 +46,15 @@ const PUBLIC_PATHS = new Set([
   '/metrics',
   /** A second opinion on a public price is still a public price. */
   '/market/crosscheck',
+  /**
+   * A split or dividend, read off a public Token-2022 mint.
+   *
+   * The same argument as the rest of `/market/*`: the multiplier and the timestamp it starts
+   * applying are on the chain, where anyone can read them without asking us. Gating it would
+   * mean a signed-out visitor sees an asset screen with a price, a chart and no mention of the
+   * corporate action that is about to restate every unit of it.
+   */
+  '/market/corporate-action',
   /** A futures venue's public market data — the Futures screens' list. */
   '/market/futures',
   /** MoonPay dev sandbox public configuration. */

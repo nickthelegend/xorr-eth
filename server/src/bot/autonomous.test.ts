@@ -216,14 +216,18 @@ describe('autonomous xStocks trading agent', () => {
       expect(best?.suggestedSlippageBps).toBe(50);
     });
 
-    it('marks down a momentum entry when the mint has a multiplier change due', async () => {
+    /*
+     * A scheduled multiplier change is a reason not to open anything on that symbol, not a reason
+     * to prefer something else on it. A markdown still lets the candidate win on a quiet day,
+     * which is exactly the entry the markdown was warning about.
+     */
+    it('stands the symbol down entirely when a multiplier change is inside the window', async () => {
       queryMock.mockImplementation(async (sql: string) =>
         sql.includes('price_observations') ? readings(200, 240, 238) : [],
       );
 
       const undisturbed = await evaluateBestSetup();
-      if (!undisturbed) throw new Error('expected a setup');
-      expect(undisturbed.strategyKind).toBe('momentum');
+      expect(undisturbed?.strategyKind).toBe('momentum');
 
       readMintScaleMock.mockResolvedValue({
         decimals: 8,
@@ -231,20 +235,38 @@ describe('autonomous xStocks trading agent', () => {
         pending: { nextMultiplier: 2, effectiveAtMs: Date.now() + 12 * 3_600_000 },
       });
 
-      const marked = await evaluateBestSetup();
-      expect(marked?.strategyKind).toBe('momentum');
-      expect(marked?.score).toBe(undisturbed.score - 40);
-      expect(marked?.corporateAction.pending?.nextMultiplier).toBe(2);
-      expect(marked?.reason).toContain('not the moment to chase it');
+      // Every symbol is affected alike here, so there is nothing left to pick.
+      expect(await evaluateBestSetup()).toBeNull();
     });
 
-    /* A change far enough out is not a reason to do anything differently today. */
-    it('leaves the score alone when the multiplier change is outside the 48h window', async () => {
+    it('stands down even when the setup would otherwise be the strongest on offer', async () => {
+      earningsCalendarMock.mockImplementation(async (symbol: string) =>
+        symbol === 'NVDAx'
+          ? { symbol, cik: 1045810, reported: [], nextAt: Date.now() + 6 * 86_400_000, gapDays: [], medianGapDays: 91, errorDays: 2 }
+          : null,
+      );
+      readMintScaleMock.mockImplementation(async (mint: string) =>
+        mint === 'Xsc9NVDA'
+          ? {
+              decimals: 8,
+              multiplier: 1,
+              pending: { nextMultiplier: 2, effectiveAtMs: Date.now() + 6 * 3_600_000 },
+            }
+          : { decimals: 8, multiplier: 1, pending: null },
+      );
+
+      const best = await evaluateBestSetup();
+      expect(best?.symbol).not.toBe('NVDAx');
+    });
+
+    /* A change far enough out says nothing about today, and must not cost the symbol its turn. */
+    it('leaves the symbol tradable when the multiplier change is outside the window', async () => {
       queryMock.mockImplementation(async (sql: string) =>
         sql.includes('price_observations') ? readings(200, 240, 238) : [],
       );
 
       const undisturbed = await evaluateBestSetup();
+      if (!undisturbed) throw new Error('expected a setup');
 
       readMintScaleMock.mockResolvedValue({
         decimals: 8,
@@ -253,9 +275,65 @@ describe('autonomous xStocks trading agent', () => {
       });
 
       const later = await evaluateBestSetup();
-      expect(later?.score).toBe(undisturbed?.score);
+      expect(later?.score).toBe(undisturbed.score);
       expect(later?.corporateAction.pending?.nextMultiplier).toBe(2);
     });
+
+    /*
+     * The band comes from the stored readings; where we sit in it comes from the live quote. A
+     * symbol whose recorded history is all near the high but which is quoted near the low right
+     * now is a dip, and reading the position off the newest stored row would have called it a
+     * breakout.
+     */
+    it('positions the live quote in the band, not the newest stored reading', async () => {
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+      xStockPriceMock.mockResolvedValue(205);
+      referencePriceMock.mockResolvedValue(205);
+
+      const best = await evaluateBestSetup();
+      expect(best?.strategyKind).toBe('dca');
+      expect(best?.currentPrice).toBe(205);
+    });
+
+    /*
+     * The bug the synthetic ±8% range hid: with no recorded history there is no band, so neither
+     * range strategy has anything to say. It used to say "upper band" about every asset on earth.
+     */
+    it('produces no candidate at all when there is no price history and no earnings window', async () => {
+      expect(await evaluateBestSetup()).toBeNull();
+    });
+
+    it('needs more than a couple of readings before it will call something a range', async () => {
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? [{ usd: '200' }, { usd: '240' }] : [],
+      );
+      expect(await evaluateBestSetup()).toBeNull();
+    });
+
+    it('skips a symbol whose off-hours drift cannot be measured', async () => {
+      vi.setSystemTime(WEEKEND);
+      referencePriceMock.mockResolvedValue(null);
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+
+      expect(await evaluateBestSetup()).toBeNull();
+    });
+
+    it('carries the chain-read multiplier and the session verdict onto the setup', async () => {
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+
+      const best = await evaluateBestSetup();
+      expect(best?.corporateAction.multiplier).toBe(1);
+      expect(best?.corporateAction.pending).toBeNull();
+      expect(best?.offHoursGuard.session).toBe('regular');
+      expect(best?.suggestedSlippageBps).toBe(50);
+    });
+
   });
 
   describe('runAutonomousCycle', () => {
