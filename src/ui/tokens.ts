@@ -306,6 +306,15 @@ export const duration = Object.freeze({
    * saying "still coming" without asking to be looked at.
    */
   pulse: 900,
+  /**
+   * One breath of an agent's orb while it is thinking (2026-09-17).
+   *
+   * animations.md's own "If you add motion" names this one: "a slow 3–4s scale breathe (1.0 → 1.015)".
+   * It is the slowest thing in the app by an order of magnitude, and that is the point — it has to read
+   * as a thing being alive rather than a thing signalling. At `pulse` it is a heartbeat under stress;
+   * at this it is breathing, and the eye stops going back to it.
+   */
+  breathe: 3600,
 } as const);
 
 /**

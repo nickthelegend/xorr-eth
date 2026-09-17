@@ -114,12 +114,15 @@ describe('motion — animations.md', () => {
    * `draw`, a screen ARRIVING rather than a control responding. Anything else new still has to argue
    * its way in here first.
    */
-  it('interaction is 150 / 180 / 250; arrival is enter and draw; the skeleton pulses', () => {
-    const { pulse, enter, draw, ...interaction } = duration;
+  it('interaction is 150 / 180 / 250; arrival is enter and draw; the skeleton pulses; an orb breathes', () => {
+    const { pulse, enter, draw, breathe, ...interaction } = duration;
     expect(Object.values(interaction).sort((a, b) => a - b)).toEqual([150, 180, 250]);
     expect(enter).toBe(420);
     expect(draw).toBe(700);
     expect(pulse).toBe(900);
+    // animations.md sanctions "a slow 3–4s scale breathe" on a working agent's orb, and nothing faster.
+    expect(breathe).toBeGreaterThanOrEqual(3000);
+    expect(breathe).toBeLessThanOrEqual(4000);
   });
 
   // The whole animated inventory:
@@ -134,6 +137,7 @@ describe('motion — animations.md', () => {
   //   AreaChart       the line revealed left to right     700ms  (arrival)
   //   Candlestick     the candles revealed left to right  700ms  (arrival)
   //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)
+  //   AgentOrb        the agent's stage: breathe / settle  3600ms (thinking) · 900ms (executing) · 250ms (decided, filled)
   // A new entry here means a primitive started animating something the policy does not sanction.
   // Argue it into motion.ts first, or take the animation out.
   it('only the sanctioned primitives animate', () => {
@@ -142,6 +146,7 @@ describe('motion — animations.md', () => {
       .map(({ rel }) => rel)
       .sort();
     expect(animated).toEqual([
+      'AgentOrb.tsx',
       'HoldButton.tsx',
       'Progress.tsx',
       'Rise.tsx',
@@ -160,11 +165,27 @@ describe('motion — animations.md', () => {
    * The loop is allowed in exactly one file. `withRepeat` anywhere else is how an app acquires a
    * pulsing dot, a breathing button and a spinning badge one reasonable-seeming commit at a time.
    */
-  it('nothing else in the design system loops', () => {
+  it('only the skeleton and a working agent\u2019s orb loop', () => {
+    /*
+     * Two, and both are argued for in animations.md: the skeleton block, which is not content and says
+     * "still coming"; and an orb whose agent is thinking or acting, which animations.md's own "If you add
+     * motion" asks for by name. Both stop the moment the state that justifies them ends.
+     */
     const looping = sources()
       .filter(({ src }) => /withRepeat/.test(stripComments(src)))
-      .map(({ rel }) => rel);
-    expect(looping).toEqual(['States.tsx']);
+      .map(({ rel }) => rel)
+      .sort();
+    expect(looping).toEqual(['AgentOrb.tsx', 'States.tsx']);
+  });
+
+  /*
+   * The orb performs a stage it is GIVEN. A stage it advanced itself — on a timer, a delay or an interval
+   * — would be an animation asserting that an agent is thinking when nothing has been asked of it.
+   */
+  it('the orb\u2019s stage comes from its prop, never from a clock', () => {
+    const src = stripComments(fs.readFileSync(path.join(UI, 'AgentOrb.tsx'), 'utf8'));
+    expect(/setTimeout|setInterval|withDelay|withSequence|Date\.now/.test(src)).toBe(false);
+    expect(src).toMatch(/useStageMotion\(stage\)/);
   });
 
   /*
