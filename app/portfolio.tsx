@@ -234,6 +234,7 @@ export default function Portfolio() {
               value={money(total)}
               variant="heroBalance"
               delay={STAGGER}
+              roll
               containerStyle={{ marginTop: space.s6 }}
             />
           ) : balance.loading ? (
