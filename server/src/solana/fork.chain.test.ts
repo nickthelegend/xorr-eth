@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as path from 'node:path';
-import type { ChildProcess } from 'node:child_process';
+import { execSync, type ChildProcess } from 'node:child_process';
 import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import {
   getOrCreateAssociatedTokenAccount,
@@ -44,7 +44,20 @@ const FORK_RPC = process.env.FORK_RPC ?? 'http://127.0.0.1:8899';
 const USDC_MINT = new PublicKey(DEFAULT_MINTS.USDC);
 const NVDAX_MINT = new PublicKey(XSTOCKS.NVDAx!.address);
 
-describe('Solana Mainnet Fork On-Chain Proofs', () => {
+// These proofs drive a real solana-test-validator. Where that binary is absent
+// (a dev box without the Solana toolchain), skip rather than fail the run — CI
+// installs the toolchain so the suite executes there.
+const hasValidator = (() => {
+  try {
+    execSync('solana-test-validator --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const d = hasValidator ? describe : describe.skip;
+
+d('Solana Mainnet Fork On-Chain Proofs', () => {
   let conn: Connection;
   let validatorProcess: ChildProcess | null = null;
   const fixturesDir = path.resolve(process.cwd(), 'scratch', 'test-chain-fixtures');
