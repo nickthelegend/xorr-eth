@@ -1,0 +1,354 @@
+/**
+ * Stand up and bootstrap a Solana mainnet fork with real USDC and xStocks (PLAN.md §11).
+ *
+ * Starts or connects to solana-test-validator, airdrops SOL, funds the dev owner
+ * with 25,000 USDC + xStocks (NVDAx), funds the venue vault with liquidity,
+ * and writes `.env.fork`.
+ */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import {
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+} from '@solana/spl-token';
+import {
+  delegateKeypair,
+  payerKeypair,
+  devOwnerKeypair,
+  venueVaultKeypair,
+} from './keys.js';
+
+const RPC = process.env.FORK_RPC ?? 'http://127.0.0.1:8899';
+const UPSTREAM_RPC = process.env.MAINNET_RPC ?? 'https://api.mainnet-beta.solana.com';
+
+export const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+export const NVDAX_MINT = new PublicKey('Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh');
+export const TSLAX_MINT = new PublicKey('XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB');
+export const AAPLX_MINT = new PublicKey('XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp');
+export const MSFTX_MINT = new PublicKey('XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX');
+export const JUPITER_PROGRAM = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
+
+// Real mainnet USDC mint base64 (82 bytes)
+const USDC_MINT_BASE64 =
+  'AQAAAJj+huiNm+Lqi8HMpIeLKYjCQPUrhCS/tA7Rot3LXhmblCui79AkGwAGAQEAAABicKqKWcWUBbRShshncubNEm6bil06OFNtN/e0FOi2Zw==';
+
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function isValidatorRunning(url = RPC): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSlot' }),
+      signal: AbortSignal.timeout(1500),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate genesis account JSON files with payer as mint authority.
+ */
+export async function prepareGenesisMints(
+  fixturesDir: string,
+  payer: Keypair,
+): Promise<{ usdcPath: string; nvdaxPath: string }> {
+  fs.mkdirSync(fixturesDir, { recursive: true });
+
+  // 1. USDC mint: replace bytes 4..36 with payer pubkey
+  const usdcBuf = Buffer.from(USDC_MINT_BASE64, 'base64');
+  payer.publicKey.toBuffer().copy(usdcBuf, 4);
+
+  const usdcAccount = {
+    pubkey: USDC_MINT.toBase58(),
+    account: {
+      lamports: 1_000_000_000,
+      data: [usdcBuf.toString('base64'), 'base64'],
+      owner: TOKEN_PROGRAM_ID.toBase58(),
+      executable: false,
+      rentEpoch: 0,
+      space: 82,
+    },
+  };
+  const usdcPath = path.join(fixturesDir, 'usdc-mint.json');
+  fs.writeFileSync(usdcPath, JSON.stringify(usdcAccount, null, 2));
+
+  // 2. NVDAx mint: fetch account info from upstream or fallback template
+  let nvdaxBuf: Buffer;
+  let nvdaxOwner = TOKEN_2022_PROGRAM_ID.toBase58();
+  let lamports = 600_000_000;
+
+  try {
+    const upstreamRes = await fetch(UPSTREAM_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getAccountInfo',
+        params: [NVDAX_MINT.toBase58(), { encoding: 'base64' }],
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const json = (await upstreamRes.json()) as {
+      result?: { value?: { data: [string, string]; owner: string; lamports: number } };
+    };
+    if (json.result?.value?.data?.[0]) {
+      nvdaxBuf = Buffer.from(json.result.value.data[0], 'base64');
+      nvdaxOwner = json.result.value.owner;
+      lamports = json.result.value.lamports;
+    } else {
+      throw new Error('No upstream data');
+    }
+  } catch {
+    // Template fallback for Token-2022 8-decimal mint (82 bytes header)
+    nvdaxBuf = Buffer.alloc(166);
+    nvdaxBuf.writeUInt32LE(1, 0); // mint authority option = 1
+    nvdaxBuf.writeBigUInt64LE(100_000_00000000n, 36); // supply
+    nvdaxBuf.writeUInt8(8, 44); // decimals = 8
+    nvdaxBuf.writeUInt8(1, 45); // isInitialized = 1
+  }
+
+  payer.publicKey.toBuffer().copy(nvdaxBuf, 4); // set mintAuthority = payer
+  const nvdaxAccount = {
+    pubkey: NVDAX_MINT.toBase58(),
+    account: {
+      lamports,
+      data: [nvdaxBuf.toString('base64'), 'base64'],
+      owner: nvdaxOwner,
+      executable: false,
+      rentEpoch: 0,
+      space: nvdaxBuf.length,
+    },
+  };
+  const nvdaxPath = path.join(fixturesDir, 'nvdax-mint.json');
+  fs.writeFileSync(nvdaxPath, JSON.stringify(nvdaxAccount, null, 2));
+
+  return { usdcPath, nvdaxPath };
+}
+
+/**
+ * Launch solana-test-validator if not already running.
+ */
+export async function startValidator(fixturesDir: string, payer: Keypair): Promise<ChildProcess | null> {
+  if (await isValidatorRunning()) {
+    console.log(`Validator is already running on ${RPC}`);
+    return null;
+  }
+
+  console.log(`Preparing genesis accounts in ${fixturesDir}...`);
+  const { usdcPath, nvdaxPath } = await prepareGenesisMints(fixturesDir, payer);
+
+  const ledgerDir = path.join(fixturesDir, 'test-ledger');
+  const logPath = path.join(fixturesDir, 'validator.log');
+  const logFd = fs.openSync(logPath, 'w');
+
+  console.log(`Starting solana-test-validator on ${RPC}...`);
+
+  const child = spawn(
+    'solana-test-validator',
+    [
+      '--ledger',
+      ledgerDir,
+      '--rpc-port',
+      '8899',
+      '--account',
+      USDC_MINT.toBase58(),
+      usdcPath,
+      '--account',
+      NVDAX_MINT.toBase58(),
+      nvdaxPath,
+      '--clone-upgradeable-program',
+      JUPITER_PROGRAM,
+      '--url',
+      UPSTREAM_RPC,
+      '--reset',
+      '--quiet',
+    ],
+    {
+      stdio: ['ignore', logFd, logFd],
+      detached: false,
+    },
+  );
+
+  child.on('error', (err) => {
+    console.error('Failed to spawn solana-test-validator:', err);
+  });
+
+  // Poll for readiness
+  for (let i = 0; i < 45; i++) {
+    await sleep(1000);
+    if (child.exitCode !== null) {
+      const logs = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
+      throw new Error(`solana-test-validator exited prematurely with code ${child.exitCode}.\nLogs:\n${logs}`);
+    }
+    if (await isValidatorRunning()) {
+      console.log('Validator is ready!');
+      return child;
+    }
+  }
+
+  const logs = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
+  child.kill('SIGKILL');
+  throw new Error(`Timed out waiting for solana-test-validator to boot.\nLogs:\n${logs}`);
+}
+
+export async function bootstrapFork(customDevOwner?: string) {
+  const payer = payerKeypair();
+  const delegate = delegateKeypair();
+  const devOwner = customDevOwner ? new PublicKey(customDevOwner) : devOwnerKeypair().publicKey;
+  const vault = venueVaultKeypair();
+
+  const fixturesDir = path.resolve(process.cwd(), 'scratch', 'fork-fixtures');
+  await startValidator(fixturesDir, payer);
+
+  const conn = new Connection(RPC, 'confirmed');
+
+  console.log('\n--- Airdropping SOL ---');
+  for (const [name, pk] of [
+    ['Payer', payer.publicKey],
+    ['Delegate', delegate.publicKey],
+    ['Dev Owner', devOwner],
+    ['Venue Vault', vault.publicKey],
+  ] as const) {
+    const sig = await conn.requestAirdrop(pk, 10 * LAMPORTS_PER_SOL);
+    await conn.confirmTransaction(sig, 'confirmed');
+    const bal = await conn.getBalance(pk);
+    console.log(`  ${name} (${pk.toBase58()}): ${bal / LAMPORTS_PER_SOL} SOL`);
+  }
+
+  console.log('\n--- Funding Dev Owner & Venue Vault ---');
+  // 1. Fund Dev Owner with 25,000 USDC
+  const devOwnerUsdcAta = await getOrCreateAssociatedTokenAccount(
+    conn,
+    payer,
+    USDC_MINT,
+    devOwner,
+    false,
+    'confirmed',
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  await mintTo(
+    conn,
+    payer,
+    USDC_MINT,
+    devOwnerUsdcAta.address,
+    payer,
+    25_000_000000n, // 25,000 USDC
+    [],
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  console.log(`  Dev Owner USDC ATA: ${devOwnerUsdcAta.address.toBase58()} -> 25,000 USDC`);
+
+  // 2. Fund Dev Owner with 10 NVDAx
+  const devOwnerNvdaxAta = await getOrCreateAssociatedTokenAccount(
+    conn,
+    payer,
+    NVDAX_MINT,
+    devOwner,
+    false,
+    'confirmed',
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  await mintTo(
+    conn,
+    payer,
+    NVDAX_MINT,
+    devOwnerNvdaxAta.address,
+    payer,
+    10_00000000n, // 10 NVDAx
+    [],
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  console.log(`  Dev Owner NVDAx ATA: ${devOwnerNvdaxAta.address.toBase58()} -> 10 NVDAx`);
+
+  // 3. Fund Venue Vault with liquidity (100,000 USDC + 1,000 NVDAx)
+  const vaultUsdcAta = await getOrCreateAssociatedTokenAccount(
+    conn,
+    payer,
+    USDC_MINT,
+    vault.publicKey,
+    false,
+    'confirmed',
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  await mintTo(
+    conn,
+    payer,
+    USDC_MINT,
+    vaultUsdcAta.address,
+    payer,
+    100_000_000000n,
+    [],
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+
+  const vaultNvdaxAta = await getOrCreateAssociatedTokenAccount(
+    conn,
+    payer,
+    NVDAX_MINT,
+    vault.publicKey,
+    false,
+    'confirmed',
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  await mintTo(
+    conn,
+    payer,
+    NVDAX_MINT,
+    vaultNvdaxAta.address,
+    payer,
+    1_000_00000000n,
+    [],
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  console.log(`  Venue Vault USDC ATA: ${vaultUsdcAta.address.toBase58()} -> 100,000 USDC`);
+  console.log(`  Venue Vault NVDAx ATA: ${vaultNvdaxAta.address.toBase58()} -> 1,000 NVDAx`);
+
+  // Write .env.fork
+  const envContent = [
+    '# Generated by fork-bootstrap.ts',
+    'XORR_CHAIN=solana-fork',
+    `FORK_RPC=${RPC}`,
+    `SOLANA_RPC_URL=${RPC}`,
+    'EXPO_PUBLIC_XORR_CHAIN=solana-fork',
+    `EXPO_PUBLIC_SOLANA_RPC=${RPC}`,
+    `DELEGATE_PUBKEY=${delegate.publicKey.toBase58()}`,
+    `DEV_OWNER_PUBKEY=${devOwner.toBase58()}`,
+    `VENUE_VAULT_PUBKEY=${vault.publicKey.toBase58()}`,
+    `USDC_MINT=${USDC_MINT.toBase58()}`,
+    `NVDAX_MINT=${NVDAX_MINT.toBase58()}`,
+    '',
+  ].join('\n');
+
+  fs.writeFileSync('.env.fork', envContent);
+  console.log('\nWrote .env.fork successfully.');
+  console.log('Fork bootstrap complete! Run tests with:');
+  console.log('  CHAIN=1 npx vitest run src/solana/fork.chain.test.ts');
+}
+
+if (process.argv[1]?.includes('fork-bootstrap')) {
+  const target = process.argv[2] ?? process.env.OWNER_ADDRESS;
+  bootstrapFork(target)
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Bootstrap error:', err);
+      process.exit(1);
+    });
+}

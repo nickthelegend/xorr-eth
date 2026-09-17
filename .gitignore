@@ -4,6 +4,8 @@
 !.env.example
 .keys/
 *.key
+test-ledger/
+scratch/
 
 node_modules/
 .expo/
