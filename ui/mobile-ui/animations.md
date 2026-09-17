@@ -36,6 +36,7 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Tab bar mark | `transform: scale` (0 ↔ 1) | 150ms | The raised pill under the open place, growing into shape on arrival and shrinking away on leaving. The glyph's colour still snaps. |
 | Sparkline, `live` | `opacity` (.9 → 1 → .9, the whole glyph) | 150ms up · 250ms back | One breath when the series it was handed actually changed. The line itself still redraws instantly. See below. |
 | Stop curtain | `opacity` (the blackout) · `transform: translateY` (the curtain) · `transform: scale` (the badge) | 420ms ease-out · 420ms ease-out · 250ms | The kill switch's own screen, up while the revoke is signed and confirmed. See below. |
 | Agent orb, `stage` | `transform: scale` (thinking, decided, filled) · `opacity` (executing) | 3600ms breathing · 900ms breathing · 250ms settling | The agent's orb performing what the screen knows the agent is doing. Driven by a prop, never a timer. See below. |
@@ -215,3 +216,16 @@ leaving is quicker than arriving.
 It is continuity, not an entrance: nothing arrives, one thing makes room for another, and both are already on screen when
 the move starts. While it is down the bar takes no taps and is hidden from a screen reader. Under reduced motion both
 simply appear and disappear.
+
+### The mark under the open place
+
+The raised pill behind Home's glyph appeared and vanished between two frames. On the one control whose whole job is to
+answer navigation, a state that swaps with no transition reads as a redraw rather than an answer.
+
+It now grows into shape and shrinks away — `transform: scale`, 0 ↔ 1, over the 150ms the segmented thumb takes, because
+selection must feel instant and 150 is the floor. One property: no slide, no fade, no travelling indicator between
+items. There is one place on this bar; Swap and Messages are actions and are never selected, so there is nothing for an
+indicator to travel to.
+
+**The glyph's colour still snaps.** It is the state, and it has to be right in the frame the tap lands — including under
+reduced motion, where the mark is simply there or not and the colour carries the whole thing on its own.
