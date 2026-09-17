@@ -9,8 +9,9 @@
  *      authority; no custody moves.
  *   3. A buy through the executor's single spend chokepoint (`guardAndSpend`), where the
  *      DELEGATE signs the transfer out of the owner's account.
- *   4. The fill is priced by a live Jupiter quote. A run that fell back to offline pricing
- *      fails rather than reporting a number nobody quoted.
+ *   4. The fill is a REAL Jupiter route: the Jupiter program is invoked, it CPIs into the AMM,
+ *      and the pool's own reserves move. A run that settled through the venue vault instead
+ *      fails here rather than being described as a Jupiter swap.
  *   5. The filled size the executor reports equals the on-chain balance change, scaled-UI
  *      multiplier included — the split/dividend-safe P&L property.
  *
@@ -112,6 +113,7 @@ async function main() {
 
   line('BUY SIGNATURE', outcome.signature);
   line('BUY SLOT', outcome.slot);
+  line('FILL VENUE', outcome.venue);
   line('filled', `${outcome.filledUnits} NVDAx`);
   line('fill price', `$${outcome.fillPrice.toFixed(2)}`);
   line('out units (raw)', outcome.outUnits.toString());
@@ -122,6 +124,28 @@ async function main() {
   });
   if (!tx) throw new Error('The buy signature is not in the fork ledger.');
   if (tx.meta?.err) throw new Error(`The buy failed on-chain: ${JSON.stringify(tx.meta.err)}`);
+
+  /*
+   * The claim under test is "a Jupiter swap happened", so check the ledger for it rather than
+   * trusting the label. The program's own log lines are the evidence.
+   */
+  if (outcome.venue !== 'jupiter-route') {
+    throw new Error(
+      `Filled through '${outcome.venue}', not a Jupiter route. That is a capped SPL delegate ` +
+        'transfer settled by the venue vault and must not be called a Jupiter swap.',
+    );
+  }
+  const logs = tx.meta?.logMessages ?? [];
+  const invokedJupiter = logs.some((l) => l.includes(DEFAULT_MINTS.JUPITER_V6) && l.includes('invoke'));
+  const routed = logs.some((l) => l.includes('Instruction: Route'));
+  const ammSwapped = logs.some((l) => l.includes('Swap'));
+  if (!invokedJupiter || !routed || !ammSwapped) {
+    throw new Error(
+      `The transaction does not show a Jupiter route (invoked=${invokedJupiter} routed=${routed} amm=${ammSwapped}).`,
+    );
+  }
+  line('jupiter invoked', invokedJupiter);
+  line('route + AMM swap', `${routed} / ${ammSwapped}`);
   console.log('\n=== 5. Confirmed in the ledger ===');
   line('slot', tx.slot);
   line('err', String(tx.meta?.err ?? null));

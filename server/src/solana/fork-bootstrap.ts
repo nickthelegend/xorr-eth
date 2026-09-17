@@ -31,6 +31,30 @@ export const TSLAX_MINT = new PublicKey('XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJ
 export const AAPLX_MINT = new PublicKey('XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp');
 export const MSFTX_MINT = new PublicKey('XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX');
 export const JUPITER_PROGRAM = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
+export const WHIRLPOOL_PROGRAM = 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc';
+
+/*
+ * The USDC/NVDAx Orca Whirlpool route, as Jupiter returns it today.
+ *
+ * Cloning the Jupiter program alone buys nothing: `Route` cross-program-invokes the AMM, and the
+ * AMM reads its pool, its two vaults, its tick arrays and its oracle. Without these the swap
+ * fails on missing accounts and the fill quietly falls back to the venue vault. With them, the
+ * fork executes the real route against the pool's real mainnet reserves.
+ *
+ * These are route-specific. If Jupiter starts quoting a different pool, refresh them with
+ * `tools/resolve-jupiter-route.ts`.
+ */
+export const ROUTE_ACCOUNTS = [
+  '6R4r93V5fcMzc13CL2enEepDSYcr4Qx3ptZBDwudTXCo', // Whirlpool USDC/NVDAx
+  '5TSHEwRAgHLTYkchrUNiKUL2RvuZgdh3vExbMptWrHoX', // pool USDC vault
+  'FaHQ9Ny2U2RkcdapsKVr9pvnt4Mg7n92NdKnvyRzuibH', // pool NVDAx vault (Token-2022)
+  '9VJRZWagVaCL2eRNpcV2zYfCSKNzEbdbL9MoBEYnrRv1', // tick array
+  'AmmznNxM2zbxxN5wZtorozeakd1LL8GtKUdZYTp7KMfy', // tick array
+  'ExnVr11uZZU9Bd8s71CtitGCt86H1T6BARRtvmerZ1tu', // tick array
+  'CbTCXA1r93p8p1v8Uhp6Ufoe15FwsmzimWY8AG3TbyxR', // whirlpool oracle
+  'D8cy77BBepLMngZx6ZukaTff5hCt1HrWyKk3Hnd9oitf', // Jupiter event authority
+  '2Se6p8VJTcsPWZ2RyaSVCkE5L5ocdFqA5Vj2CEGDZ1rW', // address lookup table the route uses
+] as const;
 
 // Real mainnet USDC mint base64 (82 bytes)
 const USDC_MINT_BASE64 =
@@ -168,6 +192,9 @@ export async function startValidator(fixturesDir: string, payer: Keypair): Promi
       nvdaxPath,
       '--clone-upgradeable-program',
       JUPITER_PROGRAM,
+      '--clone-upgradeable-program',
+      WHIRLPOOL_PROGRAM,
+      ...ROUTE_ACCOUNTS.flatMap((a) => ['--clone', a]),
       '--url',
       UPSTREAM_RPC,
       '--reset',
