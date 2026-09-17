@@ -8,7 +8,7 @@
  * for any Token-2022 mint that is not 8 decimals, and wrong for every xStock the moment its
  * issuer declared a split.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { PublicKey, Connection } from '@solana/web3.js';
 import {
   ExtensionType,
@@ -23,7 +23,7 @@ import {
   ACCOUNT_TYPE_SIZE,
   unpackMint,
 } from '@solana/spl-token';
-import { getTokenBalance, scaledUiMultiplier, ataFor } from './balances.js';
+import { getTokenBalance, scaledUiMultiplier, ataFor, clearMintScaleCache } from './balances.js';
 
 // NVDAx — a real xStock, and one of the Token-2022 mints `tokenProgramForMint` knows.
 const NVDAX = 'Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh';
@@ -121,6 +121,10 @@ function connectionServing(mintData: Buffer, ataData: Buffer, ata: PublicKey): C
 }
 
 describe('scaled UI amount balances', () => {
+  // Every case here reuses one mint address with different decimals and multipliers, so the
+  // read-through memo has to be dropped between them.
+  beforeEach(() => clearMintScaleCache());
+
   it('reports a 1.0-multiplier balance at face value', async () => {
     const mintPk = new PublicKey(NVDAX);
     const ownerPk = new PublicKey(OWNER);

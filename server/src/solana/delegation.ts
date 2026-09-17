@@ -26,7 +26,7 @@ import {
 import { connection as defaultConnection, waitForTx } from './connection.js';
 import { DEFAULT_MINTS } from './clusters.js';
 import { delegateKeypair, payerKeypair } from './keys.js';
-import { ataFor, tokenProgramForMint, decimalsForMint } from './balances.js';
+import { ataFor, tokenProgramForMint, readMintScale, toUiAmount } from './balances.js';
 
 export type DelegationState = {
   owner: string;
@@ -72,19 +72,21 @@ export async function readDelegation(
     const isRevoked = !delegate || delegatedAmount === 0n;
     const hasActiveDelegation = Boolean(delegate && delegatedAmount > 0n);
 
-    const decimals = decimalsForMint(mintPk);
+    // Read the mint rather than assume it: the cap and the balance are both money.
+    const scale = await readMintScale(mintPk, conn, prog);
+    const delegatedUsd = toUiAmount(delegatedAmount, scale);
     return {
       owner: ownerPk.toBase58(),
       ownerAta: ownerAta.toBase58(),
       delegate,
       delegatedAmount,
       balanceAmount: acc.amount,
-      remainingUsd: baseUnitsToUsd(delegatedAmount, decimals),
+      remainingUsd: delegatedUsd,
       isRevoked,
       hasActiveDelegation,
       hasDelegate: hasActiveDelegation,
-      delegatedUsd: baseUnitsToUsd(delegatedAmount, decimals),
-      balanceUsd: baseUnitsToUsd(acc.amount, decimals),
+      delegatedUsd,
+      balanceUsd: toUiAmount(acc.amount, scale),
     };
   } catch (e) {
     if (e instanceof TokenAccountNotFoundError || e instanceof TokenInvalidAccountOwnerError) {
@@ -241,6 +243,12 @@ export async function spendAsDelegate(params: {
     );
   }
 
+  /*
+   * `transferChecked` re-derives decimals from the mint and rejects the instruction if the
+   * number handed to it disagrees. A guessed value is a failed transfer, not a rounding error.
+   */
+  const { decimals } = await readMintScale(mintPk, conn, prog);
+
   const tx = new Transaction();
   tx.add(
     createTransferCheckedInstruction(
@@ -249,7 +257,7 @@ export async function spendAsDelegate(params: {
       destPk,
       delegate.publicKey,
       amountUnits,
-      decimalsForMint(mintPk),
+      decimals,
       [],
       prog,
     ),
@@ -312,7 +320,7 @@ export async function returnToOwner(params: {
       ownerAta,
       fromKeypair.publicKey,
       amountUnits,
-      decimalsForMint(mintPk),
+      (await readMintScale(mintPk, conn, prog)).decimals,
       [],
       prog,
     ),
