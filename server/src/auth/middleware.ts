@@ -48,6 +48,10 @@ const PUBLIC_PATHS = new Set([
   '/market/crosscheck',
   /** A futures venue's public market data — the Futures screens' list. */
   '/market/futures',
+  /** MoonPay dev sandbox public configuration. */
+  '/deposit/moonpay/config',
+  /** MoonPay webhook callbacks from MoonPay servers. */
+  '/deposit/moonpay/webhook',
 ]);
 
 /** Path prefixes that are public. `/perp/:symbol` is a mark price, not user data. */

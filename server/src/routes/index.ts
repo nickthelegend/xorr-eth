@@ -56,6 +56,9 @@ import { STOCKS, isStock, equitiesFunctional } from '../venues/stocks.js';
 import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
 import { PUSH_KINDS } from '../notifications/push.js';
 import { SNAPSHOT_EVERY_MS, historySince, listSnapshots, snapshotWallet, thinPoints } from '../portfolio/snapshots.js';
+import { isSolanaCluster, getClusterConfig } from '../solana/clusters.js';
+import { readSolanaBalances } from '../solana/balances.js';
+import { readDelegation } from '../solana/delegation.js';
 
 /**
  * Every wallet lookup is scoped to the AUTHENTICATED Privy user.
@@ -285,6 +288,23 @@ routes.post('/wallet/connect', async (c) => {
 routes.get('/wallet/balance', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json({ usd: 0 });
+
+  if (isSolanaCluster(process.env.XORR_CHAIN ?? '') || !w.address.startsWith('0x')) {
+    const balances = await readSolanaBalances(w.address);
+    const delegation = await readDelegation(w.address);
+    return c.json({
+      usd: balances.usdc.amount,
+      cashUsd: balances.usdc.amount,
+      holdings: [
+        { symbol: 'USDC', units: balances.usdc.amount, usd: balances.usdc.amount },
+        { symbol: 'SOL', units: balances.sol.amount, usd: 0 },
+      ],
+      suppliedUsd: 0,
+      dailyCapUsd: delegation.delegatedUsd,
+      remainingTodayUsd: delegation.delegatedUsd,
+    });
+  }
+
   /*
    * A failed read is an error, not a zero (PLAN.md 1.7).
    *
