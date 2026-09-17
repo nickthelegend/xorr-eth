@@ -22,6 +22,7 @@ import { currentWallet } from '../routes/wallet-context.js';
 import { PERSONAS, type PersonaId } from '../bot/personas.js';
 import { NO_TRADES, agentRecords, type AgentRecord } from './leaderboard.js';
 import { notifyKill } from '../notifications/alerts.js';
+import { agentPreview } from '../bot/preview.js';
 
 export const agents = new Hono();
 
@@ -193,6 +194,26 @@ async function setStopped(c: Context, stopped: boolean) {
   }
   return c.json(await stoppedState(id));
 }
+
+/**
+ * When the autonomous agent next looks, and what it will look at.
+ *
+ * `/agents/` plural, not `/agent/`. The singular prefix is the MACHINE surface — reached with an
+ * agent key or not at all — so a user route registered there is dead between two correct refusals:
+ * a Privy token is told it needs an agent key, and an agent key is told the route belongs to a
+ * signed-in user. `agent-prefix.test.ts` guards that, and caught this one.
+ *
+ * Deliberately does not evaluate the setups. That would be a quote and a mint read per symbol on
+ * every load, and the answer would be a prediction of what the agent is going to decide — which
+ * this cannot know, because the sweep reads its conditions at tick time. Naming a winner here
+ * would be wrong the moment a price moved, on the one panel whose job is setting expectations
+ * accurately.
+ */
+agents.get('/agents/preview', async (c) => {
+  const w = await currentWallet(c);
+  if (!w) return c.json({ error: 'no_wallet' }, 400);
+  return c.json(await agentPreview(w.id));
+});
 
 agents.get('/agents/stopped', async (c) => {
   const id = await walletId(c);

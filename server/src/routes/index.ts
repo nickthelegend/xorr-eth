@@ -11,6 +11,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
+import { explainTrade } from '../bot/explain.js';
 import { recordGrant, recordRevoke } from '../delegation/record.js';
 import {
   ANCHOR_ADDRESS,
@@ -896,6 +897,23 @@ routes.get('/activity', async (c) => {
       explorer: r.signature ? explorerTx(r.signature) : undefined,
     })),
   );
+});
+
+/**
+ * Why the agent took the trade on this row.
+ *
+ * Keyed on the audit sequence, which is exactly the `id` the activity list already renders, so the
+ * screen asks about the row the person tapped rather than about a signature it has to match up.
+ * A sequence belonging to another wallet reads as missing — the counter is global, and
+ * `/activity/8/explain` must not become a way to read somebody else's trade.
+ */
+routes.get('/activity/:seq/explain', async (c) => {
+  const w = await requireWallet(c);
+  const found = await explainTrade(w.id, c.req.param('seq'));
+  if (!found) {
+    return c.json({ error: 'not_found', message: 'No entry with that sequence in this wallet.' }, 404);
+  }
+  return c.json(found);
 });
 
 routes.get('/activity/export', async (c) => {
