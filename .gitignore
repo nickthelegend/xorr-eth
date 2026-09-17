@@ -4,6 +4,8 @@
 !.env.example
 .keys/
 *.key
+test-ledger/
+scratch/
 
 # In a git worktree these are symlinks to the owner's disk, not directories, and a trailing
 # slash matches directories only — so the slash-less forms are what keep `git add -A` from

@@ -1,124 +1,331 @@
 /**
- * Solana SPL Token Delegation seam (PLAN.md §0.1, §6, §8.1).
+ * SPL Token delegation (approve, revoke, spend, return, read) on Solana (PLAN.md §6, §8.1).
  *
- * Replaces EVM XorrDelegation with native SPL Token approve / revoke / delegate transfer.
+ * Non-custody invariant: user USDC sits in the user's own token account (ATA).
+ * The user approves the bot's delegate key up to a capped `delegated_amount`.
+ * The SPL Token program itself is the authoritative on-chain guard.
+ *
+ * Kill switch = on-chain SPL revoke instruction signed by the user.
  */
 import {
+  Connection,
+  Keypair,
   PublicKey,
-  TransactionInstruction,
+  Transaction,
+  sendAndConfirmTransaction,
 } from '@solana/web3.js';
 import {
   createApproveInstruction,
   createRevokeInstruction,
-  createTransferInstruction,
+  createTransferCheckedInstruction,
+  createAssociatedTokenAccountIdempotentInstruction,
   getAccount,
+  TokenAccountNotFoundError,
+  TokenInvalidAccountOwnerError,
 } from '@solana/spl-token';
-import { ataFor, toPublicKey } from './balances.js';
-import { getConnection } from './connection.js';
-import { getClusterConfig } from './clusters.js';
+import { connection as defaultConnection, waitForTx } from './connection.js';
+import { DEFAULT_MINTS } from './clusters.js';
+import { delegateKeypair, payerKeypair } from './keys.js';
+import { ataFor, tokenProgramForMint, decimalsForMint } from './balances.js';
 
-export interface DelegationState {
-  hasDelegate: boolean;
+export type DelegationState = {
+  owner: string;
+  ownerAta: string;
   delegate: string | null;
   delegatedAmount: bigint;
+  balanceAmount: bigint;
+  remainingUsd: number;
+  isRevoked: boolean;
+  hasActiveDelegation: boolean;
+  /** Aliases the wallet routes read: the same facts in the shape they already expect. */
+  hasDelegate: boolean;
   delegatedUsd: number;
   balanceUsd: number;
+};
+
+export function usdToBaseUnits(usd: number, decimals = 6): bigint {
+  if (usd < 0) throw new Error(`Negative USD amount not allowed: ${usd}`);
+  return BigInt(Math.floor(usd * 10 ** decimals));
+}
+
+export function baseUnitsToUsd(units: bigint, decimals = 6): number {
+  return Number(units) / 10 ** decimals;
 }
 
 /**
- * Builds an SPL Token `approve` instruction that sets the delegate and delegated_amount.
- */
-export function buildApproveInstruction(params: {
-  owner: string | PublicKey;
-  delegate: string | PublicKey;
-  amountUnits: bigint;
-  mint?: string | PublicKey;
-}): TransactionInstruction {
-  const ownerPk = toPublicKey(params.owner);
-  const delegatePk = toPublicKey(params.delegate);
-  const ata = ataFor(ownerPk, params.mint);
-
-  return createApproveInstruction(
-    ata,
-    delegatePk,
-    ownerPk,
-    params.amountUnits,
-  );
-}
-
-/**
- * Builds an SPL Token `revoke` instruction that clears the delegate.
- */
-export function buildRevokeInstruction(params: {
-  owner: string | PublicKey;
-  mint?: string | PublicKey;
-}): TransactionInstruction {
-  const ownerPk = toPublicKey(params.owner);
-  const ata = ataFor(ownerPk, params.mint);
-
-  return createRevokeInstruction(
-    ata,
-    ownerPk,
-  );
-}
-
-/**
- * Builds an SPL Token transfer instruction spending as the delegate.
- */
-export function buildSpendAsDelegateInstruction(params: {
-  owner: string | PublicKey;
-  delegate: string | PublicKey;
-  destination: string | PublicKey;
-  amountUnits: bigint;
-  mint?: string | PublicKey;
-}): TransactionInstruction {
-  const ownerPk = toPublicKey(params.owner);
-  const delegatePk = toPublicKey(params.delegate);
-  const destinationPk = toPublicKey(params.destination);
-  const sourceAta = ataFor(ownerPk, params.mint);
-  const destinationAta = ataFor(destinationPk, params.mint);
-
-  return createTransferInstruction(
-    sourceAta,
-    destinationAta,
-    delegatePk, // delegate signs as authority
-    params.amountUnits,
-  );
-}
-
-/**
- * Reads the SPL Token delegation status from the owner's ATA.
+ * Read delegation state from owner's USDC token account.
  */
 export async function readDelegation(
-  owner: string | PublicKey,
-  mint?: string | PublicKey,
+  owner: PublicKey | string,
+  mint: PublicKey | string = DEFAULT_MINTS.USDC,
+  conn: Connection = defaultConnection,
 ): Promise<DelegationState> {
-  const ownerPk = toPublicKey(owner);
-  const ata = ataFor(ownerPk, mint);
-  const conn = getConnection();
-  const decimals = getClusterConfig().decimals.usdc;
+  const ownerPk = typeof owner === 'string' ? new PublicKey(owner) : owner;
+  const mintPk = typeof mint === 'string' ? new PublicKey(mint) : mint;
+  const prog = tokenProgramForMint(mintPk);
+  const ownerAta = ataFor(ownerPk, mintPk, prog);
 
   try {
-    const account = await getAccount(conn, ata);
-    const balanceUsd = Number(account.amount) / Math.pow(10, decimals);
-    const delegatedAmount = account.delegatedAmount;
-    const delegatedUsd = Number(delegatedAmount) / Math.pow(10, decimals);
-    const delegate = account.delegate ? account.delegate.toBase58() : null;
+    const acc = await getAccount(conn, ownerAta, 'confirmed', prog);
+    const delegate = acc.delegate ? acc.delegate.toBase58() : null;
+    const delegatedAmount = acc.delegatedAmount;
+    const isRevoked = !delegate || delegatedAmount === 0n;
+    const hasActiveDelegation = Boolean(delegate && delegatedAmount > 0n);
 
+    const decimals = decimalsForMint(mintPk);
     return {
-      hasDelegate: delegate !== null && delegatedAmount > 0n,
+      owner: ownerPk.toBase58(),
+      ownerAta: ownerAta.toBase58(),
       delegate,
       delegatedAmount,
-      delegatedUsd,
-      balanceUsd,
+      balanceAmount: acc.amount,
+      remainingUsd: baseUnitsToUsd(delegatedAmount, decimals),
+      isRevoked,
+      hasActiveDelegation,
+      hasDelegate: hasActiveDelegation,
+      delegatedUsd: baseUnitsToUsd(delegatedAmount, decimals),
+      balanceUsd: baseUnitsToUsd(acc.amount, decimals),
     };
-  } catch {
-    return {
-      hasDelegate: false,
-      delegate: null,
-      delegatedAmount: 0n,
-      delegatedUsd: 0,
-      balanceUsd: 0,
-    };
+  } catch (e) {
+    if (e instanceof TokenAccountNotFoundError || e instanceof TokenInvalidAccountOwnerError) {
+      return {
+        owner: ownerPk.toBase58(),
+        ownerAta: ownerAta.toBase58(),
+        delegate: null,
+        delegatedAmount: 0n,
+        balanceAmount: 0n,
+        remainingUsd: 0,
+        isRevoked: true,
+        hasActiveDelegation: false,
+        hasDelegate: false,
+        delegatedUsd: 0,
+        balanceUsd: 0,
+      };
+    }
+    throw e;
   }
+}
+
+/**
+ * Grant or update SPL delegation from user to delegate keypair.
+ * Signed by ownerKeypair.
+ */
+export async function approveDelegate(
+  ownerKeypair: Keypair,
+  delegatePubkey: PublicKey | string = delegateKeypair().publicKey,
+  maxUsdOrUnits: number | bigint,
+  conn: Connection = defaultConnection,
+  feePayer: Keypair = payerKeypair(),
+  mint: PublicKey | string = DEFAULT_MINTS.USDC,
+): Promise<{ signature: string; slot: number; delegatedAmount: bigint }> {
+  const delegatePk = typeof delegatePubkey === 'string' ? new PublicKey(delegatePubkey) : delegatePubkey;
+  const mintPk = typeof mint === 'string' ? new PublicKey(mint) : mint;
+  const prog = tokenProgramForMint(mintPk);
+  const ownerAta = ataFor(ownerKeypair.publicKey, mintPk, prog);
+
+  const amountUnits = typeof maxUsdOrUnits === 'bigint' ? maxUsdOrUnits : usdToBaseUnits(maxUsdOrUnits, 6);
+
+  const tx = new Transaction();
+  // Ensure owner ATA exists
+  tx.add(
+    createAssociatedTokenAccountIdempotentInstruction(
+      feePayer.publicKey,
+      ownerAta,
+      ownerKeypair.publicKey,
+      mintPk,
+      prog,
+    ),
+  );
+  // Add approve instruction
+  tx.add(
+    createApproveInstruction(
+      ownerAta,
+      delegatePk,
+      ownerKeypair.publicKey,
+      amountUnits,
+      [],
+      prog,
+    ),
+  );
+
+  const signers = feePayer.publicKey.equals(ownerKeypair.publicKey)
+    ? [ownerKeypair]
+    : [feePayer, ownerKeypair];
+
+  const signature = await sendAndConfirmTransaction(conn, tx, signers, {
+    commitment: 'confirmed',
+  });
+
+  const { slot } = await waitForTx(signature, conn);
+  return { signature, slot, delegatedAmount: amountUnits };
+}
+
+/**
+ * On-chain kill switch: Revoke SPL delegation immediately.
+ * Signed by ownerKeypair.
+ */
+export async function revokeDelegate(
+  ownerKeypair: Keypair,
+  conn: Connection = defaultConnection,
+  feePayer: Keypair = payerKeypair(),
+  mint: PublicKey | string = DEFAULT_MINTS.USDC,
+): Promise<{ signature: string; slot: number }> {
+  const mintPk = typeof mint === 'string' ? new PublicKey(mint) : mint;
+  const prog = tokenProgramForMint(mintPk);
+  const ownerAta = ataFor(ownerKeypair.publicKey, mintPk, prog);
+
+  const tx = new Transaction();
+  tx.add(
+    createRevokeInstruction(
+      ownerAta,
+      ownerKeypair.publicKey,
+      [],
+      prog,
+    ),
+  );
+
+  const signers = feePayer.publicKey.equals(ownerKeypair.publicKey)
+    ? [ownerKeypair]
+    : [feePayer, ownerKeypair];
+
+  const signature = await sendAndConfirmTransaction(conn, tx, signers, {
+    commitment: 'confirmed',
+  });
+
+  const { slot } = await waitForTx(signature, conn);
+  return { signature, slot };
+}
+
+/**
+ * Spend from owner ATA as delegate (Plan §6.3, Option A).
+ * Signed by delegateKeypair.
+ */
+export async function spendAsDelegate(params: {
+  owner: PublicKey | string;
+  destinationAta: PublicKey | string;
+  amountUnits: bigint;
+  mint?: PublicKey | string;
+  conn?: Connection;
+  feePayer?: Keypair;
+  delegate?: Keypair;
+}): Promise<{ signature: string; slot: number; amount: bigint }> {
+  const {
+    owner,
+    destinationAta,
+    amountUnits,
+    mint = DEFAULT_MINTS.USDC,
+    conn = defaultConnection,
+    feePayer = payerKeypair(),
+    delegate = delegateKeypair(),
+  } = params;
+
+  const ownerPk = typeof owner === 'string' ? new PublicKey(owner) : owner;
+  const destPk = typeof destinationAta === 'string' ? new PublicKey(destinationAta) : destinationAta;
+  const mintPk = typeof mint === 'string' ? new PublicKey(mint) : mint;
+  const prog = tokenProgramForMint(mintPk);
+  const ownerAta = ataFor(ownerPk, mintPk, prog);
+
+  // Read current on-chain delegation state
+  const state = await readDelegation(ownerPk, mintPk, conn);
+  if (state.isRevoked) {
+    throw new Error('PolicyRevoked: Trading permission revoked on-chain');
+  }
+  if (!state.delegate || state.delegate !== delegate.publicKey.toBase58()) {
+    throw new Error(
+      `InvalidDelegate: Delegate on account (${state.delegate ?? 'none'}) does not match active delegate (${delegate.publicKey.toBase58()})`,
+    );
+  }
+  if (amountUnits > state.delegatedAmount) {
+    throw new Error(
+      `custom program error: 0x1 (InsufficientDelegatedAmount: requested ${amountUnits} units exceeds delegated cap of ${state.delegatedAmount})`,
+    );
+  }
+
+  const tx = new Transaction();
+  tx.add(
+    createTransferCheckedInstruction(
+      ownerAta,
+      mintPk,
+      destPk,
+      delegate.publicKey,
+      amountUnits,
+      decimalsForMint(mintPk),
+      [],
+      prog,
+    ),
+  );
+
+  const signers = feePayer.publicKey.equals(delegate.publicKey)
+    ? [delegate]
+    : [feePayer, delegate];
+
+  const signature = await sendAndConfirmTransaction(conn, tx, signers, {
+    commitment: 'confirmed',
+  });
+
+  const { slot } = await waitForTx(signature, conn);
+  return { signature, slot, amount: amountUnits };
+}
+
+/**
+ * Return funds / proceeds from venue vault back to user's ATA.
+ * Signed by fromKeypair (e.g. venue vault or payer).
+ */
+export async function returnToOwner(params: {
+  owner: PublicKey | string;
+  mint: PublicKey | string;
+  amountUnits: bigint;
+  fromKeypair: Keypair;
+  conn?: Connection;
+  feePayer?: Keypair;
+}): Promise<{ signature: string; slot: number; amount: bigint }> {
+  const {
+    owner,
+    mint,
+    amountUnits,
+    fromKeypair,
+    conn = defaultConnection,
+    feePayer = payerKeypair(),
+  } = params;
+
+  const ownerPk = typeof owner === 'string' ? new PublicKey(owner) : owner;
+  const mintPk = typeof mint === 'string' ? new PublicKey(mint) : mint;
+  const prog = tokenProgramForMint(mintPk);
+  const ownerAta = ataFor(ownerPk, mintPk, prog);
+  const sourceAta = ataFor(fromKeypair.publicKey, mintPk, prog);
+
+  const tx = new Transaction();
+  // Ensure recipient ATA exists
+  tx.add(
+    createAssociatedTokenAccountIdempotentInstruction(
+      feePayer.publicKey,
+      ownerAta,
+      ownerPk,
+      mintPk,
+      prog,
+    ),
+  );
+  tx.add(
+    createTransferCheckedInstruction(
+      sourceAta,
+      mintPk,
+      ownerAta,
+      fromKeypair.publicKey,
+      amountUnits,
+      decimalsForMint(mintPk),
+      [],
+      prog,
+    ),
+  );
+
+  const signers = feePayer.publicKey.equals(fromKeypair.publicKey)
+    ? [fromKeypair]
+    : [feePayer, fromKeypair];
+
+  const signature = await sendAndConfirmTransaction(conn, tx, signers, {
+    commitment: 'confirmed',
+  });
+
+  const { slot } = await waitForTx(signature, conn);
+  return { signature, slot, amount: amountUnits };
 }
