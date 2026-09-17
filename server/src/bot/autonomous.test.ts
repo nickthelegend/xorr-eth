@@ -339,7 +339,7 @@ describe('autonomous xStocks trading agent', () => {
 
       const chosen = {
         symbol: 'AAPLx',
-        stock: { symbol: 'AAPLx', name: 'Apple', address: 'XsbEAAPL', decimals: 8 },
+        stock: { symbol: 'AAPLx', name: 'Apple', address: 'XsbEAAPL', decimals: 8, sector: 'Technology' as const },
         strategyKind: 'dca' as const,
         persona: 'yield-keeper' as const,
         personaName: 'Yield Keeper',

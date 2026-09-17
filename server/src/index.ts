@@ -23,6 +23,7 @@ import { faucetRoutes } from './routes/faucet.js';
 import { withdrawalRoutes } from './routes/withdrawals.js';
 import { moonpayRoutes } from './routes/moonpay.js';
 import { businessRoutes } from './routes/business.js';
+import { xstockRoutes } from './routes/xstocks.js';
 import { guardRequests } from './http/guards.js';
 import { requestId, currentRequestId, log } from './http/request-id.js';
 import { startScheduler } from './executor/scheduler.js';
@@ -173,6 +174,7 @@ app.route('/', faucetRoutes);
 app.route('/', withdrawalRoutes);
 app.route('/', moonpayRoutes);
 app.route('/', businessRoutes);
+app.route('/', xstockRoutes);
 
 const port = Number(process.env.PORT ?? 8787);
 const server = serve({ fetch: app.fetch, port });

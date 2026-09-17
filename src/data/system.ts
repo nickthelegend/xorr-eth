@@ -545,6 +545,37 @@ export type StockRow = {
   feed: 'live' | 'unavailable';
 };
 
+/**
+ * One tokenized equity in the xStocks catalog, with both prices that exist for it.
+ *
+ * `price` is what one token costs in the Solana pools — what a buy actually pays. `underlyingPrice`
+ * is what the issuer's feed marks the listed share at. They are near each other and not equal, and
+ * the gap is the spread the pool charges, so the screen shows which is which rather than picking one.
+ *
+ * `price: null` with `feed: 'unavailable'` is a row the catalog renders, not one it drops.
+ */
+export type XStockRow = {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  sector: string;
+  price: number | null;
+  underlyingPrice: number | null;
+  /** Null is "not reported". Zero is "did not move". The screen must not render them the same. */
+  change24hPct: number | null;
+  liquidityUsd: number | null;
+  underlyingAt: string | null;
+  feed: 'live' | 'unavailable';
+};
+
+export type XStockCatalog = {
+  rows: XStockRow[];
+  /** The sectors present, in the order the filter should offer them. The server derives these. */
+  sectors: string[];
+  unpriced: number;
+};
+
 /** One push kind, its explanation, and whether it is on. Labels come from the server. */
 export type NotificationPref = {
   kind: string;
@@ -646,6 +677,8 @@ export const system = {
     ),
   flattenPreview: () => api.get<FlattenPreview>('/panic/preview'),
   stocks: () => api.get<StockRow[]>('/market/stocks'),
+  /** The tokenized-equity catalog: every mint, its sector, and what it costs (PLAN.md §8.4). */
+  xstocks: () => api.get<XStockCatalog>('/market/xstocks'),
   symbols: () => api.get<string[]>('/market/symbols'),
   backtestStrategy: (body: {
     kind: 'dca' | 'grid';
