@@ -137,6 +137,7 @@ describe('motion — animations.md', () => {
   //   AreaChart       the line revealed left to right     700ms  (arrival)
   //   Candlestick     the candles revealed left to right  700ms  (arrival)
   //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)
+  //   FillReceipt     a confirmed fill's receipt arriving   420ms  (arrival; once, on the signature — never on mount)
   //   AgentOrb        the agent's stage: breathe / settle  3600ms (thinking) · 900ms (executing) · 250ms (decided, filled)
   //   StopCurtain     the kill switch's own screen         420ms  (the curtain down) · 250ms (the confirm badge)
   // A new entry here means a primitive started animating something the policy does not sanction.
@@ -148,6 +149,7 @@ describe('motion — animations.md', () => {
       .sort();
     expect(animated).toEqual([
       'AgentOrb.tsx',
+      'FillReceipt.tsx',
       'HoldButton.tsx',
       'Progress.tsx',
       'Rise.tsx',
@@ -509,5 +511,33 @@ describe('the stop curtain — evidence, never a claim', () => {
   /* `stopped` is the chain's answer, not the app's intent, so neither state may be reached on a clock. */
   it('advances on the revoke, never on a timer', () => {
     expect(/setTimeout|setInterval|withDelay|withSequence/.test(src)).toBe(false);
+  });
+});
+
+describe('the fill receipt — a signature is not an event until it says where', () => {
+  const src = stripComments(fs.readFileSync(path.join(UI, 'FillReceipt.tsx'), 'utf8'));
+
+  /*
+   * The venue is the field that says what the signature means, and the receipt exists because it was the one being
+   * left out. It must be drawn unconditionally — including the case where none was recorded, which says so in words.
+   */
+  it('always says something about the venue, never nothing', () => {
+    expect(src).toMatch(/No venue was recorded/);
+    expect(src).toMatch(/naming \?/);
+  });
+
+  /* The signature goes out whole: a truncation is what someone takes to an explorer and fails to find. */
+  it('prints the signature in full', () => {
+    expect(src).toMatch(/\{signature\}/);
+    expect(src).not.toMatch(/shortSignature\(signature\)/);
+  });
+
+  /*
+   * The arrival is keyed to the signature, not to mount. Opening a week-old run from the list must not animate its
+   * receipt in, because that is the app saying a fill just landed.
+   */
+  it('arrives on the fill, not on the mount', () => {
+    expect(src).toMatch(/arrivedFor\.current === signature/);
+    expect(/setTimeout|setInterval|withRepeat|withSequence/.test(src)).toBe(false);
   });
 });

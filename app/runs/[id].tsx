@@ -27,6 +27,7 @@ import { money, price, quantity, when } from '@/format';
 import { useAsync } from '@/data/useAsync';
 import { system, type StrategyRunRow } from '@/data/system';
 import { kindLabel, labelFigure } from '@/strategies/ladder';
+import { FillReceipt } from '@/ui/FillReceipt';
 
 function toneFor(status: StrategyRunRow['status']): string {
   if (status === 'filled') return colors.up;
@@ -100,16 +101,17 @@ export default function RunDetail() {
             {run.units !== null ? <Field label="Units" value={quantity(run.units)} figure="units" /> : null}
             {run.price !== null ? <Field label="Price" value={price(run.price)} figure="market" /> : null}
 
+            {/*
+              The receipt, with the venue it filled at — which this screen recorded all along and did not show. A
+              signature on its own proves a transaction happened; the venue is what says WHICH event it was, and a
+              `venue-vault` settlement and a `jupiter-route` fill produce equally valid signatures for two different
+              things (`fillVenue.ts`).
+
+              `animate={false}`: this screen is opened from the list, so its run already happened. A receipt that rises
+              into place here would be saying a fill just landed when it may be a week old.
+            */}
             {run.signature ? (
-              <SheetCard bordered borderRadius={radius.panel} padding={space.s14}>
-                <Text variant="footnote" color={colors.ink55}>
-                  TRANSACTION
-                </Text>
-                {/* In full — this is the thing a reader takes to an explorer. */}
-                <Text variant="footnoteSm" color={colors.ink65} style={{ marginTop: space.s6 }}>
-                  {run.signature}
-                </Text>
-              </SheetCard>
+              <FillReceipt signature={run.signature} venue={run.venue} animate={false} />
             ) : null}
           </ScrollView>
         )}
