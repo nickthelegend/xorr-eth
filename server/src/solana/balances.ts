@@ -200,7 +200,16 @@ export function scaledUiMultiplier(mintInfo: Mint, atUnixSeconds = Date.now() / 
     : config.multiplier;
 }
 
-export type MintScale = { decimals: number; multiplier: number };
+export type MintScale = {
+  decimals: number;
+  multiplier: number;
+  /**
+   * A multiplier change the issuer has published but that has not taken effect yet, if there is
+   * one. This is how a split or a dividend announces itself on-chain ahead of time, which is the
+   * only corporate-action calendar this project has that nobody had to make up.
+   */
+  pending: { nextMultiplier: number; effectiveAtMs: number } | null;
+};
 
 /*
  * Decimals never change for a mint, so they are safe to remember. The multiplier does change —
@@ -217,7 +226,27 @@ export function clearMintScaleCache(): void {
 }
 
 /**
- * Read a mint's actual decimals and its current Scaled UI multiplier.
+ * A multiplier change the issuer has already scheduled but that has not taken effect yet.
+ *
+ * This is a corporate action, on the chain, ahead of time: a split or a dividend is published as a
+ * new multiplier with the timestamp it starts applying, and until that moment arrives the mint
+ * carries both numbers. Null when the mint has no Scaled UI extension, or when the scheduled change
+ * is already in force — at which point it is the current multiplier, not a pending one.
+ */
+export function pendingMultiplierChange(
+  mintInfo: Mint,
+  atUnixSeconds = Date.now() / 1000,
+): { nextMultiplier: number; effectiveAtMs: number } | null {
+  const config = getScaledUiAmountConfig(mintInfo);
+  if (!config) return null;
+  const effectiveAt = Number(config.newMultiplierEffectiveTimestamp);
+  if (!Number.isFinite(effectiveAt) || atUnixSeconds >= effectiveAt) return null;
+  if (config.newMultiplier === config.multiplier) return null;
+  return { nextMultiplier: config.newMultiplier, effectiveAtMs: effectiveAt * 1000 };
+}
+
+/**
+ * Read a mint's actual decimals, its current Scaled UI multiplier, and any change queued behind it.
  */
 export async function readMintScale(
   mint: PublicKey | string,
@@ -236,10 +265,20 @@ export async function readMintScale(
   const scale: MintScale = {
     decimals: mintInfo.decimals,
     multiplier: scaledUiMultiplier(mintInfo),
+    pending: pendingMultiplierChange(mintInfo),
   };
   scaleCache.set(key, { scale, readAt: Date.now() });
   return scale;
 }
+
+/**
+ * The two fields the conversions need, so a caller doing arithmetic can pass a pair of numbers.
+ *
+ * `MintScale` also carries a scheduled multiplier change, which is a fact about the future and has
+ * no bearing on what a raw amount is worth now. Asking for the whole thing would make every call
+ * site invent a `pending: null` to satisfy a field the function never reads.
+ */
+export type UiScale = Pick<MintScale, 'decimals' | 'multiplier'>;
 
 /**
  * Raw base units -> the amount a holder is actually shown, scaled UI multiplier included.
@@ -247,12 +286,12 @@ export async function readMintScale(
  * Use this anywhere a raw token amount becomes a number a person reads or a P&L line divides by.
  * `Number(raw) / 10 ** decimals` is the version that goes wrong after a split.
  */
-export function toUiAmount(raw: bigint, scale: MintScale): number {
+export function toUiAmount(raw: bigint, scale: UiScale): number {
   return (Number(raw) / 10 ** scale.decimals) * scale.multiplier;
 }
 
 /** The inverse: a displayed amount back to the raw base units that represent it. */
-export function fromUiAmount(ui: number, scale: MintScale): bigint {
+export function fromUiAmount(ui: number, scale: UiScale): bigint {
   return BigInt(Math.floor((ui / scale.multiplier) * 10 ** scale.decimals));
 }
 

@@ -99,7 +99,15 @@ export async function placeOrder(
  * doubled — two exit strategies on one holding would race each other to sell it.
  */
 export async function armExits(
-  w: WalletRow,
+  /*
+   * Only the fields this actually reads.
+   *
+   * It wanted a whole `WalletRow`, and used `w.id`. The autonomous agent selects three columns —
+   * it has no use for `kind`, `cluster`, `user_id` or `last_seen_at` — so a full row was a demand
+   * for four values nobody here needs, and the caller either widened its query to satisfy the
+   * type or lied about the shape it had.
+   */
+  w: Pick<WalletRow, 'id' | 'address' | 'agents_stopped'>,
   p: { symbol: string; entryPrice: number; stopPrice: number; targetPrice: number },
 ): Promise<{ strategyId: string | null; sentence: string }> {
   if (!(p.stopPrice > 0) || !(p.targetPrice > 0)) {

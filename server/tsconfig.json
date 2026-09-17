@@ -24,5 +24,10 @@
       "@/*": ["../src/*"]
     }
   },
-  "include": ["src/**/*.ts"]
+  /*
+   * `scripts/` as well as `src/`, because a demo nobody typechecks is a demo that rots.
+   * `demo-autonomous-agent.ts` reaches into a dozen modules the agent owns, and the first thing a
+   * reviewer does with it is run it — which is the wrong moment to find out a signature moved.
+   */
+  "include": ["src/**/*.ts", "scripts/**/*.ts"]
 }

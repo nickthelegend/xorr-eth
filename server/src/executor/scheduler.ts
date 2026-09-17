@@ -12,6 +12,7 @@ import { query } from '../db/index.js';
 import { THIS_CHAIN } from '../db/chain-scope.js';
 import { log } from '../http/request-id.js';
 import { runStrategy, type StrategyRow } from './run.js';
+import { autonomousAgentSweep } from '../bot/autonomous.js';
 import { evaluateAlerts } from '../alerts/evaluate.js';
 import { anchorSweep } from '../audit/anchor-sweep.js';
 import { snapshotSweep } from '../portfolio/snapshots.js';
@@ -42,6 +43,24 @@ export async function tick(now: Date = new Date()): Promise<number> {
     } catch (e) {
       log.error(`[scheduler] ${s.label} threw:`, e instanceof Error ? e.message : e);
     }
+  }
+
+  /*
+   * The autonomous agent, once per tick (PLAN.md §8.6).
+   *
+   * Scores momentum, event-driven and DCA entries across the xStocks registry from what is
+   * actually readable — a Jupiter quote, the readings this app has recorded, EDGAR's filing
+   * cadence, the mint's Scaled UI multiplier, the Nasdaq clock — and sends the best one through
+   * the same `guardAndSpend` chokepoint every other spend goes through. Wallets past their
+   * cooldown only, and none at all while the kill switch is on.
+   *
+   * It contributes to `ran` because a sweep that placed a trade is work this tick did.
+   */
+  try {
+    const autoExecuted = await autonomousAgentSweep(now);
+    ran += autoExecuted;
+  } catch (e) {
+    log.error('[scheduler] autonomous agent sweep failed:', e instanceof Error ? e.message : e);
   }
 
   /*
