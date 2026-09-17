@@ -201,17 +201,45 @@ export function scaledUiMultiplier(mintInfo: Mint, atUnixSeconds = Date.now() / 
 }
 
 /**
- * Read a mint's actual decimals and its current Scaled UI multiplier.
+ * A multiplier change the issuer has already scheduled but that has not taken effect yet.
+ *
+ * This is a corporate action, on the chain, ahead of time: a split or a dividend is published as a
+ * new multiplier with the timestamp it starts applying, and until that moment arrives the mint
+ * carries both numbers. Null when the mint has no Scaled UI extension, or when the scheduled change
+ * is already in force — at which point it is the current multiplier, not a pending one.
+ */
+export function pendingMultiplierChange(
+  mintInfo: Mint,
+  atUnixSeconds = Date.now() / 1000,
+): { nextMultiplier: number; effectiveAtMs: number } | null {
+  const config = getScaledUiAmountConfig(mintInfo);
+  if (!config) return null;
+  const effectiveAt = Number(config.newMultiplierEffectiveTimestamp);
+  if (!Number.isFinite(effectiveAt) || atUnixSeconds >= effectiveAt) return null;
+  if (config.newMultiplier === config.multiplier) return null;
+  return { nextMultiplier: config.newMultiplier, effectiveAtMs: effectiveAt * 1000 };
+}
+
+/**
+ * Read a mint's actual decimals, its current Scaled UI multiplier, and any change queued behind it.
  */
 export async function readMintScale(
   mint: PublicKey | string,
   conn: Connection = defaultConnection,
   programId?: PublicKey,
-): Promise<{ decimals: number; multiplier: number }> {
+): Promise<{
+  decimals: number;
+  multiplier: number;
+  pending: { nextMultiplier: number; effectiveAtMs: number } | null;
+}> {
   const mintPk = toPublicKey(mint);
   const prog = programId ?? tokenProgramForMint(mintPk);
   const mintInfo = await getMint(conn, mintPk, 'confirmed', prog);
-  return { decimals: mintInfo.decimals, multiplier: scaledUiMultiplier(mintInfo) };
+  return {
+    decimals: mintInfo.decimals,
+    multiplier: scaledUiMultiplier(mintInfo),
+    pending: pendingMultiplierChange(mintInfo),
+  };
 }
 
 /**

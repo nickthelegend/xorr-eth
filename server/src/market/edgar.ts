@@ -78,9 +78,16 @@ export type EarningsCalendar = {
   errorDays: number;
 };
 
-/** `NVDAc` → `NVDA`. The lowercase suffix marks the tokenized form, not a different company. */
+/**
+ * `NVDAc` → `NVDA`, and `NVDAx` → `NVDA`. The lowercase suffix marks the tokenized form, not a
+ * different company: `c` is the Base listing, `x` is the Solana one, and EDGAR files under neither.
+ *
+ * Lowercase only, deliberately. Real tickers are uppercase, so `SPY` survives and `SPYx` reduces;
+ * matching an uppercase `X` would turn a company whose ticker genuinely ends in one into a company
+ * that does not exist.
+ */
 export function underlyingTicker(symbol: string): string {
-  return symbol.endsWith('c') ? symbol.slice(0, -1).toUpperCase() : symbol.toUpperCase();
+  return /[cx]$/.test(symbol) ? symbol.slice(0, -1).toUpperCase() : symbol.toUpperCase();
 }
 
 type TickerRow = { cik_str: number; ticker: string; title: string };
