@@ -1,406 +1,533 @@
-# xorr — build plan
+# xorr-solana — full migration plan: chain-agnostic reference → Solana-native
 
-**The fifth plan — 2026-09-13.** The fourth (2026-09-09) is in git history at `8def793`; its hosted URL
-now returns 404 and it predates the redesign, so it was replaced rather than patched.
+**The first xorr-solana plan — 2026-09-16.** xorr-solana is a clone of **xorr-dev** (the full-featured
+reference build of xorr, itself a copy of the xorr-eth/Base implementation). The reference app ships the
+complete feature surface — 85 screens, the full executor, venues, contracts layer, subgraphs, and
+29-doc audit trail — with chain-specific code structured behind clean seams (`server/src/evm/`,
+`contracts/`, `subgraph/`, `src/networks/`, `src/wallet/`, `app/network.tsx`) so that a chain can be
+swapped in file-by-file.
 
-Written from seven read-only code audits (goals and brief, 1inch, Privy and the permission, executor,
-app, contracts and The Graph, tests and delivery) plus live measurements taken the same day. Every
-state below was checked by running or reading something, not copied forward.
+This plan migrates the reference to a **Solana-native** xorr:
+
+- Non-custody via **SPL Token delegation** (`approve` / `revoke`) instead of an ERC-20 allowance +
+  `XorrDelegation` contract. The SPL Token program is the final, authoritative cap and the kill switch.
+- Settlement in **USDC on Solana** (mainnet mint `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`, 6 decimals).
+- Every EVM module is mapped to a Solana equivalent in section 8 (the module-by-module table). Nothing is
+  dropped; everything is repointed at a Solana primitive, a Solana venue, or a neutral market feed.
 
 Written for an agent to pick up cold: each task names its files and what "done" means. Status tags:
 **DONE** · **IN PROGRESS** · **NOT STARTED** · **BLOCKED — reason**.
 
 ---
 
-## How to work this plan
+## 0. How to work this plan
 
-- **Rules from the owner.** No mocks, no fallback data, no stubbed logic. Real database, real deployed
-  contracts, real signed transactions, real API calls with credentials already in the repo or on
-  Railway. Pause only for real money, a mainnet action, or a credential that does not exist.
-  Never print a secret value — names only. Never delete a Railway service, a Postgres, or their env vars.
-- **Environments.**
-  - *base-sepolia* — `executor` on Railway = `https://api.xorr.finance` (also
-    `executor-production-1659.up.railway.app`). The contract and the user's Privy signatures are real;
-    1inch cannot fill here.
-  - *base-fork* — `executor-fork` (`https://executor-fork-production.up.railway.app`) on a Base mainnet
-    fork served by `base-fork`. 1inch, Aqua and SwapVM fill for real; in-app user signing does not
-    (see 4.1).
-  - *local* — `cd server && npx tsx watch src/index.ts` on :8788 reads the root `.env` (base-sepolia).
-    The iOS simulator app talks to this, not Railway — check with `lsof` before trusting a screenshot.
-- **Deploy.** Executors are CLI uploads, not git-linked: `cd server && railway up --service executor`
-  (then `executor-fork`); migrations run as the preDeploy step. Web: `npm run deploy:web` (Vercel CLI,
-  project `xorr-eth`, domain `app.xorr.finance`).
-- **Verify.** `npm test` (root, includes server) · `cd server && npm test` · `cd contracts && forge test`
-  · `npx tsc --noEmit` in both projects · live checks with curl against the deployed executors ·
-  `node tools/shoot.mjs` for screens.
+### 0.1 Owner rules (unchanged from the reference)
 
----
+- **No mocks, no fallbacks, no stubs.** Real database, real (or localnet) chain, real signatures, real API
+  calls. Pause only for real money, a mainnet action, or a credential that does not exist.
+- **Never print a secret value — names only.** `.keys` and `.env*` stay git-ignored and are never pasted
+  into logs, tests, or commits.
+- **Never delete a Railway service, a Postgres, or their env vars.** Existing executors from the reference
+  stay up while xorr-solana ships its own named services (`xorr-solana-executor`).
+- **One path to spending.** Every entry (DCA, agent, manual order) funnels through the spend chokepoint;
+  `strategy_runs.period_key` and `position_closes.claim_key` stay UNIQUE for idempotency. Proved
+  adversarially on-chain in the reference — re-prove it on Solana.
+- **Kill switch = on-chain revoke.** New orders stop, resting exits/TPs stay live, open positions stay
+  untouched. Three behaviors tested independently (keep the reference's tests, port the chain assertions).
 
-## 1. What done and winning mean here
+### 0.2 Environments
 
-The claim the project serves, unchanged:
-
-> **A bot trades your capital under a permission you granted on-chain, that you can read and revoke
-> without our cooperation — and every number the app shows you can be checked somewhere we do not
-> control.**
-
-### Done — seven bars, all at once
-
-| # | Bar | State on 2026-09-13 | Closed by |
-|---|---|---|---|
-| 1 | **The permission is real and safe** — cap, expiry and venues enforced on chain, output can only reach the owner, the deployed contract matches the source and is verifiable | **Does not hold.** Nothing on chain checks where swap output goes (`XorrDelegation.sol:179,232`, both books pay `principal`); `closePosition` is uncapped; the Sepolia contract lacks `closePosition` (bytecode checked) so it predates the source; nothing is verified on an explorer | Phase 1 |
-| 2 | **The bot really trades from the app** — a strategy made in the app fills through Aqua, SwapVM or 1inch; nothing reports a trade that did not happen | **Partial.** Fork: 41 filled runs (`swapvm 4 · 1inch 36 · aqua 7`), but SwapVM is not in the venues an app grant allows, books are shipped only by scripts, and approving a chat proposal writes "Filled…" without trading | Phases 1, 3 |
-| 3 | **Nothing on screen is invented** | **Does not hold.** Fixture agents render when the server fails; onboarding goals and sleeves are design fixtures; 27 instruments with no feed are listed; failed chain reads return `$0` or "revoked"; the portfolio graph is today's holdings replayed over old prices | Phases 2, 5 |
-| 4 | **A stranger can verify it** — `/verify`, `/judge`, the audit anchor, the subgraph | **Holds on Sepolia.** `/verify?owner=0x95A0…e615`: **19 pass · 1 fail · 1 skip** (fail = audit chain forked at entry 2, permanent by design; skip = equities). Must be re-proven after the contract redeploy | Phase 1 |
-| 5 | **A stranger can finish the core loop on the hosted app** — sign in → fund → grant → a fill → P&L → withdraw | **Does not hold.** Sepolia signs but cannot fill; the fork fills but cannot take a user signature; a new wallet has no USDC and no way to get any | Phase 4 |
-| 6 | **Simple and good-looking** — three-button shell, every kept screen within three taps, one visual language, real charts | **Partial.** 8 of 101 route files in the new look, 41 reachable only via Profile → Settings → Explore, 13 orphaned, More tab blank, and the redesign is not deployed | Phases 0, 5 |
-| 7 | **Shipped honestly** — committed history, CI green, deployed build equals the repo, docs match code, a 2–4 minute demo | **Does not hold.** ~80 uncommitted files, CI 0 of 76 runs green, the live web bundle is pre-redesign, `/health` has no version, the demo is 91 s, silent and shows no fill | Phases 0, 6, 7 |
-
-### Winning — the sponsor tracks (ETHOnline 2026, plus Base Build Camp)
-
-| Track | Official bar, summarised | State | Closed by |
-|---|---|---|---|
-| **1inch — Build an Aqua App** ($5k) | Custom Aqua app using official Aqua/SwapVM contracts; on-chain token transfers shown in the final demo (forks allowed); real commit history; positions shown via scripts or UI | **Met on the fork, fragile.** Books are shipped by hand-run scripts; the app's grants cannot reach SwapVM; the demo shows no transfer; ~80 files uncommitted | 0.1, 3.1–3.3, 7.6 |
-| **Privy — Best B2B Financial Product** ($2.5k) | Privy core with a wallet; a business use case; a working B2B workflow; at least one Privy control | **Built.** A business treasury: a Privy server wallet owned by the key quorum, under the policy, grants the bot a capped permission, the bot trades inside it, its operator stops it, and Privy refuses to sign a transfer out — run from the Android app on the fork, by a live test on the fork, and on Base Sepolia | 4.13, 4.14, 7.2 |
-| **Privy — Best Financial Flow** ($2.5k) | One completed flow with a GA Privy feature (transfer, swap, onramp…) | **Partial.** User-signed approvals and grant only; no withdrawal on record | 4.4, 4.9, 7.2 |
-| **The Graph — Composable / Standardized** ($5k) | Two or more Graph products, or a standardized schema; live data | **Not met, not claimed.** One subgraph; the Aqua slug needs a Studio login | 8.3 |
-| **Base Build Camp** | Real transactions on Base | **Not met.** Nothing on mainnet | 8.1 |
-
-No deadline is recorded anywhere in the repo or on the ETHGlobal pages — see 7.7.
-
----
-
-## 2. Phases
-
-Ordered by dependency and by what does the most damage if left.
-
-| # | Phase | Why here |
-|---|---|---|
-| 0 | **Ship what already works** | Everything later needs a clean tree, a green CI and a deploy path that is known to work |
-| 1 | **Security and correctness** | Two live authorization holes, an unenforced contract promise and a fake fill on a deployed service |
-| 2 | **Backend: honest data and speed** | Zeros from failures, positions that disagree with the chain, 4–9 s routes |
-| 3 | **1inch: complete, reachable, accounted** | The strongest track, currently resting on scripts; the wallet features the owner asked for |
-| 4 | **Wallet and Privy: a loop a stranger can finish** | Bar 5 and both Privy tracks |
-| 5 | **UI: simpler and cooler** | Bar 6; depends on the data and features above existing |
-| 6 | **Tests and CI depth** | The riskiest paths have no executor tests |
-| 7 | **Docs, demo and submission** | Written last so they describe the final product |
-| 8 | **Blocked on an external thing** | Each names exactly what it waits on |
-
----
-
-## Phase 0 — Ship what already works
-
-| # | Task | Status |
-|---|---|---|
-| 0.1 | Commit the 2026-09-12/13 work as coherent commits: shell and Home/Portfolio/Profile redesign; motion primitives (`src/ui/Rise.tsx`, `RollingNumber.tsx`, chart `drawIn`); `BackButton`/`CloseButton` across 38 screens; Futures (`server/src/market/hyperliquid.ts`, `perp.ts`, `/market/futures`, `/perp/:symbol/candles`, `app/futures.tsx`, `app/perp/[symbol].tsx`, `app/funding.tsx`); Strategies out of the tab group. Add `/reference-ui.mp4` to `.gitignore`. Done when `git status` is clean and both suites pass | **DONE** — six commits `36c607a`…`3980d6a` (server futures; motion; back/close buttons; futures screens; shell and screens; this plan), with the Strategies move in the shell commit; both suites green on that tree |
-| 0.2 | Fix CI install: `@privy-io/expo@0.72.0` wants exactly `viem@2.56.0`, root pins `^2.56.3` (`package.json`). Pin viem to 2.56.0 at the root (and server if shared), regenerate `package-lock.json`, prove `npm ci` works in a fresh clone | **DONE** — GitHub run 34727643070 on `80a8c62`: install, both typechecks, lint, unit tests and forge all green. viem pinned to 2.56.0 and the lock regenerated. The first "passes in a clean copy" was wrong: those installs inherited `legacy-peer-deps=true` from this machine's user npmrc (`npx` hands it to the child npm as env config), which is exactly what a runner lacks. Reproduced with a real npm 10.9.9 and no inherited config: root `npm ci` exit 1 (ERESOLVE — `@solana/kit`, pulled in by `@privy-io/react-auth`, declares `peerOptional typescript ^5`; the app is on 6.0.3), server `npm ci` exit 1 (lock out of sync on `utf-8-validate`). With `legacy-peer-deps=true` committed in `.npmrc` and `server/.npmrc` — the setting both lockfiles were resolved with — both exit 0; tsc, lint and root tests (61 files / 558) pass on an npm 10 install with that setting |
-| 0.3 | Make `server/src/market/ids.test.ts`, `news/feed.test.ts`, `routes/alerts-validation.test.ts` pass without `.env` via `test.env` placeholders in `vitest.config.mts` and `server/vitest.config.ts`; prove it in a clone with no `.env` | **DONE** — placeholders for `ONEINCH_API_KEY`, `PRIVY_APP_ID`, `PRIVY_APP_SECRET` in both configs (unit runs only); `event-driven.test.ts` uses anvil's public dev key; six lint errors fixed on the way. Clean copy with no `.env`: root 61 files / 558 tests, server 37 / 277, both typechecks and lint clean. The runner has no `.env` either, and run 34727643070 passed |
-| 0.4 | Push and get CI green on GitHub (`gh run watch`); fix whatever else fails | **DONE** — run 34727643070 (`80a8c62`) green on both jobs, `checks` and `contracts` — the first green run; every earlier one, including 34726695181 on `b5878ba`, failed at Install for 0.2's reason |
-| 0.5 | `/health` reports the deployed git SHA (`server/src/routes/ops.ts`), set at deploy time; verify with curl | **DONE** — `version` in `/health`, fed by `XORR_BUILD_SHA`, which `scripts/deploy-executor.mjs` (`npm run deploy:executor`) sets before uploading and then waits for. Both executors report `b5878ba82ccc7122fda7e50f426db301446a36b8` |
-| 0.6 | Deploy `executor` and `executor-fork` from the committed tree; verify `/market/futures` answers 200 on both and `/health` shows the SHA | **DONE** — both deployed at `b5878ba`. The first attempt failed before uploading (`railway up server` → "prefix not found"); the script now uploads from inside `server/` with project, environment and service named. Live: `/market/futures` 200, `/perp/BTC/candles` 200, `/market/logos` 200, every dependency up on both |
-| 0.7 | Web: default API in `scripts/build-web.mjs` → `https://api.xorr.finance`; `npm run deploy:web`; verify the live bundle contains the redesign ("Total balance", "Gainers") and calls api.xorr.finance | **DONE** — deployed 2026-09-12 23:59 UTC (Vercel `dpl_3mtdrFWLuyGAEXp7cmKSq2ffWnjH`, aliased to app.xorr.finance). The live bundle was downloaded and read: its only executor host is `https://api.xorr.finance`, and it contains "Total balance", "Gainers", "/market/futures" and "Copy address" |
-| 0.8 | `server/railway.json` matches live (RAILPACK, preDeploy `npm run migrate`, start `npm start`); healthcheck on `executor-fork` | **DONE** — `server/railway.json` now says Railpack, `npm run migrate` as the pre-deploy command, `npm start`, `/health` check; it ships with every upload, so `executor-fork` has the health check too. Both deploys built with Railpack and came up healthy |
-| 0.9 | `.env.example`: add the 18 missing server names with comments (incl. `PRIVY_AUTHORIZATION_KEY`, `PRIVY_KEY_QUORUM_ID`, `OPERATOR_TOKEN`, `ANCHOR_ADDRESS`, `SWAPVM_BOOK_ADDRESS`, `SUBGRAPH_DELEGATION_ADDRESS`, `ANCHOR_EVERY_MS`, `SEC_USER_AGENT`, rate-limit and HTTP knobs); fix the malformed `.gitignore` line that leaves `tools/.auth.json` unignored; add `*.pem *.p8 *.p12 *.jks` patterns; add `.keys/` to `server/.railwayignore` | **DONE** — 18 names documented with their defaults; unused `EXPO_PUBLIC_DELEGATION_ADDRESS` removed; the glued expo-cli line fixed so `tools/.auth.json` is ignored (verified with `git check-ignore`); key-file patterns added; `server/.railwayignore` excludes `.keys/` and key files |
-| 0.10 | Add a LICENSE | **BLOCKED — owner decision.** The repo is public; the licence is the owner's legal choice |
-| 0.11 | Remove stray tracked files (`head.svg` 22 MB, `ui and prompt.zip`, `server/sectionb.ts`, `server/killswitch.ts`) | **BLOCKED — owner decision.** Owner-supplied assets; deleting them is the owner's call |
-
-## Phase 1 — Security and correctness
-
-| # | Task | Status |
-|---|---|---|
-| 1.1 | **Wallet takeover.** `/wallet/connect` and `/wallet/create` (`server/src/routes/index.ts:88,154-172`) accept any address and reassign its row to the caller. Accept only addresses linked to the caller's Privy user (`privy.getUser` linked accounts); answer 409 instead of reassigning `user_id`; label embedded wallets `kind='embedded'`. Vitest proving a second user cannot claim a wallet; live check with two Privy test users | **DONE** — deployed at `80a8c62` to both executors (their `/health` reports it) and re-proven there: `wallet-takeover.live.test.ts` passes 5/5 against api.xorr.finance and against executor-fork, with two real Privy test accounts. `verifyToken` returns every Ethereum wallet on the Privy account (`wallets`; undefined when Privy cannot be asked, never read as "none"). `server/src/auth/walletBinding.ts` holds the one upsert both routes use: it updates only a row the caller already owns and takes `inserted` from the write itself. `/wallet/connect`: 403 `wallet_not_linked` for an address not on the caller's account, 409 when the row is someone else's, 503 when Privy cannot be asked. `/wallet/create` no longer reads the body. Embedded wallets are stored as `embedded`; the gas drip fires only on a genuine insert. Proven: `walletBinding.test.ts` (4); `walletBinding.live.test.ts` on local Postgres (3 — insert, same-user touch, a second user refused with the row unchanged); `wallet-takeover.live.test.ts` with two real Privy test accounts against the local executor (5 — 403 in any letter case, create ignores the body, the row stays with its owner, the owner's reconnect writes no second registration). Server suite 38 files / 281 |
-| 1.2 | **Strategy ownership.** `/strategies/:id/{pause,resume,end}` and PATCH/DELETE (`server/src/routes/strategies.ts:592-665`) do not check the wallet. Scope by `wallet_id`, append an audit row, delete the duplicate PATCH/DELETE registrations. Tests | **DONE** — deployed at `fbaa2c5` to both executors and re-proven there: `strategy-ownership.live.test.ts` 7/7 against api.xorr.finance and against executor-fork; CI run 34728392669 green. Every state change goes through one `moveStrategy`: scoped to the caller's wallet (another account's id answers `not_found`), written on the trail only when the state actually changes, `ended` stays ended (409 `strategy_ended`), and resuming asks the same on-chain cap question creating does (`commitmentRefusal`, now shared) — pausing frees allowance, so pause → create → resume used to commit past the cap. Duplicate PATCH/DELETE removed. `requireWallet` throws `NoWalletError`, answered 409 `no_wallet` instead of 500. Proven: `strategy-ownership.live.test.ts` with two real Privy test accounts against the local executor (7/7 — the other account gets 404 from all five routes, the owner's strategy and trail are untouched, owner resume/pause writes each change once and a repeated tap nothing, ended stays ended); tsc clean; server suite 38 files / 281 |
-| 1.3 | **Fake fill.** Approving a proposal (`server/src/routes/extra.ts:289-339`) writes "Filled X at Y" and trades nothing. Make approve run a one-off buy through the `/orders` path and return the real run; scope the UPDATE by wallet; client (`src/chat/Chat.tsx:314-330`) marks decided only on success and renders filled or refused from the status. Verify on the fork | **DONE** — the fill is proven on the rebuilt fork: `proposal-approve.live.test.ts` 3/3 against executor-fork at `47b1296` (approve answered `filled` with a transaction hash and "Bought … WETH at $…", the exit strategy it armed was live, a second approve placed nothing, another account got `gone`), after the same test passed 3/3 on Sepolia on the refusal path. Deployed at `400d64e` to both executors and the web app (Vercel `dpl_6Ht6W4mVEteHGJrSzmQuJAvo1XrQ`; the live bundle carries the new approve copy); CI run 34728962882 green. `proposal-approve.live.test.ts` passes 3/3 against api.xorr.finance. Against executor-fork, approve answered `failed` and claimed nothing — and a plain `POST /orders` there fails the same way: the router reverts `ReturnAmountIsNotEnough` (0x9a446475), because the `base-fork` chain has drifted from the mainnet state 1inch quotes. That is the fork being stale, not the approve path; the fork is re-forked and re-bootstrapped in 1.5 and the fill is proven there. Approve places the order through `placeOrder` (`server/src/executor/order.ts`, which `POST /orders` now also uses) and answers with what happened: `filled` with the transaction hash, plus an `exit-rules` strategy holding the stop and target (measured from the fill price; an exit already live on the symbol is left alone), or `blocked`/`failed` with the executor's own sentence. The UPDATE is scoped by wallet and the order runs after the decision commits. Payloads carry `usd`, `stopPrice`, `targetPrice` as decimals; the pre-written `onApprove` "Filled…" now states what approving will do. Client: decided only after the executor answers, buttons disabled while in flight, `decisionMessage` renders fill / blocked / declined / expired from the status; the unused `fillMessage` template ("…SOL at…") is gone. Found on the way: the skip reply promised "I will not re-propose X today" and nothing enforced it — `propose()` now refuses a symbol skipped that UTC day. Proven locally: `proposal-approve.live.test.ts` 3/3 on base-sepolia (another account gets `gone`; approve answers `failed` — "This network cannot settle trades. Prices are real; filling needs Base or a Base fork." — and claims no fill; a second approve places nothing); `proposal-decline.live.test.ts` still passes; both typechecks clean; root 62 files / 562, server 38 / 281 |
-| 1.4 | **Contract: output can only reach the owner.** In `contracts/src/XorrDelegation.sol`: record the active owner for the duration of a venue call; `XorrAquaBook`/`XorrSwapVMBook` `fillForDelegation` revert unless `principal` is that owner; for the 1inch path require the owner's output-token balance to rise; `closePosition` refuses the settlement token; `grant` clears the previous venue list. Forge tests: wrong principal, wrong 1inch receiver, re-grant drops venues | **DONE** — built and tested at `47b1296`, deployed in 1.5, and proven with real transactions on the rebuilt fork: a $5 WETH buy through the new `spend` (tx `0x854b…22e0`) delivered 0.001974 WETH to the owner's wallet, and `POST /positions/close` sold 0.003948 WETH through the new `closePosition` (tx `0x1893…675a`) with +9.938452 USDC landing in the owner's wallet and nothing left in the contract. `spend`/`closePosition` take `tokenOut` and a non-zero `minOut`, and the owner's `tokenOut` balance must rise by `minOut` across the venue call (`OutputNotReceived`). The owner is held in EIP-1153 transient storage for exactly the venue call (`activeOwner`), and both books refuse a delegated fill — and the Aqua taker path reached through the delegation — that pays anyone else (`RecipientNotActiveOwner`). `closePosition` refuses the settlement token (fixed at construction); `grant` replaces the venue list. The executor passes a floor on every trade (router `dstAmount` less slippage, a book's quote less slippage, a SwapVM program's compiled minimum, the aToken for an Aave supply) and names the new errors. The honest limit, written into the contract's header: the floor is chosen by the delegate, so a route paying the owner exactly the floor and the rest elsewhere is bounded by the cap, the allowlist and the kill switch, not by this check. Proven: `XorrDelegationTest` 31/31 (wrong receiver on spend and on close, short-changed output, zero floor, invalid `tokenOut`, active owner visible only during the call, re-grant drops venues including a toggled one, settlement token refused); fork suites 35/35 against Base state (Aqua 17, SwapVM 11, Stocks 7) including a fill naming an attacker on both books and the delegated taker swap; server 38 files / 281; tsc clean |
-| 1.5 | **Redeploy and prove.** Deploy the fixed contracts to Base Sepolia with the deployer (`0x364d…2581`, 0.109 test ETH); verify on Sourcify (`forge verify-contract --verifier sourcify`); commit `contracts/deployments/base-sepolia.json`; update `DELEGATION_ADDRESS` on `executor`, root `.env`, README, `subgraph/subgraph.yaml` (ABI with `Closed`); redeploy the delegation subgraph (`GRAPH_DEPLOY_KEY` exists); rebuild the fork's contracts; re-run `/verify` | **DONE** — and `/verify` on Sepolia is back to its baseline on the new contract: **19 pass · 1 fail · 1 skip** (the fail is the permanent `audit-chain` fork at entry 2; the skip is equities). The demo wallet re-granted through the hosted app's own permission screen: $1,600/day for 30 days, tx `0xce90642d…6a1f`, delegate `0xC38f…c8A5`, read back from `policyOf`. The first attempt sent both approvals and never broadcast the grant; the second, with stall diagnostics added to `tools/grant-test-wallet.mjs`, went through. It also exposed a real bug: `/delegation/record` answered the landed grant 400 `tx_not_found`, because `waitForTx` asked the executor's node for the hash once, a moment before that node had heard of it — fixed with a bounded look-up (see below). Base Sepolia: `XorrDelegation` `0x6c5528Fd8E74a047A85bAb413856A9239E73540e` (block 46746780, tx `0x51a2…2ac0`, settlement token USDC `0x036C…CF7e`) deployed from `47b1296`; Sourcify **exact match** (creation and runtime); recorded in `contracts/deployments/base-sepolia.json`. Delegation subgraph v0.0.3 (`QmYaEZ…DKM6`) indexes it, now including `Closed`, synced with no indexing errors; both executors' `SUBGRAPH_URL` point at it. `executor` switched (`DELEGATION_ADDRESS`, deployed at `47b1296`, every dependency up); root `.env` and README updated. Fork: `base-fork` re-forked at mainnet head (block 51236256); new `XorrDelegation` `0xd5fa…17e9`, `XorrAquaBook` `0xcd0c…a4dd`, `XorrSwapVMBook` `0xa9f5…7c84` from the same build (rebuilt again at head since — see 1.10); demo wallet funded with 25,000 USDC and granted $2,810/day to the executor's delegate; executor-fork switched and redeployed; a real fill, a real close and a real approve proven there (1.3, 1.4). Before the re-grant, `/verify` read 17 pass · 3 fail · 1 skip — `policy` and `cap-agrees` failed only because the demo wallet had no grant on the new contract yet, which the re-grant above closed |
-| 1.6 | **Scheduler survives errors.** `server/src/executor/run.ts:299-365` runs wallet, policy and rules reads after the claim but outside the `try`; `scheduler.ts` has no per-strategy catch or overlap guard; blocked/failed runs never advance `next_run_at`; transient retries every 30 s write an audit row each time. Fix all four; tests | **DONE** — deployed at `d76845a` (migration 014 applied by the pre-deploy step) and completed at `31226d7`, and proven on the running fork: before, four "QA — daily WETH" strategies were overdue and the executor logged them `skipped` on every tick (their period was already claimed by runs that ended before `settleSchedule` existed); after two ticks on `31226d7`, **0 of 9 live strategies overdue**. That last gap — a claimed period leaving a due schedule in place — is closed by `runStrategy` moving a still-due schedule on when the period holds a finished run (a `pending` one is left to settle itself; `run-failure.test.ts` now 7). (1) Every throw after the claim — the wallet, `readPolicy` and rules reads included — goes through one `failRun`, so nothing escapes with the run left `pending`. (2) `tick()` catches per strategy, so one throwing strategy no longer ends the tick or skips the alert and anchor sweeps; `guardedTick` skips a tick while the previous one is still running instead of stacking them. (3) Blocked, failed, no-op, watch and filled runs all go through `settleSchedule`, which moves `next_run_at` to the next period — a blocked strategy no longer stays due and re-selected every tick. (4) A transient failure backs off 1 → 2 → 4 … → 30 min from a due schedule (`retryDelayMs`, migration `014` adds `strategies.retry_attempts`) and writes "Retrying" once per streak, not every tick. Proven: `run-failure.test.ts` 4/4 against the real `runStrategy` (timeout on the permission read releases the period, backs off 60 s then 120 s, one trail row; a permanent failure closes the run and moves the schedule a day; a blocked run moves it too), `scheduler.test.ts` 2/2 (a throwing strategy does not stop the next or the alert sweep; an overlapping tick is skipped); migration applied locally; executor suite 40 files / 287; tsc clean |
-| 1.7 | **A failed read is an error, not a zero.** `/wallet/balance` returns `usd:0` on chain failure; `/delegation` returns null; `/limits` says `revoked:true`; `getPosition` falls back to `all[0]` (`routes/index.ts:223-226,261,390,864-870`; `positions/index.ts:259`). Return 502 `chain_read_failed` / null for unknown ids; client shows a dash or ErrorState. Tests | **DONE** — deployed at `31226d7` (both executors and the web app). `readChain` turns a thrown chain read into `ChainReadFailed`, answered **502 `chain_read_failed`** by the error handler (moved to `http/errors.ts` so it is testable): `/wallet/balance` (balance and permission), `/delegation` (permission and allowed venues), `/limits`, `/limits/check` and the backtest cap no longer substitute `0`, `null`, `[]` or `revoked: true` for a failed read. `/limits` distinguishes never granted (`granted: false, revoked: false`) from revoked, and the Limits screen says "Nothing — no permission granted yet". `getPosition` no longer falls back to the wallet's first position; `/positions/:id` is 404 for an id not in the book (the client already maps that to its not-found state). Proven: `errors.test.ts` 4/4 (502 with the sentence, `null` and `[]` pass through as answers, the other statuses kept); `read-failures.live.test.ts` 2/2 against the local executor, **api.xorr.finance and executor-fork** (an unknown position id is 404; the second test account, which holds a wallet and no grant, reads `granted: false, revoked: false`). Found on the way and fixed: `waitForTx` asked the executor's node for a hash once, so `/delegation/record` refused a real grant the node had not yet seen — now a bounded 15 s look-up (`wait-for-tx.test.ts` 3/3), proven by a second grant through the hosted app that reached `/proposal` ("renewed.", expiry 2026-10-13T01:48:02Z) with no 400 |
-| 1.8 | **Gas faucet.** Drip only after a verified binding (1.1) and only once, via `INSERT … ON CONFLICT DO NOTHING RETURNING` (`server/src/evm/gasDrip.ts`, `routes/index.ts:163-211`); pay from a dedicated faucet key rather than the delegate key. Test the race | **DONE** — deployed at `a3a3247` and proven on a first visit by an account that had never used the app: `test-4668@privy.io` signed in through app.xorr.finance, its new wallet `0x0EAc…3c16` was registered (trail: "Wallet connected", "Sent 0.002 test ETH for gas"), the 0.002 ETH arrived **from the faucet `0xCdCf…3795`** (tx `0x9971…07d9`), and the same wallet then signed a real $1,600/day grant with that gas (`policyOf` confirms it). The faucet went from 0.02 to 0.018 ETH; the delegate paid nothing. Once-only and verified-binding-only were delivered by 1.1 (`bindWallet` reports `inserted` from the write itself, and only an address on the caller's Privy account reaches it). The drip now pays from a dedicated `FAUCET_PRIVATE_KEY` (`0xCdCf…3795`, generated for this, funded with 0.02 Sepolia ETH from the deployer, set on `executor` only) and never from the delegate; without a key it sends nothing and says so. Proven: `gasDrip.test.ts` 4/4 (no key → nothing sent; an empty wallet is paid by the faucet, which is named as the sender, and no delegate balance is read; a funded wallet is not topped up; a nearly empty faucet refuses); the race — eight simultaneous first connects against the real local Postgres produce exactly one `inserted` (`walletBinding.live.test.ts` 4/4) |
-| 1.9 | **Privy policy rules match calldata.** `server/src/auth/privyPolicy.ts:181-189` matches only `to`, so `USDC.transfer(attacker)` passes. Add calldata conditions on `transfer`/`approve` recipients; make `/privy/policy/prove` operator-only; cache policy reads. Re-prove the refusal live | **DONE** — deployed at `3989ef9` to both executors and proven live, holding every credential the server has: `POST /privy/policy/prove` with the operator token on api.xorr.finance and on executor-fork — `USDC.approve(delegation, 0)` got past the policy (and then failed for want of gas on the empty demo wallet, which is the policy allowing it), while `USDC.transfer(0x…dEaD, 0)`, `grant(0x…dEaD, …)` and a send to an unlisted address were each refused `RPC request denied due to policy violation`; the signed owner write went through (`proven: true`, `authorizationKey.signed: true`). A signed-in user gets **403**. Read back from Privy: the Sepolia policy holds 5 rules and the fork's 13 (the eight equities are approvable only there), every one pinning `to` and a decoded argument or function name. The first proof after the deploy was **not** proven — `transfer`, and on Sepolia a grant to a stranger, passed — because the route probed the remembered demo wallet without bringing the policy up to date first, and only its closing key check patched the new rules in; the same request a minute later came back proven on both. The route now calls `ensurePolicy()` before probing, so a proof always tests the rules the build means. Every rule now pins the call as well as the destination (`ethereum_calldata` conditions, per Privy's policy API): each token may only be `approve`d with the delegation as spender; the delegation may be `grant`ed only to this executor's delegate and `revoke`d; nothing else — no `transfer`, no `setVenue`, no address on no list. The Aave pool is left out on purpose: one policy serves every wallet on a deployment, so it cannot pin `supply(onBehalfOf)` or `withdraw(to)` to the signing wallet. `ensurePolicy` compares every condition (comparing the first `to` alone would never have replaced the old rules) and is cached for 5 minutes, the wallet list for 1; `/privy/policy/prove` is operator-only (`requireScope('admin')`) and now probes an approve to the delegation (must pass) and a `USDC.transfer` to a stranger, a grant to a stranger and a send to an unlisted address (all must be refused). Proven locally: `privyPolicy.test.ts` 6/6, evaluating the rules the way Privy documents matching against the real calls |
-| 1.10 | **Tier 6–7 need approval.** `requiresApprovalByDefault` (`src/strategies/ladder.ts:99`) is never called, so momentum and event-driven would trade unattended. Refuse `live` without `params.autoExecute`; otherwise write a proposal. Tests | **DONE** — deployed at `3989ef9` and proven with a real approve on the fork: `strategy-proposal.live.test.ts` 1/1 against executor-fork at `35c4395` — a paused momentum strategy's proposal, approved through `/proposals/:id/decide`, answered `filled` with a transaction hash and "… now manages it, with its stop at $1,000", and that strategy's own `params` then held `stopPrice` 1000 and `openEntryPrice` at the WETH price actually paid instead of the planner's placeholder of 1; the test sold the WETH back and ended the strategy. The first run, before a rebuild, answered `failed` — "The price moved more than your slippage limit while this was in flight. Nothing was placed." — because `base-fork` was 1,796 blocks (~1 h) behind live Base, the staleness described in 1.3; nothing was placed and nothing claimed a fill. So the fork was rebuilt at head (block 51238069) per `docs/RUNBOOK.md`: `XorrDelegation` `0xc535…e44e`, `XorrAquaBook` `0x74e1…c54f`, `XorrSwapVMBook` `0x2fba…7bd1`, the owner funded with 25,000 USDC and granted $2,810/day to the executor's delegate (tx `0x12c2…a973`), executor-fork pointed at the new addresses and redeployed. `/verify` on it then read **19 pass · 0 fail · 2 skip**, and the Privy proof re-ran `proven: true` against the new delegation — the policy followed the address change on its own. Implemented as the second half of the task rather than a refusal: a live momentum or event-driven strategy without `params.autoExecute: true` no longer trades an entry — `runStrategy` writes a proposal (size, symbol, stop, and the state the strategy should hold, naming the strategy), ends the run `skipped · awaiting_approval`, moves the schedule on and pushes `proposal-awaiting`; one open proposal per strategy. A close never waits for a yes. Approving (`/proposals/:id/decide`) places the order through `placeOrder` and hands the position to the strategy that asked — its `stateAfter` written with the entry at the fill price — instead of arming a second exit; skipping answers with the strategy's own `onSkip`. Proven locally: `approval-first.test.ts` 5/5 against the real `runStrategy` (an entry becomes a proposal and nothing reaches settlement; one proposal while one is open; `autoExecute` goes straight to settlement; a momentum stop and a recurring buy are never turned into questions) |
-| 1.11 | **CORS.** Production answers `*`. Set `ALLOWED_ORIGINS` on both executors to the real origins; verify with a preflight from a foreign origin | **DONE** — both executors had `ALLOWED_ORIGINS=*` set explicitly, and a preflight from `https://evil.example` got `access-control-allow-origin: *`. Now `ALLOWED_ORIGINS=https://app.xorr.finance` on `executor` and `executor-fork`; measured after the redeploy on both: a preflight from `https://evil.example` gets `https://app.xorr.finance` back (the browser refuses the mismatch) and one from `https://app.xorr.finance` gets its own origin, with `vary: Origin`. Native builds send no Origin and are unaffected |
-| 1.12 | `POST /audit/anchor` (`routes/index.ts:830`) spends bot gas with no limit — one per wallet per hour | **DONE** — deployed at `3989ef9` and proven on api.xorr.finance with the owner test account: press 1 answered 200 `unchanged` ("Already anchored at entry 81, block 46748045"); a paused probe strategy then wrote a new trail row; press 2 answered **429 `rate_limited`** with `retry-after: 2809` — "This trail was anchored to Base less than an hour ago. The next anchor can be published in 47 minutes, and the hourly anchor will publish it anyway." — and sent no transaction. The probe strategy was ended. `POST /audit/anchor` goes through `anchorOnDemand`: an unchanged head still answers `unchanged` for nothing; a press that would spend gas less than an hour after the wallet's last anchor — counted from the anchor's own block timestamp on chain, so nothing stored here can reset it — answers **429 `rate_limited`** with `retry-after`; two presses at once share one transaction. The hourly sweep is unaffected. Proven locally: `anchor-limit.test.ts` 3/3 |
-
-## Phase 2 — Backend: honest data and speed
-
-| # | Task | Status |
-|---|---|---|
-| 2.1 | **Auth overhead (~0.45 s per request).** Call `agentFor` only for `xagt_` tokens (`server/src/auth/middleware.ts:95`); cache `privy.getUser` per user for 5 min and pick the embedded wallet (`auth/privy.ts:59-63`). Measure before/after | **DONE** — deployed at `031d578` to both executors. Measured first, and the premise did not hold there: from this machine, over a ~240 ms round trip, a signed-in request that routes nowhere cost **+17 ms** (Sepolia) and **+14 ms** (fork) over an unauthenticated one before the change, and +35 ms on the local executor — not ~0.45 s. What it spent was still worth removing: every Privy session was first looked up as an agent key (`agentFor`, a database write stamping `last_seen_at`), and every request asked Privy's API for the account (`getUser`, which Privy's SDK marks strictly rate-limited). Now only `xagt_` tokens are looked up as keys (every minted key has carried the prefix since agent keys existed), and the account record is reused for five minutes per user while the token itself is still verified on every request; a failed read is never kept; `/wallet/create` and `/wallet/connect` ask Privy again (`freshWallets`) before refusing an address missing from the cached record, so a wallet linked a moment ago is not turned away. The embedded-wallet preference named here was already in place from 1.1. After the deploy the signed-in difference is inside run-to-run noise (p50 over 8 requests: Sepolia −20 ms, fork +33 ms). Locally a signed-in request that routes nowhere went from 37 ms to 2 ms, and `/wallet` from 39 ms to 2 ms. Proven: `privy.test.ts` 6/6 (one Privy read across three requests, a re-read after five minutes, a failed read not kept, per account, refresh on demand, an invalid token reads nothing), `middleware.test.ts` 4/4 (a Privy session never reaches `agentFor`; an agent key never reaches Privy); after the deploy `wallet-takeover.live.test.ts` 5/5, `strategy-ownership.live.test.ts` 7/7 and `read-failures.live.test.ts` 2/2 against both executors; CI run 34733475637 green |
-| 2.2 | **`/agents` (9.4 s).** Prices in parallel, attribute via `strategies.agent_id` instead of scanning audit JSON (`agents/leaderboard.ts:35-58`). Measure | **DONE** — deployed at `031d578`. Measured first: `/agents` answered in 261 ms (Sepolia) and 247 ms (fork) p50 from here — the 9.4 s was not reproducible on the test accounts, whose 30-day record is small (the fork owner: 44 filled runs, WETH and USDC). Fixed anyway, because its cost grew with the trail: each run was credited by searching the wallet's audit log for the run's id inside JSON, prices were fetched one symbol after another, and a run the search missed was credited to Yield Keeper by default. Credit now comes from a join — the agent that owns the strategy (`strategies.agent_id` → `agents.persona_id`), else the persona for its kind, by the rule the executor writes into the trail (`agents/attribution.ts`, moved out of `run.ts`) — prices are fetched in parallel, and a run no persona ran is on nobody's record. After: 268 ms / 274 ms p50. One fork request in 8 took 3.1 s, and a burst a few minutes later took ~3.4 s each: the leaderboard waiting out its 3 s price deadline while the price feed was slow — bounded by design, and back to 0.34 s on re-measure. Locally 64 → 4 ms. Proven: `leaderboard.test.ts` 4/4 (owner, then kind; no default credit; a join, not the audit log; one price per symbol, concurrently, an unpriced symbol left out), `attribution.test.ts` 2/2 |
-| 2.3 | **`/positions` (6.3 s).** Dedupe symbols, price in parallel with a deadline; `getPosition` queries one row (`positions/index.ts:225,257`). Measure | **DONE** — deployed at `031d578`. Measured first: `/positions` 268 ms (Sepolia) and 266 ms (fork) p50, p90 558 / 535 ms — not 6.3 s on these accounts, but the book was priced a row at a time with no deadline, so its cost grew with every holding, and `getPosition` priced the whole book to keep one entry. Now one mark per symbol, all at once, with a 4 s deadline (a symbol that misses it reads `feed: unavailable`, as one with no feed already did), and `/positions/:id` reads one row. After: 274 / 273 ms p50, p90 314 / 282 ms; `/positions/:id` answers 200 for the fork's WETH position and 404 for an id not in the book. Locally 37 → 2 ms. Proven: `marks.test.ts` 4/4 |
-| 2.4 | **`/wallet/balance` (3.7 s).** Skip the Aave read where Aave does not exist; cache `usdcReserve` 60 s; batch `readPolicy` into one multicall (`evm/balances.ts:131`, `market/yield.ts:115`). Measure | **DONE** — deployed at `031d578`, and this one was real. Measured first: `/wallet/balance` p50 526 ms with a **7,973 ms** p90 on Sepolia, and 361 ms with a **4,158 ms** p90 on the fork. The executors' own logs named the tail — `[rpc] throttled, retrying in 1200ms … 2400ms … 3600ms` at the slow Sepolia request (02:15:05Z) and `1200ms … 2400ms` at the slow fork request (02:17:58Z): the mainnet Aave reserve read, over the free public endpoint, waiting out its back-off. Sepolia paid that read on every balance only to learn it has no Aave. Now there is no reserve read where the chain has no pool (`aavePoolIsDeployedHere`, whose failed check is no longer remembered as "no pool"), the reserve is cached for 60 s (`/verify` still reads it fresh), and `readPolicy` is one multicall instead of three calls. After, over 30 requests each: Sepolia p50 346 ms, p90 511 ms, max 572 ms; fork p50 252 ms, p90 286 ms, max 287 ms; the fork balance still reads 24,999.97 USDC. Locally: p50 1,561 → 790 ms, p90 2,400 → 810 ms. Proven: `balances.test.ts` 3/3, `reserve-cache.test.ts` 4/4, `delegation-read.test.ts` 5/5 |
-| 2.5 | **`/delegation` (3.9 s).** One multicall for policy, remaining, spent and venues; basenames in parallel (`routes/index.ts:252-273`). Measure | **DONE** — deployed at `031d578`. Measured first: `/delegation` p50 477 ms (p90 661) on Sepolia and 255 ms (p90 463) on the fork; the permission and its venue list were four reads in two rounds. Now one multicall (`readPolicyAndVenues`); the two basenames were already parallel and cached. After: 354 ms (p90 396) on Sepolia, 263 ms (p90 276) on the fork, answering 1 allowed venue on Sepolia and 3 on the fork with `delegateIsCurrent: true`. Locally 1,048 → 280 ms p50. Proven: `delegation-read.test.ts` — both reads are a single call, and a failed read throws rather than answering with no permission or no venues |
-| 2.6 | **Migration 014.** `chain` column on positions, strategies and strategy_runs, filtered by `CHAIN_KEY`; indexes on `strategy_runs(strategy_id,status,finished_at)`, `strategies(wallet_id)`, `strategies(agent_id)`, `proposals(wallet_id,created_at)`, `audit_log((payload->>'runId'))`; delete idempotency rows older than 24 h each tick | **DONE** — deployed at `e75cec6`, as migration **015** (014 was taken by 1.6); Railway's pre-deploy step logged `applied 015-chain-scope.sql` on both executors (02:55:48Z fork, 02:55:52Z Sepolia). `positions`, `strategies` and `strategy_runs` carry `chain`: the pool puts `xorr.chain_key` in every connection's startup packet (`db/index.ts`), each column defaults to it, and every wallet-wide or global read of the three tables filters on it (`db/chain-scope.ts` — the scheduler's due list, `/strategies`, `/runs`, positions and P&L, the leaderboard, alerts, reconcile, fill quality, `/metrics`, `/verify`, the agent surface, news and proposal symbols), as do the by-id strategy lookups; a position is unique per wallet, chain, symbol and side. Existing rows took the migrating executor's chain — an inference each deployed database supports, having served one executor — and the database's own default is set to it for sessions that do not say. Proven the backfill tagged every row: the owner account's `/strategies`, `/runs` and `/positions` and the global `/metrics` tallies are identical before and after on both executors (Sepolia 13 strategies · 6 runs · no positions; fork 75 · 96 · WETH 0.802587) — a row left untagged would have vanished from those filtered reads. After it: `/verify` 19 pass · 1 fail (the permanent audit-chain) · 1 skip on Sepolia, 19 pass · 2 skip on the fork; `wallet-takeover`, `read-failures` and `strategy-ownership` live tests 14/14 on both (they create strategies, so new rows took the default); `strategy-proposal.live.test.ts` 1/1 on the fork (a fill through the per-chain unique index and the chain-scoped strategy update); CI run 34734210592 green. Indexes added: `strategy_runs(strategy_id, status, finished_at)`, `strategies(wallet_id, chain)`, `strategies(agent_id)`, `proposals(wallet_id, created_at)`. **Not added:** `audit_log((payload->>'runId'))` — the leaderboard was the query that needed it, and it no longer searches the trail (2.2), so it would only cost every append. Each scheduler tick deletes `Idempotency-Key` responses older than 24 h. Proven locally first: `chain-scope.live.test.ts` 4/4 against Postgres (the session carries the chain; a strategy and a run written without one take it; one wallet holds the same symbol on two chains while `listPositions`, `applyFill` and `realisedPnl` see and change only their own), scheduler tests 4/4 (the cleanup runs last and a failing cleanup does not fail the tick), server suite 54 files / 349, and the build booted with every dependency up |
-| 2.7 | **Positions agree with the chain.** Cap listed units at the chain balance and return the drift; Portfolio shows it | **DONE** — deployed at `a10584f` to both executors and the web app (Vercel `dpl_6CGM19nkjfct2k6nsLhMTuS69Z4j`; the live `index-0e9756cc…js` carries the new copy). `listPositions` and `getPosition` read the wallet's balance of every listed token in one multicall (`chainUnitsOf`), cap the listed units at it — the cost basis scaled with them, so the entry is still what was paid — and return `ledgerUnits`, `chainUnits` and `driftUnits`; a balance read that fails is a 502, never an empty or unchecked book; ledger rows in another case than the registry (`weth`, `NVDAC`) are checked under the registry's name. Assets, Portfolio and the position screen say where the two disagree. Proven on real data: on the fork executor the owner's `/positions` and `/positions/:id` read WETH `units 0 · ledger 0.802586837 · chain 0 · drift 0.802586837 · notional 0` — ledger from before the fork rebuild, which the Portfolio used to price as a holding; and signed in as the same account through xorr's local web app against the local executor, the note renders on Assets, Portfolio and the WETH position ("0.0579 WETH on record is not in your wallet, so size and value show what the wallet holds." — a ledger its Sepolia wallet does not hold). That screenshot also caught a gap, fixed at `a6ce7e2`: a registry token with no contract at all on the chain (mainnet cbBTC on Sepolia) was listed unchecked at its ledger value — $347 of CBBTC under a $0.00 portfolio value — when nothing can be held there; the local executor now reads it `units 0 · chain 0 · drift 0.00449116 · notional 0`, and a failed code lookup is no longer cached as unreadable. Tests: `drift.test.ts` 7, `marks.test.ts` 4, `balances.test.ts` (units held, 5), `derived.test.ts` 3 new; live regression 14/14 on both executors; CI run 34734726230 green |
-| 2.8 | **Realised P&L from what actually arrived.** Close and flatten read the USDC balance before and after and write a `strategy_runs` row (`routes/panic.ts:131-395`) | **DONE** — deployed at `a6ce7e2`. Closes, flattens and a strategy's own sales read the owner's USDC before the transaction and after its receipt and book the difference as the proceeds (`usdcRawOf` / `proceedsSince`); the units sold are exactly what the delegation pulled, not a float of the fraction. When the balance cannot be read back the estimate stands, the trail says "about $X USDC (the balance could not be read back)", and the run keeps no quote. `/positions/close` and `/panic/flatten` now write a filled `strategy_runs` row for every sale, under an ended `close` strategy, in the same transaction as the position change. Proven on the fork with `sale-record.live.test.ts` 3/3: an $8 WETH buy delivered 0.003160949 WETH; `Sold 50% of WETH` answered `measured: true` and `/runs` holds a filled `close` run for **$3.98** and 0.001580475 WETH; the flatten sold the other 0.001580475 for **$3.98**, measured and recorded the same way — $7.96 back from $8.00, the cost of two swaps, where the old record booked each sale at its arrival estimate. Tests: `close-measure.test.ts` 3/3 (measured proceeds and the run row; an unreadable balance keeps the estimate, says so and leaves no quote; a partial close sells an exact fraction of the chain balance), `sale-proceeds.test.ts` 3/3 (a strategy's stop books measured proceeds beside its arrival value; an unreadable balance books the estimate with no quote; a buy is recorded as a buy with no USDC read); CI run 34735270860 green |
-| 2.9 | **Fill quality is measured correctly.** Sells compare expected vs measured USDC (today ~0 bps by construction); equity rows tagged; `fillsByVenue` from `strategy_runs.venue`, not audit prose (`executor/fill-quality.ts`, `routes/ops.ts:114-200`) | **DONE** — deployed at `a6ce7e2` as migration **016**, with **018** following. `strategy_runs` gains `side`, `quoted_usd` and `asset_class`, backfilled once from what was recorded with each fill (a supply by its venue, a sale by the trail entry written in its own transaction, everything else a buy — locally 130 buys and 27 sales). A sale is scored by the USDC it paid against its arrival value — it had been compared in the units it sold, which the delegation moves exactly, so every sale scored zero — and a sale with no quote (every sale before this, or one whose proceeds could not be read back) is unmeasured, not perfect. Equities are reported beside crypto, not averaged in. `fillsByVenue` counts `strategy_runs.venue` instead of parsing "Aqua book" / "SwapVM program" / "Bought" / "Sold" out of the trail on every request; the Metrics screen names sales and equities. Proven on the fork after the deploy: `/metrics` fill quality reads 1inch · crypto **7 fills including 2 sales, −24.3 bps mean** (worst −44.4, best 0), SwapVM 2 fills +73.2 bps, Aqua 2 fills −309.8 bps, 11 measured and 36 unmeasured, basis `forked`; Sepolia answers an empty table (no fills there). The venue count read `unrecorded: 36` — fills from before a run kept its venue — which migration **018** fills in once from the trail entry written with each fill (deploying with 2.10). Tests: `fill-quality.test.ts` 13/13 (the original nine on the new row shape, plus sale scoring, unmeasured sales, the taker's sign and equities kept apart). Live regression: on the fork `read-failures` and `wallet-takeover` failed once at setup in the ship chain and passed 7/7 on an immediate rerun; CI run 34735270860 green |
-| 2.10 | **Portfolio history for real graphs.** `portfolio_snapshots` table; scheduler writes one every 15 min and after each fill, close or withdrawal; `GET /portfolio/history?range=1D/1W/1M/ALL` | **DONE** (server; the Portfolio graph moves to it in 5.8) — deployed at `d1cbda0`, migration **017**. `portfolio_snapshots` keeps what each wallet was worth, read from the chain the way `/wallet/balance` reads it and strictly (`totalValueUsd({ strict: true })`): an unpriced holding or an Aave read that does not answer keeps nothing, rather than a dip that never happened. The scheduler snapshots each wallet with something on this chain every 15 minutes (one that cannot be read is not retried until the next interval); a fill, a close and a flatten each keep one as they land; a withdrawal or send the app signs itself calls `POST /portfolio/snapshot` with its hash, and the executor waits for that transaction and reads the value itself (once a minute per wallet). `GET /portfolio/history?range=1D|1W|1M|ALL` answers points oldest first, thinned with every event kept. Proven on both executors after the deploy: a requested snapshot answered `recorded: true` and a second within the minute **429** with `retry-after: 60`; `range=5Y` answered 400; the latest point equalled `/wallet/balance` to the cent ($0.00 on Sepolia, $24,999.88 on the fork); on the fork `sale-record.live.test.ts` (3/3) left a `fill` snapshot at $24,999.85 and `close` snapshots at $24,999.84 and $24,999.82 within two seconds of the trades. The hosted bundle (`index-1a36e414…`) requests a snapshot after a send and after an Aave withdrawal. Tests: `snapshots.test.ts` 7/7, the strict cases in `balances.test.ts`. Live regression 14/14 on Sepolia; on the fork the takeover and read-failure files failed at setup when run straight after Sepolia's pass and passed 14/14 run on their own — a collision between back-to-back test-token mints, not the executor; CI run 34735793419 green |
-| 2.11 | `/health` adds breaker state and a subgraph check (with 0.5) | **DONE** — deployed at `d1cbda0`. `/health` adds a non-critical `subgraph` probe (indexing errors, and whether the index is about this deployment's contract), a non-critical `upstreams` probe naming any circuit breaker open right now, and every breaker's state (`breakers`). It found a real fault on its first run: both executors answered `subgraph: degraded — at block 46751112, but indexing 0xb14cf3d0…, not this deployment's 0x6c5528fd…`. The subgraph moved to the redeployed contract in 1.5, but `SUBGRAPH_DELEGATION_ADDRESS` was never set and the code defaulted to the first Sepolia contract — so on Sepolia the Graph decision has stood aside on every run since 1.5 (`index_is_for_another_deployment`). The default is removed (unset now reads as unknown, and the probe says so) and the variable is set on both executors, taking effect with the next deploy. `upstreams: up — no breaker open` on both. After that deploy (`a75fa85`) Sepolia reads `subgraph: up — at block 46751740, indexing 0x6c5528fd…` — its own contract, so the Graph decision reads permission there again — and the fork reads `degraded — … indexing 0x6c5528fd…, not this deployment's 0xc535e991…`, which is the truth: the index is Sepolia's |
-| 2.12 | Notification preferences: the app sends PATCH to a GET/POST route (`src/data/system.ts:446`) — use POST; verify the toggle persists | **DONE** — deployed at `d1cbda0` (web `dpl_HsNHRM1Mqo5N28zvUb1GpucgGaH8`). `setNotificationPref` sent PATCH to a path the executor registers only GET and POST on. Proven live on api.xorr.finance: `PATCH /notifications/prefs {dca-executed: false}` → **404**, and the preference still read `true`; `POST` with the same body → `{ok: true, enabled: false}`, and the next GET read `false` (restored to `true` after). The hosted bundle (`index-1a36e414…`) now carries `setNotificationPref:(o,s)=>t.api.post('/notific…` |
-| 2.13 | Subgraph fetch gets a 5 s timeout (`server/src/graph/client.ts:85`) so it cannot hang a run | **DONE** — deployed at `d1cbda0`. Subgraph queries carry `AbortSignal.timeout(5 s)`; a timeout or a network failure is the same `SubgraphUnavailable` an unreachable index already was, which every caller handles. Proven: `graph/client.test.ts` — a gateway that accepts the request and never answers gives up at its deadline (tested at 50 ms) with `no answer in 50ms`; the deadline is attached to every query; a network failure is `SubgraphUnavailable`, not a crash |
-| 2.14 | **Server-side stop-all.** `wallets.agents_stopped` + `POST /agents/stop` / `/agents/resume`, passed into `evaluate` (`server/src/rules/engine.ts`) | **DONE** — deployed at `a75fa85` to both executors, migration **019** (`wallets.agents_stopped`, `agents_stopped_at`). `POST /agents/stop` and `POST /agents/resume` set it for the signed-in wallet (a second stop keeps the first time) and `GET /agents/stopped` reads it; `/limits/check` and every run hand it to the rules as `killed`, so a stopped wallet's runs are refused `agents_stopped` before anything is planned — on every chain, whatever the delegation says. The app's "Stop all agents" still revokes the delegation on chain, the stop the contract enforces; this one is the executor's own, reachable from the API and agent keys. Proven live on Sepolia after the deploy: `stop-all.live.test.ts` 1/1 — stopped, `/agents/stopped` read it at once, the limit check answered `allowed: false · agents_stopped`, a run of a strategy the account created answered `blocked · agents_stopped`, a second stop kept the original time, and after `resume` (`{stopped: false, since: null}`) the refusal was gone. Unit: `stop-all.test.ts` 2/2 |
-| 2.15 | Leaderboard scores buys only; agent `risk_limits` enforced as a block reason in `run.ts` | **DONE** — deployed at `a75fa85`. The leaderboard scores buys only (`side = 'buy'`, 2.9's column): a stop's sale or a close is no longer the agent's trade. An agent's `riskLimits` is a strict schema — `maxUsdPerTrade`, `maxUsdPerDay` — so a limit spelled any other way is refused (400) instead of stored and ignored, and a run of a strategy an agent owns is checked against them before anything is planned: `agent_trade_limit`, or `agent_daily_limit` over that agent's buys today on this chain. After the deploy the leaderboard reads Yield Keeper 1 trade on the fork and every persona 0 on Sepolia. Proven on the fork: `agent-limits.live.test.ts` 2/2 — `{maxPerTrade: 3}` refused with 400; with `{maxUsdPerTrade: 3}` a $5 recurring buy owned by Momentum Scout answered `blocked · agent_trade_limit · "Momentum Scout is limited to $3.00 a trade, and this one was $5.00."`, and the account's hire and limits were restored after. Unit: `agent-limits.test.ts` 5/5, `leaderboard.test.ts` 4/4 |
-| 2.16 | Watch mode runs the kind's own planner (`run.ts:249-288`) instead of logging a plain buy for every kind | **DONE** — deployed at `a75fa85`. A watched strategy asks its kind's own planner, with what the kind observes (keeping none of it), and reports that plan — "Would have bought/sold N SYMBOL", priced by the leg it would trade (a `PORTFOLIO` rebalance by the token it would buy, never as "PORTFOLIO") — or "Would have done nothing", answering `skipped · nothing_to_do`. It had logged a plain buy of `usd ÷ price` for every kind, a stop included. The rules, the permission, settlement and signing are not touched. Proven on the fork: `portfolio-rebalance.live.test.ts` — a watched rebalance answered `status: watch` with the units and price of the WETH leg its planner chose. Unit: `watch-mode.test.ts` 5/5 (an entry, a stop reported as a sale, nothing to do, the observation not persisted, a portfolio priced by its leg) |
-| 2.17 | Onboarding rebalance can be created: accept `PORTFOLIO` with `params.targets` keyed by tradable symbols (`strategies.ts:93-97`) | **DONE** — deployed at `a75fa85` (web `dpl_3gHUTztgF33mZb9dkDDEEvzKszpf`). A rebalance on `PORTFOLIO` is accepted when `params.targets` names registry symbols with positive percents summing to 100 or less — not the settlement token, whose share is the untargeted cash, and not an equity where equities do not function (`not_settleable_here`, as a buy is); targets are stored under the registry's names, and `PORTFOLIO` is refused for any other kind. Onboarding splits each sleeve's weight across the symbols this network offers (`targetsFromSleeves`) and sends `targets` and `cashPct`. Proven on both executors: `portfolio-rebalance.live.test.ts` refused no targets, empty targets, a USDC target, 110%, DOGE, a DCA on `PORTFOLIO` and an equity, and created `{weth: 27.5, cbbtc: 27.5}`, read back as `{WETH: 27.5, CBBTC: 27.5}` — 2/2 on Sepolia, 4/4 on the fork, where a live one also bought toward a 0.05% WETH target (a filled `rebalance` run of at most $10, with its signature) and the WETH was sold back. Server suite 62 files / 397, app suite 86 / 684; live regression 14/14 on Sepolia and on the fork (whose first attempt skipped 2 at setup, 14/14 on the retry); Sepolia `/verify` 19 pass · 1 fail (the permanent audit fork at entry 2 — one break, none since) · 1 skip; CI run 34736623473 green. Where nothing settles, 3.7 creates it watched instead |
-| 2.18 | Chat context and memory: `/bot/say` gets recent runs and positions as figure-free context; turns persisted to `messages` | **BLOCKED — no LLM credential.** `OPENROUTER_API_KEY` (or any model key) exists in neither `.env` nor Railway, so the model call cannot be verified. The code path answers honestly today (`source: fallback, reason: no_key`) |
-| 2.19 | Push delivery to a real device | **BLOCKED — credential.** `eas whoami`: not logged in; no EAS project id; no Firebase config |
-
-## Phase 3 — 1inch: complete, reachable, accounted
-
-| # | Task | Status |
-|---|---|---|
-| 3.1 | **App grants can reach SwapVM.** Add `SWAPVM_BOOK_ADDRESS` to `SETTLEMENT_VENUES` (`server/src/evm/chains.ts:138-142`); prove a strategy run settles through `swapvm` on the fork under a grant that did not come from `live-swapvm.ts` | **DONE** — committed at `b928b3a`, deployed to both executors. `SETTLEMENT_VENUES` names the SwapVM book whenever its address is set, so `/delegation/params` — what the app signs — and `fork-grant.ts` both grant it; `chains.test.ts` 2/2. Proven on the fork with `swapvm-settle.live.test.ts` 3/3, under the grant `npm run rebuild:fork` wrote from that list: `/delegation/params` offers exactly the venues `/delegation` reads back from the chain; `/route/compare` for $400 had the Aqua book refusing (its price band) and the SwapVM program serving; a $400 WETH buy settled with `/runs` reading `venue: swapvm · side: buy`, and the WETH was sold back. The contract enforces the venue list, so that fill is itself the proof the grant names the SwapVM book |
-| 3.2 | **A fork rebuild keeps the books.** `fork-bootstrap.ts` ships an Aqua book and a SwapVM program (from `live-aqua.ts:130-205`, `live-swapvm.ts`), deploys `XorrAuditAnchor`, funds the deployed delegate; add `npm run rebuild:fork`. Prove on a local anvil fork end to end | **DONE** — committed at `b928b3a`. `npm run rebuild:fork` runs `fork-bootstrap.ts` and then `fork-grant.ts` with the file it wrote. The bootstrap deploys `XorrDelegation`, both books and `XorrAuditAnchor`; gives gas to this machine's delegate and to the deployed executor's (`XORR_DELEGATE_ADDRESS`) and 25,000 USDC to the owner; and ships an Aqua book and a SwapVM program, each from a fresh maker holding real Base USDC moved from Aave's aUSDC reserve and WETH wrapped from its own ETH (`fork/makers.ts` — the shipping half of `live-aqua.ts` and `live-swapvm.ts`; `npm run ship:makers` re-ships onto a fork that is already up). The grant names the deployed delegate, with the cap from `FORK_GRANT_CAP_USD`, over every settlement venue, the SwapVM book included (3.1). Proven on a local anvil fork of Base pinned at block 51241496: the executor's own discovery read back the anchor (1,522 bytes), one open Aqua book (2 WETH / 5,042.38 USDC), our SwapVM program (beside a real mainnet maker's, which discovery also finds in Aqua's logs), the grant (delegate `0xC38f…`, cap $2,810, not revoked) and both books allowed by it — and read the same again after anvil was stopped and started from its saved state. Then on Railway, the same command against the rebuilt `base-fork` (block 51242312, 04:35Z): `XorrDelegation 0xc32dd8ae…`, `XorrAquaBook 0x1adf8fab…`, `XorrSwapVMBook 0xe62dc791…`, `XorrAuditAnchor 0x4549c762…`, book 2 WETH / 5,045.4 USDC, program 50,000 USDC / 20.163 WETH, grant tx `0xcee53c95…`, all read back the same way; `executor-fork`, pointed at them, answers `/verify?owner=0x95A0…` 20 pass · 0 fail · 1 skip (equities), and `/route/compare` sees Aqua serve $50–$150, SwapVM $50–$700 and 1inch every size |
-| 3.3 | Fork state survives restarts: commit `infra/base-fork/Dockerfile` (`anvil --state` on a volume) and move the `base-fork` service to it after 3.2 is proven | **DONE** — committed at `b928b3a`. `base-fork` now runs `infra/base-fork` — a `Dockerfile` on foundry `v1.7.1` (pinned: the saved chain is anvil's own format) and an `entrypoint.sh` — deployed with `railway up`, with a `fork-state` volume at `/data`. anvil saves the chain there every 30 s and on shutdown, and a start resumes it forked from the same Base block; a new `REFORKED_AT` is the one way to drop it and fork at the head. Proven locally first, with a 600 s interval so only the shutdown dump could have written: a changed balance and five mined blocks survived a restart, and a new `REFORKED_AT` dropped both and forked at the head. On Railway: deployed at 04:32Z (`fork: forking Base at block 51242312`), rebuilt (3.2), restarted at 04:38Z — the log reads `fork: resuming the saved chain, forked from Base block 51242312` — and at 04:42Z the anchor, the book, both programs and the grant read back unchanged, with `/verify` on `executor-fork` at 20 pass · 0 fail · 1 skip. `docs/RUNBOOK.md` §8 rewritten: a restart resumes, ageing is the one reason to re-fork, and the rebuild is one command |
-| 3.4 | `settle.ts` honours `preferred === '1inch'` only when the Aqua index is configured — today a delegation index can silently skip both books (`graph/decide.ts:72-73`) | **DONE** — committed at `b928b3a`. `chooseSettlement` skips the books for a "1inch" recommendation only when `aquaIndexConfigured()`; without an Aqua index the books are discovered from Aqua's own logs, as with no index at all. Proven in `settle.test.ts`: with the index configured neither book is asked and the aggregator fills; without it a serving Aqua book, and then a serving SwapVM program, still win; any other recommendation leaves the books in play |
-| 3.5 | `/graph/decision` passes `aquaApp`, `tokenOut`, `amountOut` and `ADDRESSES.usdcBase` (`routes/extra.ts:484-500`) | **DONE** — deployed at `b928b3a`. `/graph/decision?usd=&symbol=` asks what a run asks: the settlement USDC, `AQUA_BOOK_ADDRESS`, the bought token (WETH unless named) and how many of its base units the size needs. Live, Sepolia answers `act: true · $50 · $1,600 observed remaining · 1inch — "No Aqua book index configured for this deployment."`, and the fork answers `index_is_for_another_deployment`; both true. Neither deployment can show an Aqua recommendation as they stand: Sepolia's executor has no Aqua book and no Aqua index configured, and no index follows the fork, which is a local chain |
-| 3.6 | `/route/compare`: Aqua detail prints `[object Object]` (`venues/compare.ts:208`); aggregator gas counts only the router, books count the full `spend()` — estimate both the same way; export the ranking for a real test | **DONE** — deployed at `b928b3a`. The Aqua detail names the maker and the fee; the aggregator is costed by estimating the whole `spend()` that would carry its calldata, as the books are; `rankVenues` is exported and `compare-net.test.ts` (8) imports it rather than a copy, with the edge cases added. Live on the fork for $50: Aqua `maker book from 0xdAa57177…, 30 bps fee · gas $0.72 · net $48.60`, SwapVM `gas $0.92 · net $48.78`, 1inch `via Pancakeswap V3, Uniswap V4 · gas $1.12 · net $48.73`. Costed evenly, the aggregator's own `spend()` is the dearest, and the net winner moved from 1inch to SwapVM. The SwapVM amount there was still its floor, which 3.20 replaces with what the program delivers |
-| 3.7 | `/market/tradable` returns `[]` where `CAN_SETTLE` is false so Buy is disabled on Sepolia instead of failing (`routes/market.ts:352`) | **DONE** — deployed at `b928b3a` (web `dpl_A5HGPwt5N7cmtPzCv4NsrSfMCCjZ`). `/market/tradable` answers `[]` where nothing settles, so Buy renders disabled with the reason the order screen already gives a symbol it cannot settle. That alone would have stranded onboarding — approving on Sepolia refused with "nothing to rebalance", and a new user could not finish — so `/market/watchable` (public) lists what a strategy can follow, priced and with a readable balance, and approving where nothing settles creates the portfolio **watched**: it reports what it would trade, moves nothing, and the proposal screen says so before approval (`proposalRebalance`; `derived.test.ts` 4 new). Live after the deploy: Sepolia `tradable=[] · watchable=[ETH, WETH, USDC, CBBTC]`, the fork `tradable = watchable = [ETH, WETH, USDC, CBBTC]`; `tradable.live.test.ts` 4/4 against both (nothing offered where nothing settles; the crypto four followable everywhere); `portfolio-rebalance.live.test.ts` 2/2 (+2 fork-only skipped) on Sepolia and 4/4 on the fork; regression 14/14 on both; `/verify` 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia, 20 · 0 · 1 on the fork; CI push run 34739091305 green |
-| 3.8 | Unit tests: `oneinch.test.ts` (query strings, AMM list on fork only), `settle.test.ts` (venue order Aqua → SwapVM → 1inch → aave), `aqua.test.ts` | **DONE** — committed at `b928b3a`. `oneinch.test.ts` (36: exact quote and swap URLs, amount scaling and `amountRaw`, the AMM-only list on the fork and localnet but not on Base or Sepolia, the bearer key, the refusal where nothing settles, price impact, floors); `aqua.test.ts` (26: encode and decode, `strategyHash` against a hand-built `abi.encode`, event and view selectors against the Solidity, log replay, fills); `settle.test.ts` (13: the venue rules and 3.4). Writing them found a real bug, fixed in the same commit: Aqua and SwapVM discovery replayed positions by strategy hash alone, so any address could ship a maker's strategy bytes under our app and dock them — hiding that maker's open book from every fill, for the price of gas — or re-ship a docked book's bytes and reopen it. Positions are now per maker and hash, as Aqua keeps them, and only the maker the strategy names counts (`replayPositions`; three stranger-log cases each in `aqua.test.ts` and `swapvm.test.ts`). Server suite 66 files / 480, app suite 90 / 771 |
-| 3.9 | **Swap, for real.** Rebuild `app/swap.tsx`: token picker over `/market/tradable` with Token API metadata, slippage wired into `/swap/quote`, route and fee rows; new `POST /swap` running a one-shot intent through `chooseSettlement` under the permission. Prove a real swap on the fork from the screen's own request | **DONE** — deployed at `40b0ebd` (web `dpl_2n1FfD4WoFW2T8JCAyMPncFG2XS7`). `POST /swap` places a swap under the permission, in the two shapes the delegation allows: USDC for anything is a one-shot order with every gate a run has (rules, cap, best execution, measurement); anything else is converted through `closePosition()` — exactly the units typed, parsed from the decimal string, measured, recorded on both sides as a `swap` run and written to the trail — and nothing is recorded for a transaction that did not confirm. `/swap/quote?slippage=` quotes at the tolerance chosen, and that tolerance reaches every venue at settlement. The Swap screen is rebuilt: a token picker over `/market/tradable` with 1inch's logos and the chain's balances, a typed amount, a direction flip, a tolerance setting, route / floor / impact / slippage rows, review then confirm, and the result with its venue and transaction; Explore links to it, and where nothing settles it says so. Proven with the screen's own request (`swapRequest`) in `swap.live.test.ts` against the fork: quoted at 0.5% (`minimumOut` = out × 0.995); $15 of USDC into WETH filled as a one-shot buy through `swapvm`; half of that WETH converted into cbBTC through `closePosition()`, with `/runs` reading `swap · sell · 1inch`; more than held and one token twice refused without sending — and against Sepolia the swap is refused `not_settleable_here` before anything is read. Unit: `swap.test.ts` 16, `settle.test.ts` (a chosen tolerance reaches every venue), `planners.test.ts` (a manual order reads "Placed by you." and carries its tolerance), `derived.test.ts` (the request builder). Server suite 67 files / 503, app suite 91 / 795; `sale-record`, `portfolio-rebalance` and the 14-test regression green on the fork, regression 14/14 on Sepolia; CI push run 34740290498 green. The executor's delegate signs the swap, so no user sign-in stood between the screen's request and the chain. The hosted app carries it: app.xorr.finance's bundles contain the rebuilt screen ("Review swap", "Confirm: …", the nothing-settles notice), the Explore entry and the quote at a chosen tolerance (`/swap/quote?in=`) Re-run after the Phase 3c deploy (`a8e8154`), the proof failed on the aged fork: the $15 buy went to 1inch and its router refused it, `ReturnAmountIsNotEnough`, because the fork — hours past its fork block — delivered 0.0059278 WETH against 1inch's live-Base quote of 0.0059994, 1.2% under and 0.7% below the floor at the test's 0.5% tolerance; the other two failures followed from the WETH that buy never delivered. That is X77, fixed in batch 4a, and the proof re-runs with it |
-| 3.10 | **Tokens and balances.** `GET /wallet/tokens` — 1inch Balance API on Base, multicall where the chain is a fork or testnet; a tokens section in Wallet | **DONE** — built at `82abd3e`, deployed at `a8e8154`. `GET /wallet/tokens` reads every token the wallet holds from 1inch's Balance API v1.2 and describes each from the Token API v1.2 on Base, and reads the chain on the fork and Sepolia, with native ETH; the Assets tab has a Tokens section. Live: the fork answered from the chain with USDC 24,999.4 ($24,993.46), ETH 9.99959 ($24,959.98) and cbBTC 0.00009662 ($7.42); Sepolia with ETH 0.00999 ($24.94). `balance.live.test.ts` 5/5 against 1inch's real Balance and Token APIs; `balance.test.ts` 15, `tokens.test.ts` 11; after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-| 3.11 | **Send any held token** with per-token decimals and a fee row (`app/send.tsx`, `src/wallet/useWithdraw.ts`) | **DONE** — built at `82abd3e`, deployed at `a8e8154` (web `dpl_8BMCWzB7zqKL51R2ADLrYnjKBbAV`). Send picks any token `/market/watchable` lists, holds the amount to the chain balance, parses the typed string in that token's own decimals (`src/wallet/transfer.ts`, which refuses more decimal places than the token has) and shows the fee the user's own wallet pays. The transfer is signed by the owner's wallet: proven through the app's own signing path with a Privy wallet on the fork (4.1, a 5 USDC transfer in `0xb4f4fe5a…`), not from the screen by a person signed in, which needs the owner; after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-| 3.12 | **Approvals include the 1inch router** (`/swap/v6.0/8453/approve/allowance`) and a Revoke button (`app/approvals.tsx`) | **DONE** — built at `82abd3e`, deployed at `a8e8154`. `/approvals` names both spenders: the delegation contract, read from the chain, and the 1inch router, read through 1inch's Approve API on Base and the chain elsewhere; an allowance nobody could read is `unread`. Live: Sepolia's delegation USDC 48,000 and WETH unlimited, router none and none; the fork's delegation USDC 83,857 and the router none. `allowances.live.test.ts` 2/2 against the real Approve API. The live read also found two defects, fixed in batch 4a: the fork's WETH allowance — 2^255 counted down by sales — printed as a 59-digit amount (X75), and the eight equities read `unread` because no fork executes them (X74). "Take it back" signs `approve(spender, 0)` in the owner's wallet: unit-tested, and signable on a fork build since 4.1; after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-| 3.13 | **Fees shown.** Gas price (1inch Gas Price API on Base; `getGasPrice` on the fork) in `/swap/quote`; fee rows on swap, order and send | **DONE** — built at `82abd3e`, deployed at `a8e8154`. `/swap/quote` carries the gas price (1inch's Gas Price API v1.6 on Base, the node's own price elsewhere), the route's gas units, the fee in dollars and `paidBy: 'executor'`; Swap and Order show it, and Send shows the fee the user's wallet pays. Live for $50 of USDC into WETH: Sepolia 0.006 gwei from the chain, 438,562 units, $0.0066; the fork 1.000028 gwei, 312,762 units, $0.78 — each paid by the executor; after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-| 3.14 | **Transaction history.** 1inch History API on Base; `Spent`/`Closed` logs on fork and Sepolia; one History screen | **DONE** — built at `82abd3e`, deployed at `a8e8154`. `GET /history` reads the delegation contract's `Spent` and `Closed` events for the wallet over the last 9,000 blocks and joins each to the run behind it, adding 1inch's History API v2.0 on Base; the History screen states the window. Live: the fork's window 51,233,357–51,242,357 held 8 entries, each joined to its run — among them the $400 SwapVM buy and its $401.17 sale through 1inch minutes earlier; Sepolia's window 46,752,180–46,761,180 held none. `history.live.test.ts` 1/1 against the real History API; after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-| 3.15 | **Limit orders.** Limit Order Protocol orders built and filled locally on the fork (`fillOrder`), listed in the app | **DONE** — built at `82abd3e`, deployed at `a8e8154`. Limit Order Protocol v4 inside the AggregationRouterV6, taken through `XorrDelegation.spend()` with `fillOrderArgs` naming the owner as the target (`venues/limit-orders.ts`, `routes/limit-orders.ts`, migration 020, the Limit orders screen). Live on the Railway fork: `ship:makers --limit` published two all-or-nothing orders from a fresh maker (0.02 WETH for 50.050013 USDC, 0.05 WETH for 125.749098 USDC), each checked against the router's own `hashOrder`; the list read both open and fillable; taking the 0.02 WETH order filled in `0x65a1c3c5…` (block 51242360, gas 195,054), whose receipt moves 50.050013 USDC from the owner to the delegation, 0.02 WETH from the maker to the owner and 50.050013 USDC from the delegation to the maker; `/runs` reads `lop · buy · $50.05`, the list reads it taken by you, a second take is refused `already_taken`, an unlisted hash 404, and publishing as a user 403. Sepolia lists nothing and says why. `fork/prove-limit-order.ts` settled each calldata choice against the deployed router first — the threshold mask is the low 184 bits, not 185, and `bitInvalidatorForOrder` takes the nonce. Posting to 1inch's public orderbook is a mainnet action and stays out; after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-| 3.16 | **Cross-chain quote.** Fusion+ quoter (`/fusion-plus/quoter/v1.0/quote/receive`) as a read-only screen | **DONE** — built at `82abd3e`, deployed at `a8e8154`. `GET /crosschain/destinations` and `GET /crosschain/quote` give a read-only Fusion+ quote for USDC or WETH from Base to Arbitrum, Optimism, Ethereum or Polygon, with what arrives under each auction preset; every quote says `submittable: false` and why. Live on both executors: 100 USDC from Base arrives as 99.877325 on Arbitrum, with presets fast (recommended) 180 s, medium 360 s and slow 600 s; an unknown chain is a 400. `fusion-plus.live.test.ts` 3/3 against the real quoter, every registry address confirmed by 1inch's Token API. Submitting is a mainnet action and stays out; after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-| 3.17 | Portfolio value from the 1inch Portfolio API | **BLOCKED — no data.** It indexes real Base only; the test wallets hold nothing there. 2.10's snapshots replace it |
-| 3.18 | `docs/SPONSOR-AUDIT.md` 1inch section regenerated from the code (stocks priced by the swap quote, not Spot Price; fill counts; SwapVM); `/market/stocks` sends `feed:'unavailable'` not `'simulated'` | **IN PROGRESS** — the feed label shipped at `b928b3a`: `/market/stocks` sends `feed: 'unavailable'` for an equity whose route fails, and the client's types, screens and fixtures use the same word (no feed was ever simulated). The 1inch section of `docs/SPONSOR-AUDIT.md` is regenerated last in Phase 3, once 3.9–3.16 have changed which 1inch APIs are used. Set aside on 2026-09-14 with the rest of the backend work (O3); `/metrics` after batch 4a, for when it resumes: fills 1inch 51 · SwapVM 10 · Aqua 8 · LOP 1, quality against quotes 1inch −16.8 bps (23), SwapVM +26.6 bps (8), Aqua −225.4 bps (3) |
-| 3.19 | Manual-dispatch CI job for live 1inch tests and forge fork tests, with repo secrets set from the existing `.env` names | **DONE** — at `40b0ebd`. `ci.yml` gains two jobs that run only on `workflow_dispatch` and fail loudly when a secret is missing rather than skipping: `fork-contracts` builds the contracts and runs the forge fork suites against Base through the `BASE_RPC` secret, and `live-1inch` forks Base with anvil inside the job and runs `oneinch.live`, `compare.live` and `stocks.live` with the `ONEINCH_API_KEY` secret. Both secrets were set on the repository from the `.env` names, values never printed. The first dispatch (run 34739737305) failed `live-1inch` before collecting a file — the executor suite compiles `tools/wait-for-warm.ts` against the root tsconfig, which extends `expo/tsconfig.base`, and only the root install provides it — so the job installs both packages now. Dispatch run 34740983206: `checks` green, `contracts` 31, `fork-contracts` 35 (17 Aqua book, 11 SwapVM, 7 tokenized equities), `live-1inch` 15 passed — `oneinch.live.test.ts` 9, `compare.live.test.ts` 4, `stocks.live.test.ts` 2. Push runs skip the two jobs by design |
-| 3.20 | **Venues compared and chosen by what they deliver.** `buildSwapVmFill` reads the program's real output — the simulated `spend()` already runs the fill and returns its own return data — and `/route/compare` reports that, not the floor; `chooseSettlement` settles through the servable venue that delivers the most, with the book-first order breaking ties | **DONE** — settlement by best execution at `40b0ebd`; SwapVM choosing the program that delivers the most, deployed at `a8e8154`. Every venue that can serve says what it would deliver — Aqua its quote, SwapVM what a dry run of `spend()` returns, the aggregator its quote — and the leg settles where the owner receives the most, books winning ties; `/route/compare` reports SwapVM's delivered amount, not its floor. Live on the fork: a fresh program (50,000 USDC / 20.374 WETH, `0xf9ee3763…`) and `/route/compare` naming SwapVM best at $20, $50, $150 and $400 (by 165, 159, 139 and 89 bps); `swapvm-settle.live.test.ts` 3/3 — the grant offers exactly the venues the chain allows, a buy settled through `swapvm` at a size where the program delivers the most, and the WETH was sold back. Found while proving 3.1: SwapVM had ranked 30 bps under the aggregator by construction, and settlement took Aqua whenever a book could serve (X72); after the deploy, the 14-test regression passed on both executors and `/verify` read 19 pass · 1 fail (the permanent audit fork) · 1 skip on Sepolia and 20 · 0 · 1 on the fork. CI did not start for `a8e8154` — push run 34748695064 ended `startup_failure` during a GitHub Actions incident and a dispatch was refused with HTTP 500 — so CI runs with batch 4a's push |
-
-## Phase 4 — Wallet and Privy: a loop a stranger can finish
-
-| # | Task | Status |
-|---|---|---|
-| 4.1 | **Spike: user signing on the fork.** Privy simulates embedded-wallet sends against real Base (`src/chain.ts:66-88`). In `src/auth/useGrantDelegation.{native,web}.ts`, sign with `eth_signTransaction` using fork nonce/gas and broadcast the raw transaction to the fork RPC. Decision gate: works → 4.2; fails → record Privy's error verbatim and do 4.3 | **DONE** — live at `e607289`. On a fork build the wallet signs with `eth_signTransaction` using the fork's nonce, gas and fees; the signed bytes are checked against what was asked and the app broadcasts them (`src/wallet/userSigning.ts`); Base and Base Sepolia send through the wallet as before. Live on the Railway fork after the deploy, a Privy wallet signed through the app's own path (`tools/prove-user-signing.ts`, wallet `0x7882…c36a`): an approval (`0xaa9c47d9…`, block 51,242,364, allowance 2,000,000 → 3,000,000) and a 5 USDC withdrawal to the owner (`0xe196391b…`, block 51,242,365; the wallet 20 → 15 USDC, the owner 25,999.661 → 26,004.661), every check passing. The spike before it: `0xf23bcf62…`. Not shown, because it takes a person signed in: Privy's embedded-wallet sheet in a browser accepting `eth_signTransaction` |
-| 4.2 | If 4.1 works: a fork web build (`EXPO_PUBLIC_XORR_CHAIN=base-fork`) is the hosted demo, so grant → fill → withdraw completes in one place | **DONE** — live at `e607289` (web `dpl_3CnCKC2AV6XTCsRa6BTWZLo2Kyvc`). app.xorr.finance is the fork build: `build-web` refuses an RPC that is not anvil on chain 8453 and checks both addresses in the artifact, and the hosted bundle names `executor-fork-production` and `base-fork-production` and carries `eth_signTransaction`, the test-funds copy and Withdraw everything. Each step of grant → fill → withdraw is proven on that fork (4.8, 3.9, 4.1); a person completing it from the hosted screens is not, which needs the owner's sign-in |
-| 4.3 | A Home banner states plainly when the connected chain cannot fill | **DONE** — live at `e607289`. Home says when the executor offers nothing to trade while offering things to watch (`nothingSettles`, from `/market/tradable` and `/market/watchable`; `nothingSettles.test.ts`); the hosted bundle carries it, and on the fork build it does not show because fills are real. The design pass (O3) cut it to one line: "Watch-only here: strategies are tracked, not traded." |
-| 4.4 | **New wallets can get test funds.** Fork: an executor faucet sends fork USDC to a verified wallet. Sepolia: settlement-token USDC from a treasury key, if one holds any; otherwise state it | **DONE** — live at `e607289`. On the Railway fork `POST /faucet` sent 1,000 USDC (`0xa50265ce…`, block 51,242,363): the receipt's one Transfer moves exactly 1,000,000,000 USDC units from Aave's reserve (`0x4e65…c0ab`) to the owner, the wallet's USDC went 24,999.661 → 25,999.661, ETH stayed at 9.9996 (above the 0.05 floor), and it was recorded; asking again was refused 409 `claimed_recently` with when it may ask again. On Base Sepolia `GET` and `POST` both refuse `no_testnet_usdc`, naming the empty faucet key `0xCdCf…3795` and Circle's captcha-gated faucet. A local fork proof before it, and `faucet.test.ts` 23 |
-| 4.5 | **Deposit screen** `app/deposit.tsx`: QR, copy, balance polling, faucet action; no mainnet QR on fork builds (`app/(onboarding)/fund.tsx:188` encodes chain 8453); Portfolio and Agent point here, not at onboarding | **DONE** — live at `e607289`. `GET /wallet/funds` answered on both executors (Sepolia USDC 0 · ETH 0.00999; fork USDC 25,999.661 · ETH 9.9996), and the Deposit screen rendered in the iOS Simulator against the fork executor on 2026-09-14: the address with copy and no code on a fork build, USDC and ETH polled every five seconds, and the test-funds button disabled with the time it opens again. Onboarding's funding step no longer encodes chain 8453 on a fork build; Portfolio and the agent screen open `/deposit` |
-| 4.6 | After a chain switch, read `eth_chainId` and stop with a stated error if it is wrong (`useGrantDelegation.*:79-102`) | **DONE** — live at `e607289`. `ensureChain` in `src/wallet/userSigning.ts` asks the wallet `eth_chainId` after the switch; a wallet on another network, or one that will not say, signs nothing, and the error names the network it is on. It runs inside the signing path 4.1 proved on the fork; unit-tested for another network, no answer, a numeric answer, and a switch that errors while the wallet is already right |
-| 4.7 | Resume re-grants with the on-chain cap and previous duration and skips approvals already sufficient (`app/safety.tsx:216-260`) | **DONE** — live at `e607289`. Resume, Reconnect and Grant a new permission plan the re-grant from the chain (`src/wallet/grantPlan.ts`): the cap the contract holds, for as long as the previous grant ran, approving only what is no longer enough, and asking at `/delegate` when no grant time is on record. Proven on a local fork ($1,200 resumed for the previous 2d 23h 59m 44s, no approval asked, then exactly the WETH approval taken back). Live, both fixes found proving it hold: the fork's grant approves USDC, WETH and CBBTC and no equity (X74), and its WETH allowance reads unlimited (X75). The hosted fork's existing grant has no `grantedAt` — it predates migration 023 — so a resume there asks at `/delegate` rather than guessing a length |
-| 4.8 | `/delegation/record` decodes the `Granted` event (owner must equal the wallet) and stores `allowedVenues()` (`routes/index.ts:487-522`) | **DONE** — live at `e607289`. `/delegation/record` records a grant only from a `Granted` log the delegation emitted for the signed-in wallet, naming this executor's delegate and still in force, with cap, expiry, venues and `granted_at` from the chain. Live on the fork: the faucet's transfer offered as a grant was refused 400 `no_grant_event`, an unknown hash 400 `tx_not_found`, and `GET /delegation` read cap $2,810, expiry 2026-09-20 and 4 venues (`grantedAt` null: that grant predates the column). A real grant recorded and every forged one refused, 20/20, on a local fork; a new grant on the hosted fork needs the owner's signature |
-| 4.9 | **Withdraw for real.** Server-side allowlist with a server clock for the cooling-off and a remove action (SECURITY.md itself requires it); any token; "withdraw everything" sequences sell → Aave exit → send. Prove one user-signed withdrawal on chain | **DONE** — live at `e607289`. The withdrawal allowlist is the executor's (migration 022). Live on the fork: an address added (201, usable 24 hours later by the executor's clock), checked at once and refused 409 `cooling_off` with the time it opens, listed, removed (200), and checked again and refused 409 `not_allowlisted`. Withdraw everything sequences sell → Aave exit → send, proven on a local fork (a 1,124.231527 USDC owner-signed transfer, `0x962433c6…`); a user-signed withdrawal on the hosted fork is 4.1's `0xe196391b…`. SECURITY.md §7 describes what is enforced where |
-| 4.10 | Wallet export in `app/recovery.tsx` via Privy, where the SDK supports it; fix the onboarding copy that asks for a backup nothing offers | **DONE** — live on app.xorr.finance since `e13d54a` (web `dpl_CkU8TP3SPgy8vycUQfdZRtdHeVqK`). Recovery offers a copy of the key where Privy can give one: on the web, Privy's own export window for this wallet (`useExportWallet`; the key stays inside Privy's frame); Privy's mobile SDK has no export, so a phone says to export at app.xorr.finance with the same email (`src/wallet/useKeyExport.*`, `useKeyExport.test.ts` 3). Onboarding no longer asks for a backup nothing offered. Rendered in the iOS Simulator; exporting a real key is the owner's to do |
-| 4.11 | Login copy matches reality (the passkey comment promises a login that is not built) | **DONE** — live since `e13d54a`. Login is an email code on web and on the phone; the comments that promised a passkey login, and a wallet type that described passkey recovery, now say so. Enabling passkeys still needs Privy's dashboard and associated domains (8.9) |
-| 4.12 | Privy wallet selection and caching (with 2.1) | NOT STARTED |
-| 4.13 | Privy policy on the user's own wallet: find the owner-authorised attach path; if none exists, remove "Ready, and yours to switch on" (`app/safety.tsx:436-441`) | NOT STARTED |
-| 4.14 | **The B2B workflow.** A concrete, working business flow built on the key-quorum policy (operator manages agent policy for a business wallet), shown in-app and written up | **DONE** — live at `4e6f80a`. Business (Explore → Account) makes a treasury: a Privy server wallet owned by key quorum `zixx49…` with the deployment's policy attached, registered as an owner apart from its operator's wallets (migration 026), which signs its own approvals, grant and revoke through Privy and can sign nothing else. From the Android app on the fork: created `0xE786…1469`, funded 1,000 USDC, granted $50 a day (three approvals and `grant()` `0x1a6e66a6…`, nonces 0–3), the bot bought 0.0020 WETH through a maker's SwapVM program (`0xceb3abb6…`), stopped (`revoke()` `0x049c6963…`), and Privy refused to sign a transfer of the $995 out. Live: `business-treasury.live.test.ts` 6/6 on the fork. Unit: `treasury.test.ts` 21, `business.test.ts` 7, `treasurySigner.test.ts` 8. On Base Sepolia Privy broadcast a treasury's approvals, grant and revoke, and the executor could not record them while its node lagged a block; fixed in `bdb85d0`, after which Privy's next `grant()` (`0x728bf11d…`) and `revoke()` (`0x88641cc4…`) were both recorded |
-
-## Phase 5 — UI: simpler and cooler
-
-| # | Task | Status |
-|---|---|---|
-| 5.1 | **More tab** (`app/(tabs)/more.tsx`, blank today): Wallet (tokens, swap, send, deposit), Strategies, Activity, Alerts, Futures, Earn, Proof (verify, judge, delegation, approvals, audit), Settings — as tiles in the new language | NOT STARTED |
-| 5.2 | **Fold the long tail.** Merge activity + inbox + runs + proposals + history + catchup; retire orphaned or duplicate screens (`watchlist`, `chart/[s]`, `(tabs)/markets`, `markets/[classId]`, `search`, `briefing`, `bot/*`, `holdings`, `balance`, `allocation`, `pnl`, `rates`, `roster-compare`, `risk`, `backtest`, `schedule`, `movers`, `tokens`, `coverage`, `compare`, `basename`, `goals`, `CatchUp.tsx`); update `src/qa/audit.test.ts` and `tools/shoot.mjs` | NOT STARTED |
-| 5.3 | **No fixtures on screen.** Remove the agent roster fallback (`src/data/local.ts:189-199`), the goals step (`app/(onboarding)/goals.tsx`), the sleeves proposal (`proposal.tsx`) in favour of a first-strategy step, and the 27 unpriced instruments (`src/data/fixtures/markets.ts:272-619`) | NOT STARTED |
-| 5.4 | **Errors look like errors.** Home (prices, limits), Portfolio (positions, runs — skeletons pulse forever on failure), inbox, alerts, position (404 vs failure); exports on web use `deliverFile` | NOT STARTED |
-| 5.5 | **Fresh numbers.** Home and Portfolio reload on focus and on pull (a refresh control on web) | NOT STARTED |
-| 5.6 | **Hiring does something.** Hire opens a create-strategy sheet with `agentId`; errors are shown; ladder tiers 6–7 get setup screens or `available:false`; exit rules route to a position | NOT STARTED |
-| 5.7 | **False claims.** Order ticket's "Auto Close is on" (arm exit rules after a fill, or remove); asset 1Y = 365 days and All = max (both fetch 90 today); star persisted or removed; TP/SL limits widened; auto-close load error branch | **IN PROGRESS** — two false claims removed in the design pass (O3): the order ticket's "Auto Close is on" line, when placing an order arms no exit rule, and the asset screen's star, which saved nothing. Still open: 1Y and All fetch 90 days, the TP/SL limits, the auto-close load error branch |
-| 5.8 | **Charts.** Candles carry timestamps; line views not folded to 12 points; drag crosshair with price and time plus an accessible summary; fill markers on asset and position charts; Portfolio graph from `/portfolio/history` with range pills ending at the balance; agent P&L chart | NOT STARTED |
-| 5.9 | **One visual language.** Restyle the kept old-design screens: safety, activity, settings, send, deposit, order, position, strategy set-ups, onboarding | NOT STARTED |
-| 5.10 | Chat: remove the dead "Conversation options" button; skip/decline messages use the proposal's own symbol and agent; delete unused builders | NOT STARTED |
-| 5.11 | **Accessibility.** Secondary text at least `ink55` on black (ink28–45 is 2.3–4.4:1); header roles; web modal `aria-modal` and Escape; labelled skeletons and charts | **IN PROGRESS** — secondary text is readable on black: the kit's secondary roles at ink55 (6.3:1) and its quiet roles — footnotes, eyebrows, tab labels — at ink50 (5.3:1), and 299 explicit ink28–45 text colours in 88 screens and components raised to ink55; colours that carry a state, such as an unselected tab, are kept. Headings, charts and text size (2026-09-14, FEATURES.md #74 and #86): screen, sheet and onboarding titles are announced as headings (`Text`; a heading element on the web), a line chart is one image with a sentence saying which way its series went and by how much (`describeSeries`), and every text role grows with the phone's text size up to its own ceiling, so rows wrap instead of clipping; skeletons already announced "Loading". Still open: the web modal's `aria-modal` and Escape, and spoken summaries on sparklines and candle charts |
-| 5.12 | Stocks rows open the asset screen with the observed series when there are no candles | NOT STARTED |
-| 5.13 | Design docs match the approved motion (`ui/mobile-ui/animations.md`, `src/ui/README.md` rule 3) — the owner directed arrival motion from the reference video | NOT STARTED |
-| 5.14 | Tab bar testIDs for e2e | NOT STARTED |
-
-## Phase 6 — Tests and CI depth
-
-| # | Task | Status |
-|---|---|---|
-| 6.1 | Chain-and-database integration tests (local anvil + Postgres) for settle, spend, withdraw calldata, reconcile, flatten and idempotency; a CI job with both services | NOT STARTED |
-| 6.2 | Lint `server/` in CI; Prettier check; checkout/setup-node v5 | NOT STARTED |
-| 6.3 | Maestro flows rewritten for the current shell (`e2e/*.yaml`), plus `npm run e2e` | NOT STARTED |
-| 6.4 | Live-test prerequisites documented in `docs/TESTPLAN.md` | NOT STARTED |
-| 6.5 | Screenshot harness covers `/more`, `/futures` and the new screens; regenerate `docs/screens` | NOT STARTED |
-| 6.6 | Delegation subgraph: `Closed` handler and matchstick tests (with 1.5) | NOT STARTED |
-| 6.7 | Forge in CI runs every non-fork suite (today only `XorrDelegationTest`); fork job with a pinned `FORK_BLOCK` | NOT STARTED |
-| 6.8 | Anchor live test on Sepolia with a scratch wallet | NOT STARTED |
-
-## Phase 7 — Docs, demo and submission
-
-| # | Task | Status |
-|---|---|---|
-| 7.1 | README: setup runs migrations (`npm --prefix server run migrate`), counts refreshed, screenshot gallery refreshed, architecture linked, a judge walkthrough, claims corrected (fork receipts for tiers 1–6, one live subgraph, policy proven on a demo wallet) | NOT STARTED |
-| 7.2 | `docs/SUBMISSION.md`: the Privy B2B use case and workflow, financial-flow transaction hashes, track claims matching the code | **DONE** — the B2B section is the treasury workflow, each step with its transaction, beside the policy checks as `/verify` reads them now |
-| 7.3 | `docs/RUNBOOK.md` and `docs/SECURITY.md` rewritten for the EVM design (they still describe Solana), with deploy and migrate steps | NOT STARTED |
-| 7.4 | Stale docs corrected or dated as historical: TESTPLAN-*, DEMO.md counts, COMPLETION.md, ARCHITECTURE (7 kinds), e2e README, BASE-BUILD-CAMP (62 contract tests, not on mainnet) | NOT STARTED |
-| 7.5 | 107 code comments cite section numbers from a different project's plan (`xorr-dev/PLAN.md`) — re-point them; remove the three `docs/QA-UI-PLAN.md` references (the file never existed) | NOT STARTED |
-| 7.6 | **Demo video, 2–4 minutes**, against the deployed app, with an on-chain transfer on screen and narration (macOS `say` + `ffmpeg`); update README and SUBMISSION links | NOT STARTED |
-| 7.7 | Deadline and official brief links at the top of SUBMISSION | **BLOCKED — owner.** Not in the repo; the ETHGlobal pages list no dates |
-
-## Phase 8 — Blocked on an external thing
-
-| # | Item | Blocked on |
-|---|---|---|
-| 8.1 | `XorrDelegation` on Base mainnet; Base Build Camp | Real money — deployer `0x364d…2581` holds 0 ETH on Base |
-| 8.2 | One tokenized-equity fill | Real money on mainnet; equities do not function on a fork |
-| 8.3 | The Graph track (`xorr-aqua` slug) | A Studio login with a wallet signature in a browser — an owner action |
-| 8.4 | x402 Gateway queries | Spends mainnet USDC |
-| 8.5 | LLM chat answers | No model key anywhere (2.18) |
-| 8.6 | Push notifications, TestFlight | Expo account login, EAS project, Firebase config, Apple account |
-| 8.7 | Explorer verification through an API key | No `ETHERSCAN_API_KEY`; Sourcify is used instead (1.5) |
-| 8.8 | Circle USDC from the Sepolia faucet | Captcha-gated |
-| 8.9 | Passkeys, Privy allowed origins | Privy dashboard access |
-| 8.10 | The crashed, unreferenced Railway `Postgres` service | Deleting a database is the owner's call |
-| 8.11 | Fusion, Fusion+ and orderbook order submission | Mainnet actions |
-| 8.12 | Sepolia audit chain forked at entry 2 | Permanent by design — append-only |
-
-## Owner requests, added during execution
-
-| # | Request | Status |
-|---|---|---|
-| O1 | **Every database copied into MongoDB Atlas** (2026-09-13, "add all the databases in here"). Asked how, the owner chose a verified copy with Postgres still serving the app, over rewriting the executor onto MongoDB | **DONE** — shipped at `a8e8154`. `server/src/db/mongo-mirror.ts` copies every table as of one REPEATABLE READ snapshot, and replaces a collection only when the sorted row hashes read back from MongoDB agree with Postgres's. `_mirror` keeps each table's count, columns and digest, so a copy re-checks from MongoDB alone (`npm run mirror:mongo -- --verify-only`). Each executor copies its own database — neither has a public address — every 30 minutes and on `POST /ops/mirror` (operator only), into the database `MONGO_MIRROR_DB` names; there is no default, so a local executor sharing the `.env` never copies a laptop over a deployment's copy (RUNBOOK §10). Live, copied by each executor and re-checked from here with 0 mismatches: Sepolia `Postgres-gWN2` → `xorr_base_sepolia`, 21 tables / 1,832 rows; fork `Postgres-WPy4` → `xorr_base_fork`, 21 tables / 1,230 rows; and the local `xorr_eth` → `xorr_local`, 21 tables / 3,792 rows. Proven locally before it shipped: `mongo-mirror.live.test.ts` against real Postgres and Atlas (every value kind the copy treats specially, a re-run after an update, a delete and a dropped table, and a copy edited behind its back caught), the CLI, and `/ops/mirror` on a scratch executor (401 without the operator token; 21 tables / 3,792 rows verified). The first local copy found a real defect: `price_observations` rows a microsecond apart collapsed onto one `_id`, so keys keep the exact timestamp text while fields are dates. Not copied, deliberately: the unreferenced `Postgres` service, crashed since 2026-09-11 (8.10 — restarting it is the owner's call), other projects' local databases (`xorr`, `molfi_somnia`) and agents' temporary proof databases |
-| O2 | **The app running in the iOS Simulator** (2026-09-14, "run the simulator … ios sim") | **DONE** — on the iPhone 17 Pro simulator (Xcode 26.5): the installed Debug build, loading Metro from the main tree (`a8e8154` plus the chat drawer work in progress there) with the hosted fork executor as its API. The first launch failed to bundle (X78); with Privy's QR code peer declared and installed, Home rendered the Privy test wallet 0x95A0…e615 with a total balance of $25,007.13, read from the fork executor. The native simulator integration refused because `xcode-select` points at the Command Line Tools, so the simulator was driven with `xcrun simctl`; `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, which needs the owner's password, enables it |
-| O3 | **Simple, sleek and chain-agnostic, with the backend set aside** (2026-09-14: "be simple and sleek design … put the blockchain apart … position ourself as chain agnostic") | **IN PROGRESS** — asked how, the owner chose: the network named only where money moves (a chip on Deposit and Send), venue and sponsor names off the main screens (they stay on How it works), and at most one short line per section. First pass, checked in the iOS Simulator against the fork executor: Home, Deposit, Safety, Recovery, Swap, Portfolio and Send. Safety lost its explanation cards and Basename rows, and its Privy card became a Wallet policy row, which also ended a duplicate-key warning; Swap shows its rows only once there is a quote and names no venue; Portfolio hides dust positions and a zero P&L line; Send raises a problem only once there is an amount. Backend work stopped at batch 4a, with X79 left open. Second and third passes, on `main`: Explore, Assets, Settings and Asset detail; onboarding (wallet, fund, delegate, goals, proposal), the order ticket, History and Agent. The first pass is live on app.xorr.finance (`dpl_CkU8TP3SPgy8vycUQfdZRtdHeVqK`), its bundle carrying the new words and no "Nothing fills on"; CI green on each push (34782791108, 34783130941). Passes two and three live on app.xorr.finance (`dpl_5haRZbz8SAiND59QL5oWEF2McHbp`, CI push run 34783528020 green). Fourth pass, on `main`: the yield strategy and Yield, Limits, Withdraw everything, the recurring buy, Activity, Allowlist, Cross-chain and Limit orders — no Aave or network names, no "BaseScan", one line each. The executor's own audit sentences ("through 1inch") are left as recorded. The fourth pass is live (`dpl_CsCu7LkyGoG34NdnU7bcYu4v6hwG`, CI push run 34783951884 green); a contrast pass (5.11) followed. Fifth pass (`292d6a4`, live since `dpl_4d6PBTiPuLvJyh4hhPUQhv34UJ5k`): signed out, every wallet screen asks for a sign-in instead of "That did not load. Not signed in, so /x was not requested" (ErrorState answers `NotSignedIn`; `useSignedOut` gates the screens that turned a signed-out read into a claim, such as "$0.00 supplied", an empty inbox, "Not granted" and a blank policy); the primary action on the order ticket, Swap, the three strategies and Delegate becomes Sign in; one line per section on Alerts, Sell everything, Export, Rate, Balance, Allocation and Inbox; no chain or venue names in the market notes or the stock rows; screen titles match Explore; the welcome card no longer repeats the tagline. Checked route by route in Chrome on app.xorr.finance, with no console warnings |
-| O4 | **A hundred features, every gap closed, everything verified** (2026-09-14: "come up with 100 features … premium", "figure out what is wrong … close all the gaps", "verify each and every thing … all screens") | **IN PROGRESS** — `docs/FEATURES.md` ranks 100 ideas by impact × feasibility × fit; `docs/qa/SCREENS.md` defines "correct" for all 101 routes and lists the defects found reading them. Built and verified so far: #1 a stop that needs no server and #24 grants only to the pinned contract (`e3d0169`: `src/wallet/delegationChain.ts`, 13 unit tests, and `tools/prove-stop-without-server.ts` passing every check against a local anvil forked from the hosted fork; the live bundle pins `0xc32d…63f4`, checked by `build-web.mjs` against the executor, the deployment record and the chain); #26 failed reads never look empty and #28 no fixture roster (`292d6a4`); #76 security headers (live: X-Frame-Options, nosniff, referrer policy, HSTS, permissions policy). Fixed on the way: `a86d8a0`'s custom bezier broke the motion policy and CI — arrivals now ease out through a timing on both platforms (`8c05266`, CI green) — and Safety said stop-losses survive a stop, when a revoked policy refuses `closePosition` (XorrDelegation.sol:279). The Markets snapshot of tokenized stocks is served stale while one probe refreshes it (8.1 s waits before). Four agents worked through the SCREENS.md defects by area, each in its own worktree, and their work is merged. By 2026-09-15, 22 of the 100 are built and shipped: #1, #3, #9, #12, #14, #21, #22, #24, #26, #27, #28, #29, #34, #45, #47, #53, #66, #74, #76, #83, #86 and #90 (#5 is not counted: the snapshot graph predates the list). Every item is held to docs/TESTPLAN.md, and the measured state is §4 |
-| O5 | **A messenger for the agents** (2026-09-15: a bottom bar "like telegram", the bar's button opening swap "from bottom", Messages as "a sliding drawer from the bottom" with "profile, agents, add agents, search … everything end to end") | **IN PROGRESS** — shipped at `cfc8420` and `7030758` (web `dpl_AUj91xEJKEvBWJZQpoaJWzoeJbUU`; both executors at `7030758`). The bar holds Home, Swap and Messages; Swap opens as a sheet from the bottom; Messages rises as a drawer drawn to the owner's reference: you at the top left, search and add at the top right, the agents as faced orbs, then a row per conversation with its last line, its time and a dot when something is new, and each agent's conversation in the same drawer. Add hires the agent (`POST /agents`). No language model is configured anywhere (`OPENROUTER_API_KEY` is absent from both executors and the local env), so `/health` publishes `voice.configured` and a conversation offers the agent's own screens (how it trades, the record its mandate reads, every run) instead of questions that could only be refused; a screen opened from the drawer brings the drawer back on return. Verified on the iPhone 17 Pro simulator (docs/TESTPLAN.md F23). Still to drive there: switching agents from the picker, opening a shortcut, and the drawer's return |
-| O6 | **Chain-agnostic, with the screens a new chain needs** (2026-09-15: "add all the other screens.. taht are needed.. dude.. chain agnostic screens.. i will build in every chains for hackathons") | **IN PROGRESS** — Networks (`/networks`) lists every deployment the app knows, each read live from its own executor (`/health`, `/market/tradable`, `/yield/supply`): whether it is up, its block, whether trades settle there, whether idle cash can earn, and which one this app uses. Network (`/network?key=`) shows any one of them, and the network chip on Deposit, Send and Fund opens Networks (`677d691`; docs/TESTPLAN.md S102). docs/ADDING-A-CHAIN.md writes down what adding a chain takes. Each chain now says what its money is (real, test or a copy) in `server/src/evm/money.ts` and `src/chain.ts`. The mainnet guard, the faucet, the gas drip and the app's Test label read that, and a key that either side does not know is refused at start and at build (`2fa214a`). Before, a mainnet added under any key but `base` would have started without ALLOW_MAINNET, had real ETH sent by the gas drip whenever a faucet key was set, and been labelled a test network. Token addresses and explorer links are records keyed by chain, so a new chain does not compile until it has them (`3cf6250`). `tools/prove-contract-refusals.ts` proves the contracts' refusals on any chain an executor runs on. Still Base-only, and listed in the guide: 1inch quoting and settlement, Aave, the tokenized equities, Basenames, the subgraphs, cross-chain quotes and the fork build rule |
-
----
-
-## 3. The gap list
-
-Every gap found, tied to the task that closes it. Severity is for the product and the submission.
-
-| ID | Gap | Where | Task | Severity |
+| Environment | Cluster (`XORR_CHAIN`) | RPC | Money class | Notes |
 |---|---|---|---|---|
-| X1 | Any signed-in user can take over any wallet row, then trade, close or flatten on that owner's permission | `routes/index.ts:88,154-172` | 1.1 | **Critical** — **closed** (1.1, `80a8c62`, verified on both executors) |
-| X2 | Swap output is not bound to the owner on chain; `closePosition` uncapped — a leaked delegate key could drain approved tokens | `XorrDelegation.sol:179,232`; books | 1.4 | **Critical** — **closed** (1.4, `47b1296`; deployed and proven with real fills in 1.5) |
-| X3 | Strategy pause/resume/end/patch/delete have no ownership check | `routes/strategies.ts:592-665` | 1.2 | **High** — **closed** (1.2, `fbaa2c5`, verified on both executors) |
-| X4 | Approving a proposal writes "Filled…" and trades nothing | `routes/extra.ts:289-339`; `Chat.tsx:314-330` | 1.3 | **High** — **closed** (1.3, `400d64e`; real fill on the fork) |
-| X5 | Sepolia contract predates the source (no `closePosition`); nothing verified; no deploy record | `0xb14C…0a4e` | 1.5 | **High** — **closed** (1.5; `0x6c55…540e` deployed, Sourcify exact match, deployment record committed) |
-| X6 | One RPC error mid-run leaves it pending and aborts the tick; failed runs starve newer ones | `run.ts:299-365`; `scheduler.ts` | 1.6 | **High** — **closed** (1.6, `d76845a` + `31226d7`; fork overdue strategies 4 → 0) |
-| X7 | Failed chain reads shown as `$0`, no delegation, or revoked | `routes/index.ts:223-226,261,390,864-870` | 1.7 | **High** — **closed** (1.7, `31226d7`; verified on both executors) |
-| X8 | Gas faucet drainable and races into double sends | `gasDrip.ts`; `routes/index.ts:163-211` | 1.8 | Medium — **closed** (1.1 + 1.8, `a3a3247`; a first visit paid by the faucet, not the delegate) |
-| X9 | Privy policy matches only `to`, so a token transfer to an attacker passes | `privyPolicy.ts:181-189` | 1.9 | Medium — **closed** (1.9, `3989ef9`; Privy refuses the transfer, a grant to a stranger and an unlisted send on both executors) |
-| X10 | Momentum and event-driven would trade without approval | `ladder.ts:99` | 1.10 | Medium — **closed** (1.10, `3989ef9`; a strategy's proposal approved and filled on the fork) |
-| X11 | CORS `*` in production | executors | 1.11 | Medium — **closed** (1.11; a foreign-origin preflight is refused on both executors) |
-| X12 | Anchor route spends bot gas without a limit | `routes/index.ts:830` | 1.12 | Low — **closed** (1.12, `3989ef9`; a second press inside the hour answered 429) |
-| X13 | Every authenticated request pays ~0.45 s before its handler | `middleware.ts:95`; `privy.ts:59` | 2.1 | Medium — **closed** (2.1, `031d578`; measured +14–17 ms on the deployed executors, not 0.45 s, and now within noise — no agent-key write or Privy read per request) |
-| X14 | `/agents` 9.4 s, `/positions` 6.3 s, `/wallet/balance` 3.7 s, `/delegation` 3.9 s | see 2.2–2.5 | 2.2–2.5 | Medium — **closed** (2.2–2.5, `031d578`; the reproducible cost was `/wallet/balance`'s throttled Aave read — p90 7,973 → 511 ms on Sepolia, 4,158 → 286 ms on the fork; the other routes were already fast on these accounts and no longer grow with the book or the trail) |
-| X15 | Positions ledger never checked against the chain and not tagged by chain — Portfolio shows `$0.00` beside open positions | `positions/index.ts:201-250` | 2.6, 2.7 | **High** — **closed** (2.6 `e75cec6`; 2.7 `a10584f` + `a6ce7e2` — the fork's stale 0.8026 WETH reads 0 held with its drift, and the drift note renders on Assets, Portfolio and Position) |
-| X16 | Realised P&L uses the pre-trade estimate; closes/flattens leave no run row | `panic.ts:131-395` | 2.8 | Medium — **closed** (2.8, `a6ce7e2`; two sales on the fork booked $3.98 each from the USDC that arrived, each with its run) |
-| X17 | Sells score ~0 bps by construction; `fillsByVenue` parses prose | `fill-quality.ts`; `ops.ts` | 2.9 | Medium — **closed** (2.9, `a6ce7e2`; sales on the fork score in USDC, −24.3 bps mean on 1inch; venue counts from runs) |
-| X18 | No stored portfolio history; the graph replays today's holdings | `app/portfolio.tsx:70-146` | 2.10, 5.8 | **High** (bar 3) — server half closed (2.10, `d1cbda0`: snapshots kept and served); the graph moves to them in 5.8 |
-| X19 | Notification toggles send PATCH to a POST route and fail silently | `src/data/system.ts:446` | 2.12 | Low — **closed** (2.12, `d1cbda0`; PATCH was a 404, POST persists) |
-| X20 | Subgraph fetch can hang a run | `graph/client.ts:85` | 2.13 | Low — **closed** (2.13, `d1cbda0`; a 5 s deadline) |
-| X21 | No server-side stop-all | `rules/engine.ts` | 2.14 | Medium — **closed** (2.14, `a75fa85`) |
-| X22 | Leaderboard scores sells and supplies as buys; `risk_limits` not enforced | `leaderboard.ts`; `agents/routes.ts:172` | 2.15 | Low — **closed** (2.15, `a75fa85`) |
-| X23 | Watch mode ignores each kind's planner | `run.ts:249-288` | 2.16 | Low — **closed** (2.16, `a75fa85`) |
-| X24 | Onboarding rebalance can never be created (400) | `proposal.tsx:68-76`; `strategies.ts:93-97` | 2.17 | Medium — **closed** (2.17, `a75fa85`) |
-| X25 | Chat has no context or memory | `bot/llm.ts` | 2.18 | Blocked |
-| X26 | Push never registers | `app.json` | 2.19 | Blocked |
-| X27 | App grants cannot reach the SwapVM book | `chains.ts:138-142` | 3.1 | **High** (1inch track) — **closed** (3.1, `b928b3a`) |
-| X28 | Fork rebuild loses the books and the anchor; recovery is manual | `fork-bootstrap.ts` | 3.2, 3.3 | **High** — **closed** (3.2, 3.3: one-command rebuild; the chain survives restarts) |
-| X29 | A configured delegation index can silently skip both books | `graph/decide.ts:72-73`; `settle.ts` | 3.4 | Medium — **closed** (3.4, `b928b3a`) |
-| X30 | `/graph/decision` can never show Aqua; hardcodes mainnet USDC | `routes/extra.ts:484-500` | 3.5 | Low — **closed** in code (3.5, `b928b3a`); no current deployment has an Aqua book and index for it to report |
-| X31 | Route compare prints `[object Object]` and costs venues unevenly | `venues/compare.ts:170-208` | 3.6 | Medium — **closed** (3.6, `b928b3a`) |
-| X32 | Buy enabled on Sepolia, then fails | `routes/market.ts:352` | 3.7 | Medium — **closed** (3.7, `b928b3a`) |
-| X33 | No unit tests for the 1inch client, venue order, or Aqua | server | 3.8 | Medium — **closed** (3.8, `b928b3a`) |
-| X34 | Swap is a dead screen (fixed pair, controls do nothing, review opens a sell) | `app/swap.tsx` | 3.9 | **High** (owner ask) — **closed** (3.9, `40b0ebd`) |
-| X35 | No token list with balances | `app/tokens.tsx` | 3.10 | Medium — **closed** by 3.10 (live at `a8e8154`) |
-| X36 | Send is USDC only, no fee | `app/send.tsx` | 3.11 | Medium — **closed** by 3.11 (live at `a8e8154`) |
-| X37 | Approvals omit the 1inch router and cannot revoke | `app/approvals.tsx` | 3.12 | Medium — **closed** by 3.12 (live at `a8e8154`) |
-| X38 | No fee estimate anywhere a user pays one | swap, order, send | 3.13 | Low — **closed** by 3.13 (live at `a8e8154`) |
-| X39 | No wallet-level transaction history | `app/history.tsx` | 3.14 | Medium — **closed** by 3.14 (live at `a8e8154`) |
-| X40 | No limit orders | — | 3.15 | Medium — **closed** by 3.15 (live at `a8e8154`) |
-| X41 | No cross-chain | — | 3.16 | Low — **closed** by 3.16 (live at `a8e8154`) |
-| X42 | SPONSOR-AUDIT contradicts itself and the code | `docs/SPONSOR-AUDIT.md` | 3.18 | Medium |
-| X72 | Settlement takes the first book that can serve, not the best price; `/route/compare` shows SwapVM's floor as its amount | `executor/settle.ts`; `venues/compare.ts:244-255` | 3.20 | Medium — **closed** by 3.20 (live at `a8e8154`) |
-| X73 | Anyone could hide an open Aqua book or SwapVM program from discovery, or reopen a docked one | `venues/aqua.ts`, `venues/swapvm.ts` | 3.8 | Medium — **closed** (found by 3.8's tests, fixed in `b928b3a`) |
-| X74 | A fork build's grant asks the wallet to approve eight tokenized equities no fork can execute, and stops at the first | `server/src/routes/index.ts` `approvableTokens()` | 4.7 | High — **closed**, live at `e607289`: listed only where `equitiesFunctional()` says they function (found proving 4.7) |
-| X75 | An allowance a sale counted down from the fork tooling's 2^255 reads as a 59-digit amount, and the resume plan asks to approve it again | `server/src/evm/allowances.ts`, `src/wallet/grantPlan.ts` | 3.12, 4.7 | Low — **closed**, live at `e607289`: unlimited from 2^254 (found proving 3.12 live) |
-| X76 | `/delegation/record` and `/delegation/revoke` wrote a second row and a second, permanent trail entry for a hash posted twice — a retried request, or a second press while the first waited on the chain | `server/src/routes/index.ts` | 4.8 | Medium — **closed**, live at `e607289`: the row and the entry in one transaction, under a lock on the hash, and neither again for a hash the trail already carries (`audit/once.ts`; found proving 4.8) |
-| X77 | On a fork, 1inch quotes live Base while the fork's pools stay as they were at its fork block: once the two drift further apart than a leg's tolerance, the router refuses every aggregator trade in that direction (`ReturnAmountIsNotEnough`), and `/route/compare` still lists the route as serving | `server/src/executor/settle.ts`, `server/src/venues/oneinch.ts`, `server/src/venues/compare.ts` | 3.9, 4.2 | High — **closed**, live at `e607289`: on a fork the route is built with the router's widest slippage (50%) and dry-run through the `spend()` or `closePosition()` that will carry it; what it delivers there is what a book has to beat, what SwapVM's floor is priced from, and what the owner is held to, less the leg's own tolerance, which the contract enforces (`evm/measure-route.ts`; real Base settles on the quote as before; found when 3.9's proof failed after the Phase 3c deploy). Proven before the deploy with `fork/prove-measured-route.ts` on a local anvil copy of the Railway fork (block 51,242,366), granted to a local delegate, every leg a dry run: a $15 buy that 1inch quoted at 0.0059648 WETH on Base delivered 0.0059267 there (−64 bps); held to the quote less its 0.54% tolerance the chain refused it (`OutputNotReceived`), held to what it delivers less the same 0.54% it accepted, and settlement chose SwapVM at a floor of 0.0059089, accepted. A 0.004 WETH sale through `closePosition()` delivered 10.059081 USDC against a 9.998374 quote and settled through 1inch at 9.95849, accepted. Unit: `measure-route.test.ts` 5, `settle.test.ts` 7 fork cases, `oneinch.test.ts` the fork router slippage; live, the Swap screen's request filled on the fork (`swap.live.test.ts` 4/4) and `/route/compare` reports 1inch's row as measured there |
-| X78 | The iOS and Android apps could not start. `src/auth/PrivyProvider.native.tsx` imports Privy's UI (`@privy-io/expo/ui`), which imports `react-native-qrcode-styled`, an optional peer of `@privy-io/expo` 0.72 the app never declared. Web never loads a `.native` file, so the type checks, the tests and every web deploy passed while a native bundle failed "Unable to resolve module react-native-qrcode-styled" | `package.json` | O2 | High — **closed**, live at `e607289`: the peer declared at 0.3.3, as Privy requires, and CI's `checks` job bundles the app for iOS (`expo export --platform ios`, 30 s locally). Found running the app in the iOS Simulator; with the peer installed the bundle built and Home rendered the fork wallet's $25,007.13 from the hosted fork executor; CI push run 34781041345 green with the iOS bundle step |
-| X79 | The on-demand `live-1inch` job fails `compare.live.test.ts` ("the aggregator answers"): on CI's fresh fork the test owner holds no grant, so X77's dry run of `spend()` is refused and the 1inch row reports that refusal instead of Base's quote — the test still expects the answer from before X77 | `server/src/venues/compare.live.test.ts` | 3.19 | Medium — open, set aside with the backend (O3): on a fork the test should grant its owner first or hold the row to the measured answer (dispatch run 34781696958) |
-| X43 | Core loop cannot complete on any single hosted chain | `src/chain.ts:66-88` | 4.1–4.3 | **Critical** (bar 5) — **closed** by 4.1–4.3 (live at `e607289`); a person completing the loop from the hosted screens is unproven |
-| X44 | New wallets have no USDC and no way to get any | `fund.tsx` | 4.4, 4.5 | **High** — **closed** by 4.4, 4.5 (live at `e607289`) |
-| X45 | Fork build's deposit QR points at real Base | `fund.tsx:188` | 4.5 | Medium — **closed** by 4.5 (live at `e607289`) |
-| X46 | Chain switch failure is swallowed | `useGrantDelegation.*` | 4.6 | Medium — **closed** by 4.6 (live at `e607289`) |
-| X47 | Resume re-grants a default cap for 24 h | `safety.tsx:216-260` | 4.7 | Medium |
-| X48 | `/delegation/record` trusts any successful transaction | `routes/index.ts:487-522` | 4.8 | Medium |
-| X49 | Withdrawal allowlist and cooling-off live only on the device; USDC only | `allowlist.ts`; `useWithdraw.ts` | 4.9 | **High** |
-| X50 | No wallet export; onboarding asks for a backup nothing offers | `recovery.tsx`; `wallet.tsx` | 4.10 | Medium |
-| X51 | Privy policy not on any user wallet; copy implies a switch that does not exist | `privyPolicy.ts`; `safety.tsx:436-441` | 4.13 | Medium |
-| X52 | No written or working B2B workflow | SUBMISSION | 4.14, 7.2 | **High** (Privy track) — **closed** by 4.14 and 7.2 (live at `4e6f80a`) |
-| X53 | More tab blank; 41 screens behind Explore; 13 orphaned | `app/` | 5.1, 5.2 | **High** (bar 6) |
-| X54 | Fixture agents, goals, sleeves and 27 unpriced instruments on screen | `local.ts`; fixtures | 5.3 | **High** (bar 3) |
-| X55 | Failures render as empty states or endless skeletons | Home, Portfolio, inbox, alerts | 5.4 | Medium |
-| X56 | Home and Portfolio never refresh | `(tabs)/index.tsx` | 5.5 | Medium |
-| X57 | Hiring starts nothing; ladder tiers 6–7 loop back to themselves | `agent/[id].tsx`; `ladder.ts` | 5.6 | Medium |
-| X58 | "Auto Close is on" without exit rules; 1Y and All both 90 days | `order/[symbol].tsx:347-356`; `marketData.ts:189-195` | 5.7 | Medium |
-| X59 | Charts have 12 points, no timestamps, no scrubbing | charts | 5.8 | Medium |
-| X60 | Two visual languages | old-design screens | 5.9 | Medium |
-| X61 | Contrast below 4.5:1; no header roles | `tokens.ts:102-108` | 5.11 | Medium |
-| X62 | CI has never passed (install conflict) | `package.json` | 0.2–0.4 | **High** — **closed** (run 34727643070) |
-| X63 | Deployed web bundle is pre-redesign; `/health` has no version | Vercel, executors | 0.5–0.7 | **High** |
-| X64 | ~80 files uncommitted (1inch requires a real commit history) | working tree | 0.1 | **High** |
-| X65 | `.env.example` missing 18 names; ignore-file holes | `.env.example`; `.gitignore` | 0.9 | Low |
-| X66 | No executor tests on settle, spend, withdraw, reconcile, flatten | server | 6.1 | **High** |
-| X67 | Maestro flows target screens that no longer exist | `e2e/` | 6.3 | Medium |
-| X68 | README setup skips 13 migrations; stale counts | `README.md` | 7.1 | Medium |
-| X69 | RUNBOOK and SECURITY describe the old Solana design | `docs/` | 7.3 | Medium |
-| X70 | 107 comments cite another project's plan | `app/`, `src/`, `server/src` | 7.5 | Low |
-| X71 | Demo 91 s, silent, no fill, pre-redesign | `docs/demo/` | 7.6 | **High** |
+| `localnet` | `solana-localnet` | `http://127.0.0.1:8899` | copy | `solana-test-validator`, no network deps |
+| `solana-dev` | `solana-devnet` | `https://api.devnet.solana.com` | test | Faucet mints SOL/USDC; CI + integration |
+| `solana-fork` | `solana-mainnet` (validator `--clone`) | local `FORK_RPC` | copy | Real USDC mint + real venue programs cloned |
+| `solana-mainnet` | `solana-mainnet` | `https://api.mainnet-beta.solana.com` | real | Refused by faucet; requires `ALLOW_MAINNET=yes` |
 
-### Mock / stub / TODO sweep
+**Chain-agreement invariant (unchanged):** `XORR_CHAIN` (server) and `EXPO_PUBLIC_XORR_CHAIN` (app) must
+agree at all times. The app switches the wallet to the build's cluster before asking for signatures.
 
-Zero TODO, FIXME or "not implemented" markers in shipped code. Hundreds of keyword hits were
-classified; almost all are the `Placeholder` skeleton primitive, input placeholders, tests, or comments
-describing a mock that was removed. **The real ones are not marked in the code at all:**
+### 0.3 Deploy (delta from reference)
 
-- Approving a proposal writes a fill that never happened — X4
-- Agent roster falls back to four fixture agents with $0 stats — X54
-- Onboarding goals and sleeves are design fixtures, and the sleeves drive a real strategy — X54, X24
-- 27 unpriced instruments listed — X54
-- Watch mode logs a plain buy for every kind — X23
-- "Auto Close is on" printed without exit rules — X58
-- `/market/stocks` labels an unrouted stock `feed:'simulated'` — 3.18
+- Executors = CLI uploads: `cd server && railway up --service xorr-solana-executor`. Migrations run as the
+  preDeploy step (`npm run migrate`). Web = `npm run deploy:web` (Vercel project to be created,
+  domain `app.xorr-solana.finance` unless the owner says otherwise).
+- **Never deploy against mainnet-beta without `ALLOW_MAINNET=yes`** — the server refuses to boot otherwise.
+
+### 0.4 Verify
+
+- App: `npm test` · `npx tsc --noEmit` · `npm run lint`
+- Server: `cd server && npm test` · `npm run test:chain` (spins `solana-test-validator`) · `npm run test:live`
+- Chain: `npm run setup:devnet`, `npm run test:chain`, fork scripts under `server/src/fork/`
+- E2E: Maestro flows in `e2e/` (5 flows, assert outcomes not renders)
+- Live: curl against the deployed executor (`GET /health`, `/api/status`, `/api/wallet/balance`)
 
 ---
 
-## 4. Current measured state — 2026-09-15
+## 1. Why this migration is not find-and-replace
 
-Measured after the completion pass's final ship; the item-by-item record is `docs/COMPLETION.md`, "Final measurement". Rows
-that were not measured again were dropped rather than carried forward.
+Solana and EVM differ in five ways that force structural decisions, not renamed files:
 
-| Check | Result |
+1. **Execution model.** EVM `approve` + `transferFrom` lets any contract spend an allowance with a single
+   signed tx. SPL Token's `approve` gives a **delegate authority** a capped `delegated_amount`; the delegate
+   signs `Transfer` instructions up to the cap. Routed swaps (Jupiter etc.) spend from the **signer's
+   authority**, not a delegate's, so the executor cannot silently fill a multi-hop swap the way 1inch does.
+   → Section 6 ("executor signing model on Solana") chooses the fill path.
+2. **Accounts vs addresses.** Token balances live in token accounts owned by wallets (ATAs). "Send USDC to a
+   venue" = transfer into the venue's ATA, which must exist (rent-funded). Every account touch costs rent.
+3. **Transactions are singles.** No try/catch, no reentrancy guards, no gas estimation then submit; one
+   failed instruction fails the tx and the payer loses the fee+priority fee. `humanFailure()` must map
+   blockhash/priority-fee/simulation errors.
+4. **No private RPC as the user's wallet.** The reference used Privy's embedded EVM wallet for signing. On
+   Solana the app signs via a wallet adapter or a local keypair; the executor never holds user keys.
+5. **Indexing.** There is no The Graph on Solana mainnet for arbitrary programs. Event streams must be
+   replaced by RPC polling, Helius/webhook DAS APIs, or Geyser gRPC (Section 9).
+
+---
+
+## 2. Target architecture (end state)
+
+```
+app/ (Expo, RN)                    server/ (Hono + Postgres + Solana)
+────────────────────────          ─────────────────────────────────────
+app/network.tsx ── XORR_CHAIN ──► server/src/solana/clusters.ts (master switch)
+src/networks ───────────────────► solana/connection.ts (RPC + explorer + guard)
+src/wallet/* (sign via adapter)  solana/keys.ts (delegate/payer/dev-owner keypairs)
+                                 solana/delegation.ts (SPL approve/revoke/transfer)
+   │                                    │
+   │ REST /api/*                        │ reads + writes
+   ▼                                    ▼
+executor/place.ts ──guardAndSpend────►  Postgres (rules engine + audit log + chain-scope)
+  rule check → chain check (SPL) →     ▲
+  real mark (markets/*) → spend        │ signals
+  (SPL transfer signed by delegate) ───┤ scheduler.ts (tick: exits → strategies → entries)
+venues/ (Jupiter, Phoenix/OpenBook,     │
+  Marinade/Kamino, Hyperliquid, ...) ───┘
+blockchain: Solana (USDC EPjFWdd5…) + SPL Token program + optional Xorr programs (Phase F)
+indexer: RPC poller / Helius webhook → Postgres (replaces subgraph/)
+audit: hash-chained Postgres log + on-chain anchor via SPL Memo (replaces XorrAuditAnchor)
+```
+
+Non-custody invariant: user USDC sits in the user's own ATA. The bot holds an SPL delegation with a
+**capped `delegated_amount`**, spendable only on behalf of the user's account, revocable in one tx. The
+withdrawal allowlist (24 h cooling-off) stays server-side and is the only path back to an external wallet.
+
+---
+
+## 3. Env layering (first task — everything hangs off this)
+
+### 3.1 Values of `XORR_CHAIN`
+
+Server `server/src/solana/clusters.ts` and app `src/chain.ts` must both accept exactly:
+
+| `XORR_CHAIN` | Cluster | RPC source | Money class |
+|---|---|---|---|
+| `solana-localnet` | localnet | `SOLANA_RPC_URL` or `http://127.0.0.1:8899` | copy |
+| `solana-devnet` | devnet | `SOLANA_RPC_URL` or `clusterApiUrl('devnet')` | test |
+| `solana-fork` | mainnet | `FORK_RPC` | copy |
+| `solana-mainnet` | mainnet-beta | `SOLANA_RPC_URL` or `clusterApiUrl('mainnet-beta')` | real |
+
+If `XORR_CHAIN` is unset or unknown, **refuse to start** (same as reference `server/src/index.ts`).
+
+### 3.2 Server env vars
+
+**Keep (chain-agnostic):** `DATABASE_URL`, `PORT`, `SCHEDULER`, `SCHEDULER_TICK_MS`, `EXECUTOR_TOKEN`,
+`OPERATOR_TOKEN`, `ALLOWED_ORIGINS`, `OPENROUTER_API_KEY`, `XORR_MODEL`, `ONEINCH_API_KEY` (unused after
+jeeter cut), `SUBGRAPH_URL` (replaced, see 3.3), `ANCHOR_EVERY_MS`.
+
+**Add (Solana):**
+
+| Var | Meaning |
 |---|---|
-| Deployed | executors `b01c85b` (both); web app `b01c85b` (`dpl_4rsbJbRf1K3rryDQYYcaApBaEThu`) |
-| `https://app.xorr.finance` | the fork build at `b01c85b`: its bundle names the fork executor and pins the delegation contract `0xc32d…63f4`; every response carries X-Frame-Options DENY, nosniff, a strict-origin referrer policy, HSTS and a permissions policy. Signed out, 103 routes swept in Chromium: 0 with an error, 0 with a warning |
-| `api.xorr.finance` | up · base-sepolia · `b01c85b` |
-| Fork executor | up · base-fork · `b01c85b` |
-| QA (`tools/qa-full.mjs`, 221 checks) | Sepolia 221/221 (a first run at 02:28 UTC met 1inch's own API answering 500 on E187 and E190; run again at 02:35, once 1inch answered, it passed) · fork 219/221 (E064, E096: the fork's clock runs 13 minutes behind, so a buy at 00:00:23 UTC counts on different days in the executor's tally and the chain's) |
-| Sepolia `/verify?owner=0x95A0…e615` | 19 pass · 1 fail (the permanent audit fork) · 1 skip |
-| Fork `/verify?owner=0x95A0…e615` | 20 pass · 0 fail · 1 skip |
-| Contract refusals (`tools/prove-contract-refusals.ts`) | every check on both chains |
-| Live tests | Sepolia: 26 files passed, 4 skipped, 121 tests. Fork: every file passed, SwapVM settlement after a fresh maker program |
-| Fork `/metrics` | fills 1inch 93 · SwapVM 21 · Aqua 9 · Aave 2 · LOP 1; against the arrival price 1inch −34.2 bps (65 measured) · SwapVM −20.5 bps (19) · Aqua −198.5 bps (4) |
-| MongoDB Atlas | the mirror's live test 3/3 against the fork executor |
-| CI | the push run for `b01c85b` green |
-| Tests | app 162 files · 1,603 tests; executor 98 files · 887 tests; `forge test` 74/74 |
-| iOS | runs on the iPhone 17 Pro simulator through `xcrun simctl`, against the fork |
-| Android | runs on an Android 15 emulator; every signed-in flow driven there against the fork |
-| Credentials absent | any LLM key, `ETHERSCAN_API_KEY`, an Expo/EAS project id, Firebase config |
+| `XORR_CHAIN` | master switch (3.1) |
+| `SOLANA_RPC_URL` | override RPC (devnet/fork/mainnet) |
+| `SOLANA_MAINNET_RPC` | JSON-RPC for mainnet-native reads (staking inflation, etc.) |
+| `FORK_RPC` | local `solana-test-validator` URL for `solana-fork` |
+| `ALLOW_MAINNET` | `yes` only to run against real mainnet-beta |
+| `XORR_KEY_DIR` | dir holding delegate/payer/dev-owner keypair files |
+| `XORR_KEY_DELEGATE`, `XORR_KEY_PAYER`, `XORR_KEY_DEV_OWNER` | base58 secret per key (or file fallback) |
+| `XORR_DEVNET_STATE` | path to devnet-state.json (token accounts) |
+| `SOLANA_USDC_MINT`, `SOLANA_USDT_MINT`, `SOLANA_WSOL_MINT` | mint overrides (defaults in 8.4) |
+| `HELIUS_API_KEY` | optional mainnet webhook/price indexer |
+
+**Remove (EVM-only):** `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_AUTHORIZATION_KEY`,
+`PRIVY_KEY_QUORUM_ID`, `BASE_RPC`, `BASE_SEPOLIA_RPC`, `LOCAL_RPC`, `DELEGATION_ADDRESS`, `AQUA_BOOK_ADDRESS`,
+`SWAPVM_BOOK_ADDRESS`, `ANCHOR_ADDRESS`, `SUBGRAPH_DELEGATION_ADDRESS`, `FAUCET_PRIVATE_KEY`,
+`MONGODB_URI`/`MONGO_*` (keep if mirror desired), `DELEGATE_PRIVATE_KEY` (replaced by `XORR_KEY_*`).
+
+### 3.3 App env vars
+
+**Add:** `EXPO_PUBLIC_XORR_CHAIN` (must equal server), `EXPO_PUBLIC_API_URL`, plus `EXPO_PUBLIC_SOLANA_RPC`
+for the wallet adapter.
 
 ---
 
-## 5. What changed since the fourth plan
+## 4. App-side chain config (swap EVM → Solana)
 
-- **The product moved.** The Railway web service is gone; the app is `app.xorr.finance` on Vercel, the
-  executor `api.xorr.finance`. The fourth plan's hosted URL is dead.
-- **A redesign landed locally and nowhere else:** a three-button shell (Home, a chat button, a grid
-  tab), one balance on Home opening Portfolio, arrival motion from the owner's reference video, new
-  back and close buttons, a simpler Profile, and Futures and Stocks backed by real market data
-  (Hyperliquid, 1inch quotes). None of it is committed or deployed.
-- **The audits looked at security, not just honesty,** and found what the fourth plan could not: a
-  wallet takeover, an unowned strategy endpoint, a contract promise nothing enforces, and a fill
-  written for a trade that never happened.
-- **The owner's asks widened:** simpler and cooler UI, every 1inch wallet feature end to end, the Privy
-  wallet and the graphs made properly — Phases 3–5.
+| File (reference) | Replace with | Task |
+|---|---|---|
+| `src/chain.ts` (`MONEY`, `CHAINS`, `ChainKey`) | `src/chain.ts` → `MONEY`/`CLUSTERS` for the 4 clusters; export `ClusterKey` | Rewrite |
+| `src/networks/deployments.ts` (Deployment[]: key/name/chainId/api/explorer/test) | same shape but `cluster` field instead of `chainId`; api = xorr-solana executor URLs; explorer = `explorer.solana.com?cluster=` | Rewrite |
+| `app/network.tsx` (network picker) | list the 4 clusters, badge money class, warn on mainnet | Rewrite |
+| `app/networks.tsx` | per-cluster RPC/explorer/faucet status screen | Rewrite |
+| `src/wallet/` * | Solana signing model (Section 5) | Rewrite |
+| `app/basename.tsx` | optional: `.sol` names via SNS/Bonfida instead of Basenames | Optional |
+| `app/recovery.tsx` | devnet owner-key copy (from reference `server/src/solana/keys.ts`) | Edit copy |
+
+**Done =** switching `EXPO_PUBLIC_XORR_CHAIN` in the app and `XORR_CHAIN` on the server changes endpoints,
+explorer links, wallet cluster, and money-class behavior — and a mismatch is surfaced as a hard error.
+
+---
+
+## 5. Wallet & signing (app-side)
+
+### 5.1 Signer choice — pick ONE for MVP, then production path
+
+1. **MVP (recommended): local keypair in `expo-secure-store`.** Key generation via `@solana/web3.js`
+   `Keypair.generate()` + bs58; export `react-native-get-random-values` already installed. Good enough for
+   devnet/e2e; NOT a mainnet wallet.
+2. **Mobile Wallet Adapter (production):** `@solana-mobile/mobile-wallet-adapter-protocol-web3js` +
+   `@solana-mobile/wallet-adapter-mobile` to let Phantom/Solfare sign on-device. `WrongChainError` becomes a
+   "switch to <cluster>" prompt; the RPC is the wallet's.
+3. **Privy Solana (if enabled in the Privy dashboard):** keep Privy auth + embedded Solana wallet — smallest
+   rework of `src/auth/`. Verify Solana support before relying on it.
+
+**Decision to record here when chosen** (owner gate): whatever we pick, the executor must see a
+**public key + signature**, never a private key.
+
+### 5.2 Module-by-module port
+
+| Reference `src/wallet/` | Solana version |
+|---|---|
+| `userSigning.ts` (Privy `eth_signTransaction` + app broadcast hack, `WrongChainError`) | `userSigning.ts`: build `Transaction`/`VersionedTransaction`, sign via adapter, verify signatures, broadcast via connection; cluster-match guard |
+| `grant.ts` (ERC-20 approve → delegation grant flow) | `grant.ts`: build `createApproveInstruction({ owner→delegate, delegated_amount })`, user signs, broadcast, POST to `/api/delegation/grant` |
+| `withdraw.ts` (withdraw flow) | `withdraw.ts`: `createTransferInstruction` user-signed to allowlisted address; cooling-off UI unchanged |
+| `approve.ts` (ERC-20 approve UX) | folded into grant/withdraw UI (the delegation IS the approve); keep screen + texts |
+| `signing.ts` | bs58/`Keypair` helpers, `signMessage`, tx serialization (legacy + v0) |
+
+## 6. Executor signing model on Solana (the critical design section)
+
+> Read before writing `server/src/solana/delegation.ts`.
+
+### 6.1 The constraint
+
+SPL `approve` gives `delegate` the right to sign `Transfer` up to `delegated_amount`. Jupiter-style
+aggregator swaps sign from the wallet's **authority**, not a delegate. So a filled multi-hop swap cannot be
+signed by the delegate key alone. The reference solved this with a contract + `transferFrom`; Solana forces
+a choice.
+
+### 6.2 Options (in build order)
+
+- **A — Delegate transfer into venue vault (MVP, matches the former xorr-dev prototype).**
+  `spendAsDelegate()` transfers capped USDC user-ATA → **venue ATA** (maker/vault account the executor also
+  controls with the payer key). The venue order is then placed from the vault by the executor key.
+  Non-custody preserved because the vault is itself under a bounded, allowlisted, revocable policy, and the
+  user's account only ever moves capped amounts. This is the default for Phase 1–4. **Never hold user funds
+  in a Genesis-less vault; the vault is a venue account, and the SPL cap is the guard.**
+- **B — User-signed per-trade fills (interactive).** For high-value trades, the app builds the full route
+  instruction (Jupiter v6 `/swap`), the user signs it (5.1), the app relays and broadcasts. Executor only
+  proposes (LLM `propose.ts` path), never signs. Used for manual / large orders while A is the bot default.
+- **C — Xorr escrow/route program (later, production).** An Anchor program holding user USDC with
+  on-chain policy (time, budget, venue), `XorrRoute` performing Jupiter CPI transfers as "itself", giving
+  the closest analogue to `XorrDelegation` + `1inch` fills. Requires a funded `xorr-escrow` program deploy
+  per cluster (Section 10).
+
+Record the chosen mix in `docs/ARCHITECTURE.md` under "spending paths".
+
+### 6.3 Spend chokepoint (`server/src/executor/place.ts`)
+
+`guardAndSpend()` keeps its 5-step chain, Solana-flavored:
+
+1. delegation row exists and not revoked/expired (DB)
+2. rules engine passes (kill switch, daily cap, spread, venue/withdrawal allowlist) (`rules/engine.ts`)
+3. on-chain check: `readDelegation(ownerAta)` → `delegate === delegateKeypair().publicKey` AND
+   `delegatedAmount >= wanted` (SPL is authoritative)
+4. real mark from `market/` (price guards, spread check)
+5. `spendAsDelegate()` (SPL `Transfer`, signer = delegate) → venue ATA; record signature + units in the same
+   DB tx.
+
+`SpendReceipt` gains `{ signature, slot }` (base58 + slot from `confirmTransaction`).
+
+---
+
+## 7. DB schema
+
+### 7.1 Kept as-is (already chain-agnostic)
+`strategies`, `strategy_runs` (UNIQUE `period_key`), `proposals`, `daily_spend`, `messages`, `devices`,
+`exit_rules`, `price_alerts`, `position_closes` (UNIQUE `claim_key`), plus the 27 reference migrations
+(alert-firing, realised-pnl, idempotency, fill-quality, withdrawal allowlist, custom agents, treasuries…).
+
+### 7.2 Change
+
+- `wallets.cluster TEXT` — values become `solana-localnet | solana-devnet | solana-fork | solana-mainnet`
+  (reference already has the column; keep `chain-scope.ts` setting `xorr.chain_key`).
+- `delegations`: `owner_pubkey`, `delegate_pubkey`, `grant_signature`, `revoke_signature` — already base58;
+  add `grant_slot`, `revoke_slot`, `delegated_units` (or keep USD). Keep `venue_allowlist`,
+  `withdrawal_allowlist`.
+- `strategy_runs.signature`, `position_closes.signature`, `audit_log.signature` — now `v0`-capable base58
+  tx sigs + add `slot` columns.
+- New migration `028-solana.sql`: add `slot` columns, a `token_mint` on `wallets`, and a
+  `cluster` constraint against 3.1 + index on `(cluster, owner_pubkey)`.
+
+**Done =** `current_setting('xorr.chain_key')` gates every multi-tenant query (mirror `chain-scope.ts`).
+
+---
+
+## 8. Module-by-module server mapping (the core of the work)
+
+### 8.1 `server/src/solana/` — the new seam (replaces `server/src/evm/`)
+
+| Reference `evm/` file | Solana replacement | Key contents |
+|---|---|---|
+| `chains.ts` (`RPCS`, `CHAINS`, `ADDRESSES`) | `solana/clusters.ts` | 3.1 table, `rpcUrl()`, `cluster`, `CLUSTER_KEY`, default mint addresses |
+| `money.ts` (`FACTS`: real/test/copy) | `solana/money.ts` | `FACTS` per cluster: settlement token = USDC mint, decimals (USDC 6, SOL 9), faucet behavior, mainnet guard |
+| `client.ts` (viem public/wallet client) | `solana/connection.ts` | `connection` (`Connection`, `confirmed`), `explorerTx(sig)`, mainnet guard at boot |
+| `keys.ts` (delegate key persistence) | `solana/keys.ts` | `Keypair` load/generate: `delegateKeypair`, `payerKeypair`, `devOwnerKeypair`; `XORR_KEY_*` + `XORR_KEY_DIR` |
+| `delegation.ts` (XorrDelegation ABI adapter) | `solana/delegation.ts` | `approveDelegate` (createApproveInstruction), `revokeDelegate` (createRevokeInstruction), `spendAsDelegate` (Transfer, delegate signer), `readDelegation` (getAccount → delegate/delegatedAmount/amount), `usdToBaseUnits`/`baseUnitsToUsd`, `returnToOwner` (venue→owner, payer signer), `DelegationState` |
+| `balances.ts` (erc20 reads) | `solana/balances.ts` | `getTokenAccountBalance` (ATA), `getBalance` (SOL); `ataFor(owner, mint)` helper |
+| `faucet.ts` (impersonate/Circle/refuse) | `solana/faucet.ts` + `solana/setup.ts` | localnet/devnet: `requestAirdrop` SOL + mint USDC (setup mints or devnet faucet); fork: pre-funded accounts; mainnet: refuse (money `real`) |
+| `gas.ts`, `gasDrip.ts`, `gas-price.ts` | `solana/gas.ts` | rent-exemption funding for ATAs/vault, priority fee from `getRecentPrioritizationFees`, `computeUnitPrice`, payer-signing funding tx |
+| `allowances.ts` | `solana/delegation.ts#readDelegation` | approved amount = `delegatedAmount` |
+| `measure-route.ts` | `venues/jupiter.ts` quote | quote path + price impact + slippage bound |
+| `logs.ts` | `solana/scan.ts` | `getSignaturesForAddress` + `getParsedTokenAccountsByOwner` polling; parse Trans/Memo logs |
+| `wait-for-tx.ts` | `confirmTransaction(commitment='confirmed')` + `getTransaction(…, { maxSupportedTransactionVersion: 0 })` | confirmed-slot + log harvest |
+| `basename.ts` | `solana/sns.ts` (optional) | `.sol` resolution via Bonfida |
+| `throttle.ts`, http/`breaker.ts` | keep | chain-agnostic |
+
+### 8.2 Executor (`server/src/executor/`)
+
+| File | Change |
+|---|---|
+| `place.ts` | 6.3 — `guardAndSpend` on SPL delegation |
+| `run.ts` | swap `explorerTx` import to `solana/connection`; `humanFailure()` → Solana error map (8.3); step 3 "execute on chain" = readDelegation → spendAsDelegate |
+| `exit.ts` | settlement = `returnToOwner()`; orphan-close = payer-sign transfer; audit payloads carry `explorerTx(sig)` |
+| `order.ts`, `entry.ts` | SPL spend via guardAndSpend; explorer links |
+| `scheduler.ts` | unchanged |
+| `schedule.ts`, `reconcile.ts`, `settle.ts`, `fill-quality.ts`, `fill-measure.ts`, `subcap-prove.ts`, `failure.ts` | keep, adapt tx refs → signature+slot |
+| `kinds/` (event-driven, momentum, planners) | chain-agnostic; keep |
+
+### 8.3 `humanFailure()` — Solana error map (in `run.ts`)
+
+Map to the same user-facing buckets, parsing for:
+- `Transaction simulation failed: Attempt to debit an account but found no record of a prior credit`
+- `insufficient funds`, `insufficient lamports`, `account is not rent exempt`
+- `blockhash not found`, `transaction too large`, `unknown signer`, `signature verification failure`
+- SPL Token custom-program errors (partial; codes are stable per token program version):
+  `custom program error: 0x0` (NotInitialized), `0x1` (AlreadyInUse), `0x4` (AuthorityTypeNotSupported),
+  `0x6` (InvalidDelegate…), and the classic `0x1771`/mint-authority collisions captured by unit tests
+- priority-fee / `Transaction simulation failed: Error processing instruction` → "network congestion — retry"
+
+Keep a table-driven `solana/errors.ts` (pure, unit-tested) mirroring reference `run.ts` tests.
+
+### 8.4 Venues (`server/src/venues/`)
+
+| Reference | Solana target | Notes |
+|---|---|---|
+| `oneinch.ts` | **Jupiter** `venues/jupiter.ts` | `quote-api.jup.ag/v6/quote` + `/v6/swap` (also `lite-api.jup.ag/swap/v1` legacy). TOKENS map → mint map: USDC `EPjFWdd5…`, USDT `Es9vMFre…`, wSOL `So111111…`, SOL symbol; slippage cap `DEFAULT_SLIPPAGE_BPS=30` |
+| `aqua.ts` (on-chain book) | **Phoenix** or **OpenBook v2** `venues/phoenix.ts` (or Jupiter Limit Order) | server places from venue vault (6.2-A); `delegatedFillArgs` equivalent = signed `PlaceOrder` via payer key |
+| `swapvm.ts` (second maker) | OpenBook v2 / Meteora `venues/makers.ts` | same pattern |
+| `aave.ts` (yield tier) | **Marinade** (SOL staking) `venues/marinade.ts` + **Kamino/Marginfi** `venues/kamino.ts` | yield rotation target; SOL inflation from `getInflationRate` (reference `staking.ts`) |
+| `fusion-plus.ts` | Solana native staking/restaking venues (Jito) | keep concept |
+| `limit-orders.ts` | Jupiter Limit Order / OpenBook | keep shape |
+| `stocks.ts`, `edgar.ts`, `hyperliquid.ts`, `perp.ts`, `yield.ts`, `history.ts`, `compare.ts`, `balance.ts`, `slippage.ts`, `symbols.ts` | **mostly unchanged** (chain-agnostic market data); `balance.ts` → token account read; `synbench`/`symbols.ts` extend mint map + CoinGecko (SOL already present) | — |
+| `staking.ts` (reference proto) | fold into `marinade.ts` + inflation read | — |
+
+### 8.5 Routes
+
+| Reference `routes/` group | Solana version |
+|---|---|
+| wallet | → `/api/wallet/balance` (token account balance + SOL), `/api/wallet/addresses` |
+| grant | → `/api/delegation/approve` (build approve tx for user signing), `/api/delegation/grant` (record), `/api/delegation/revoke` (kill switch), `/api/delegation` (reconcile DB row vs SPL via readDelegation → `onChainRemainingUsd`) |
+| portfolio / history / activity | unchanged shape; read DB + Solana signatures |
+| trade | unchanged (goes through executor chokepoint) |
+| strategy | unchanged |
+| faucet | → airdrop (devnet) / local mint (localnet/fork) / refused (mainnet) |
+| agent-keys | unchanged (scopes carry Solana base58 pubkeys) |
+| privy | removed (wallet signing moved app-side; see 5.1) — delete group |
+| status | unchanged + add `cluster`, `rpcUrl` |
+| verify | audit chain + Solana memo anchors |
+| market | unchanged (prices from CoinGecko; symbols SOL-aware) |
+| anchor | → memo-anchor (Section 12) |
+| migrate / params / revoke / extra / tokens / business / crosschain / limit-orders / withdrawal / panic / ops / mirror | keep; params exposes mints + decimals |
+
+### 8.6 Bot / LLM / news / backtest
+No chain code. `propose.ts` default symbol `SOL` already correct; `news/feed.ts` SOL mapping already present.
+Keep unchanged.
+
+---
+
+## 9. Indexing (replaces `subgraph/` + `subgraph-aqua/`)
+
+| Reference | Solana replacement |
+|---|---|
+| `subgraph/` (delegations, spends, daily rollups) | **Postgres-fed poller**: `graph/poller.ts` polls Token `Transfer`/`Approve` signatures for each user ATA (`getSignaturesForAddress` + `getTransaction` every `POLL_TICK_MS`), converts log diffs into delegation/spend rows; daily rollups via existing SQL |
+| `subgraph-aqua/` (venue book index) | poll Phoenix/OpenBook program events the same way (or listen via their gRPC/websocket feeds) |
+| `graph/decide.ts` (pre-flight routing decision) | now reads `graph/poller` state + Jupiter quote; keep the decision logic and tests |
+
+**Mainnet later:** Helius DAS API + webhooks (`HELIUS_API_KEY`) or a Geyser gRPC stream; the write-side schema
+must not change (indexer-output-agnostic). Keep `graph/` tests green with a stubbed poller.
+
+---
+
+## 10. Contracts → Solana programs
+
+| Reference `contracts/` | Solana outcome |
+|---|---|
+| `XorrDelegation` | **No custom program for MVP** — SPL `approve`/`revoke` + server rules (6.2-A). Later: `xorr-escrow` Anchor program (6.2-C) to hold policy (time/budget/venue) on-chain |
+| `XorrAquaBook` | Phoenix/OpenBook venue program (8.4) — no custom contract |
+| `XorrSwapVMBook` | second maker program (OpenBook v2 / Meteora) |
+| `XorrAuditAnchor` | **SPL Memo anchor** (Section 12) — no custom contract |
+| `contracts/deployments/*.json` | `deployments/` per cluster holding program pubkeys + mints (keypairs under `.keys/`, never committed) |
+| Foundry toolchain | **Anchor** (programs/) if/when `xorr-escrow` ships: `anchor build`, `anchor deploy`, tests via `solana-test-validator` |
+
+**Deployment gate:** any program deploy requires owner approval and a mainnet `ALLOW_MAINNET` + verify step
+(`solana program` addresses in docs).
+
+---
+
+## 11. Fork / local infra (replaces `infra/base-fork`)
+
+`infra/solana-fork/`:
+- `Dockerfile` + entrypoint booting `solana-test-validator` with:
+  `--clone EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (USDC), `--clone <jupiter>`, `--clone <phoenix>`,
+  `--reset`, `--rpc-port 8899`, plus a **pre-funded dev owner** with real USDC (airdrop SOL + mint on fork).
+- Scripts (`scripts/`): `fork-bootstrap.ts` (start + fund), `fork-grant.ts`, `fork-e2e.ts`,
+  `fork-yield.ts`, `fork/ship-makers.ts`, `fork/orphans.ts`, `fork/guard.ts` — port each reference fork
+  script, replacing anvil/RPC impersonation with validator `--clone` + airdrop.
+- `.env.fork` → `XORR_CHAIN=solana-fork`, `FORK_RPC=http://127.0.0.1:8899`.
+
+**Done =** a full demo runs locally against cloned real USDC with real signatures and real venue fills.
+
+---
+
+## 12. Audit & verify (replaces the EVM anchor)
+
+- `audit/once.ts`, `anchor-limit.ts`, `anchor-sweep.ts` — keep (ALREADY generic).
+- `audit/anchor.ts` → `solana/anchor.ts`: read `audit_log` chain-head hash → build a one-instruction tx using
+  the **SPL Memo program** (`MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr`) containing the hash; broadcast with
+  the payer key; record sig + slot. Verify reads it back via `getTransaction`.
+- `verify/checks.ts` → verify the Postgres hash chain AND that each head memo exists on-chain for the anchor
+  cadence (`ANCHOR_EVERY_MS`).
+- Routes: keep `/api/verify` and the `app/audit/*` screens (explorer links now point at `explorer.solana.com`).
+
+---
+
+## 13. Dependencies
+
+### 13.1 `server/package.json`
+
+**Add:** `@solana/web3.js` (^1.x), `@solana/spl-token` (^0.4), `bs58` (^6). **Remove:** `viem`,
+any foundry-only dep not used by the server, `@graphprotocol/*` only if the poller replaces it.
+**Scripts:** `setup:devnet` = `tsx src/solana/setup.ts`; `test:chain` = `CHAIN=1 vitest run src/**/*.chain.test.ts`.
+
+### 13.2 root `package.json`
+
+**Add:** `@solana/web3.js`, `@solana/spl-token`, `bs58`, `react-native-get-random-values` (already present),
+`@ethersproject/shims` (remove — EVM only), `viem` (remove), `react-native-passkeys`/Privy packages only if
+5.1 keeps Privy; **or** `@solana-mobile/mobile-wallet-adapter-protocol-web3js` + `@solana-mobile/wallet-adapter-mobile`
+if 5.1 uses MWA. **Polyfills:** ensure `Buffer`/`global.Buffer` exists in the RN entry (standard Solana RN
+setup; `react-native-quick-crypto` optional).
+
+---
+
+## 14. Tests (mirror the reference's 271-check bar)
+
+| Suite | Content | Command |
+|---|---|---|
+| App unit | `src/**/*.test.ts` (store, derived, format, strategies, wallet allowlist, bot voice/facts) | `npm test` |
+| Server unit | rules engine, schedule/idempotency, delegation math (usd↔units), `humanFailure` map, audit log/once, venues compare/slippage, kind tests | `cd server && npm test` |
+| **Chain** | `solana/delegation.chain.test.ts`, `executor/executor.chain.test.ts` — against a real `solana-test-validator`: real signatures, SPL-enforced cap, revoke semantics, kill switch, orphan close | `cd server && npm run test:chain` |
+| Live | Jupiter quote, perps, staking inflation, airdrop | `npm run test:live` |
+| E2E | 5 Maestro flows (onboarding, DCA, proposal, kill-switch, expiry) — assert outcomes | `maestro test e2e` |
+| CI | `.github/workflows/ci.yml`: app job + server job (Postgres 16 service) + Solana job using `anza-xyz/setup-solana@v1` running `test:chain` | push |
+
+**Non-negotiable on-chain proofs (port from reference):**
+1. a transfer beyond `delegatedAmount` is rejected by the token program on-chain;
+2. `revoke` stops new orders while resting exits/TPs stay live;
+3. retrying a run with the same `period_key` collapses to one fill;
+4. a close returns the user's own asset (daily cap does not block closes);
+5. orphan detection settles a venue split.
+
+---
+
+## 15. Security (delta from `docs/SECURITY.md`)
+
+- Keys: delegate/payer keypairs live only in `XORR_KEY_DIR` on the server; NEVER committed or logged.
+  Production: KMS-backed signer (e.g., AWS KMS/Solana signing or a Deco/signing service) — owner gate.
+- Non-custody blast radius: SPL cap is the authority; withdrawal allowlist + 24 h cooling-off; kill switch
+  on-chain revoke (three behaviors tested, 6/14).
+- Cluster guardrails: unknown `XORR_CHAIN` refuses boot; mainnet requires `ALLOW_MAINNET=yes`; faucet refuses
+  on `real` money; app/server cluster mismatch is a hard error.
+- Idempotency: `period_key`/`claim_key` UNIQUE; retries and concurrent runs collapse to one fill.
+- Audit: append-only hash-chained `audit_log` + memo anchor (Section 12).
+- Phishing: verify signed bytes client-side before broadcast where applicable; never broadcast on a cluster
+  the wallet isn't on (wrong-cluster prompt).
+- Certificate pinning, Sentry, quota/metrics dashboards: carry over as owner-approved hardening tasks.
+
+---
+
+## 16. Rollout order & task list
+
+Status tags: **DONE** · **IN PROGRESS** · **NOT STARTED** · **BLOCKED — reason**.
+
+### Phase 0 — Foundations
+- [ ] 3.1–3.3 env layering; `server/src/solana/clusters.ts` + `money.ts`; app `src/chain.ts` + `networks/*`; unknown-chain refuses boot.
+- [ ] 13 deps: server (web3.js, spl-token, bs58), app (adapter choice + polyfills); prune viem/Privy.
+- [ ] `network.tsx` cluster picker + mismatch error.
+- [ ] CI skeleton: setup-solana action + validator job.
+
+### Phase 1 — `server/src/solana/` module
+- [ ] `connection.ts`, `keys.ts`, `setup.ts`, `delegation.ts`, `balances.ts`, `faucet.ts`, `gas.ts`, `errors.ts`.
+- [ ] `delegation.chain.test.ts` on `solana-test-validator`: approve/grant/revoke/kill-switch/cap.
+- [ ] `npm run setup:devnet` mint + fund flow.
+
+### Phase 2 — Routes
+- [ ] wallet balance/addresses, delegation approve/grant/revoke/read, faucet, status, params, migrate, verify, anchor (memo).
+- [ ] Remove privy route group + `src/auth/privy*`.
+
+### Phase 3 — Executor
+- [ ] `place.ts` guardAndSpend on SPL; `run.ts` + `humanFailure` map; `order.ts`/`entry.ts`; `values.ts` (atomic record+spend).
+- [ ] `exit.ts` settlement + orphan closes; `positions/`, `reconcile.ts`, `settle.ts`, `fill-quality.ts`.
+- [ ] `executor.chain.test.ts` (5 proofs in §14).
+
+### Phase 4 — Venues
+- [ ] `jupiter.ts` (quote/swap), `phoenix.ts`/OpenBook, `marinade.ts` + `kamino.ts`, fold `staking.ts` inflation; `compare.ts`, `limit-orders.ts`, `slippage.ts`.
+- [ ] Venue live tests (Jupiter + perps + staking inflation).
+
+### Phase 5 — App wallet & screens
+- [ ] `src/wallet/*` (sign model from §5), onboarding fund (faucet/SOL+USDC), delegation screen, approvals, send/withdraw, audit screens → solana explorer, basename → SNS.
+- [ ] Manual e2e on devnet: sign → grant → run DCA → kill switch.
+
+### Phase 6 — Indexing & audit
+- [ ] `graph/poller.ts` (subgraph replacement) + decide() rewire + tests.
+- [ ] `solana/anchor.ts` memo anchor + `verify/checks.ts`.
+
+### Phase 7 — Fork & E2E
+- [ ] `infra/solana-fork/` (test-validator `--clone`), fork scripts port, `.env.fork`.
+- [ ] 5 Maestro flows pass on fork; fork demo script runs end-to-end.
+
+### Phase 8 — Mainnet hardening (owner-gated)
+- [ ] KMS signer, mainnet `ALLOW_MAINNET` rehearsal on a cloned-mainnet fork, Sentry, certificate pinning, quotas.
+- [ ] Helius webhook indexer (replace poller), docs (ARCHITECTURE/SECURITY/RUNBOOK/STORE), store listing.
+
+---
+
+## 17. Done definition (acceptance)
+
+1. `XORR_CHAIN` switch works end-to-end and mismatch is a hard error.
+2. All §14 suites green; the five on-chain proofs pass on a real validator; 271-check parity restored.
+3. Localnet + devnet demo: onboarding → fund → grant (SPL approve signed by user wallet) → DCA fill on the
+   book → position armed with exit rule → one-tap kill switch (on-chain revoke) with the three behaviors.
+4. Settlement is USDC on Solana; audit head anchored via Memo and verifiable.
+5. No EVM imports remain (`rg -n "viem|ethers|privy-io|eth_"` across `server/src`, `src`, `app` clean).
+6. No secrets in git; `git status` clean except `.claude/`; `.keys`/`.env*` ignored.
+
+---
+
+## 18. Reading this plan
+
+Read in this order: §0 (rules + env) → §1 (why it's not find/replace) → §6 (signing model, the crux) →
+§8 (module map) → §3/§7 (env + DB) → §5/§9/§10/§12 (wallet, indexer, programs, audit) → §16 (tasks).
+Supporting docs in `docs/` (ARCHITECTURE, SECURITY, RUNBOOK, ADDING-A-CHAIN.md) are the EVM-flavored
+baseline; each must be rewritten for Solana as part of Phase 8.

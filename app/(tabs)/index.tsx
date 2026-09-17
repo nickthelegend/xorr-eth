@@ -450,14 +450,16 @@ export default function Home() {
             accessibilityHint={balancesHidden ? 'Shows every amount.' : 'Hides every amount.'}
           >
             {/*
-              Rolls in once it is real, a placeholder while on its way, a dash when unreadable — never animated. Hidden,
-              it is four dots, as every amount is.
+              Rolls in once it is real, a placeholder while on its way, a dash when unreadable. `roll` hands each
+              changed character over to the next when the balance moves — the person's own money, where a change is an
+              event; a market quote still snaps. Hidden, it is four dots, as every amount is, and dots do not roll.
             */}
             {total !== null ? (
               <RollingNumber
                 value={money(total)}
                 variant="heroBalance"
                 delay={STAGGER}
+                roll
                 containerStyle={{ marginTop: space.s6 }}
               />
             ) : balance.loading ? (

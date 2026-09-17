@@ -44,6 +44,8 @@ import { useIntentKeys } from '@/data/useIntentKeys';
 import { errorText } from '@/data/apiError';
 import { faucetStatus, requestFaucet, type FaucetOutcome } from '@/data/deposit';
 
+import { openMoonPayBuy } from '@/deposit/moonpay';
+
 const QR_SIZE = 168;
 
 /**
@@ -71,6 +73,8 @@ export default function Fund() {
   const now = useNow();
   const [copied, setCopied] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [openingMoonPay, setOpeningMoonPay] = useState(false);
+  const [moonPayError, setMoonPayError] = useState<string>();
   const [outcome, setOutcome] = useState<FaucetOutcome>();
   // One key per claim, kept through a timeout, as Deposit's claim does: a retry asks after the first, never sends twice.
   const keys = useIntentKeys();
@@ -79,6 +83,19 @@ export default function Fund() {
     if (!address) return;
     await Clipboard.setStringAsync(address);
     setCopied(true);
+  }
+
+  async function buyWithMoonPay() {
+    if (!address || openingMoonPay) return;
+    setOpeningMoonPay(true);
+    setMoonPayError(undefined);
+    try {
+      await openMoonPayBuy({ walletAddress: address });
+    } catch (e) {
+      setMoonPayError(errorText(e));
+    } finally {
+      setOpeningMoonPay(false);
+    }
   }
 
   async function ask() {
@@ -163,12 +180,24 @@ export default function Fund() {
                 {address ?? 'Setting up your wallet…'}
               </Text>
               {address ? (
-                <Button
-                  label={copied ? 'Copied' : 'Copy address'}
-                  variant="ghost"
-                  onPress={copy}
-                  style={{ marginTop: space.s12 }}
-                />
+                <View style={{ marginTop: space.s12, gap: space.s10 }}>
+                  <Button
+                    label="Buy with Card · MoonPay Sandbox"
+                    variant="secondary"
+                    loading={openingMoonPay}
+                    onPress={buyWithMoonPay}
+                  />
+                  {moonPayError ? (
+                    <Text variant="footnote" color={colors.down} align="center">
+                      {moonPayError}
+                    </Text>
+                  ) : null}
+                  <Button
+                    label={copied ? 'Copied' : 'Copy address'}
+                    variant="ghost"
+                    onPress={copy}
+                  />
+                </View>
               ) : null}
               <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
                 {depositQrWorks ? `Send only USDC on ${chainLabel}.` : depositQrNote}

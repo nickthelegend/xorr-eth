@@ -221,6 +221,12 @@ export type Health = {
   uptimeSec: number;
   dependencies: HealthDependency[];
   db?: string;
+  /**
+   * Every upstream host the HTTP lane has seen, with its consecutive failures and when a breaker closes
+   * (`server/src/http/get.ts`). Absent from an executor older than the field — which is not a claim that
+   * none is open, only that it did not say.
+   */
+  breakers?: { host: string; failures: number; openUntil: number; open?: boolean }[];
   publicSurface?: { paths: string[] };
   /** Whether a language model can write the agents' replies. Absent from an executor older than the field. */
   voice?: { configured: boolean };
@@ -294,6 +300,14 @@ export type SwapOutcome =
  * Every numeric is nullable because a run that never reached a fill has no price and no size, and
  * zero would be a different claim.
  */
+/** The regulator's own classification of a listed company. */
+export type SectorClassification = {
+  /** The SEC's wording for the SIC code — e.g. "Semiconductors & Related Devices". */
+  sector: string;
+  /** The four-digit Standard Industrial Classification code it came from. */
+  sic: string;
+};
+
 export type StrategyRunRow = {
   id: string;
   strategyId: string;
@@ -539,6 +553,79 @@ export type StockRow = {
   feed: 'live' | 'unavailable';
 };
 
+/**
+ * One tokenized equity in the xStocks catalog, with both prices that exist for it.
+ *
+ * `price` is what one token costs in the Solana pools — what a buy actually pays. `underlyingPrice`
+ * is what the issuer's feed marks the listed share at. They are near each other and not equal, and
+ * the gap is the spread the pool charges, so the screen shows which is which rather than picking one.
+ *
+ * `price: null` with `feed: 'unavailable'` is a row the catalog renders, not one it drops.
+ */
+export type XStockRow = {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  sector: string;
+  price: number | null;
+  underlyingPrice: number | null;
+  /** Null is "not reported". Zero is "did not move". The screen must not render them the same. */
+  change24hPct: number | null;
+  liquidityUsd: number | null;
+  underlyingAt: string | null;
+  feed: 'live' | 'unavailable';
+};
+
+export type XStockCatalog = {
+  rows: XStockRow[];
+  /** The sectors present, in the order the filter should offer them. The server derives these. */
+  sectors: string[];
+  unpriced: number;
+};
+
+/** One hop of a Jupiter route: the AMM, and how much of the order it carries. */
+export type RouteHop = {
+  label: string;
+  /** Null when the venue did not say. A split route has several hops summing to 100. */
+  percent: number | null;
+};
+
+/**
+ * What an xStock order costs, read off the Jupiter quote that would fill it.
+ *
+ * Every number is the venue's, for the size actually asked. A figure the venue did not report
+ * arrives as null and is rendered as "not reported" — never as a zero, which on this screen would
+ * read as a trade that costs nothing.
+ */
+export type XStockQuote = {
+  symbol: string;
+  side: 'buy' | 'sell';
+  usd: number;
+  /** What is paid, in that token's own units. */
+  pay: number;
+  payToken: string;
+  /** What the venue expects to deliver. */
+  receive: number;
+  receiveToken: string;
+  /** The least it may deliver and still fill — the number the swap is submitted with. */
+  minimumReceive: number;
+  /** The venue's measured impact at this size, as a percent. */
+  priceImpactPct: number | null;
+  priceImpactUsd: number | null;
+  /** The tolerance the quote was taken at, as the venue echoed it back. */
+  slippageBps: number;
+  /** The worst that tolerance allows, in USD. */
+  slippageWorstUsd: number;
+  hops: RouteHop[];
+  /** Null means the aggregator takes nothing, which is this deployment's case. */
+  platformFeeUsd: number | null;
+  /** What this order works out to per token, once impact is in it. */
+  effectivePrice: number;
+  /** The pool mark for one token, to read `effectivePrice` against. */
+  markPrice: number;
+};
+
 /** One push kind, its explanation, and whether it is on. Labels come from the server. */
 export type NotificationPref = {
   kind: string;
@@ -640,6 +727,14 @@ export const system = {
     ),
   flattenPreview: () => api.get<FlattenPreview>('/panic/preview'),
   stocks: () => api.get<StockRow[]>('/market/stocks'),
+  /** The tokenized-equity catalog: every mint, its sector, and what it costs (PLAN.md §8.4). */
+  xstocks: () => api.get<XStockCatalog>('/market/xstocks'),
+  /** What one xStock order costs, before it is placed: impact, tolerance and route, from Jupiter. */
+  xstockQuote: (params: { symbol: string; side: 'buy' | 'sell'; usd: number; slippageBps?: number }) =>
+    api.get<XStockQuote>(
+      `/market/xstocks/quote?symbol=${encodeURIComponent(params.symbol)}&side=${params.side}&usd=${params.usd}` +
+        (params.slippageBps === undefined ? '' : `&slippageBps=${params.slippageBps}`),
+    ),
   symbols: () => api.get<string[]>('/market/symbols'),
   backtestStrategy: (body: {
     kind: 'dca' | 'grid';
@@ -656,6 +751,16 @@ export const system = {
   /** What the wallet was worth over time, from snapshots read on the chain (PLAN.md 2.10). */
   portfolioHistory: (range: '1D' | '1W' | '1M' | 'ALL') =>
     api.get<PortfolioHistory>(`/portfolio/history?range=${range}`),
+  /**
+   * What the SEC says each company does, for the allocation donut.
+   *
+   * A symbol maps to `null` when the regulator has no classification on record for it, or when the record could not be
+   * read. Both mean "this build cannot say", and the chart draws that as Unclassified rather than guessing.
+   */
+  classification: (symbols: string[]) =>
+    api.get<Record<string, SectorClassification | null>>(
+      `/market/classification?symbols=${encodeURIComponent(symbols.join(','))}`,
+    ),
   // POST: the executor registers GET and POST on this path, and the PATCH that was sent here 404'd, so a
   // toggle looked saved and was not (PLAN.md 2.12).
   setNotificationPref: (kind: string, enabled: boolean) =>

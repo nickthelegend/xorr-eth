@@ -11,6 +11,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { one, query } from '../db/index.js';
 import { append, exportTrail, list as listAudit, verify } from '../audit/log.js';
+import { explainTrade } from '../bot/explain.js';
 import { recordGrant, recordRevoke } from '../delegation/record.js';
 import {
   ANCHOR_ADDRESS,
@@ -29,6 +30,10 @@ import {
 } from '../executor/run.js';
 import { TOKENS as VENUE_TOKENS, canonicalSymbol } from '../venues/oneinch.js';
 import { nextRuns, type Cadence } from '../executor/schedule.js';
+import { backingFor } from '../venues/proof-of-reserves.js';
+import { backingDetail } from '../venues/backing-detail.js';
+import { checkEligibility } from '../solana/eligibility.js';
+import { XSTOCKS, xStockKey } from '../venues/xstocks.js';
 import { ADDRESSES, APPROVABLE_TOKENS, CHAIN_KEY, IS_BASE_MAINNET_STATE, SETTLEMENT_VENUES, explorerTx } from '../evm/chains.js';
 import { allowanceView, chainAllowance, routerAllowance, routerSpender } from '../evm/allowances.js';
 import { delegateAccount } from '../evm/client.js';
@@ -56,6 +61,9 @@ import { STOCKS, isStock, equitiesFunctional } from '../venues/stocks.js';
 import { getPosition, listPositions, realisedPnl } from '../positions/index.js';
 import { PUSH_KINDS } from '../notifications/push.js';
 import { SNAPSHOT_EVERY_MS, historySince, listSnapshots, snapshotWallet, thinPoints } from '../portfolio/snapshots.js';
+import { isSolanaCluster, getClusterConfig } from '../solana/clusters.js';
+import { readSolanaBalances } from '../solana/balances.js';
+import { readDelegation } from '../solana/delegation.js';
 
 /**
  * Every wallet lookup is scoped to the AUTHENTICATED Privy user.
@@ -285,6 +293,23 @@ routes.post('/wallet/connect', async (c) => {
 routes.get('/wallet/balance', async (c) => {
   const w = await currentWallet(c);
   if (!w) return c.json({ usd: 0 });
+
+  if (isSolanaCluster(process.env.XORR_CHAIN ?? '') || !w.address.startsWith('0x')) {
+    const balances = await readSolanaBalances(w.address);
+    const delegation = await readDelegation(w.address);
+    return c.json({
+      usd: balances.usdc.amount,
+      cashUsd: balances.usdc.amount,
+      holdings: [
+        { symbol: 'USDC', units: balances.usdc.amount, usd: balances.usdc.amount },
+        { symbol: 'SOL', units: balances.sol.amount, usd: 0 },
+      ],
+      suppliedUsd: 0,
+      dailyCapUsd: delegation.delegatedUsd,
+      remainingTodayUsd: delegation.delegatedUsd,
+    });
+  }
+
   /*
    * A failed read is an error, not a zero (PLAN.md 1.7).
    *
@@ -642,6 +667,76 @@ routes.get('/positions', async (c) => {
 });
 
 /**
+ * Whether an xStock is actually backed by the share it claims to represent.
+ *
+ * Backed's attestor publishes shares held against tokens in circulation; the ratio is the whole
+ * badge. The answer is deliberately two-shaped — `verified` with a measured ratio, or `unverified`
+ * with the reason — because the failure mode worth designing against is a tokenized-equity app
+ * rendering a confident "1:1" it never actually read. Callers that want a number must handle not
+ * getting one.
+ *
+ * 200 either way: "we could not reach the attestor" is an answer about the asset, not an error in
+ * the request.
+ */
+/**
+ * Whether a wallet may hold this xStock, asked before a buy is offered.
+ *
+ * xStocks are jurisdiction-restricted and Token-2022 gives the issuer several independent ways to
+ * refuse a transfer. The screen needs this before it draws a buy button, because the alternative
+ * is a user signing a transaction that fails on-chain for reasons nobody explained.
+ *
+ * `eligible: false` with `indeterminate: true` means a gate could not be read — which is NOT a
+ * pass, and must not be drawn as one.
+ */
+/**
+ * Everything a position can say about what backs it, for the backing drawer.
+ *
+ * Every field is a recorded value or `null`, and `null` means "we have no record of this" rather
+ * than zero — the screen renders that difference in words. The attestation carries its own age
+ * so the drawer can say how stale it is instead of implying it is current.
+ */
+routes.get('/xstocks/:symbol/backing/detail', async (c) => {
+  const symbol = c.req.param('symbol');
+  const detail = await backingDetail(symbol);
+  if (!detail) {
+    return c.json({ error: 'unknown_symbol', message: `${symbol} is not an xStock this executor knows.` }, 404);
+  }
+  return c.json(detail);
+});
+
+routes.get('/xstocks/:symbol/eligibility', async (c) => {
+  const symbol = c.req.param('symbol');
+  const wallet = c.req.query('wallet');
+  const stock = XSTOCKS[xStockKey(symbol) ?? symbol];
+  if (!stock) {
+    return c.json({ error: 'unknown_symbol', message: `${symbol} is not an xStock this executor knows.` }, 404);
+  }
+  if (!wallet) {
+    return c.json({ error: 'wallet_required', message: 'Pass ?wallet= to check eligibility.' }, 400);
+  }
+  return c.json({ symbol: stock.symbol, ...(await checkEligibility(wallet, stock.address)) });
+});
+
+routes.get('/xstocks/:symbol/backing', async (c) => {
+  const symbol = c.req.param('symbol');
+  const status = await backingFor(symbol);
+  if (status.status === 'unverified') {
+    return c.json({ symbol, verified: false, reason: status.reason });
+  }
+  const b = status.backing;
+  return c.json({
+    symbol: b.symbol,
+    verified: true,
+    ratio: b.ratio,
+    fullyBacked: b.ratio >= 1,
+    sharesHeld: b.sharesHeld,
+    circulatingSupply: b.circulatingSupply,
+    custodians: b.custodians,
+    asOf: b.asOf,
+  });
+});
+
+/**
  * One position, or null.
  *
  * `null` rather than 404, and the distinction matters. A position the user closed, or a deep link
@@ -819,6 +914,23 @@ routes.get('/activity', async (c) => {
       explorer: r.signature ? explorerTx(r.signature) : undefined,
     })),
   );
+});
+
+/**
+ * Why the agent took the trade on this row.
+ *
+ * Keyed on the audit sequence, which is exactly the `id` the activity list already renders, so the
+ * screen asks about the row the person tapped rather than about a signature it has to match up.
+ * A sequence belonging to another wallet reads as missing — the counter is global, and
+ * `/activity/8/explain` must not become a way to read somebody else's trade.
+ */
+routes.get('/activity/:seq/explain', async (c) => {
+  const w = await requireWallet(c);
+  const found = await explainTrade(w.id, c.req.param('seq'));
+  if (!found) {
+    return c.json({ error: 'not_found', message: 'No entry with that sequence in this wallet.' }, 404);
+  }
+  return c.json(found);
 });
 
 routes.get('/activity/export', async (c) => {
