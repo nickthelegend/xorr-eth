@@ -88,7 +88,19 @@ const JUPITER_APIS = [
 ];
 
 /**
+ * Raised when Jupiter cannot price a pair: no route, or the API could not be reached.
+ *
+ * Its own class so a caller can tell "we could not find out" from "the swap failed" — the first is a
+ * screen that says so and a button still worth pressing later, the second is money that moved.
+ */
+export class UnpricedError extends Error {
+  override readonly name = 'UnpricedError';
+}
+
+/**
  * Fetch a quote from Jupiter.
+ *
+ * Throws `UnpricedError` when no venue answers. It never invents one — see the throw below.
  */
 export async function quote(params: {
   inSymbolOrMint: string;
@@ -129,35 +141,24 @@ export async function quote(params: {
     }
   }
 
-  // Fallback estimation for offline/test environments if remote API is down:
-  // Approximate standard prices for xStocks: NVDA ~$216, TSLA ~$250, AAPL ~$220, MSFT ~$430
-  console.warn(`Jupiter quote API warning: ${lastError?.message}. Using local pricing model.`);
-  const inUnits = BigInt(amount);
-  let rate = 1.0;
-  if (outputMint === JUPITER_TOKENS.NVDAx) rate = 1 / 216;
-  else if (outputMint === JUPITER_TOKENS.TSLAx) rate = 1 / 250;
-  else if (outputMint === JUPITER_TOKENS.AAPLx) rate = 1 / 220;
-  else if (outputMint === JUPITER_TOKENS.MSFTx) rate = 1 / 430;
-  else if (inputMint === JUPITER_TOKENS.NVDAx) rate = 216;
-  else if (inputMint === JUPITER_TOKENS.TSLAx) rate = 250;
-  else if (inputMint === JUPITER_TOKENS.AAPLx) rate = 220;
-  else if (inputMint === JUPITER_TOKENS.MSFTx) rate = 430;
-
-  // Convert decimals: USDC (6) -> xStock (8) has a 10^2 factor
-  const decimalFactor = inputMint === DEFAULT_MINTS.USDC ? 100 : 0.01;
-  const outUnits = BigInt(Math.floor(Number(inUnits) * rate * decimalFactor));
-
-  return {
-    inputMint,
-    inAmount: amount,
-    outputMint,
-    outAmount: outUnits.toString(),
-    otherAmountThreshold: outUnits.toString(),
-    swapMode: 'ExactIn',
-    slippageBps,
-    priceImpactPct: '0.0001',
-    routePlan: [{ swapInfo: { label: 'ForkVenueVault', inAmount: amount, outAmount: outUnits.toString() } }],
-  };
+  /*
+   * No quote is no quote.
+   *
+   * This used to fall back to a table of remembered share prices — NVDA at $216, TSLA at $250 — and
+   * return them wearing the shape of a real answer: a `priceImpactPct` of 0.0001 nobody measured and
+   * a route plan naming a pool that was never consulted. Two things read that. `xStockPriceUsd`
+   * published it as a live mark, and `executor/place.ts` handed it to `swap()`, where the venue vault
+   * settles a REAL on-chain transfer at whatever price it is given. An unreachable API therefore did
+   * not stop trading; it moved someone's tokens at a number this file made up, and the fill was
+   * recorded as though Jupiter had priced it.
+   *
+   * A price is either observed or it is not. Callers that can degrade already know how — the catalog
+   * shows "No price", `xStockPriceUsd` returns null — and an order that cannot be priced must not be
+   * placed at all.
+   */
+  throw new UnpricedError(
+    `No Jupiter quote for ${inputMint} -> ${outputMint}: ${lastError?.message ?? 'no route'}`,
+  );
 }
 
 /**
