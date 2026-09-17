@@ -129,6 +129,7 @@ export default function RootLayout() {
           <Stack.Screen name="portfolio" options={{ presentation: 'modal' }} />
           <Stack.Screen name="profile" options={{ presentation: 'modal' }} />
           <Stack.Screen name="order/[symbol]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="xstock/[symbol]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="auto-close/[id]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="bot/[id]/intro" options={{ presentation: 'modal' }} />
           <Stack.Screen name="bot/[id]/settings" options={{ presentation: 'modal' }} />
