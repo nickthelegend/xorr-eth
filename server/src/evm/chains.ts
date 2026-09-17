@@ -21,19 +21,21 @@ export type ChainKey = KnownChain;
 
 // Named XORR_CHAIN, not CHAIN: Foundry auto-loads .env and treats CHAIN as its own --chain
 // flag, which makes every cast/forge command in this repo fail with a confusing parse error.
+// When running on Solana (PLAN.md §3.1), solana/clusters.ts is authoritative; EVM falls back to localnet.
 const ASKED = process.env.XORR_CHAIN ?? 'localnet';
+const EVM_CHAIN = ASKED.startsWith('solana-') ? 'localnet' : ASKED;
 
 /*
  * A chain this executor does not know is refused at start. It was an unchecked cast, with no RPC and no chain behind it,
  * and every guard that must not hand out real value asked about a key that meant nothing to it.
  */
-if (!isKnownChain(ASKED)) {
+if (!isKnownChain(EVM_CHAIN)) {
   throw new Error(
     `XORR_CHAIN=${ASKED} is not a chain this executor knows (${KNOWN_CHAINS.join(', ')}). ` +
       'Add it to server/src/evm/money.ts, saying what its money is, then give it an RPC and a chain in server/src/evm/chains.ts.',
   );
 }
-export const CHAIN_KEY: ChainKey = ASKED;
+export const CHAIN_KEY: ChainKey = EVM_CHAIN;
 
 /** Guardrail: real money needs a deliberate, reviewed decision, never a default. */
 if (moneyOn(CHAIN_KEY) === 'real' && process.env.ALLOW_MAINNET !== 'yes') {
