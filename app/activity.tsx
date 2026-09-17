@@ -13,6 +13,7 @@
  */
 import React, { useState } from 'react';
 import { Linking, ScrollView, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import {
   BackButton,
   Button,
@@ -93,6 +94,7 @@ function ExplorerLink({ explorer }: { explorer: string }) {
 
 export default function Activity() {
   const goBack = useGoBack();
+  const router = useRouter();
   const actFilter = useStore((s) => s.actFilter);
   const setActFilter = useStore((s) => s.setActFilter);
   const trail = useAsync(() => repos.activity.list(), []);
@@ -179,8 +181,20 @@ export default function Activity() {
             {rows.map((r) => {
               const credit = activityAmountIsCredit(r.amount);
               return (
-                <View
+                /*
+                  Every row opens its own explanation, including the ones with nothing to explain.
+
+                  Tapping only the agent's trades would mean the rows that ANSWER are the rows that
+                  respond to touch, so a person learns what the agent did by discovering which rows
+                  move. Nothing on this list says which is which, and the honest answer — "no
+                  reasoning was stored for this one" — is worth arriving at deliberately rather
+                  than by finding a row that does not react.
+                */
+                <Press
                   key={r.id}
+                  onPress={() => router.push(`/explain/${r.id}`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Why: ${plainAction(r.action)}`}
                   style={[
                     { flexDirection: 'row', gap: space.s12, paddingVertical: space.s14 },
                     divider,
@@ -215,7 +229,7 @@ export default function Activity() {
                       {r.amount}
                     </Price>
                   ) : null}
-                </View>
+                </Press>
               );
             })}
           </ScrollView>
