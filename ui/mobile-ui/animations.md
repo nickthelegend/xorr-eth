@@ -36,6 +36,7 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Stop curtain | `opacity` (the blackout) · `transform: translateY` (the curtain) · `transform: scale` (the badge) | 420ms ease-out · 420ms ease-out · 250ms | The kill switch's own screen, up while the revoke is signed and confirmed. See below. |
 | Agent orb, `stage` | `transform: scale` (thinking, decided, filled) · `opacity` (executing) | 3600ms breathing · 900ms breathing · 250ms settling | The agent's orb performing what the screen knows the agent is doing. Driven by a prop, never a timer. See below. |
 | Balance roll-over | `transform: translateY` + `opacity`, per changed character | 180ms | A balance or P&L figure handing each changed character to the one that replaces it, in the direction the figure moved. Opt-in (`<RollingNumber roll>`), never on a market quote. See below. |
 
@@ -61,6 +62,33 @@ Two places would genuinely benefit, both currently unbuilt:
   in the chat's `Turn`, and again as `stage="filled"` on the orb.
 
 Anything beyond those two, don't.
+
+## The stop's curtain
+
+The kill switch signs an on-chain revoke from the person's own wallet, and after it every agent,
+strategy and stop-loss is inert. It used to finish the way every other button finishes: a label
+changed, a badge went green to red. The biggest thing this app can do passed with less ceremony than
+a segmented control.
+
+It now takes the screen for the length of the transaction. A curtain comes down — a red wash over a
+blackout, the stop button's own red at the weight the design gives a destructive surface, because on a
+true-black app a full-bleed #EF3B36 reads as a crash. It holds while the revoke is signed. When the
+chain confirms, a badge scales in once, the words say what is now true, and the phone gives its one
+two-beat haptic (`killTap` — a thud and a latch, `haptics.ts`).
+
+Three properties, each on its own element, all collapsing to nothing under reduced motion.
+
+What keeps it honest:
+
+- **Both states are real.** `signing` is a revoke actually out for signature; `stopped` is set only
+  once `revoke()` returns, which happens only when the chain shows the policy revoked. Nothing here
+  is a timer standing in for a progress the app does not have.
+- **A failure takes it away.** The curtain never stays up over an error — that would be the app
+  claiming a stop it did not make. The screen underneath says what went wrong.
+- **It cannot be dismissed while the signature is out.** There is nothing to go back to, and a
+  curtain a stray touch could clear is a way to leave this screen unsure whether trading stopped.
+- **The words carry it.** Under reduced motion, with a screen reader, in a screenshot: the same
+  sentences, the same badge, the same detail line. The motion is the second telling.
 
 ## The agent orb's stages
 

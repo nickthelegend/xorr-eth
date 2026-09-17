@@ -34,3 +34,24 @@ export function warningTap(): void {
 export function heavyTap(): void {
   if (ON_PHONE) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
 }
+
+/** How long after the thud the latch lands. Short enough to be one event, long enough to be two beats. */
+const LATCH_MS = 90;
+
+/**
+ * The stop, confirmed on-chain — the only two-beat haptic in the app.
+ *
+ * A thud and a latch: `Heavy`, then `Rigid` a beat later. `heavyTap` is the finger's moment, when the
+ * hold completes and the signature goes out; this is the chain's answer, and the two must not feel the
+ * same or the second says nothing. Every other confirmation in the app is a single tap, so a phone in a
+ * pocket can tell this one apart from a fill without being looked at.
+ *
+ * The beat is a real interval and not an animation: nothing on screen is waiting for it.
+ */
+export function killTap(): void {
+  if (!ON_PHONE) return;
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
+  setTimeout(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid).catch(() => undefined);
+  }, LATCH_MS);
+}
