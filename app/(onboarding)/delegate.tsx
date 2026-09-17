@@ -31,6 +31,7 @@ import {
   space,
   SignInButton,
 } from '@/ui';
+import { grantTap } from '@/ui/haptics';
 import { useSignedOut } from '@/auth/useSignedOut';
 import { useGoBack } from '@/nav/useGoBack';
 import { useAsync } from '@/data/useAsync';
@@ -89,6 +90,8 @@ export default function GrantDelegation() {
         }
       }
       await signGrant(cap, runForMs(runFor));
+      // The permission is set: one firm press, the beat this app keeps for a lever being thrown (`haptics.ts`).
+      grantTap();
       // Read it back from the chain rather than trusting what we just sent.
       const d = await repos.wallet.delegation();
       setDelegation(d);

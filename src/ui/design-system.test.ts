@@ -215,6 +215,48 @@ describe('motion — animations.md', () => {
   });
 });
 
+describe('haptics — FEATURES.md #23, one beat per event', () => {
+  const haptics = stripComments(fs.readFileSync(path.join(UI, 'haptics.ts'), 'utf8'));
+  /** Each exported beat, and the `Haptics.*` calls it makes, in order. */
+  const beats = (): Map<string, string[]> => {
+    const out = new Map<string, string[]>();
+    const fns = haptics.split(/export function /).slice(1);
+    for (const fn of fns) {
+      const name = fn.slice(0, fn.indexOf('('));
+      out.set(name, [...fn.matchAll(/Haptics\.(\w+)(?:\(Haptics\.\w+\.(\w+)\))?/g)].map((m) => m[2] ?? m[1]!));
+    }
+    return out;
+  };
+
+  it('every beat is distinct — nothing means two things', () => {
+    /*
+     * The pairs this exists for are fill against reject, and grant against kill: a trade happened or it did
+     * not, the bot was given the permission or it was taken away. Two of those feeling alike is the failure
+     * a haptic vocabulary is supposed to prevent, so the whole set is pinned rather than those four.
+     */
+    const patterns = [...beats().values()].map((calls) => calls.join('+'));
+    expect(new Set(patterns).size, `duplicate beats: ${patterns.join(' | ')}`).toBe(patterns.length);
+  });
+
+  it('exactly one event is two beats, and it is the confirmed stop', () => {
+    const doubles = [...beats().entries()].filter(([, calls]) => calls.length > 1).map(([name]) => name);
+    expect(doubles).toEqual(['killTap']);
+  });
+
+  it('the stop is the heaviest single blow, and a grant is lighter than it', () => {
+    expect(beats().get('heavyTap')).toEqual(['Heavy']);
+    expect(beats().get('grantTap')).toEqual(['Medium']);
+  });
+
+  /* A beat is never the only report: nothing may fire where there is no hand to feel it, or no words beside it. */
+  it('nothing buzzes in a browser', () => {
+    expect(haptics).toMatch(/const ON_PHONE = Platform\.OS === 'ios' \|\| Platform\.OS === 'android'/);
+    for (const [name, calls] of beats()) {
+      expect(calls.length, `${name} makes no haptic call`).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('the one product rule — green and red are P&L only', () => {
   const PNL = ['colors.up', 'colors.down', 'colors.candleUp', 'colors.candleDown'];
 

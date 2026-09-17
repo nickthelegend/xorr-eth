@@ -33,6 +33,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { Href } from 'expo-router';
 import { agentGradient } from '@/design/gradients';
 import { Press, Text, duration, space, timing, useReducedMotion } from '@/ui';
+import { fillTap, rejectTap } from '@/ui/haptics';
 import { mmss } from '@/format';
 import { repos } from '@/data';
 import { executorSentence, renderSegments, voice, type ThreadMessage } from '@/bot/message';
@@ -348,6 +349,8 @@ export function Chat({
                       try {
                         res = await repos.bot.decideProposal(proposal.id, d);
                       } catch (e) {
+                        // A refusal and a fill must never feel the same; the sentence appended below says which it was.
+                        rejectTap();
                         const refused = e instanceof ApiError && e.status < 500;
                         const why = apiReason(e);
                         append(
@@ -366,6 +369,13 @@ export function Chat({
                       }
                       try {
                         setDecided(d);
+                        /*
+                         * The executor's own answer, in the hand as well as on screen (`haptics.ts`). Only a `filled`
+                         * answer is a fill: a blocked, failed or skipped one is a refusal, and the whole reason this
+                         * path stopped drawing a green fill for any approve at all was that those four are different.
+                         */
+                        if (res.status === 'filled') fillTap();
+                        else if (res.status === 'blocked' || res.status === 'failed') rejectTap();
                         append(decisionMessage(agentName, res));
                       } finally {
                         setDeciding(false);

@@ -48,6 +48,7 @@ import {
   timing,
   useReducedMotion,
 } from '@/ui';
+import { grantTap } from '@/ui/haptics';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
 import { useSignedOut } from '@/auth/useSignedOut';
 import { CAP_MAX, CAP_MIN, RUN_FOR, capLabel, capMarkerPct, runForMs } from '@/state/derived';
@@ -86,6 +87,8 @@ export default function TradeSettings() {
     setLocalError(undefined);
     try {
       await signGrant(cap, runForMs(runFor));
+      // The permission is set: one firm press, the beat this app keeps for a lever being thrown (`haptics.ts`).
+      grantTap();
       // Read it back from the chain rather than trusting what we just sent.
       const d = await repos.wallet.delegation();
       setDelegation(d);

@@ -35,6 +35,7 @@ import {
   size,
   space,
 } from '@/ui';
+import { grantTap } from '@/ui/haptics';
 import { shortAddress } from '@/format';
 import {
   capUsed,
@@ -327,8 +328,11 @@ export default function Safety() {
        * A disconnected or expired permission is re-granted, not revoked: revoking would take the user from a permission
        * that does not work to no permission at all — a transaction, a wallet prompt and a fee to change nothing.
        */
-      if (plan) await grantWith(plan.dailyCapUsd, plan.durationMs, { approvals: plan.approvals });
-      else {
+      if (plan) {
+        await grantWith(plan.dailyCapUsd, plan.durationMs, { approvals: plan.approvals });
+        // A lever set, not news delivered: one firm press, against the stop's double thud (`haptics.ts`).
+        grantTap();
+      } else {
         setStopping('signing');
         await signRevoke();
         setStopping('stopped');
