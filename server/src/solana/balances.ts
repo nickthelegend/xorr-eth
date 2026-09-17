@@ -4,11 +4,14 @@
 import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import {
   getAssociatedTokenAddressSync,
+  getScaledUiAmountConfig,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAccount,
+  getMint,
   TokenAccountNotFoundError,
   TokenInvalidAccountOwnerError,
+  type Mint,
 } from '@solana/spl-token';
 import { connection as defaultConnection, getConnection } from './connection.js';
 import { DEFAULT_MINTS, getClusterConfig } from './clusters.js';
@@ -66,7 +69,11 @@ export function tokenProgramForMint(mint: PublicKey | string): PublicKey {
 }
 
 /**
- * Determine decimals for a given token mint.
+ * Decimals for a known mint, without an RPC round trip.
+ *
+ * This is a lookup, not a fact: it is right only for the mints listed above. Anything that
+ * reports a balance or builds a `transferChecked` should read the mint instead, via
+ * `readMintScale`. Kept for callers that have no connection to hand.
  */
 export function decimalsForMint(mint: PublicKey | string): number {
   const str = typeof mint === 'string' ? mint : mint.toBase58();
@@ -176,7 +183,45 @@ export async function getSolBalance(
 }
 
 /**
+ * The Scaled UI Amount multiplier in force for a mint at a given moment.
+ *
+ * Token-2022's Scaled UI Amount extension is how an issuer expresses a stock split or a
+ * dividend: the raw balance never moves, the multiplier does, and the displayed balance is
+ * raw x multiplier. The extension carries the next multiplier alongside the current one, so
+ * which of the two applies is a question about the clock.
+ *
+ * Mints without the extension scale by 1.
+ */
+export function scaledUiMultiplier(mintInfo: Mint, atUnixSeconds = Date.now() / 1000): number {
+  const config = getScaledUiAmountConfig(mintInfo);
+  if (!config) return 1;
+  return atUnixSeconds >= Number(config.newMultiplierEffectiveTimestamp)
+    ? config.newMultiplier
+    : config.multiplier;
+}
+
+/**
+ * Read a mint's actual decimals and its current Scaled UI multiplier.
+ */
+export async function readMintScale(
+  mint: PublicKey | string,
+  conn: Connection = defaultConnection,
+  programId?: PublicKey,
+): Promise<{ decimals: number; multiplier: number }> {
+  const mintPk = toPublicKey(mint);
+  const prog = programId ?? tokenProgramForMint(mintPk);
+  const mintInfo = await getMint(conn, mintPk, 'confirmed', prog);
+  return { decimals: mintInfo.decimals, multiplier: scaledUiMultiplier(mintInfo) };
+}
+
+/**
  * Fetch token account balance for a given mint.
+ *
+ * `uiAmount` is what the holder owns, which for an xStock is not `amount / 10 ** decimals`:
+ * these are Token-2022 mints carrying the Scaled UI Amount extension, and every split or
+ * dividend moves the multiplier rather than the raw balance. Both the decimals and the
+ * multiplier are read from the mint — assuming either is how a balance goes quietly wrong
+ * the first time an issuer acts.
  */
 export async function getTokenBalance(
   owner: PublicKey | string,
@@ -188,18 +233,18 @@ export async function getTokenBalance(
   const prog = tokenProgramForMint(mintPk);
   const ata = ataFor(ownerPk, mintPk, prog);
 
+  const { decimals, multiplier } = await readMintScale(mintPk, conn, prog);
+
   try {
     const acc = await getAccount(conn, ata, 'confirmed', prog);
-    const decimals = prog.equals(TOKEN_2022_PROGRAM_ID) ? 8 : 6;
     return {
       amount: acc.amount,
-      uiAmount: Number(acc.amount) / 10 ** decimals,
+      uiAmount: (Number(acc.amount) / 10 ** decimals) * multiplier,
       decimals,
       ata,
     };
   } catch (e) {
     if (e instanceof TokenAccountNotFoundError || e instanceof TokenInvalidAccountOwnerError) {
-      const decimals = prog.equals(TOKEN_2022_PROGRAM_ID) ? 8 : 6;
       return { amount: 0n, uiAmount: 0, decimals, ata };
     }
     throw e;
