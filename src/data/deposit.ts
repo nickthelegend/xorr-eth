@@ -8,11 +8,12 @@
 import { api, ApiError } from './api';
 import type { Keyed } from './intentKey';
 
-/** The two things a deposit lands as: USDC to trade with, and ETH to sign with. */
+/** The two things a deposit lands as: USDC to trade with, and ETH or SOL to sign with. */
 export type WalletFunds = {
   owner: string;
   chain: string;
   usdc: { address: string; raw: string; amount: number };
+  sol?: { raw: string; amount: number };
   eth: { raw: string; amount: number };
   /** When the executor read them, in milliseconds. */
   readAt: number;

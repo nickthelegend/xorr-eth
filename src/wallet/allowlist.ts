@@ -22,6 +22,15 @@ import { withdrawals, type WithdrawalAddress, type WithdrawalAddressBook } from 
 
 export type AllowlistEntry = WithdrawalAddress;
 
+export function isSolanaAddress(address: string): boolean {
+  const t = address.trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
+}
+
+export function isEvmAddress(address: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(normaliseAddress(address));
+}
+
 /**
  * A destination has to be an address on this chain.
  *
@@ -29,8 +38,13 @@ export type AllowlistEntry = WithdrawalAddress;
  * safety feature, it is a list — and the one moment it matters is the moment someone is trying to
  * get their money out.
  */
-export function isValidAddress(address: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(normaliseAddress(address));
+export function isValidAddress(address: string, chain?: string): boolean {
+  const t = normaliseAddress(address);
+  const active = chain ?? process.env.EXPO_PUBLIC_XORR_CHAIN ?? process.env.XORR_CHAIN ?? '';
+  if (active.startsWith('solana')) {
+    return isSolanaAddress(t);
+  }
+  return isEvmAddress(t);
 }
 
 /**
@@ -52,7 +66,12 @@ export function normaliseAddress(address: string): string {
 
 /** One address, however it is spelled: EIP-55 casing is a checksum, not a different destination. */
 export function sameAddress(a: string, b: string): boolean {
-  return normaliseAddress(a).toLowerCase() === normaliseAddress(b).toLowerCase();
+  const normA = normaliseAddress(a);
+  const normB = normaliseAddress(b);
+  if (isSolanaAddress(normA) && isSolanaAddress(normB)) {
+    return normA === normB;
+  }
+  return normA.toLowerCase() === normB.toLowerCase();
 }
 
 /** The executor's answer, exactly as it gave it. Never worked out again from this device's clock. */
