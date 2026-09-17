@@ -36,6 +36,18 @@ export type AsyncState<T> = {
    * `useFreshOnReturn`.
    */
   refreshIfStale: () => void;
+  /**
+   * A re-read is on its way, and what is on screen is the last answer (FEATURES.md #27).
+   *
+   * `loading` cannot say this: a re-read deliberately leaves it off so the screen keeps what it shows. That made the
+   * refresh completely silent — a figure read thirty seconds ago and a figure being replaced this instant were drawn
+   * identically, which is the same "nothing" versus "not yet" conflation the skeleton pulse exists to fix. A screen
+   * wraps what it is keeping in `<Refreshing>` and the figure itself says it is the last one.
+   *
+   * Never true for a `reload`, which asks a NEW question: there the answer on screen is about to be wrong, not old, and
+   * a placeholder is the honest state.
+   */
+  rereading: boolean;
 };
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncState<T> {
@@ -53,7 +65,13 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncSt
   const asked = useRef({ fn, key, loading });
   /** When the last read came back, answered or failed — the age `shouldReread` judges. */
   const lastSettledAt = useRef<number | undefined>(undefined);
+  /*
+   * A re-read in flight, twice: a ref, which `refreshIfStale` reads to refuse a second one without waiting for a
+   * render, and state, which the screen draws from. The ref is the guard and the state is the report; a screen that
+   * drew from the ref would never see it change.
+   */
   const rereading = useRef(false);
+  const [showingLast, setShowingLast] = useState(false);
 
   useEffect(() => {
     asked.current = { fn, key, loading };
@@ -100,6 +118,7 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncSt
     const inFlight = answering || rereading.current;
     if (!shouldReread({ now: Date.now(), lastSettledAt: lastSettledAt.current, inFlight })) return;
     rereading.current = true;
+    setShowingLast(true);
     // Started from a resolved promise, so a read that throws before it returns one still ends the re-read.
     void Promise.resolve()
       .then(read)
@@ -110,7 +129,9 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncSt
       .then((result) => {
         rereading.current = false;
         lastSettledAt.current = Date.now();
-        if (alive.current) setSettled((prev) => settleReread(prev, question, result));
+        if (!alive.current) return;
+        setShowingLast(false);
+        setSettled((prev) => settleReread(prev, question, result));
       });
   }, []);
 
@@ -123,5 +144,6 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[] = []): AsyncSt
     reload,
     settledAt: settled.at,
     refreshIfStale,
+    rereading: showingLast,
   };
 }

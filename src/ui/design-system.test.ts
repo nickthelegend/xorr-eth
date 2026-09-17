@@ -140,6 +140,7 @@ describe('motion — animations.md', () => {
   //   AgentOrb        the agent's stage: breathe / settle  3600ms (thinking) · 900ms (executing) · 250ms (decided, filled)
   //   StopCurtain     the kill switch's own screen         420ms  (the curtain down) · 250ms (the confirm badge)
   //   Sparkline       one breath when the series ticks      150ms up · 250ms back (opacity only; the line still snaps)
+  //   Refreshing      a kept value breathing while re-read  900ms  (the skeleton's cadence, half its depth)
   // A new entry here means a primitive started animating something the policy does not sanction.
   // Argue it into motion.ts first, or take the animation out.
   it('only the sanctioned primitives animate', () => {
@@ -151,6 +152,7 @@ describe('motion — animations.md', () => {
       'AgentOrb.tsx',
       'HoldButton.tsx',
       'Progress.tsx',
+      'Refreshing.tsx',
       'Rise.tsx',
       'RollingNumber.tsx',
       'Segmented.tsx',
@@ -169,17 +171,18 @@ describe('motion — animations.md', () => {
    * The loop is allowed in exactly one file. `withRepeat` anywhere else is how an app acquires a
    * pulsing dot, a breathing button and a spinning badge one reasonable-seeming commit at a time.
    */
-  it('only the skeleton and a working agent\u2019s orb loop', () => {
+  it('only the skeleton, a working agent\u2019s orb and a value being re-read loop', () => {
     /*
-     * Two, and both are argued for in animations.md: the skeleton block, which is not content and says
-     * "still coming"; and an orb whose agent is thinking or acting, which animations.md's own "If you add
-     * motion" asks for by name. Both stop the moment the state that justifies them ends.
+     * Three, each argued for in animations.md: the skeleton block, which is not content and says "still
+     * coming"; an orb whose agent is thinking or acting, which animations.md's own "If you add motion"
+     * asks for by name; and a value kept on screen while it is read again, which says "this is the last
+     * one". All three stop the moment the state that justifies them ends.
      */
     const looping = sources()
       .filter(({ src }) => /withRepeat/.test(stripComments(src)))
       .map(({ rel }) => rel)
       .sort();
-    expect(looping).toEqual(['AgentOrb.tsx', 'States.tsx']);
+    expect(looping).toEqual(['AgentOrb.tsx', 'Refreshing.tsx', 'States.tsx']);
   });
 
   /*

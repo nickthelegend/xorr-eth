@@ -29,6 +29,7 @@ import {
   Placeholder,
   Press,
   Price,
+  Refreshing,
   Row,
   Screen,
   SignInPrompt,
@@ -455,13 +456,16 @@ export default function Home() {
               event; a market quote still snaps. Hidden, it is four dots, as every amount is, and dots do not roll.
             */}
             {total !== null ? (
-              <RollingNumber
-                value={money(total)}
-                variant="heroBalance"
-                delay={STAGGER}
-                roll
-                containerStyle={{ marginTop: space.s6 }}
-              />
+              // Read again on return, the figure stays and breathes rather than going back to a block.
+              <Refreshing on={balance.rereading} style={{ alignSelf: 'flex-start' }}>
+                <RollingNumber
+                  value={money(total)}
+                  variant="heroBalance"
+                  delay={STAGGER}
+                  roll
+                  containerStyle={{ marginTop: space.s6 }}
+                />
+              </Refreshing>
             ) : balance.loading ? (
               <Placeholder width={190} height={46} style={{ marginTop: space.s8, borderRadius: radius.tile }} />
             ) : (

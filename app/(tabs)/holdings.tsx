@@ -16,6 +16,7 @@ import {
   FigureSpan,
   LoadingRows,
   Price,
+  Refreshing,
   Row,
   Screen,
   SheetCard,
@@ -140,13 +141,16 @@ export default function Assets() {
             seconds this executor takes to answer. Sixth site with this conflation. The failure is
             said under the dash now that the read reports one: it used to be swallowed into `null`,
             so the line below could never appear. */}
-        <Price variant="heroBalance" style={{ marginTop: space.s8 }}>
-          {balance.data !== null && balance.data !== undefined
-            ? money(balance.data)
-            : balance.loading
-              ? '· · ·'
-              : '—'}
-        </Price>
+        {/* Read again on return, the figure stays and breathes: it is the last one, not a missing one. */}
+        <Refreshing on={balance.rereading} style={{ alignSelf: 'flex-start' }}>
+          <Price variant="heroBalance" style={{ marginTop: space.s8 }}>
+            {balance.data !== null && balance.data !== undefined
+              ? money(balance.data)
+              : balance.loading
+                ? '· · ·'
+                : '—'}
+          </Price>
+        </Refreshing>
         {/* With a figure above it, the failure is a re-read on return (FEATURES.md #27): that figure is the last one
             read, which is not the same as a balance that never loaded. */}
         {balance.error ? (

@@ -36,6 +36,7 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Kept value | `opacity` (1 → .78, reversing) | 900ms | A figure staying on screen while it is read again, instead of going back to a skeleton. See below. |
 | Messages room | `opacity` (the room being left, over the one that arrived) | 250ms | A theme change dissolving instead of flashing. Both rooms are complete; one becomes transparent. See below. |
 | Tab bar mark | `transform: scale` (0 ↔ 1) | 150ms | The raised pill under the open place, growing into shape on arrival and shrinking away on leaving. The glyph's colour still snaps. |
 | Sparkline, `live` | `opacity` (.9 → 1 → .9, the whole glyph) | 150ms up · 250ms back | One breath when the series it was handed actually changed. The line itself still redraws instantly. See below. |
@@ -65,6 +66,29 @@ Two places would genuinely benefit, both currently unbuilt:
   in the chat's `Turn`, and again as `stage="filled"` on the orb.
 
 Anything beyond those two, don't.
+
+## The kept value
+
+A screen coming back into view reads its numbers again (`useFreshOnReturn`), and it deliberately does
+**not** go back to a skeleton. The question has not changed, so what is on screen is still true, and
+replacing a real balance with a grey block in order to fetch the same balance again is the app throwing
+away a correct answer to look busy.
+
+That was already right, and it made the refresh completely silent: a figure read thirty seconds ago and
+a figure being replaced this instant were drawn identically. That is the "nothing" versus "not yet"
+conflation this app fixes everywhere else, one step along — **"still" versus "still arriving"**.
+
+`<Refreshing on>` says the missing half. The value stays, exactly as it was, and breathes on the
+skeleton's 900ms cadence at half its depth — to .78, not .45, because this is content and a balance
+that dims to half is a balance someone squints at.
+
+- **Rule 1 is untouched.** No value moves and no value changes. Nothing interpolates, nothing counts,
+  nothing slides. One property, opacity, on a figure that is already correct.
+- **Only for a re-read, never a reload.** A reload asks a new question and the answer on screen is
+  about to be wrong; that is a placeholder's job. `rereading` from `useAsync` is the one input.
+- **Said as well as drawn.** The wrapper carries `busy`, so a screen reader is told the app is working.
+  Nobody should need to see a pulse to know a number is being replaced.
+- **Off under reduced motion**, where the value simply stays — which is the important half anyway.
 
 ## One room dissolving into the other
 
@@ -214,7 +238,9 @@ Rules it still obeys:
 - **Shallow.** Down to .45, not to zero. A skeleton must not out-contrast the content beside it.
 - **Off under reduced motion**, where the block is simply grey.
 - **Never on a price.** It appears only where a value is absent. The instant a real figure exists,
-  the block is gone — the price rule is untouched.
+  the block is gone — the price rule is untouched. Note precisely what this forbids: **a block standing
+  where a figure should be**, which says a price is unknown when it is known. A real figure breathing
+  while it is read again is the opposite claim and has its own section below.
 
 900ms because the interaction scale does not apply. 150/180/250 is calibrated for a transition the
 user *caused*; nobody pressed a skeleton. At 250 it strobes. At 900 it breathes.
