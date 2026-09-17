@@ -12,6 +12,7 @@ const earningsCalendarMock = vi.fn();
 const xStockPriceMock = vi.fn<(symbol: string) => Promise<number | null>>();
 const referencePriceMock = vi.fn<(symbol: string) => Promise<number | null>>();
 const readMintScaleMock = vi.fn();
+const appendMock = vi.fn();
 
 /*
  * Four xStocks rather than main's eleven, so a test asserting "it picked NVDAx" is asserting a
@@ -55,11 +56,11 @@ vi.mock('../notifications/alerts.js', () => ({
 vi.mock('../market/edgar.js', () => ({
   earningsCalendar: (...a: unknown[]) => earningsCalendarMock(...a),
 }));
+vi.mock('../audit/log.js', () => ({ append: (...a: unknown[]) => appendMock(...a) }));
 vi.mock('./llm.js', () => ({ speak: vi.fn(async () => ({ ok: true, text: 'Optimal entry setup.' })) }));
 
-const { evaluateBestSetup, runAutonomousCycle, autonomousAgentSweep } = await import(
-  './autonomous.js'
-);
+const { evaluateBestSetup, runAutonomousCycle, autonomousAgentSweep, AGENT_DECISION } =
+  await import('./autonomous.js');
 
 const OWNER = Keypair.generate().publicKey.toBase58();
 
@@ -104,6 +105,7 @@ describe('autonomous xStocks trading agent', () => {
     xStockPriceMock.mockResolvedValue(238);
     referencePriceMock.mockResolvedValue(238);
     readMintScaleMock.mockResolvedValue({ decimals: 8, multiplier: 1, pending: null });
+    appendMock.mockResolvedValue({ seq: '1' });
   });
 
   afterEach(() => {
@@ -214,14 +216,18 @@ describe('autonomous xStocks trading agent', () => {
       expect(best?.suggestedSlippageBps).toBe(50);
     });
 
-    it('marks down a momentum entry when the mint has a multiplier change due', async () => {
+    /*
+     * A scheduled multiplier change is a reason not to open anything on that symbol, not a reason
+     * to prefer something else on it. A markdown still lets the candidate win on a quiet day,
+     * which is exactly the entry the markdown was warning about.
+     */
+    it('stands the symbol down entirely when a multiplier change is inside the window', async () => {
       queryMock.mockImplementation(async (sql: string) =>
         sql.includes('price_observations') ? readings(200, 240, 238) : [],
       );
 
       const undisturbed = await evaluateBestSetup();
-      if (!undisturbed) throw new Error('expected a setup');
-      expect(undisturbed.strategyKind).toBe('momentum');
+      expect(undisturbed?.strategyKind).toBe('momentum');
 
       readMintScaleMock.mockResolvedValue({
         decimals: 8,
@@ -229,20 +235,38 @@ describe('autonomous xStocks trading agent', () => {
         pending: { nextMultiplier: 2, effectiveAtMs: Date.now() + 12 * 3_600_000 },
       });
 
-      const marked = await evaluateBestSetup();
-      expect(marked?.strategyKind).toBe('momentum');
-      expect(marked?.score).toBe(undisturbed.score - 40);
-      expect(marked?.corporateAction.pending?.nextMultiplier).toBe(2);
-      expect(marked?.reason).toContain('not the moment to chase it');
+      // Every symbol is affected alike here, so there is nothing left to pick.
+      expect(await evaluateBestSetup()).toBeNull();
     });
 
-    /* A change far enough out is not a reason to do anything differently today. */
-    it('leaves the score alone when the multiplier change is outside the 48h window', async () => {
+    it('stands down even when the setup would otherwise be the strongest on offer', async () => {
+      earningsCalendarMock.mockImplementation(async (symbol: string) =>
+        symbol === 'NVDAx'
+          ? { symbol, cik: 1045810, reported: [], nextAt: Date.now() + 6 * 86_400_000, gapDays: [], medianGapDays: 91, errorDays: 2 }
+          : null,
+      );
+      readMintScaleMock.mockImplementation(async (mint: string) =>
+        mint === 'Xsc9NVDA'
+          ? {
+              decimals: 8,
+              multiplier: 1,
+              pending: { nextMultiplier: 2, effectiveAtMs: Date.now() + 6 * 3_600_000 },
+            }
+          : { decimals: 8, multiplier: 1, pending: null },
+      );
+
+      const best = await evaluateBestSetup();
+      expect(best?.symbol).not.toBe('NVDAx');
+    });
+
+    /* A change far enough out says nothing about today, and must not cost the symbol its turn. */
+    it('leaves the symbol tradable when the multiplier change is outside the window', async () => {
       queryMock.mockImplementation(async (sql: string) =>
         sql.includes('price_observations') ? readings(200, 240, 238) : [],
       );
 
       const undisturbed = await evaluateBestSetup();
+      if (!undisturbed) throw new Error('expected a setup');
 
       readMintScaleMock.mockResolvedValue({
         decimals: 8,
@@ -251,9 +275,65 @@ describe('autonomous xStocks trading agent', () => {
       });
 
       const later = await evaluateBestSetup();
-      expect(later?.score).toBe(undisturbed?.score);
+      expect(later?.score).toBe(undisturbed.score);
       expect(later?.corporateAction.pending?.nextMultiplier).toBe(2);
     });
+
+    /*
+     * The band comes from the stored readings; where we sit in it comes from the live quote. A
+     * symbol whose recorded history is all near the high but which is quoted near the low right
+     * now is a dip, and reading the position off the newest stored row would have called it a
+     * breakout.
+     */
+    it('positions the live quote in the band, not the newest stored reading', async () => {
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+      xStockPriceMock.mockResolvedValue(205);
+      referencePriceMock.mockResolvedValue(205);
+
+      const best = await evaluateBestSetup();
+      expect(best?.strategyKind).toBe('dca');
+      expect(best?.currentPrice).toBe(205);
+    });
+
+    /*
+     * The bug the synthetic ±8% range hid: with no recorded history there is no band, so neither
+     * range strategy has anything to say. It used to say "upper band" about every asset on earth.
+     */
+    it('produces no candidate at all when there is no price history and no earnings window', async () => {
+      expect(await evaluateBestSetup()).toBeNull();
+    });
+
+    it('needs more than a couple of readings before it will call something a range', async () => {
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? [{ usd: '200' }, { usd: '240' }] : [],
+      );
+      expect(await evaluateBestSetup()).toBeNull();
+    });
+
+    it('skips a symbol whose off-hours drift cannot be measured', async () => {
+      vi.setSystemTime(WEEKEND);
+      referencePriceMock.mockResolvedValue(null);
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+
+      expect(await evaluateBestSetup()).toBeNull();
+    });
+
+    it('carries the chain-read multiplier and the session verdict onto the setup', async () => {
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+
+      const best = await evaluateBestSetup();
+      expect(best?.corporateAction.multiplier).toBe(1);
+      expect(best?.corporateAction.pending).toBeNull();
+      expect(best?.offHoursGuard.session).toBe('regular');
+      expect(best?.suggestedSlippageBps).toBe(50);
+    });
+
   });
 
   describe('runAutonomousCycle', () => {
@@ -369,6 +449,66 @@ describe('autonomous xStocks trading agent', () => {
     });
 
     /*
+     * A fill that never reaches `audit_log` did not happen as far as the app is concerned:
+     * Activity is the one screen whose whole promise is showing what the agents did, and
+     * `/agent/explain` starts from a row on it. `guardAndSpend` does not write one.
+     */
+    it('puts the fill on the audit trail, carrying the signature', async () => {
+      oneMock.mockResolvedValue({ id: 'wallet-1', address: OWNER, agents_stopped: false });
+      readDelegationMock.mockResolvedValue({ delegatedUsd: 1000, isRevoked: false });
+      evaluateMock.mockResolvedValue({ allowed: true, spentTodayUsd: 0, remainingUsd: 800 });
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+      guardAndSpendMock.mockResolvedValue(FILL);
+      armExitsMock.mockResolvedValue({ strategyId: 'exit-1', sentence: 'Exit set' });
+
+      await runAutonomousCycle('wallet-1', { fixedUsd: 25 });
+
+      expect(appendMock).toHaveBeenCalledTimes(1);
+      const entry = appendMock.mock.calls[0]?.[0];
+      expect(entry).toMatchObject({
+        walletId: 'wallet-1',
+        kind: 'trade',
+        signature: FILL.signature,
+        amount: '$25.00',
+      });
+      expect(entry.action).toContain(FILL.symbol);
+      // The whole decision record rides along, so explaining the trade needs no second lookup.
+      expect(entry.payload).toMatchObject({
+        symbol: FILL.symbol,
+        strategyKind: 'momentum',
+        signature: FILL.signature,
+        slippageBps: 50,
+        exitStrategyId: 'exit-1',
+      });
+      expect(typeof entry.payload.proposalId).toBe('string');
+    });
+
+    /*
+     * `proposals.decision` is a CHECK column. Writing a word it does not allow means Postgres
+     * refuses the row, and the refusal was being logged and stepped over — so the record this
+     * whole feature reads back was never there, and the sweep's cooldown never matched.
+     */
+    it('stores the decision under a word the proposals constraint accepts', async () => {
+      oneMock.mockResolvedValue({ id: 'wallet-1', address: OWNER, agents_stopped: false });
+      readDelegationMock.mockResolvedValue({ delegatedUsd: 1000, isRevoked: false });
+      evaluateMock.mockResolvedValue({ allowed: true, spentTodayUsd: 0, remainingUsd: 800 });
+      queryMock.mockImplementation(async (sql: string) =>
+        sql.includes('price_observations') ? readings(200, 240, 238) : [],
+      );
+      guardAndSpendMock.mockResolvedValue(FILL);
+      armExitsMock.mockResolvedValue({ strategyId: 'exit-1', sentence: 'Exit set' });
+
+      await runAutonomousCycle('wallet-1', { fixedUsd: 25 });
+
+      const insert = queryMock.mock.calls.find(([sql]) => sql.includes('INSERT INTO proposals'));
+      if (!insert) throw new Error('expected a proposal insert');
+      expect(insert[0]).not.toContain("'approved'");
+      expect(insert[1]).toContain(AGENT_DECISION);
+    });
+
+    /*
      * `guardAndSpend` answers with a refusal as readily as a receipt, and a refusal is not a fill:
      * nothing downstream of it — exits, proposal, notification — may run.
      */
@@ -407,6 +547,8 @@ describe('autonomous xStocks trading agent', () => {
       oneMock.mockImplementation(async (sql: string, params?: unknown[]) => {
         const id = Array.isArray(params) ? params[0] : undefined;
         if (sql.includes('FROM proposals')) {
+          // Parameterised on the decision word now, so the cooldown matches what the agent writes.
+          expect(params).toContain(AGENT_DECISION);
           return id === 'wallet-active-1' ? { id: 'recent-prop-id' } : null;
         }
         if (sql.includes('FROM wallets')) {

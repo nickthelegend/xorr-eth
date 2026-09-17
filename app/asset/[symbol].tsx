@@ -40,6 +40,7 @@ import {
   colors,
   lineMarks,
   money,
+  NoteStrip,
   percent,
   pnlTone,
   price as fmtPrice,
@@ -64,8 +65,10 @@ import { rangeChange } from '@/state/derived';
 import { settlementSymbol } from '@/data/tradable';
 import { useSettleable } from '@/data/useSettleable';
 import { quoteOf } from '@/markets/quote';
+import { actionSentence, type CorporateActionNotice } from '@/markets/corporateAction';
 import { DUST_USD } from '@/markets/ticket';
 import { useLiveRead } from '@/markets/useLiveRead';
+import { useNow } from '@/state/useNow';
 
 /**
  * The ranges, each as long as its label.
@@ -178,6 +181,32 @@ export default function AssetDetail() {
   const fills = useMemo(() => fillsOf(runs.data ?? [], settlementSymbol(symbol ?? '')), [runs.data, symbol]);
   const onLine = useMemo(() => lineMarks(fills, line.times), [fills, line]);
   const inCandles = useMemo(() => candleMarks(fills, spans), [fills, spans]);
+
+  /*
+   * The corporate action this share has queued, off its own mint.
+   *
+   * A Token-2022 Scaled UI multiplier change IS the split or the dividend — the issuer publishes
+   * the new multiplier and the moment it starts applying, and the chain carries both until then.
+   * There is no vendor calendar involved and nothing anybody typed in, which is why this can be on
+   * the screen at all: the agent's first version of this feature shipped a hardcoded list of
+   * invented dates, and that is not something to show a person next to their money.
+   *
+   * A failure is left to the strip to word. The price and the chart are still worth showing, and
+   * "we could not check" is a different sentence from "nothing is coming".
+   */
+  const corporate = useAsync(
+    () =>
+      api.get<CorporateActionNotice>(
+        `/market/corporate-action?symbol=${encodeURIComponent(symbol ?? '')}`,
+      ),
+    [symbol],
+  );
+  /*
+   * A minute is the right tick for this: the strip counts in hours and days, so a faster clock
+   * would be a wakeup a second for a number that moves hourly.
+   */
+  const now = useNow();
+  const action = actionSentence(corporate.data, now);
 
   /*
    * The same asset, priced a second way.
@@ -318,6 +347,21 @@ export default function AssetDetail() {
           </Text>
         ) : null}
       </View>
+
+      {/*
+        What is about to happen to this holding, when the chain has already said.
+
+        Above the chart rather than below the position rows: a change that restates every unit and
+        every price is context for the whole screen, and a candle series drawn across the effective
+        timestamp means two different things either side of it. Nothing renders when nothing is
+        queued — a strip announcing the absence of a split on every asset every day is noise, and
+        the value here is that it appears only when there is something to know.
+      */}
+      {action ? (
+        <NoteStrip kind={action.kind} style={{ marginTop: space.s12, marginHorizontal: space.gutter }}>
+          {action.text}
+        </NoteStrip>
+      ) : null}
 
       {/*
         The chart type, visibly — and now the only way to change it.
