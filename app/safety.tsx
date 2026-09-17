@@ -128,6 +128,8 @@ export default function Safety() {
    * land; the error under it says what went wrong.
    */
   const [stopping, setStopping] = useState<'signing' | 'stopped'>();
+  /** The revoke's transaction, once the chain has confirmed it. Never set from anything but a real one. */
+  const [stopSignature, setStopSignature] = useState<string>();
   // Expiry is judged against a clock that is state, so a render stays a pure function of what it read.
   const now = useNow();
 
@@ -330,7 +332,12 @@ export default function Safety() {
       if (plan) await grantWith(plan.dailyCapUsd, plan.durationMs, { approvals: plan.approvals });
       else {
         setStopping('signing');
-        await signRevoke();
+        /*
+         * The transaction the stop went out as, kept. `revoke()` resolves only once `confirmStopped` has seen this
+         * hash revoke the policy on-chain, so what the curtain shows is evidence rather than a claim — and it is the
+         * one thing on that screen someone can check for themselves.
+         */
+        setStopSignature(await signRevoke());
         setStopping('stopped');
       }
     } catch (e) {
@@ -657,6 +664,7 @@ export default function Safety() {
       <StopCurtain
         state={stopping}
         detail={running ? stoppedDetail(running) : undefined}
+        signature={stopSignature}
         onDone={() => setStopping(undefined)}
       />
 

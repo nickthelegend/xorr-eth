@@ -484,3 +484,30 @@ describe('edge cases — section W of docs/QA-UI-PLAN.md', () => {
     expect(src).toMatch(/box\.width > 0 && hasData/);
   });
 });
+
+describe('the stop curtain — evidence, never a claim', () => {
+  const src = stripComments(fs.readFileSync(path.join(UI, 'StopCurtain.tsx'), 'utf8'));
+
+  /*
+   * The badge may say CONFIRMED ON-CHAIN only where a real transaction hash was handed in. A placeholder,
+   * a default or an `ellipsis` fallback here would be a fabricated receipt for the most consequential act
+   * in the app — and the one screen whose entire argument is that you do not have to take its word.
+   */
+  it('shows the hash only when there is one, and only once the chain has confirmed', () => {
+    expect(src).toMatch(/stopped && signature \?/);
+    // No default value for the signature: absent stays absent.
+    expect(src).not.toMatch(/signature\s*=\s*['"`]/);
+    expect(src).not.toMatch(/signature\s*\?\?/);
+  });
+
+  /* Both ends of the hash: the leading bytes of two transactions look alike, and a truncation nobody can match is decoration. */
+  it('truncates a hash from both ends, and leaves a short one alone', () => {
+    expect(src).toMatch(/hash\.slice\(0, 8\)/);
+    expect(src).toMatch(/hash\.slice\(-6\)/);
+  });
+
+  /* `stopped` is the chain's answer, not the app's intent, so neither state may be reached on a clock. */
+  it('advances on the revoke, never on a timer', () => {
+    expect(/setTimeout|setInterval|withDelay|withSequence/.test(src)).toBe(false);
+  });
+});

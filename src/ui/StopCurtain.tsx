@@ -43,7 +43,7 @@ import { Icon } from '@/design/Icon';
 import { Button } from './Button';
 import { killTap } from './haptics';
 import { arrival, duration, timing, useReducedMotion } from './motion';
-import { Text } from './Text';
+import { Text, Value } from './Text';
 import { alpha, colors, radius, size, space } from './tokens';
 
 /** How red the wash over the blackout is. The destructive surface's weight, not a full-bleed red screen. */
@@ -53,6 +53,16 @@ const BADGE = 76;
 const BADGE_FROM = 0.94;
 
 export type StopState = 'signing' | 'stopped';
+
+/**
+ * A transaction hash, short enough to read on one line and long enough to find.
+ *
+ * Both ends, never a prefix: the leading bytes of two hashes look alike, and a truncation someone cannot match against
+ * an explorer is decoration shaped like proof. Anything already short is left exactly as it came.
+ */
+function shortSignature(hash: string): string {
+  return hash.length <= 8 + 6 + 1 ? hash : `${hash.slice(0, 8)}…${hash.slice(-6)}`;
+}
 
 export interface StopCurtainProps {
   /**
@@ -66,10 +76,18 @@ export interface StopCurtainProps {
   onDone: () => void;
   /** What stopped, in one line — e.g. how many agents and strategies were running. The screen knows; the curtain says. */
   detail?: string;
+  /**
+   * The revoke's own transaction, once the chain has confirmed it.
+   *
+   * Shown shortened under the badge, because "revoked on-chain" is a claim and this is the evidence for it — the one
+   * thing on this screen someone can take away and check against a block explorer themselves. Absent until there is a
+   * real hash: a placeholder here would be a fabricated receipt for the most consequential act in the app.
+   */
+  signature?: string;
   testID?: string;
 }
 
-export function StopCurtain({ state, onDone, detail, testID }: StopCurtainProps) {
+export function StopCurtain({ state, onDone, detail, signature, testID }: StopCurtainProps) {
   const reduced = useReducedMotion();
   const { height } = useWindowDimensions();
   const open = state !== undefined;
@@ -168,6 +186,22 @@ export function StopCurtain({ state, onDone, detail, testID }: StopCurtainProps)
             <Text variant="footnote" color={colors.ink45} align="center">
               {detail}
             </Text>
+          ) : null}
+
+          {/*
+            The evidence, not another claim. `confirmStopped` has already seen this transaction revoke the policy, so by
+            the time it is drawn it is a hash someone can paste into an explorer — which is the whole argument this app
+            makes about itself.
+          */}
+          {stopped && signature ? (
+            <View style={{ alignItems: 'center', gap: space.s4 }}>
+              <Text variant="tagSm" color={colors.ink45}>
+                CONFIRMED ON-CHAIN
+              </Text>
+              <Value variant="footnote" color={colors.ink55}>
+                {shortSignature(signature)}
+              </Value>
+            </View>
           ) : null}
 
           {stopped ? (
