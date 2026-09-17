@@ -68,6 +68,7 @@ export {
   AgentOrb,
   AssetMark,
   type AgentOrbProps,
+  type AgentStage,
   type OrbSize,
   type OrbStatus,
 } from './AgentOrb';

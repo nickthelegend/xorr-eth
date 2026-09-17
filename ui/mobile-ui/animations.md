@@ -36,6 +36,7 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Agent orb, `stage` | `transform: scale` (thinking, decided, filled) · `opacity` (executing) | 3600ms breathing · 900ms breathing · 250ms settling | The agent's orb performing what the screen knows the agent is doing. Driven by a prop, never a timer. See below. |
 | Balance roll-over | `transform: translateY` + `opacity`, per changed character | 180ms | A balance or P&L figure handing each changed character to the one that replaces it, in the direction the figure moved. Opt-in (`<RollingNumber roll>`), never on a market quote. See below. |
 
 ## Not animated, on purpose
@@ -53,11 +54,40 @@ to show that the app registered a tap.
 
 Two places would genuinely benefit, both currently unbuilt:
 
-- **Agent orb idle** — a slow 3–4s scale breathe (1.0 → 1.015) on *active* agents only. It would
-  make the roster feel alive and encode state. Keep it off paused agents.
-- **Order fill confirmation** — a 250ms scale-in on the filled-order chat bubble, once, on arrival.
+- ~~**Agent orb idle** — a slow 3–4s scale breathe (1.0 → 1.015) on *active* agents only.~~ Built
+  2026-09-17 as `<AgentOrb stage="thinking">`; see "The agent orb's stages" above. It is off an agent that
+  is not working, which is the stricter version of "keep it off paused agents".
+- **Order fill confirmation** — a 250ms scale-in on the filled-order chat bubble, once, on arrival. Built
+  in the chat's `Turn`, and again as `stage="filled"` on the orb.
 
 Anything beyond those two, don't.
+
+## The agent orb's stages
+
+"If you add motion" below named two things worth building, and this is both of them plus the two states
+between: an orb that **breathes while its agent is working** and **pops once when a fill lands**.
+
+| `stage` | What it draws | Why that property |
+|---|---|---|
+| `thinking` | scale 1 → 1.015, breathing, 3.6s | Alive. The one animations.md asked for by name. |
+| `decided` | settles to rest, 250ms, then still | The agent has stopped; the screen now says what it decided. |
+| `executing` | opacity 1 → .72, breathing, 900ms | In flight. The skeleton's cadence, because it means the same thing. |
+| `filled` | one 250ms scale-in from .94 | The second thing "If you add motion" asked for. Once, on arrival. |
+
+Two loops and two properties. **Scale means alive, opacity means in flight** — a second scale loop at a
+different speed would read as the same state at a different frame rate.
+
+The rules it obeys:
+
+- **The stage is a prop, from what the screen knows** — a request in flight, a proposal waiting, an
+  executor's answer. Never a timer, an interval or a sequence. An orb that performs a four-beat routine on
+  a clock says "something is happening" while nothing is, which on a screen that moves money is a lie the
+  animation tells. There is a test for this.
+- **Motion is never the only carrier.** Every screen that passes a stage says the same thing in words. Under
+  reduced motion the orb is simply still, and nothing is lost.
+- **Off by default.** An orb with no stage does not move. A roster of twelve breathing orbs is a screen that
+  will not sit still to be read, which is exactly what animations.md's ban on the pulsing status dot is about.
+- **It stops when the state does**, and when the orb unmounts.
 
 ## The balance roll-over
 

@@ -23,10 +23,40 @@
  * `identity` draws the face from the agent's name instead (`agentGlyph`): eyes, a mouth and a
  * mark on the sphere, the same for that name on every screen. The orb — gradient, specular,
  * bloom — is untouched; without `identity` the face is §5's single design.
+ *
+ * ## `stage` — what the agent is doing (2026-09-17)
+ *
+ * animations.md's "If you add motion" sanctions two things and nothing else: a slow scale breathe on an
+ * active agent's orb, and a single 250ms scale-in on a fill. `stage` is those two, plus the two states
+ * between them, driven by **what the screen actually knows** — never by a timer. An orb that cycles
+ * through a performance on a schedule is a loading spinner wearing a face: it says "something is
+ * happening" while nothing is, which on a screen that moves money is a lie the animation tells.
+ *
+ *   thinking   scale 1 → 1.015, breathing, 3.6s        the agent is working something out
+ *   decided    settles to rest and holds still, 250ms  it has something for you; the screen says what
+ *   executing  opacity 1 → .72, breathing, 900ms       it is acting — the skeleton's "still coming" cadence
+ *   filled     one 250ms scale-in from .94, then still it is done
+ *
+ * Two loops, two properties. Scale means *alive*, opacity means *in flight*; a second scale loop at a
+ * different speed would read as the same state at a different frame rate. The stages are ordered but not
+ * sequential — a screen may go straight from thinking to filled, and each stage draws itself from
+ * wherever the last one was.
+ *
+ * **The motion is never the only carrier.** Every screen that passes a stage already says the same thing
+ * in words, because a person with reduced motion on — where all of this collapses to a still orb — must
+ * lose nothing. That is the rule the badge, the status word and the orb's face all follow here.
  */
 import React from 'react';
 import { Image } from 'expo-image';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg, {
   Circle,
   Defs,
@@ -39,14 +69,23 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import { agentGlyph, pathData, type GlyphShape } from '../design/agentGlyph';
+import { timing, useReducedMotion } from './motion';
 import { Placeholder } from './States';
 import { Text, Value } from './Text';
-import { colors, orbBloom, radius, size as metrics, space, type Gradient } from './tokens';
+import { colors, duration, orbBloom, radius, size as metrics, space, type Gradient } from './tokens';
 
 /** The six sizes design.md §5 sanctions. */
 export type OrbSize = 52 | 56 | 70 | 74 | 84 | 104;
 
 export type OrbStatus = 'active' | 'new' | 'paused';
+
+/**
+ * What the agent is doing right now, as the screen knows it.
+ *
+ * Passed from real state — a request in flight, a proposal waiting, an executor's answer — and never
+ * from a timer. See the choreography in this file's docblock.
+ */
+export type AgentStage = 'thinking' | 'decided' | 'executing' | 'filled';
 
 export interface AgentOrbProps {
   gradient: Gradient;
@@ -71,6 +110,11 @@ export interface AgentOrbProps {
   name?: string;
   /** Status word under the name. Green for active/new, `ink40` for paused. */
   status?: OrbStatus;
+  /**
+   * What the agent is doing, which the orb performs. Undefined is a still orb, and is the default —
+   * a roster of twelve orbs all breathing at once is a screen that will not sit still to be read.
+   */
+  stage?: AgentStage;
   /** Overrides the status word. Defaults to Active / New / Paused. */
   statusLabel?: string;
   style?: StyleProp<ViewStyle>;
@@ -87,6 +131,13 @@ const SPECULAR = { w: 0.28, h: 0.18, left: 0.24, top: 0.17, blur: 0.035 };
 const EYE = { w: 9 / 74, h: 13 / 74, top: 30 / 74, left: 21 / 74 };
 const SMILE = { w: 16 / 74, h: 7 / 74, bottom: 16 / 74 };
 const BADGE_OFFSET = { top: -8, left: -6 };
+
+/** The top of the breath. design.md's own suggestion: 1.5% — visible on a 104pt orb, invisible as a jump. */
+const BREATH = 1.015;
+/** How far the orb dims while it is acting. The skeleton's depth, for the same reason: it must not out-contrast its screen. */
+const ACTING_DIM = 0.72;
+/** Where a fill's single scale-in starts. */
+const FILL_FROM = 0.94;
 
 const STATUS_LABEL: Readonly<Record<OrbStatus, string>> = {
   active: 'Active',
@@ -142,6 +193,80 @@ function GlyphPart({ shape, unit }: { shape: GlyphShape; unit: number }) {
   }
 }
 
+/**
+ * The stage, drawn: a scale and an opacity for the orb to wear.
+ *
+ * Each stage restates BOTH values, so an orb arriving from any other stage lands somewhere defined
+ * rather than keeping half of what it was doing — a `filled` orb still breathing from `thinking` was
+ * the first version of this, and the pop was invisible underneath the loop. `cancelAnimation` before
+ * each, because a `withRepeat` left running is not stopped by assigning the shared value.
+ *
+ * Under reduced motion the loops are not started at all and the rest collapse to instant state changes
+ * (`timing`), so the orb simply rests where the stage puts it. `ReduceMotion.System` as well as the
+ * flag, for the same reason `motion.ts` gives: `useReducedMotion` answers a beat after mount, and
+ * reanimated can ask the OS itself as the animation starts.
+ */
+function useStageMotion(stage: AgentStage | undefined) {
+  const reduced = useReducedMotion();
+  const scale = useSharedValue(1);
+  const shade = useSharedValue(1);
+
+  React.useEffect(() => {
+    cancelAnimation(scale);
+    cancelAnimation(shade);
+    if (stage === undefined) {
+      scale.set(1);
+      shade.set(1);
+      return;
+    }
+    if (stage === 'thinking') {
+      shade.set(1);
+      if (reduced) {
+        scale.set(1);
+        return;
+      }
+      scale.set(
+        withRepeat(
+          withTiming(BREATH, { ...timing(duration.breathe, reduced), reduceMotion: ReduceMotion.System }),
+          -1,
+          true,
+        ),
+      );
+      return;
+    }
+    if (stage === 'executing') {
+      scale.set(withTiming(1, { ...timing(duration.slow, reduced), reduceMotion: ReduceMotion.System }));
+      if (reduced) {
+        shade.set(1);
+        return;
+      }
+      shade.set(
+        withRepeat(
+          withTiming(ACTING_DIM, { ...timing(duration.pulse, reduced), reduceMotion: ReduceMotion.System }),
+          -1,
+          true,
+        ),
+      );
+      return;
+    }
+    shade.set(withTiming(1, { ...timing(duration.slow, reduced), reduceMotion: ReduceMotion.System }));
+    // A fill arrives; a decision settles. Both end at rest, and neither loops.
+    if (stage === 'filled') scale.set(FILL_FROM);
+    scale.set(withTiming(1, { ...timing(duration.slow, reduced), reduceMotion: ReduceMotion.System }));
+  }, [stage, reduced, scale, shade]);
+
+  // Stopped with the component: a loop outliving its orb is a frame budget nobody is spending on anything.
+  React.useEffect(
+    () => () => {
+      cancelAnimation(scale);
+      cancelAnimation(shade);
+    },
+    [scale, shade],
+  );
+
+  return useAnimatedStyle(() => ({ opacity: shade.get(), transform: [{ scale: scale.get() }] }));
+}
+
 export function AgentOrb({
   gradient,
   size = 70,
@@ -154,9 +279,11 @@ export function AgentOrb({
   name,
   status,
   statusLabel,
+  stage,
   style,
   testID,
 }: AgentOrbProps) {
+  const staged = useStageMotion(stage);
   const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
   const gradientId = `orb-g-${uid}`;
   const blurId = `orb-b-${uid}`;
@@ -180,12 +307,12 @@ export function AgentOrb({
   const smileR = Math.min(smileH, smileW / 2);
 
   const orb = (
-    <View
-      style={
-        bloom
-          ? { borderRadius: radius.full, boxShadow: orbBloom(gradient.c1) }
-          : undefined
-      }
+    <Animated.View
+      style={[
+        bloom ? { borderRadius: radius.full, boxShadow: orbBloom(gradient.c1) } : null,
+        // Still, and costing nothing, until a screen hands the orb a stage.
+        staged,
+      ]}
     >
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Defs>
@@ -272,7 +399,7 @@ export function AgentOrb({
           </Value>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 
   if (name === undefined && status === undefined) {
