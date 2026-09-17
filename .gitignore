@@ -5,7 +5,13 @@
 .keys/
 *.key
 
+# In a git worktree these are symlinks to the owner's disk, not directories, and a trailing
+# slash matches directories only — so the slash-less forms are what keep `git add -A` from
+# committing an absolute local path as a file.
 node_modules/
+node_modules
+/node_modules
+server/node_modules
 .expo/
 dist/
 web-build/
@@ -20,6 +26,7 @@ typechain/
 subgraph/generated/
 subgraph/build/
 subgraph/node_modules/
+subgraph/node_modules
 contracts/out/
 contracts/cache/
 
@@ -33,6 +40,7 @@ expo-env.d.ts
 # so this pattern read as part of the expo-cli marker and ignored nothing.
 tools/.auth.json
 contracts/lib/swap-vm/node_modules/
+contracts/lib/swap-vm/node_modules
 
 # The owner's design reference video — a 9.5 MB input, not source.
 /reference-ui.mp4
