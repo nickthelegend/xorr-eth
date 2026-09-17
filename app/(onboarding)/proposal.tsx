@@ -35,6 +35,7 @@ import {
   space,
   timing,
   useReducedMotion,
+  type AgentStage,
 } from '@/ui';
 import { canApprove, proposalRebalance, sleeveHeldAsCash, weightBarPct, weightTotal } from '@/state/derived';
 import { sleeveFixtures } from '@/data/fixtures/sleeves';
@@ -101,6 +102,23 @@ export default function Proposal() {
   const total = weightTotal(weights);
   const ok = canApprove(weights);
 
+  /*
+   * What the Strategist is doing, for its orb (`AgentOrb`'s `stage`). Every one of these is a fact this
+   * screen already holds and already says in words — the subtitle, the total, the CTA — so the orb adds
+   * a second reading of the same thing rather than the only one. Nothing here is a timer.
+   */
+  const stage: AgentStage = busy
+    ? // The strategy is being written to the executor.
+      'executing'
+    : existing
+      ? // A rebalance already runs for this wallet: the work this screen exists for is done.
+        'filled'
+      : strategies.loading || tradable === undefined
+        ? // Still asking what this network settles and what the wallet already runs.
+          'thinking'
+        : // The draft is on screen and the decision is yours.
+          'decided';
+
   async function start() {
     if (!ok || existing) return;
     setBusy(true);
@@ -153,7 +171,15 @@ export default function Proposal() {
   return (
     <Screen>
       <View style={{ alignItems: 'center', gap: space.s14 }}>
-        <AgentOrb gradient={agentGradients.Strategist} identity="Strategist" size={size.orb56} face specular bloom />
+        <AgentOrb
+          gradient={agentGradients.Strategist}
+          identity="Strategist"
+          size={size.orb56}
+          face
+          specular
+          bloom
+          stage={stage}
+        />
         <Text variant="onboardingTitle" align="center">
           Your draft portfolio
         </Text>

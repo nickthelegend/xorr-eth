@@ -68,6 +68,7 @@ export {
   AgentOrb,
   AssetMark,
   type AgentOrbProps,
+  type AgentStage,
   type OrbSize,
   type OrbStatus,
 } from './AgentOrb';
@@ -87,6 +88,7 @@ export {
   type ButtonVariant,
 } from './Button';
 export { HoldButton, type HoldButtonProps } from './HoldButton';
+export { StopCurtain, type StopCurtainProps, type StopState } from './StopCurtain';
 export { Eyebrow, type EyebrowProps } from './Eyebrow';
 export { BackButton, CloseButton, IconButton, HeaderBar, type IconButtonProps } from './IconButton';
 export { Progress, type ProgressProps } from './Progress';

@@ -27,6 +27,7 @@ import {
   Row,
   Screen,
   SheetCard,
+  StopCurtain,
   Text,
   colors,
   quantity,
@@ -67,6 +68,20 @@ import { useAsync } from '@/data/useAsync';
 import { useFreshOnReturn } from '@/data/useFreshOnReturn';
 import { errorText, NotSignedIn } from '@/data/apiError';
 
+/**
+ * What was running, in words, for the curtain that confirms the stop.
+ *
+ * From the counts this screen already read, and by kind: a live strategy is scheduled against this permission exactly
+ * as a hired agent is, and calling the sum "agents" is the conflation `running` was split up to fix.
+ */
+function stoppedDetail({ agents, strategies }: { agents: number; strategies: number }): string {
+  const parts: string[] = [];
+  if (agents > 0) parts.push(`${agents} ${agents === 1 ? 'agent' : 'agents'}`);
+  if (strategies > 0) parts.push(`${strategies} ${strategies === 1 ? 'strategy' : 'strategies'}`);
+  if (parts.length === 0) return 'Nothing was running when you stopped it.';
+  return `${parts.join(' and ')} stopped.`;
+}
+
 /** The state chip's dot. 7pt — screens.md gives this one exactly. */
 const DOT = 7;
 const SETTING_ROW = 52;
@@ -106,6 +121,15 @@ export default function Safety() {
   const delegation = useStore((s) => s.delegation);
   const recoveryBackedUp = useStore((s) => s.recoveryBackedUp);
   const [localError, setLocalError] = useState<string>();
+  /*
+   * The stop, while it is happening (`StopCurtain`). Real, both of it: `signing` is a revoke actually out
+   * for signature, and `stopped` is set only after `signRevoke()` returns — which it does only once the
+   * chain shows the policy revoked. A failure clears it, so the curtain never claims a stop that did not
+   * land; the error under it says what went wrong.
+   */
+  const [stopping, setStopping] = useState<'signing' | 'stopped'>();
+  /** The revoke's transaction, once the chain has confirmed it. Never set from anything but a real one. */
+  const [stopSignature, setStopSignature] = useState<string>();
   // Expiry is judged against a clock that is state, so a render stays a pure function of what it read.
   const now = useNow();
 
@@ -306,8 +330,19 @@ export default function Safety() {
        * that does not work to no permission at all — a transaction, a wallet prompt and a fee to change nothing.
        */
       if (plan) await grantWith(plan.dailyCapUsd, plan.durationMs, { approvals: plan.approvals });
-      else await signRevoke();
+      else {
+        setStopping('signing');
+        /*
+         * The transaction the stop went out as, kept. `revoke()` resolves only once `confirmStopped` has seen this
+         * hash revoke the policy on-chain, so what the curtain shows is evidence rather than a claim — and it is the
+         * one thing on that screen someone can check for themselves.
+         */
+        setStopSignature(await signRevoke());
+        setStopping('stopped');
+      }
     } catch (e) {
+      // The curtain comes back up: nothing was stopped, and the screen underneath says why.
+      setStopping(undefined);
       setLocalError(errorText(e));
       return;
     }
@@ -621,6 +656,18 @@ export default function Safety() {
           </Text>
         </>
       ) : null}
+      {/*
+        The stop, while it happens and once it lands (FEATURES.md, animations.md "The stop's curtain"). Its detail line
+        is the count this screen already read, and only when it was actually read — a stop that says "0 agents were
+        running" because a roster failed to load would be the screen guessing about the thing it just did.
+      */}
+      <StopCurtain
+        state={stopping}
+        detail={running ? stoppedDetail(running) : undefined}
+        signature={stopSignature}
+        onDone={() => setStopping(undefined)}
+      />
+
       {/* Stopping and exiting are different needs: exiting is a quiet link, never a second red button. */}
       {signedOut ? null : (
         <Press

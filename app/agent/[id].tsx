@@ -72,6 +72,13 @@ export default function AgentDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [hiring, setHiring] = useState(false);
   const [hireError, setHireError] = useState<string>();
+  /*
+   * A hire that went through ON THIS VISIT, for the orb's `filled` beat.
+   *
+   * Not `agent.hired`: that is true for every visit afterwards, and an orb that pops every time the page
+   * opens is celebrating something that happened last week. The beat belongs to the moment it lands.
+   */
+  const [justHired, setJustHired] = useState(false);
 
   // `listAgents` throws when /agents cannot answer, so a failed read reaches the ErrorState below
   // rather than passing for an agent with a record of zeros. Signed out, that asks for a sign-in.
@@ -95,6 +102,7 @@ export default function AgentDetail() {
     setHireError(undefined);
     try {
       await repos.bot.hire(agent.personaId ?? agent.id);
+      setJustHired(true);
       agents.reload();
     } catch (e) {
       /*
@@ -142,7 +150,18 @@ export default function AgentDetail() {
           contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: space.s30, gap: space.s14 }}
         >
           <Rise index={0} style={{ alignItems: 'center', gap: space.s8 }}>
-            <AgentOrb gradient={agentGradient(agent.name)} identity={agent.name} size={ORB} face />
+            {/*
+              What the agent is doing, from this screen's own state (`AgentOrb`'s `stage`): the hire is out for
+              the executor to answer, or it has just answered. An agent that was already hired when the page
+              opened is still — nothing is happening, and the HIRED chip below says the rest.
+            */}
+            <AgentOrb
+              gradient={agentGradient(agent.name)}
+              identity={agent.name}
+              size={ORB}
+              face
+              stage={hiring ? 'executing' : justHired ? 'filled' : undefined}
+            />
             <Text variant="screenTitle" align="center" style={{ marginTop: space.s6 }}>
               {agent.name}
             </Text>
