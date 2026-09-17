@@ -11,6 +11,7 @@ const readDelegationMock = vi.fn();
 const quoteJupiterMock = vi.fn();
 const buildJupiterSwapMock = vi.fn();
 const executeJupiterSwapMock = vi.fn();
+const evaluateOffHoursGuardMock = vi.fn();
 
 vi.mock('../db/index.js', () => ({
   one: (...args: unknown[]) => oneMock(...args),
@@ -39,6 +40,14 @@ vi.mock('../venues/jupiter.js', () => ({
   executeJupiterSwap: (...args: unknown[]) => executeJupiterSwapMock(...args),
 }));
 
+vi.mock('../market/nasdaq.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../market/nasdaq.js')>();
+  return {
+    ...actual,
+    evaluateOffHoursGuard: (...args: unknown[]) => evaluateOffHoursGuardMock(...args),
+  };
+});
+
 const { guardAndSpend, SpendRefusalError } = await import('./place.js');
 
 const VALID_SOLANA_OWNER = Keypair.generate().publicKey.toBase58();
@@ -47,6 +56,11 @@ describe('guardAndSpend executor chokepoint', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryMock.mockResolvedValue({ rows: [] });
+    evaluateOffHoursGuardMock.mockReturnValue({
+      session: 'regular',
+      action: 'normal',
+      suggestedSlippageBps: 50,
+    });
   });
 
   it('rejects unsupported non-stock symbols', async () => {
@@ -151,5 +165,34 @@ describe('guardAndSpend executor chokepoint', () => {
     // Verify DB transaction was opened to record fill and audit log
     expect(txMock).toHaveBeenCalledTimes(1);
     expect(queryMock).toHaveBeenCalled();
+  });
+
+  it('refuses trade when off-hours slippage guard triggers HOLD', async () => {
+    oneMock.mockResolvedValue({
+      id: 'wallet-1',
+      address: VALID_SOLANA_OWNER,
+      agents_stopped: false,
+    });
+    readDelegationMock.mockResolvedValue({
+      delegatedUsd: 1000,
+      revoked: false,
+    });
+    evaluateMock.mockResolvedValue({ allowed: true });
+    evaluateOffHoursGuardMock.mockReturnValueOnce({
+      session: 'closed',
+      action: 'hold',
+      reason: 'Nasdaq closed, spread too wide (>1.5%)',
+    });
+
+    await expect(
+      guardAndSpend({
+        walletId: 'wallet-1',
+        ownerAddress: VALID_SOLANA_OWNER,
+        usd: 50,
+        symbol: 'NVDAx',
+        venue: 'jupiter',
+        because: 'test',
+      }),
+    ).rejects.toMatchObject({ reason: 'off_hours_spread_hold' });
   });
 });

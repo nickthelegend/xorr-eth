@@ -61,3 +61,59 @@ export async function getUsdcBalance(owner: PublicKey | string): Promise<number>
   const bal = await getTokenAccountBalance(ata);
   return bal?.uiAmount ?? 0;
 }
+
+export type XStockBalance = {
+  symbol: string;
+  mint: string;
+  uiAmount: number;
+  uiAmountString: string;
+  amount: bigint;
+  decimals: number;
+};
+
+/**
+ * Reads the Token-2022 balance for an xStock holding.
+ *
+ * CRITICAL INVARIANT (Audit note):
+ * xStocks balances on Token-2022 use Scaled UI (raw units x corporate action multiplier).
+ * Always rely on `uiAmount` rather than computing `raw / 10^decimals`, so a stock split
+ * does not register as a sudden drawdown / P&L crash.
+ */
+export async function getXStockBalance(
+  owner: PublicKey | string,
+  symbol: string,
+): Promise<XStockBalance | null> {
+  const { XSTOCKS, xStockKey } = await import('../venues/stocks.js');
+  const key = xStockKey(symbol);
+  if (!key) return null;
+  const stock = XSTOCKS[key];
+  if (!stock) return null;
+
+  const ownerPk = typeof owner === 'string' ? new PublicKey(owner) : owner;
+  const ata = ataFor(ownerPk, stock.mint, TOKEN_2022_PROGRAM_ID);
+
+  try {
+    const res = await connection.getTokenAccountBalance(ata);
+    return {
+      symbol: stock.symbol,
+      mint: stock.mint,
+      uiAmount: res.value.uiAmount ?? 0,
+      uiAmountString: res.value.uiAmountString ?? '0',
+      amount: BigInt(res.value.amount),
+      decimals: res.value.decimals,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('could not find account') || msg.includes('Invalid param: could not find account')) {
+      return {
+        symbol: stock.symbol,
+        mint: stock.mint,
+        uiAmount: 0,
+        uiAmountString: '0',
+        amount: 0n,
+        decimals: stock.decimals,
+      };
+    }
+    return null;
+  }
+}

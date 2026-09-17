@@ -23,6 +23,7 @@ import { append } from '../audit/log.js';
 import { applyFill } from '../positions/index.js';
 import { SOLANA_MINTS } from '../solana/clusters.js';
 import { explorerTx } from '../solana/connection.js';
+import { evaluateOffHoursGuard } from '../market/nasdaq.js';
 
 export type GuardAndSpendParams = {
   walletId: string;
@@ -105,6 +106,16 @@ export async function guardAndSpend(params: GuardAndSpendParams): Promise<SpendR
     throw new SpendRefusalError('no_market_price', `Could not get live price for ${stock.symbol}.`);
   }
 
+  // 4b. Off-hours slippage guard (oracle vs Nasdaq spread)
+  const offHours = evaluateOffHoursGuard({
+    symbol: stock.symbol,
+    onChainPrice: mark,
+  });
+  if (offHours.action === 'hold') {
+    throw new SpendRefusalError('off_hours_spread_hold', offHours.reason);
+  }
+  const effectiveSlippageBps = params.slippageBps ?? offHours.suggestedSlippageBps;
+
   // 5. Execute trade through Jupiter
   const wantedUnits = usdToBaseUnits(usd, 6); // USDC units
   let signature: string;
@@ -117,7 +128,7 @@ export async function guardAndSpend(params: GuardAndSpendParams): Promise<SpendR
       inputMint: SOLANA_MINTS.usdc,
       outputMint: stock.mint,
       amount: wantedUnits,
-      slippageBps: params.slippageBps ?? 50,
+      slippageBps: effectiveSlippageBps,
       onlyDirectRoutes: true,
     });
 
