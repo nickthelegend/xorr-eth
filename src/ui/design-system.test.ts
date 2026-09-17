@@ -130,6 +130,7 @@ describe('motion — animations.md', () => {
   //   States          skeleton block opacity, looping     900ms  (the only loop in the app)
   //   Rise            a section fading up into place      420ms  (arrival, 2026-09-12)
   //   RollingNumber   digits rising into their slots      420ms  (arrival, 28ms apart — never counting)
+  //                  a changed character handed over     180ms  (`roll`, own money only — still never counting)
   //   AreaChart       the line revealed left to right     700ms  (arrival)
   //   Candlestick     the candles revealed left to right  700ms  (arrival)
   //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)

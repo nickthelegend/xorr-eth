@@ -36,6 +36,7 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Balance roll-over | `transform: translateY` + `opacity`, per changed character | 180ms | A balance or P&L figure handing each changed character to the one that replaces it, in the direction the figure moved. Opt-in (`<RollingNumber roll>`), never on a market quote. See below. |
 
 ## Not animated, on purpose
 
@@ -57,6 +58,34 @@ Two places would genuinely benefit, both currently unbuilt:
 - **Order fill confirmation** — a 250ms scale-in on the filled-order chat bubble, once, on arrival.
 
 Anything beyond those two, don't.
+
+## The balance roll-over
+
+Rule 1 says never animate a price, and it stands. A market quote that moves on screen implies a move
+the market did not make, and a quote that ticks every few seconds would turn a quiet market into a
+flickering one.
+
+A balance is not a quote. It changes because something *happened* — a fill landed, a position moved,
+money arrived — and a change that appears with no motion at all is the one event on the screen that
+goes unannounced. `<RollingNumber roll>` hands each **changed** character over to the one replacing
+it: the old character leaves the clip as the new one enters, upward when the figure rose and downward
+when it fell. Characters that did not change do not move.
+
+What it does not do is **count**. Every frame shows a character from the figure that was on screen or
+a character from the figure that replaced it, and nothing in between — two real values, handed over.
+There is no interpolated $4,9xx on the way from $4,862.18 to $4,901.02, because no such figure was
+ever true.
+
+Rules it obeys:
+
+- **Opt-in, and only for the person's own money.** The default is still a snap, and a `figure="market"`
+  price is never given `roll`.
+- **180ms**, the interaction scale, because a hand-over is one character being replaced rather than a
+  screen arriving.
+- **Only what changed.** The separators, the currency mark and the digits that held still stay put.
+- **Nothing while balances are hidden.** The figure is dots, and one dot replacing another is movement
+  with nothing behind it.
+- **Off under reduced motion**, where the new character is simply there.
 
 ## The skeleton pulse
 
