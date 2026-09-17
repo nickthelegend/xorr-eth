@@ -95,6 +95,16 @@ const CORPORATE_ACTION_WINDOW_MS = 48 * 3_600_000;
 export const AGENT_DECISION = 'approve';
 
 /**
+ * How long a wallet waits between autonomous entries.
+ *
+ * The tick is faster than any thesis is, so without this the agent would re-enter the same setup
+ * every thirty seconds. Exported because `/agent/preview` tells the user when the hold lifts, and
+ * a screen that disagrees with the sweep about the length of the cooldown is worse than a screen
+ * that does not mention it.
+ */
+export const COOLDOWN_MINUTES = 10;
+
+/**
  * Why the agent did what it did, in the shape `/agent/explain` reads back.
  *
  * Written once and stored twice — as the proposal payload and on the audit row — because they are
@@ -588,12 +598,13 @@ export async function autonomousAgentSweep(_now: Date = new Date()): Promise<num
   let executedCount = 0;
   for (const w of wallets) {
     try {
-      // One autonomous entry per wallet per ten minutes. The tick is faster than any thesis is.
+      // One autonomous entry per wallet per cooldown. The tick is faster than any thesis is.
       const recent = await one<{ id: string }>(
         `SELECT id FROM proposals
-          WHERE wallet_id = $1 AND decision = $2 AND decided_at > now() - interval '10 minutes'
+          WHERE wallet_id = $1 AND decision = $2
+            AND decided_at > now() - ($3 || ' minutes')::interval
           LIMIT 1`,
-        [w.id, AGENT_DECISION],
+        [w.id, AGENT_DECISION, String(COOLDOWN_MINUTES)],
       ).catch(() => null);
       if (recent) continue;
 
