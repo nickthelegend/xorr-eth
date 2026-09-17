@@ -10,7 +10,19 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "types": ["node", "vitest/globals"],
-    "noEmit": true
+    "noEmit": true,
+    /*
+     * The app's own `@/` alias, as `vitest.config.mts` resolves it at the repo root.
+     *
+     * Two of the executor's tests read the app's modules on purpose — `evm/chain-agreement.test.ts`
+     * holds the two chain vocabularies to each other, and `routes/order-amount.test.ts` checks the
+     * executor's bounds against the ones the app enforces before sending. Those tests run from the
+     * root config, which already resolves `@/`; without the same mapping here the executor's
+     * typecheck was the only place in the repo that could not see what they import.
+     */
+    "paths": {
+      "@/*": ["../src/*"]
+    }
   },
   "include": ["src/**/*.ts"]
 }
