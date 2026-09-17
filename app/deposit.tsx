@@ -48,6 +48,8 @@ import { errorText } from '@/data/apiError';
 import { faucetStatus, requestFaucet, walletFunds, type FaucetOutcome, type WalletFunds } from '@/data/deposit';
 import { useIntentKeys } from '@/data/useIntentKeys';
 
+import { openMoonPayBuy } from '@/deposit/moonpay';
+
 /** Often enough to see a deposit land while you wait for it. Each read is two balance calls against the executor's node. */
 const POLL_MS = 5_000;
 const QR_SIZE = 168;
@@ -80,6 +82,8 @@ export default function Deposit() {
   const now = useNow();
   const [copied, setCopied] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [openingMoonPay, setOpeningMoonPay] = useState(false);
+  const [moonPayError, setMoonPayError] = useState<string>();
   const [outcome, setOutcome] = useState<FaucetOutcome>();
 
   /*
@@ -98,6 +102,19 @@ export default function Deposit() {
     if (!address) return;
     await Clipboard.setStringAsync(address);
     setCopied(true);
+  }
+
+  async function buyWithMoonPay() {
+    if (!address || openingMoonPay) return;
+    setOpeningMoonPay(true);
+    setMoonPayError(undefined);
+    try {
+      await openMoonPayBuy({ walletAddress: address });
+    } catch (e) {
+      setMoonPayError(errorText(e));
+    } finally {
+      setOpeningMoonPay(false);
+    }
   }
 
   /*
@@ -167,12 +184,24 @@ export default function Deposit() {
               {address ?? 'Setting up your wallet…'}
             </Text>
             {address ? (
-              <Button
-                label={copied ? 'Copied' : 'Copy address'}
-                variant="ghost"
-                onPress={copy}
-                style={{ marginTop: space.s12 }}
-              />
+              <View style={{ marginTop: space.s12, gap: space.s10 }}>
+                <Button
+                  label="Buy with Card · MoonPay Sandbox"
+                  variant="secondary"
+                  loading={openingMoonPay}
+                  onPress={buyWithMoonPay}
+                />
+                {moonPayError ? (
+                  <Text variant="footnote" color={colors.down} align="center">
+                    {moonPayError}
+                  </Text>
+                ) : null}
+                <Button
+                  label={copied ? 'Copied' : 'Copy address'}
+                  variant="ghost"
+                  onPress={copy}
+                />
+              </View>
             ) : null}
             <Text variant="footnote" color={colors.ink55} style={{ marginTop: space.s10 }}>
               {depositQrWorks ? `Send only USDC on ${chainLabel}.` : depositQrNote}
@@ -262,8 +291,13 @@ function Funds({
             height={size.rowSm}
           />
           <Row
-            title="ETH"
-            value={<Holding figure={quantity(data.eth.amount, ETH_DIGITS)} arrivals={arrivals.eth} />}
+            title={data.sol ? 'SOL' : 'ETH'}
+            value={
+              <Holding
+                figure={quantity(data.sol ? data.sol.amount : data.eth.amount, data.sol ? 4 : ETH_DIGITS)}
+                arrivals={arrivals.eth}
+              />
+            }
             height={size.rowSm}
             divider={false}
           />

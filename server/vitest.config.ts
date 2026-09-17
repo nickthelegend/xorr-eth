@@ -45,4 +45,19 @@ export default defineConfig({
     fileParallelism: !process.env.LIVE ? undefined : false,
     globalSetup: ['../tools/wait-for-warm.ts'],
   },
+  /*
+   * The app's `@/` alias, as `vitest.config.mts` resolves it at the repo root.
+   *
+   * Two of these tests read the app's modules on purpose — `evm/chain-agreement.test.ts` holds the two
+   * chain vocabularies to each other, and `routes/order-amount.test.ts` checks the executor's bounds
+   * against the ones the app enforces before sending. Both collect from the root config, which resolves
+   * `@/`; without the same mapping here they failed to collect under `(cd server && npm test)`, the
+   * command the README gives. The same suite passing from one directory and not the other is exactly
+   * what the note above this config exists to prevent.
+   */
+  resolve: {
+    alias: {
+      '@': path.resolve(import.meta.dirname, '../src'),
+    },
+  },
 });

@@ -13,7 +13,6 @@ import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useGoBack } from '@/nav/useGoBack';
 import {
-  AreaChart,
   BackButton,
   Button,
   Eyebrow,
@@ -38,12 +37,17 @@ import {
 } from '@/ui';
 import { useSignedOut } from '@/auth/useSignedOut';
 import { PositionCard, PositionCardSkeleton, type PositionLevel } from '@/ui/PositionCard';
+import { AllocationDonut } from '@/ui/charts/AllocationDonut';
+import { TimelineNotYet, ValueTimeline } from '@/ui/charts/ValueTimeline';
+import { continuityWindowMs, netInvestedSteps, observedRuns, recordedCount } from '@/ui/charts/timeline';
+import { useMeasuredBox } from '@/ui/charts/useMeasuredBox';
+import { allocationBySector } from '@/ui/charts/allocation';
 import { Rise } from '@/ui/Rise';
 import { RollingNumber } from '@/ui/RollingNumber';
 import { STAGGER } from '@/ui/motion';
 import { signedMoney } from '@/format';
 import { repos } from '@/data';
-import { system } from '@/data/system';
+import { system, type SectorClassification } from '@/data/system';
 import { useAsync } from '@/data/useAsync';
 import { useFreshOnReturn } from '@/data/useFreshOnReturn';
 import type { Strategy } from '@/data/types';
@@ -170,11 +174,53 @@ export default function Portfolio() {
    */
   useFreshOnReturn(balance, positions, realised, strategies, runs, activity, history);
   const points = useMemo(() => (history.data?.points ?? []).map((p) => p.totalUsd), [history.data]);
-  // When each point was recorded, so a finger on the line reads the value and the time it was true (FEATURES.md #45).
-  const times = useMemo(() => (history.data?.points ?? []).map((p) => p.at), [history.data]);
   const firstAt = history.data?.points[0]?.at;
   const graphDelta = points.length > 1 ? points[points.length - 1]! - points[0]! : 0;
   const graphPct = points.length > 1 && points[0]! > 0 ? (graphDelta / points[0]!) * 100 : 0;
+
+  /*
+   * What each held company does, from the SEC (`/market/classification`). Asked only for what is actually held, and
+   * re-asked when the book changes; a symbol the regulator has no classification for comes back null and stays null.
+   */
+  const heldSymbols = useMemo(() => [...new Set(book.map((p) => p.symbol))].sort(), [book]);
+  const sectors = useAsync<Record<string, SectorClassification | null>>(
+    () => (heldSymbols.length === 0 ? Promise.resolve({}) : system.classification(heldSymbols)),
+    [heldSymbols.join(',')],
+  );
+  /* The donut's arithmetic, from real position values and real classifications. */
+  const allocation = useMemo(
+    () =>
+      allocationBySector(
+        book.map((p) => ({ symbol: p.symbol, valueUsd: p.notional, sector: sectors.data?.[p.symbol]?.sector ?? null })),
+      ),
+    [book, sectors.data],
+  );
+
+  /*
+   * The history, as the things that were actually recorded (`timeline.ts`).
+   *
+   * Two series, true in two different ways. NET INVESTED steps at each recorded fill and is flat between them because
+   * it WAS flat between them — exactly, not approximately — so joining two fills claims nothing. VALUE WHEN RECORDED is
+   * the snapshots, drawn as the readings they are and joined only across stretches recorded continuously; where nothing
+   * was recorded for a while there is a gap, because a line across it would be a claim about time nobody looked at.
+   *
+   * Neither is interpolated, smoothed or extended to the edges.
+   */
+  const investedSteps = useMemo(
+    () =>
+      netInvestedSteps(
+        (runs.data ?? [])
+          .filter((r) => r.status === 'filled' && r.usd !== null)
+          .map((r) => ({ at: Date.parse(r.finishedAt ?? r.at), usd: r.usd as number, side: r.side ?? null })),
+      ),
+    [runs.data],
+  );
+  const valueRuns = useMemo(
+    () => observedRuns(history.data?.points ?? [], continuityWindowMs(history.data?.everyMinutes)),
+    [history.data],
+  );
+  const recorded = recordedCount(investedSteps, valueRuns);
+  const [graphBox, onGraphLayout] = useMeasuredBox();
 
   /* Fills per symbol — how many trades built each position. */
   const trades = useMemo(() => {
@@ -234,6 +280,7 @@ export default function Portfolio() {
               value={money(total)}
               variant="heroBalance"
               delay={STAGGER}
+              roll
               containerStyle={{ marginTop: space.s6 }}
             />
           ) : balance.loading ? (
@@ -260,29 +307,35 @@ export default function Portfolio() {
             <Text variant="footnote" color={colors.ink55}>
               Couldn’t load the past week.
             </Text>
-          ) : points.length > 1 && firstAt !== undefined ? (
-            <>
-              <AreaChart
-                data={points}
-                times={times}
-                formatValue={money}
-                height={GRAPH_H}
-                color={graphDelta < 0 ? colors.down : colors.up}
-                grid
-                drawIn
-              />
+          ) : recorded < 2 ? (
+            /* Nothing, or one reading. Neither is a trend, and a line along zero would claim we watched and it held. */
+            <TimelineNotYet count={recorded} />
+          ) : (
+            <View onLayout={onGraphLayout}>
+              <ValueTimeline steps={investedSteps} runs={valueRuns} width={graphBox.width} height={GRAPH_H} />
               <View
                 style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: space.s8 }}
               >
                 <Text variant="footnote" color={colors.ink55}>
-                  {historyCaption(firstAt)}
+                  {firstAt !== undefined ? historyCaption(firstAt) : 'Every reading recorded so far'}
                 </Text>
-                <Price variant="footnote" tone={pnlTone(graphDelta)}>
-                  {`${signedMoney(graphDelta)} · ${percent(graphPct)}`}
-                </Price>
+                {points.length > 1 ? (
+                  <Price variant="footnote" tone={pnlTone(graphDelta)}>
+                    {`${signedMoney(graphDelta)} · ${percent(graphPct)}`}
+                  </Price>
+                ) : null}
               </View>
-            </>
-          ) : null}
+              {/* What the two series are. Without this the dimmer step line is an unexplained second line. */}
+              <View style={{ flexDirection: 'row', gap: space.s14, marginTop: space.s6 }}>
+                <Text variant="footnote" color={colors.ink55}>
+                  Value when recorded
+                </Text>
+                <Text variant="footnote" color={colors.ink45}>
+                  Net invested
+                </Text>
+              </View>
+            </View>
+          )}
         </Rise>
 
         <Rise
@@ -297,7 +350,31 @@ export default function Portfolio() {
           </View>
         </Rise>
 
-        <Rise index={3} style={{ marginTop: space.s26, paddingHorizontal: space.gutter, gap: space.s12 }}>
+        {/*
+          What the book is made of, by sector — the SEC's own classification of each underlying company, never a
+          mapping of ours (`/market/classification`). A holding the regulator has no answer for is drawn and labelled
+          Unclassified; it is never guessed from the ticker and never dropped, because dropping it would renormalise
+          every other slice and the chart would look right while being wrong by exactly that much.
+
+          Nothing is drawn until the classifications have answered: a donut whose every slice says Unclassified
+          because the read is still in flight is a chart telling a story about the read rather than the portfolio.
+        */}
+        {book.length > 0 ? (
+          <Rise index={3} style={{ marginTop: space.s26, paddingHorizontal: space.gutter, gap: space.s12 }}>
+            <Text variant="cardTitle">Allocation</Text>
+            {sectors.loading && !sectors.data ? (
+              <Placeholder height={168} style={{ borderRadius: radius.panel }} />
+            ) : sectors.error ? (
+              <Text variant="body" color={colors.ink55}>
+                Couldn’t read what these companies do, so the split by sector isn’t shown.
+              </Text>
+            ) : (
+              <AllocationDonut slices={allocation.slices} total={money(allocation.totalUsd)} totalLabel="In positions" />
+            )}
+          </Rise>
+        ) : null}
+
+        <Rise index={4} style={{ marginTop: space.s26, paddingHorizontal: space.gutter, gap: space.s12 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <Text variant="cardTitle">Positions</Text>
             {positions.data ? (
@@ -357,7 +434,7 @@ export default function Portfolio() {
           })}
         </Rise>
 
-        <Rise index={4} style={card}>
+        <Rise index={5} style={card}>
           <Text variant="cardTitle">Profit</Text>
           <Row
             height={size.rowSm}
@@ -389,7 +466,7 @@ export default function Portfolio() {
           />
         </Rise>
 
-        <Rise index={5} style={[card, { flexDirection: 'row', gap: space.s12 }]}>
+        <Rise index={6} style={[card, { flexDirection: 'row', gap: space.s12 }]}>
           <View style={{ flex: 1, gap: space.s4 }}>
             <Text variant="eyebrowSm">Cash</Text>
             {balance.data ? (

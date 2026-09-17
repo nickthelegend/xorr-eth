@@ -18,6 +18,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { getAddress, isAddress, zeroAddress } from 'viem';
+import { PublicKey } from '@solana/web3.js';
 import { one, query, tx } from '../db/index.js';
 import { THIS_CHAIN } from '../db/chain-scope.js';
 import { append } from '../audit/log.js';
@@ -76,9 +77,45 @@ export function utc(ms: number): string {
 }
 
 /** What someone pasted, as an address: trimmed, and `0X` read as the `0x` it means. */
-function normalise(address: string): string {
+export function normalise(address: string): string {
   const t = address.trim();
   return t.startsWith('0X') ? `0x${t.slice(2)}` : t;
+}
+
+export function isSolanaAddress(address: string): boolean {
+  const t = address.trim();
+  if (t.length < 32 || t.length > 44) return false;
+  try {
+    new PublicKey(t);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isEvmAddress(address: string): boolean {
+  const t = normalise(address);
+  return isAddress(t, { strict: false });
+}
+
+/** Check if string is a valid EVM or Solana address depending on active chain */
+export function isValidAddress(address: string, chain?: string): boolean {
+  const t = normalise(address);
+  const active = chain ?? process.env.XORR_CHAIN ?? process.env.EXPO_PUBLIC_XORR_CHAIN ?? '';
+  if (active.startsWith('solana-')) {
+    return isSolanaAddress(t);
+  }
+  return isEvmAddress(t);
+}
+
+/** Canonical format of address (checksummed for EVM, base58 for Solana) */
+export function formatAddress(address: string, chain?: string): string {
+  const t = normalise(address);
+  const active = chain ?? process.env.XORR_CHAIN ?? process.env.EXPO_PUBLIC_XORR_CHAIN ?? '';
+  if (active.startsWith('solana-')) {
+    return t;
+  }
+  return isEvmAddress(t) ? getAddress(t) : t;
 }
 
 /** A cooling-off as the trail says it. The fork proof's short one is written as what it was, not rounded to hours. */
@@ -132,18 +169,19 @@ export type DestinationVerdict =
  */
 export async function destinationStatus(walletId: string, address: string): Promise<DestinationVerdict> {
   const raw = normalise(address);
-  if (!isAddress(raw, { strict: false })) {
+  if (!isValidAddress(raw)) {
     return { usable: false, reason: 'not_allowlisted', detail: 'That is not an address, so nothing can be sent to it.' };
   }
-  const row = await one<Row>(`SELECT ${COLUMNS} FROM withdrawal_addresses WHERE ${LIVE} AND lower(address) = lower($2)`, [
-    walletId,
-    raw,
-  ]);
+  const formatted = formatAddress(raw);
+  const row = await one<Row>(
+    `SELECT ${COLUMNS} FROM withdrawal_addresses WHERE ${LIVE} AND (address = $2 OR lower(address) = lower($2))`,
+    [walletId, formatted],
+  );
   if (!row) {
     return {
       usable: false,
       reason: 'not_allowlisted',
-      detail: `${getAddress(raw)} is not on your withdrawal allowlist, so nothing can be sent to it. An address you add becomes usable ${COOLING_OFF_HOURS} hours later.`,
+      detail: `${formatted} is not on your withdrawal allowlist, so nothing can be sent to it. An address you add becomes usable ${COOLING_OFF_HOURS} hours later.`,
     };
   }
   const entry = shape(row);
@@ -176,13 +214,19 @@ export async function addAddress(
   coolingOffSeconds: number = COOLING_OFF_SECONDS,
 ): Promise<AddOutcome> {
   const label = input.label.trim();
-  const raw = normalise(input.address);
-  if (!isAddress(raw, { strict: false })) {
-    return refuse('invalid_address', 'That is not a Base address. It should start 0x and be 42 characters.');
+  const raw = input.address;
+  if (!isValidAddress(raw)) {
+    const isSolana = (process.env.XORR_CHAIN ?? '').startsWith('solana-');
+    return refuse(
+      'invalid_address',
+      isSolana
+        ? 'That is not a Solana address. It should be a base58 public key.'
+        : 'That is not a Base address. It should start 0x and be 42 characters.',
+    );
   }
-  const address = getAddress(raw);
-  if (address === zeroAddress) {
-    return refuse('zero_address', 'That is the zero address. Anything sent there is gone for good, so it cannot be a destination.');
+  const address = formatAddress(raw);
+  if (address === zeroAddress || address === '11111111111111111111111111111111') {
+    return refuse('zero_address', 'That is the zero or system address. Anything sent there is gone for good, so it cannot be a destination.');
   }
   if (label.length === 0 || label.length > MAX_LABEL) {
     return refuse('invalid_label', `Name the address in 1 to ${MAX_LABEL} characters.`);
@@ -192,7 +236,7 @@ export async function addAddress(
   const out = await tx(async (client): Promise<AddOutcome> => {
     await lockBook(client, walletId);
     const existing = await client.query<Row>(
-      `SELECT ${COLUMNS} FROM withdrawal_addresses WHERE ${LIVE} AND lower(address) = lower($2)`,
+      `SELECT ${COLUMNS} FROM withdrawal_addresses WHERE ${LIVE} AND (address = $2 OR lower(address) = lower($2))`,
       [walletId, address],
     );
     if (existing.rows[0]) {
@@ -260,19 +304,20 @@ export type RemoveOutcome = { status: 'removed'; address: string; label: string 
 /** Take an address off the list, effective at once. Adding it again later starts a new cooling-off from zero. */
 export async function removeAddress(walletId: string, address: string): Promise<RemoveOutcome> {
   const raw = normalise(address);
-  if (!isAddress(raw, { strict: false })) {
+  if (!isValidAddress(raw)) {
     return refuse('not_listed', 'That is not an address, so it is not on your allowlist.');
   }
+  const formatted = formatAddress(raw);
   const out = await tx(async (client): Promise<RemoveOutcome> => {
     await lockBook(client, walletId);
     const removed = await client.query<{ address: string; label: string }>(
       `UPDATE withdrawal_addresses SET removed_at = now()
-        WHERE ${LIVE} AND lower(address) = lower($2)
+        WHERE ${LIVE} AND (address = $2 OR lower(address) = lower($2))
         RETURNING address, label`,
-      [walletId, raw],
+      [walletId, formatted],
     );
     const row = removed.rows[0];
-    if (!row) return refuse('not_listed', `${getAddress(raw)} is not on your allowlist.`);
+    if (!row) return refuse('not_listed', `${formatted} is not on your allowlist.`);
     await append(
       {
         walletId,

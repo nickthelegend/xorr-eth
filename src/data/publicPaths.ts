@@ -27,9 +27,12 @@ export const PUBLIC_PATHS: readonly string[] = [
   '/market/watchable',
   '/market/stocks',
   '/market/stocks/history',
+  '/market/xstocks',
   '/market/crosscheck',
   '/market/futures',
   '/yield/supply',
+  '/deposit/moonpay/config',
+  '/deposit/moonpay/webhook',
 ];
 
 export const PUBLIC_PREFIXES: readonly string[] = ['/perp/'];

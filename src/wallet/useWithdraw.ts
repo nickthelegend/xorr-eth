@@ -19,12 +19,15 @@
  */
 import { useCallback, useState } from 'react';
 import type { Address, Hex } from 'viem';
+import { PublicKey } from '@solana/web3.js';
 import { useGrantDelegation } from '@/auth/useGrantDelegation';
-import { sameAddress, type AllowlistEntry } from './allowlist';
+import { isSolana } from '@/chain';
+import { isSolanaAddress, sameAddress, type AllowlistEntry } from './allowlist';
 import { transferCall } from './transfer';
 import { humanWalletError } from './walletError';
 import { ApiError, errorText } from '@/data/apiError';
 import { withdrawals } from '@/data/withdrawals';
+import { getOrCreateSolanaKeypair, sendSolanaSplTransfer } from './solanaWallet';
 
 export class NotAllowlisted extends Error {
   constructor(detail = 'That address is not on your allowlist.') {
@@ -48,7 +51,7 @@ export function useWithdraw() {
   const { sendTransaction } = useGrantDelegation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [txHash, setTxHash] = useState<Hex>();
+  const [txHash, setTxHash] = useState<string>();
 
   /**
    * Send a token to an allowlisted destination (PLAN.md 3.11).
@@ -74,9 +77,6 @@ export function useWithdraw() {
         if (!entry || !allowlist.some((a) => sameAddress(a.address, entry.address))) throw new NotAllowlisted();
         if (!(Number(amount) > 0)) throw new Error('Enter an amount above zero.');
 
-        // In the token's own decimals, from the typed string — never through a float.
-        const call = transferCall(token, entry.address as Address, amount);
-
         /*
          * The executor decides, now, with the signature still unrequested.
          *
@@ -91,7 +91,24 @@ export function useWithdraw() {
             : new NotAllowlisted(verdict.detail);
         }
 
-        const hash = await sendTransaction(call.to, call.data);
+        let hash: string;
+        if (isSolanaAddress(entry.address) || isSolana) {
+          const signer = await getOrCreateSolanaKeypair();
+          const mint = new PublicKey(token.address);
+          const destination = new PublicKey(entry.address);
+          const rawAmount = BigInt(Math.round(Number(amount) * 10 ** token.decimals));
+          hash = await sendSolanaSplTransfer({
+            signer,
+            mint,
+            destination,
+            amountRaw: rawAmount,
+          });
+        } else {
+          // In the token's own decimals, from the typed string — never through a float.
+          const call = transferCall(token, entry.address as Address, amount);
+          hash = await sendTransaction(call.to, call.data);
+        }
+
         setTxHash(hash);
         /*
          * Read back from the chain and written to the trail — what left, where to, and whether that

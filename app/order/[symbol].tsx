@@ -16,6 +16,7 @@ import { useGoBack } from '@/nav/useGoBack';
 import {
   Button,
   CloseButton,
+  FailureNote,
   Fill,
   Keypad,
   Pill,
@@ -42,12 +43,28 @@ import { useDebounced } from '@/data/useDebounced';
 import { useStore } from '@/state/store';
 import { DEFAULT_BUY } from '@/data/tradable';
 import { useSettleable } from '@/data/useSettleable';
-import { errorText } from '@/data/apiError';
+import { ApiError, wasReplayed } from '@/data/apiError';
+import { placementOf } from '@/markets/placed';
 import type { SwapQuoteResult } from '@/data/useSwapQuote';
 import { waitOutWarming } from '@/data/warming';
 import { sellMax, ticketLimit } from '@/markets/ticket';
 
 type Side = 'buy' | 'sell';
+
+/**
+ * A refusal the executor ANSWERED with, as the error it is.
+ *
+ * `/orders` and `/positions/close` answer a blocked attempt 409 with a body — `{ status, reason, detail }` —
+ * which `repos` hands back as a value rather than throwing. Wrapping it in the same `ApiError` a thrown
+ * refusal arrives as means one component reads both, and `failures.ts` finds the code either way.
+ */
+function refusalOf(
+  res: { status?: string; reason?: string; error?: string; detail?: string },
+  fallback: string,
+  replayed: boolean,
+) {
+  return new ApiError(409, fallback, { error: res.reason ?? res.error, detail: res.detail ?? fallback }, undefined, undefined, replayed);
+}
 
 const SIDES = [
   { value: 'buy', label: 'Buy' },
@@ -165,7 +182,18 @@ export default function OrderTicket() {
         : Promise.resolve(null),
     [quoteFor],
   );
-  const limit = ticketLimit({ side, symbol, amountUsd: amount, cashUsd: availableUsd, held: heldRead });
+  /*
+   * `text` as well as the parsed amount: `0.001` and `0.00` are different states and `parseFloat` makes
+   * them one. The first is an order under the executor's floor and the second is an empty field.
+   */
+  const limit = ticketLimit({
+    side,
+    symbol,
+    amountUsd: amount,
+    cashUsd: availableUsd,
+    held: heldRead,
+    text: orderAmt,
+  });
   /** What Max inserts: the cash for a buy, and for a sale the holding — which Max used to ignore, composing a sale of the cash. */
   const maxUsd = side === 'sell' ? (typeof heldRead === 'number' ? heldRead : undefined) : availableUsd;
 
@@ -173,8 +201,25 @@ export default function OrderTicket() {
   const { quote, error: priceError } = usePrice(symbol);
 
   const [placing, setPlacing] = useState(false);
-  const [refusal, setRefusal] = useState<string>();
-  const [filled, setFilled] = useState<{ units: number; price: number }>();
+  /*
+   * What the attempt came back with, kept as it came.
+   *
+   * This used to be `errorText(e)` — a string, assigned at the catch — which threw away everything except the
+   * sentence: whether repeating it could answer differently, whether a transaction may have gone out, and
+   * which screen fixes it. `FailureNote` reads all three off the error itself (`failures.ts`), so it is the
+   * error that is kept. A refusal the executor answered with rather than threw is wrapped as one, so both
+   * arrive here in the same shape.
+   */
+  const [refusal, setRefusal] = useState<unknown>();
+  /*
+   * What came back, once something did.
+   *
+   * `replayed` is the executor saying this key had already been answered: the order filled once, a while
+   * ago, and this tap placed nothing. Without it the ticket rendered the first attempt's confirmation a
+   * second time, so the mechanism that prevented a double spend looked exactly like one. See
+   * `markets/placed.ts`.
+   */
+  const [filled, setFilled] = useState<{ units: number; price: number; replayed: boolean }>();
   /*
    * The order's Idempotency-Key (FEATURES.md #29). An order that timed out may have filled; the same order tapped again
    * carries the same key, and the executor answers with what the first one did rather than filling it twice.
@@ -200,10 +245,15 @@ export default function OrderTicket() {
           repos.portfolio.close({ symbol, fraction }, { idempotencyKey }),
         );
         if (res.status === 'closed') {
-          setFilled({ units: res.units ?? 0, price: (res.usd ?? 0) / (res.units || 1) });
-          setTimeout(() => goBack(), 1200);
+          setFilled({
+            units: res.units ?? 0,
+            price: (res.usd ?? 0) / (res.units || 1),
+            replayed: wasReplayed(res),
+          });
+          // A replay is read, not glanced at: it says the tap did nothing, which takes longer than a fill.
+          setTimeout(() => goBack(), wasReplayed(res) ? 2600 : 1200);
         } else {
-          setRefusal(res.detail ?? res.error ?? `The sale came back "${res.status}".`);
+          setRefusal(refusalOf(res, `The sale came back "${res.status}".`, wasReplayed(res)));
         }
         return;
       }
@@ -212,16 +262,18 @@ export default function OrderTicket() {
         repos.orders.place({ symbol, usd: amount }, { idempotencyKey }),
       );
       if (res.status === 'filled') {
-        setFilled({ units: res.units ?? 0, price: res.price ?? 0 });
+        setFilled({ units: res.units ?? 0, price: res.price ?? 0, replayed: wasReplayed(res) });
         // Let the fill land on screen before the sheet goes; a ticket that closes the
-        // instant you tap it leaves you unsure whether anything happened.
-        setTimeout(() => goBack(), 1200);
+        // instant you tap it leaves you unsure whether anything happened. An "already filled" has a
+        // sentence under it and takes longer to read, so it gets longer.
+        setTimeout(() => goBack(), wasReplayed(res) ? 2600 : 1200);
       } else {
-        // The policy engine's own sentence — "the daily cap is spent", not "409".
-        setRefusal(res.detail ?? res.reason ?? res.error ?? `The order came back "${res.status}".`);
+        // The policy engine's own sentence — "the daily cap is spent", not "409" — and its code with it, so
+        // the note below can offer the screen that fixes it.
+        setRefusal(refusalOf(res, `The order came back "${res.status}".`, wasReplayed(res)));
       }
     } catch (e) {
-      setRefusal(errorText(e));
+      setRefusal(e);
     } finally {
       setPlacing(false);
     }
@@ -344,7 +396,7 @@ export default function OrderTicket() {
         <Button
           label={
             filled
-              ? `${side === 'buy' ? 'Bought' : 'Sold'} ${quantity(filled.units)} ${symbol}`
+              ? placementOf({ side, symbol, units: filled.units, replayed: filled.replayed }).label
               : orderCta(side, orderAmt, symbol)
           }
           // What filled is the person's money and hides while balances are hidden; the order being typed does not.
@@ -365,25 +417,42 @@ export default function OrderTicket() {
           </Text>
         </View>
       )}
-      {refusal ? (
+      {/*
+        A duplicate submit, said in as many words.
+
+        The executor answered this key before and handed back what that attempt did, so nothing was placed
+        here. The button already says "Already bought"; this is the sentence that makes it unambiguous.
+      */}
+      {filled?.replayed ? (
         <Text
           variant="footnote"
-          color={colors.down}
+          color={colors.sheet.muted}
           align="center"
           style={{ marginTop: space.s10 }}
+          accessibilityLiveRegion="polite"
         >
-          {refusal}
+          {placementOf({ side, symbol, units: filled.units, replayed: true }).note}
         </Text>
       ) : null}
-      {/* Why the order cannot go, on the ticket: nothing held, more than is held, more than the cash. */}
+      {refusal !== undefined ? (
+        <FailureNote error={refusal} light style={{ marginTop: space.s10 }} />
+      ) : null}
+      {/*
+        Why the order cannot go, on the ticket: nothing held, more than is held, more than the cash, and now
+        the amount's own rules — under a cent, over the executor's ceiling, finer than a cent.
+
+        Only the balance sentences are the person's money. "You have $1,234.00." hides while balances are
+        hidden (FEATURES.md #47); "The smallest order is $0.01." is a property of the executor and masking it
+        would hide the one number that says what to type instead.
+      */}
       {limit.state === 'refused' && tradable && !signedOut && filled === undefined ? (
-        // "You have $1,234.00." is the person's cash, and hides while balances are hidden (FEATURES.md #47).
         <Text
           variant="footnote"
           color={colors.down}
           align="center"
           style={{ marginTop: space.s10 }}
-          figure="own"
+          figure={limit.code === undefined || limit.code === 'insufficient' ? 'own' : undefined}
+          accessibilityLiveRegion="polite"
         >
           {limit.reason}
         </Text>

@@ -36,6 +36,9 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Stop curtain | `opacity` (the blackout) · `transform: translateY` (the curtain) · `transform: scale` (the badge) | 420ms ease-out · 420ms ease-out · 250ms | The kill switch's own screen, up while the revoke is signed and confirmed. See below. |
+| Agent orb, `stage` | `transform: scale` (thinking, decided, filled) · `opacity` (executing) | 3600ms breathing · 900ms breathing · 250ms settling | The agent's orb performing what the screen knows the agent is doing. Driven by a prop, never a timer. See below. |
+| Balance roll-over | `transform: translateY` + `opacity`, per changed character | 180ms | A balance or P&L figure handing each changed character to the one that replaces it, in the direction the figure moved. Opt-in (`<RollingNumber roll>`), never on a market quote. See below. |
 
 ## Not animated, on purpose
 
@@ -52,11 +55,95 @@ to show that the app registered a tap.
 
 Two places would genuinely benefit, both currently unbuilt:
 
-- **Agent orb idle** — a slow 3–4s scale breathe (1.0 → 1.015) on *active* agents only. It would
-  make the roster feel alive and encode state. Keep it off paused agents.
-- **Order fill confirmation** — a 250ms scale-in on the filled-order chat bubble, once, on arrival.
+- ~~**Agent orb idle** — a slow 3–4s scale breathe (1.0 → 1.015) on *active* agents only.~~ Built
+  2026-09-17 as `<AgentOrb stage="thinking">`; see "The agent orb's stages" above. It is off an agent that
+  is not working, which is the stricter version of "keep it off paused agents".
+- **Order fill confirmation** — a 250ms scale-in on the filled-order chat bubble, once, on arrival. Built
+  in the chat's `Turn`, and again as `stage="filled"` on the orb.
 
 Anything beyond those two, don't.
+
+## The stop's curtain
+
+The kill switch signs an on-chain revoke from the person's own wallet, and after it every agent,
+strategy and stop-loss is inert. It used to finish the way every other button finishes: a label
+changed, a badge went green to red. The biggest thing this app can do passed with less ceremony than
+a segmented control.
+
+It now takes the screen for the length of the transaction. A curtain comes down — a red wash over a
+blackout, the stop button's own red at the weight the design gives a destructive surface, because on a
+true-black app a full-bleed #EF3B36 reads as a crash. It holds while the revoke is signed. When the
+chain confirms, a badge scales in once, the words say what is now true, and the phone gives its one
+two-beat haptic (`killTap` — a thud and a latch, `haptics.ts`).
+
+Three properties, each on its own element, all collapsing to nothing under reduced motion.
+
+What keeps it honest:
+
+- **Both states are real.** `signing` is a revoke actually out for signature; `stopped` is set only
+  once `revoke()` returns, which happens only when the chain shows the policy revoked. Nothing here
+  is a timer standing in for a progress the app does not have.
+- **A failure takes it away.** The curtain never stays up over an error — that would be the app
+  claiming a stop it did not make. The screen underneath says what went wrong.
+- **It cannot be dismissed while the signature is out.** There is nothing to go back to, and a
+  curtain a stray touch could clear is a way to leave this screen unsure whether trading stopped.
+- **The words carry it.** Under reduced motion, with a screen reader, in a screenshot: the same
+  sentences, the same badge, the same detail line. The motion is the second telling.
+
+## The agent orb's stages
+
+"If you add motion" below named two things worth building, and this is both of them plus the two states
+between: an orb that **breathes while its agent is working** and **pops once when a fill lands**.
+
+| `stage` | What it draws | Why that property |
+|---|---|---|
+| `thinking` | scale 1 → 1.015, breathing, 3.6s | Alive. The one animations.md asked for by name. |
+| `decided` | settles to rest, 250ms, then still | The agent has stopped; the screen now says what it decided. |
+| `executing` | opacity 1 → .72, breathing, 900ms | In flight. The skeleton's cadence, because it means the same thing. |
+| `filled` | one 250ms scale-in from .94 | The second thing "If you add motion" asked for. Once, on arrival. |
+
+Two loops and two properties. **Scale means alive, opacity means in flight** — a second scale loop at a
+different speed would read as the same state at a different frame rate.
+
+The rules it obeys:
+
+- **The stage is a prop, from what the screen knows** — a request in flight, a proposal waiting, an
+  executor's answer. Never a timer, an interval or a sequence. An orb that performs a four-beat routine on
+  a clock says "something is happening" while nothing is, which on a screen that moves money is a lie the
+  animation tells. There is a test for this.
+- **Motion is never the only carrier.** Every screen that passes a stage says the same thing in words. Under
+  reduced motion the orb is simply still, and nothing is lost.
+- **Off by default.** An orb with no stage does not move. A roster of twelve breathing orbs is a screen that
+  will not sit still to be read, which is exactly what animations.md's ban on the pulsing status dot is about.
+- **It stops when the state does**, and when the orb unmounts.
+
+## The balance roll-over
+
+Rule 1 says never animate a price, and it stands. A market quote that moves on screen implies a move
+the market did not make, and a quote that ticks every few seconds would turn a quiet market into a
+flickering one.
+
+A balance is not a quote. It changes because something *happened* — a fill landed, a position moved,
+money arrived — and a change that appears with no motion at all is the one event on the screen that
+goes unannounced. `<RollingNumber roll>` hands each **changed** character over to the one replacing
+it: the old character leaves the clip as the new one enters, upward when the figure rose and downward
+when it fell. Characters that did not change do not move.
+
+What it does not do is **count**. Every frame shows a character from the figure that was on screen or
+a character from the figure that replaced it, and nothing in between — two real values, handed over.
+There is no interpolated $4,9xx on the way from $4,862.18 to $4,901.02, because no such figure was
+ever true.
+
+Rules it obeys:
+
+- **Opt-in, and only for the person's own money.** The default is still a snap, and a `figure="market"`
+  price is never given `roll`.
+- **180ms**, the interaction scale, because a hand-over is one character being replaced rather than a
+  screen arriving.
+- **Only what changed.** The separators, the currency mark and the digits that held still stay put.
+- **Nothing while balances are hidden.** The figure is dots, and one dot replacing another is movement
+  with nothing behind it.
+- **Off under reduced motion**, where the new character is simply there.
 
 ## The skeleton pulse
 

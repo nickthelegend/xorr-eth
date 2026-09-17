@@ -21,7 +21,15 @@
 import { base, baseSepolia } from 'viem/chains';
 import { isAddress, type Address, type Chain } from 'viem';
 
-export type ChainKey = 'base' | 'base-sepolia' | 'base-fork' | 'localnet';
+export type ChainKey =
+  | 'base'
+  | 'base-sepolia'
+  | 'base-fork'
+  | 'localnet'
+  | 'solana-fork'
+  | 'solana-devnet'
+  | 'solana-localnet'
+  | 'solana-mainnet';
 
 /**
  * What money on each chain is, in the executor's three words (`server/src/evm/money.ts`): real on a mainnet, test funds on
@@ -33,6 +41,10 @@ const MONEY: Record<ChainKey, 'real' | 'test' | 'copy'> = {
   'base-sepolia': 'test',
   'base-fork': 'copy',
   localnet: 'copy',
+  'solana-fork': 'copy',
+  'solana-devnet': 'test',
+  'solana-localnet': 'copy',
+  'solana-mainnet': 'real',
 };
 
 const ASKED = process.env.EXPO_PUBLIC_XORR_CHAIN ?? 'base-sepolia';
@@ -49,8 +61,56 @@ if (!Object.prototype.hasOwnProperty.call(MONEY, ASKED)) {
 }
 
 export const CHAIN_KEY = ASKED as ChainKey;
+export const isSolana = CHAIN_KEY.startsWith('solana-');
+
+/**
+ * Every chain this app knows, which must be every chain the executor knows.
+ *
+ * `server/src/evm/chain-agreement.test.ts` holds the two lists to each other: a chain the executor can be
+ * started on and the app cannot be built for is a deployment nobody can reach from the product.
+ */
+export const CHAIN_KEYS = Object.keys(MONEY) as ChainKey[];
+
+/** What money on any chain is, not only this build's. A key this app does not know is real: nothing is reassured on a guess. */
+export function moneyOnChain(key: string): 'real' | 'test' | 'copy' {
+  return Object.prototype.hasOwnProperty.call(MONEY, key) ? MONEY[key as ChainKey] : 'real';
+}
 
 const money = MONEY[CHAIN_KEY];
+
+/**
+ * What money on the chain this build signs on is, in the executor's own three words.
+ *
+ * Exported for `net/chainMatch.ts`, which has to say whether a disagreement between this build and its
+ * executor is a wiring problem or a money one. `testNetwork` cannot answer that: it folds `test` and `copy`
+ * into one boolean, and the sentence needs to know which.
+ */
+export const chainMoney: 'real' | 'test' | 'copy' = money;
+
+/**
+ * How this build's chain is named inside a sentence, as the executor names it.
+ *
+ * `chainLabel` is a title — "Base fork" — and reads wrong mid-sentence. The EVM strings are the ones
+ * `evm/money.ts` writes and the Solana ones are the ones `solana/clusters.ts` writes, so a sentence naming
+ * both sides of a mismatch names them the same way whichever side of the app the chain belongs to.
+ */
+const SENTENCE_NAMES: Record<ChainKey, string> = {
+  base: 'Base mainnet',
+  'base-sepolia': 'Base Sepolia',
+  'base-fork': 'a fork of Base mainnet',
+  localnet: 'a local fork of Base Sepolia',
+  'solana-fork': 'Solana Mainnet Fork',
+  'solana-devnet': 'Solana Devnet',
+  'solana-localnet': 'Solana Localnet',
+  'solana-mainnet': 'Solana Mainnet',
+};
+
+export const chainSentenceName = SENTENCE_NAMES[CHAIN_KEY];
+
+/** Any chain's sentence name, for the screens that talk about a chain other than this build's. */
+export function chainSentenceNameOf(key: string): string {
+  return Object.prototype.hasOwnProperty.call(SENTENCE_NAMES, key) ? SENTENCE_NAMES[key as ChainKey] : key;
+}
 
 /**
  * A fork of Base IS Base — same id, same deployed contracts, different node. So the chain is Base
@@ -70,6 +130,10 @@ const CHAINS: Record<ChainKey, () => Chain> = {
   'base-sepolia': () => withRpc(baseSepolia, RPC),
   'base-fork': () => withRpc({ ...base, name: 'Base fork' }, RPC ?? 'http://127.0.0.1:8545'),
   localnet: () => withRpc({ ...base, name: 'Base fork' }, RPC ?? 'http://127.0.0.1:8545'),
+  'solana-fork': () => withRpc({ ...base, name: 'Solana fork' }, RPC ?? 'http://127.0.0.1:8899'),
+  'solana-devnet': () => withRpc({ ...baseSepolia, name: 'Solana Devnet' }, RPC ?? 'https://api.devnet.solana.com'),
+  'solana-localnet': () => withRpc({ ...base, name: 'Solana Localnet' }, RPC ?? 'http://127.0.0.1:8899'),
+  'solana-mainnet': () => withRpc({ ...base, name: 'Solana Mainnet' }, RPC ?? 'https://api.mainnet-beta.solana.com'),
 };
 
 export const activeChain: Chain = CHAINS[CHAIN_KEY]();
@@ -88,6 +152,10 @@ const LABELS: Record<ChainKey, string> = {
   'base-sepolia': 'Base Sepolia',
   'base-fork': 'Base fork',
   localnet: 'Base fork',
+  'solana-fork': 'Solana fork',
+  'solana-devnet': 'Solana Devnet',
+  'solana-localnet': 'Solana Localnet',
+  'solana-mainnet': 'Solana Mainnet',
 };
 
 /** For the screens that name the network to the user. */
@@ -136,10 +204,12 @@ export const walletSignsOnly = money === 'copy';
  * fork build the same code opens a phone wallet on real Base, where a transfer is real money sent to an address whose
  * balance this build never reads. Any copy of a chain carries the id of the chain it copies, so none has a code.
  */
-export const depositQrWorks = money !== 'copy';
+export const depositQrWorks = !isSolana && money !== 'copy';
 
 /** Said where the code would be. A fork build has no code, and its money is test funds. */
-export const depositQrNote = 'Test network. Use test funds.';
+export const depositQrNote = isSolana
+  ? (money === 'copy' ? 'Solana fork. Test funds.' : 'Send only USDC on Solana.')
+  : 'Test network. Use test funds.';
 
 /**
  * The delegation contract this build trusts, when the build pinned one (FEATURES.md #24).

@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { FONTS } from './fonts';
-import { colors, duration, radius, size, space } from './tokens';
+import { allocationPalette, allocationUnknown, colors, duration, radius, size, space } from './tokens';
 import { type as typeScale, numericVariants, type TypeVariant } from './type';
 import { MINUS, money, percent, price, quantity, wholeMoney } from './format';
 import {
@@ -114,12 +114,15 @@ describe('motion — animations.md', () => {
    * `draw`, a screen ARRIVING rather than a control responding. Anything else new still has to argue
    * its way in here first.
    */
-  it('interaction is 150 / 180 / 250; arrival is enter and draw; the skeleton pulses', () => {
-    const { pulse, enter, draw, ...interaction } = duration;
+  it('interaction is 150 / 180 / 250; arrival is enter and draw; the skeleton pulses; an orb breathes', () => {
+    const { pulse, enter, draw, breathe, ...interaction } = duration;
     expect(Object.values(interaction).sort((a, b) => a - b)).toEqual([150, 180, 250]);
     expect(enter).toBe(420);
     expect(draw).toBe(700);
     expect(pulse).toBe(900);
+    // animations.md sanctions "a slow 3–4s scale breathe" on a working agent's orb, and nothing faster.
+    expect(breathe).toBeGreaterThanOrEqual(3000);
+    expect(breathe).toBeLessThanOrEqual(4000);
   });
 
   // The whole animated inventory:
@@ -130,9 +133,15 @@ describe('motion — animations.md', () => {
   //   States          skeleton block opacity, looping     900ms  (the only loop in the app)
   //   Rise            a section fading up into place      420ms  (arrival, 2026-09-12)
   //   RollingNumber   digits rising into their slots      420ms  (arrival, 28ms apart — never counting)
+  //                  a changed character handed over     180ms  (`roll`, own money only — still never counting)
   //   AreaChart       the line revealed left to right     700ms  (arrival)
   //   Candlestick     the candles revealed left to right  700ms  (arrival)
   //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)
+  //   FillReceipt     a confirmed fill's receipt arriving   420ms  (arrival; once, on the signature — never on mount)
+  //   AllocationDonut the ring sweeping clockwise on load    700ms  (arrival, the chart reveal beat — revealed, never resized)
+  //   ValueTimeline   the recorded history revealed L→R     700ms  (arrival; no point ever moves to a new value)
+  //   AgentOrb        the agent's stage: breathe / settle  3600ms (thinking) · 900ms (executing) · 250ms (decided, filled)
+  //   StopCurtain     the kill switch's own screen         420ms  (the curtain down) · 250ms (the confirm badge)
   // A new entry here means a primitive started animating something the policy does not sanction.
   // Argue it into motion.ts first, or take the animation out.
   it('only the sanctioned primitives animate', () => {
@@ -141,16 +150,21 @@ describe('motion — animations.md', () => {
       .map(({ rel }) => rel)
       .sort();
     expect(animated).toEqual([
+      'AgentOrb.tsx',
+      'FillReceipt.tsx',
       'HoldButton.tsx',
       'Progress.tsx',
       'Rise.tsx',
       'RollingNumber.tsx',
       'Segmented.tsx',
       'States.tsx',
+      'StopCurtain.tsx',
       'Switch.tsx',
       'TabBar.tsx',
+      'charts/AllocationDonut.tsx',
       'charts/AreaChart.tsx',
       'charts/Candlestick.tsx',
+      'charts/ValueTimeline.tsx',
       'motion.ts',
     ]);
   });
@@ -159,11 +173,27 @@ describe('motion — animations.md', () => {
    * The loop is allowed in exactly one file. `withRepeat` anywhere else is how an app acquires a
    * pulsing dot, a breathing button and a spinning badge one reasonable-seeming commit at a time.
    */
-  it('nothing else in the design system loops', () => {
+  it('only the skeleton and a working agent\u2019s orb loop', () => {
+    /*
+     * Two, and both are argued for in animations.md: the skeleton block, which is not content and says
+     * "still coming"; and an orb whose agent is thinking or acting, which animations.md's own "If you add
+     * motion" asks for by name. Both stop the moment the state that justifies them ends.
+     */
     const looping = sources()
       .filter(({ src }) => /withRepeat/.test(stripComments(src)))
-      .map(({ rel }) => rel);
-    expect(looping).toEqual(['States.tsx']);
+      .map(({ rel }) => rel)
+      .sort();
+    expect(looping).toEqual(['AgentOrb.tsx', 'States.tsx']);
+  });
+
+  /*
+   * The orb performs a stage it is GIVEN. A stage it advanced itself — on a timer, a delay or an interval
+   * — would be an animation asserting that an agent is thinking when nothing has been asked of it.
+   */
+  it('the orb\u2019s stage comes from its prop, never from a clock', () => {
+    const src = stripComments(fs.readFileSync(path.join(UI, 'AgentOrb.tsx'), 'utf8'));
+    expect(/setTimeout|setInterval|withDelay|withSequence|Date\.now/.test(src)).toBe(false);
+    expect(src).toMatch(/useStageMotion\(stage\)/);
   });
 
   /*
@@ -458,5 +488,85 @@ describe('edge cases — section W of docs/QA-UI-PLAN.md', () => {
     const src = fs.readFileSync(path.join(UI, 'charts', 'Candlestick.tsx'), 'utf8');
     expect(src).toMatch(/const hasData = series\.length > 0;/);
     expect(src).toMatch(/box\.width > 0 && hasData/);
+  });
+});
+
+describe('the stop curtain — evidence, never a claim', () => {
+  const src = stripComments(fs.readFileSync(path.join(UI, 'StopCurtain.tsx'), 'utf8'));
+
+  /*
+   * The badge may say CONFIRMED ON-CHAIN only where a real transaction hash was handed in. A placeholder,
+   * a default or an `ellipsis` fallback here would be a fabricated receipt for the most consequential act
+   * in the app — and the one screen whose entire argument is that you do not have to take its word.
+   */
+  it('shows the hash only when there is one, and only once the chain has confirmed', () => {
+    expect(src).toMatch(/stopped && signature \?/);
+    // No default value for the signature: absent stays absent.
+    expect(src).not.toMatch(/signature\s*=\s*['"`]/);
+    expect(src).not.toMatch(/signature\s*\?\?/);
+  });
+
+  /* Both ends of the hash: the leading bytes of two transactions look alike, and a truncation nobody can match is decoration. */
+  it('truncates a hash from both ends, and leaves a short one alone', () => {
+    expect(src).toMatch(/hash\.slice\(0, 8\)/);
+    expect(src).toMatch(/hash\.slice\(-6\)/);
+  });
+
+  /* `stopped` is the chain's answer, not the app's intent, so neither state may be reached on a clock. */
+  it('advances on the revoke, never on a timer', () => {
+    expect(/setTimeout|setInterval|withDelay|withSequence/.test(src)).toBe(false);
+  });
+});
+
+describe('the fill receipt — a signature is not an event until it says where', () => {
+  const src = stripComments(fs.readFileSync(path.join(UI, 'FillReceipt.tsx'), 'utf8'));
+
+  /*
+   * The venue is the field that says what the signature means, and the receipt exists because it was the one being
+   * left out. It must be drawn unconditionally — including the case where none was recorded, which says so in words.
+   */
+  it('always says something about the venue, never nothing', () => {
+    expect(src).toMatch(/No venue was recorded/);
+    expect(src).toMatch(/naming \?/);
+  });
+
+  /* The signature goes out whole: a truncation is what someone takes to an explorer and fails to find. */
+  it('prints the signature in full', () => {
+    expect(src).toMatch(/\{signature\}/);
+    expect(src).not.toMatch(/shortSignature\(signature\)/);
+  });
+
+  /*
+   * The arrival is keyed to the signature, not to mount. Opening a week-old run from the list must not animate its
+   * receipt in, because that is the app saying a fill just landed.
+   */
+  it('arrives on the fill, not on the mount', () => {
+    expect(src).toMatch(/arrivedFor\.current === signature/);
+    expect(/setTimeout|setInterval|withRepeat|withSequence/.test(src)).toBe(false);
+  });
+});
+
+describe('the allocation palette — a sector is not an outcome', () => {
+  /*
+   * The one product rule, in the one chart most likely to break it by accident. A donut wants eight distinct colours,
+   * and the two most distinct ones left in this palette are the P&L pair — so a sector drawn in `up` green would read
+   * as "the sector that made money", which is a claim the chart is not making.
+   */
+  it('never reaches for a P&L colour', () => {
+    const pnl = [colors.up, colors.down, colors.candleUp, colors.candleDown];
+    for (const hue of allocationPalette) {
+      expect(pnl, `allocation palette uses a P&L colour: ${hue}`).not.toContain(hue);
+    }
+    expect(pnl).not.toContain(allocationUnknown);
+  });
+
+  it('is all distinct — two sectors the same colour is a legend that cannot be read', () => {
+    expect(new Set(allocationPalette).size).toBe(allocationPalette.length);
+  });
+
+  /* Unclassified is the absence of an answer. A hue of its own would seat it in the legend as a peer of real sectors. */
+  it('draws the not-known slice in a grey, not a hue', () => {
+    expect(allocationUnknown).toBe(colors.switchOff);
+    expect(allocationPalette).not.toContain(allocationUnknown);
   });
 });
