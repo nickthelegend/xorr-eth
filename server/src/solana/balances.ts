@@ -200,6 +200,31 @@ export function scaledUiMultiplier(mintInfo: Mint, atUnixSeconds = Date.now() / 
     : config.multiplier;
 }
 
+export type MintScale = {
+  decimals: number;
+  multiplier: number;
+  /**
+   * A multiplier change the issuer has published but that has not taken effect yet, if there is
+   * one. This is how a split or a dividend announces itself on-chain ahead of time, which is the
+   * only corporate-action calendar this project has that nobody had to make up.
+   */
+  pending: { nextMultiplier: number; effectiveAtMs: number } | null;
+};
+
+/*
+ * Decimals never change for a mint, so they are safe to remember. The multiplier does change —
+ * that is the entire point of the extension — so it is cached only briefly: long enough that a
+ * single trade does not re-read the same mint several times, short enough that a split shows up
+ * in seconds rather than at the next restart.
+ */
+const MULTIPLIER_TTL_MS = 10_000;
+const scaleCache = new Map<string, { scale: MintScale; readAt: number }>();
+
+/** Drop the memo. Tests that move a multiplier need the next read to see it. */
+export function clearMintScaleCache(): void {
+  scaleCache.clear();
+}
+
 /**
  * A multiplier change the issuer has already scheduled but that has not taken effect yet.
  *
@@ -227,19 +252,47 @@ export async function readMintScale(
   mint: PublicKey | string,
   conn: Connection = defaultConnection,
   programId?: PublicKey,
-): Promise<{
-  decimals: number;
-  multiplier: number;
-  pending: { nextMultiplier: number; effectiveAtMs: number } | null;
-}> {
+): Promise<MintScale> {
   const mintPk = toPublicKey(mint);
+  const key = mintPk.toBase58();
+  const hit = scaleCache.get(key);
+  if (hit && Date.now() - hit.readAt < MULTIPLIER_TTL_MS) {
+    return hit.scale;
+  }
+
   const prog = programId ?? tokenProgramForMint(mintPk);
   const mintInfo = await getMint(conn, mintPk, 'confirmed', prog);
-  return {
+  const scale: MintScale = {
     decimals: mintInfo.decimals,
     multiplier: scaledUiMultiplier(mintInfo),
     pending: pendingMultiplierChange(mintInfo),
   };
+  scaleCache.set(key, { scale, readAt: Date.now() });
+  return scale;
+}
+
+/**
+ * The two fields the conversions need, so a caller doing arithmetic can pass a pair of numbers.
+ *
+ * `MintScale` also carries a scheduled multiplier change, which is a fact about the future and has
+ * no bearing on what a raw amount is worth now. Asking for the whole thing would make every call
+ * site invent a `pending: null` to satisfy a field the function never reads.
+ */
+export type UiScale = Pick<MintScale, 'decimals' | 'multiplier'>;
+
+/**
+ * Raw base units -> the amount a holder is actually shown, scaled UI multiplier included.
+ *
+ * Use this anywhere a raw token amount becomes a number a person reads or a P&L line divides by.
+ * `Number(raw) / 10 ** decimals` is the version that goes wrong after a split.
+ */
+export function toUiAmount(raw: bigint, scale: UiScale): number {
+  return (Number(raw) / 10 ** scale.decimals) * scale.multiplier;
+}
+
+/** The inverse: a displayed amount back to the raw base units that represent it. */
+export function fromUiAmount(ui: number, scale: UiScale): bigint {
+  return BigInt(Math.floor((ui / scale.multiplier) * 10 ** scale.decimals));
 }
 
 /**
@@ -267,7 +320,7 @@ export async function getTokenBalance(
     const acc = await getAccount(conn, ata, 'confirmed', prog);
     return {
       amount: acc.amount,
-      uiAmount: (Number(acc.amount) / 10 ** decimals) * multiplier,
+      uiAmount: toUiAmount(acc.amount, { decimals, multiplier }),
       decimals,
       ata,
     };

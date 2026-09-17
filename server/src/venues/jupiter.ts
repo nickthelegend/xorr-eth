@@ -22,7 +22,7 @@ import {
 import { connection as defaultConnection, waitForTx } from '../solana/connection.js';
 import { DEFAULT_MINTS, CLUSTER_KEY } from '../solana/clusters.js';
 import { payerKeypair, venueVaultKeypair } from '../solana/keys.js';
-import { ataFor, tokenProgramForMint, decimalsForMint } from '../solana/balances.js';
+import { ataFor, tokenProgramForMint, readMintScale } from '../solana/balances.js';
 
 export const JUPITER_TOKENS: Record<string, string> = {
   USDC: DEFAULT_MINTS.USDC,
@@ -214,6 +214,12 @@ export async function swap(params: {
    * 1) If userSigner is provided and input is not yet in vault: transfer input from user to vault
    * 2) Transfer output tokens from vault to user ATA
    */
+  // Both legs are `transferChecked`, which rejects a decimals value the mint disagrees with.
+  const [inputScale, outputScale] = await Promise.all([
+    readMintScale(inputMintPk, conn, inputProg),
+    readMintScale(outputMintPk, conn, outputProg),
+  ]);
+
   const userInAta = ataFor(userPk, inputMintPk, inputProg);
   const vaultInAta = ataFor(vaultKeypair.publicKey, inputMintPk, inputProg);
   const userOutAta = ataFor(userPk, outputMintPk, outputProg);
@@ -250,7 +256,7 @@ export async function swap(params: {
         vaultInAta,
         userSigner.publicKey,
         inAmount,
-        decimalsForMint(inputMintPk),
+        inputScale.decimals,
         [],
         inputProg,
       ),
@@ -265,7 +271,7 @@ export async function swap(params: {
       userOutAta,
       vaultKeypair.publicKey,
       outAmount,
-      decimalsForMint(outputMintPk),
+      outputScale.decimals,
       [],
       outputProg,
     ),

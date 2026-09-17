@@ -14,7 +14,7 @@
 import { PublicKey } from '@solana/web3.js';
 import { readDelegation, spendAsDelegate, usdToBaseUnits, baseUnitsToUsd } from '../solana/delegation.js';
 import { delegateKeypair, venueVaultKeypair } from '../solana/keys.js';
-import { ataFor, tokenProgramForMint } from '../solana/balances.js';
+import { ataFor, tokenProgramForMint, readMintScale, toUiAmount, fromUiAmount } from '../solana/balances.js';
 import { DEFAULT_MINTS } from '../solana/clusters.js';
 import { evaluate, type RuleContext } from '../rules/engine.js';
 import { xStockPriceUsd, XSTOCKS, xStockKey } from '../venues/xstocks.js';
@@ -170,8 +170,16 @@ export async function guardAndSpend(intent: SpendIntent): Promise<SpendOutcome> 
       vaultKeypair: vault,
     });
 
-    const decimals = stock ? stock.decimals : 8;
-    const filledUnits = Number(swapRes.outAmount) / 10 ** decimals;
+    /*
+     * What the holder actually received, not what the raw amount looks like.
+     *
+     * xStocks are Token-2022 with the Scaled UI Amount extension: a split or an auto-reinvested
+     * dividend moves an issuer multiplier while every raw balance stays put. Dividing the raw
+     * amount by a hardcoded 8 decimals reports the pre-split position and prices the fill against
+     * it, so both the holding and the P&L drift the moment an issuer acts.
+     */
+    const outScale = await readMintScale(outMint);
+    const filledUnits = toUiAmount(swapRes.outAmount, outScale);
     const fillPrice = intent.usd / (filledUnits > 0 ? filledUnits : 1);
 
     return {
@@ -189,8 +197,9 @@ export async function guardAndSpend(intent: SpendIntent): Promise<SpendOutcome> 
   } else {
     // SELL side (closes / exits): sells stock back to USDC
     const inMint = stock ? stock.address : resolveMint(symbolKey);
-    const stockDecimals = stock ? stock.decimals : 8;
-    const inUnits = BigInt(Math.floor((intent.usd / markPrice) * 10 ** stockDecimals));
+    // Same reasoning as the buy leg: the multiplier decides how many raw units a holding is.
+    const inScale = await readMintScale(inMint);
+    const inUnits = fromUiAmount(intent.usd / markPrice, inScale);
 
     const quoteRes = await quote({
       inSymbolOrMint: inMint,
@@ -212,8 +221,8 @@ export async function guardAndSpend(intent: SpendIntent): Promise<SpendOutcome> 
       slot: swapRes.slot,
       inUnits,
       outUnits: swapRes.outAmount,
-      filledUnits: Number(inUnits) / 10 ** stockDecimals,
-      fillPrice: outUsd / (Number(inUnits) / 10 ** stockDecimals || 1),
+      filledUnits: toUiAmount(inUnits, inScale),
+      fillPrice: outUsd / (toUiAmount(inUnits, inScale) || 1),
       symbol: symbolKey,
       usd: outUsd,
       side: 'sell',
