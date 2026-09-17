@@ -164,7 +164,7 @@ export default function MarketsScreen() {
                         rather than a flat line claiming the price never moved.
                       */}
                       {(sparks.data?.[item.sym]?.length ?? 0) > 1 ? (
-                        <Sparkline data={sparks.data![item.sym]!} />
+                        <Sparkline data={sparks.data![item.sym]!} live />
                       ) : null}
                       <Price variant="rowPrimary" figure="market">
                         {item.px}

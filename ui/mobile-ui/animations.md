@@ -36,6 +36,7 @@ to show that the app registered a tap.
 | Skeleton block | `opacity 1 → .45`, reversing | 900ms | The one duration outside 150/180/250, and the only looping animation in the app. See below. |
 | Messages drawer | `transform: translateY` (below the screen ↔ open) | up 420ms ease-out · down 250ms | Rises once it has laid out, on the arrival curve; goes down on the interaction curve, and follows a drag. The scrim's opacity follows it. See below. |
 | Tab bar | `transform: translateY` (0 ↔ its own height) | down 420ms ease-out · up 250ms | Moves with the Messages drawer, starting when the drawer starts. See below. |
+| Sparkline, `live` | `opacity` (.9 → 1 → .9, the whole glyph) | 150ms up · 250ms back | One breath when the series it was handed actually changed. The line itself still redraws instantly. See below. |
 | Stop curtain | `opacity` (the blackout) · `transform: translateY` (the curtain) · `transform: scale` (the badge) | 420ms ease-out · 420ms ease-out · 250ms | The kill switch's own screen, up while the revoke is signed and confirmed. See below. |
 | Agent orb, `stage` | `transform: scale` (thinking, decided, filled) · `opacity` (executing) | 3600ms breathing · 900ms breathing · 250ms settling | The agent's orb performing what the screen knows the agent is doing. Driven by a prop, never a timer. See below. |
 | Balance roll-over | `transform: translateY` + `opacity`, per changed character | 180ms | A balance or P&L figure handing each changed character to the one that replaces it, in the direction the figure moved. Opt-in (`<RollingNumber roll>`), never on a market quote. See below. |
@@ -62,6 +63,25 @@ Two places would genuinely benefit, both currently unbuilt:
   in the chat's `Turn`, and again as `stage="filled"` on the orb.
 
 Anything beyond those two, don't.
+
+## The sparkline's breath
+
+Rule 1 is intact: the line **redraws instantly**, exactly as a candle mutates in place with no
+transition. What breathes is the glyph's opacity — §6's .9 up to full over 150ms and back over 250ms.
+No point grows, no segment draws itself, and nothing interpolates between two prices.
+
+It says the one thing neither the line nor the price beside it can: *this is live*. A market list ten
+minutes open and one that just refreshed are drawn identically, which is the "nothing" versus "not yet"
+conflation the skeleton pulse exists to fix, running the other way — "still" versus "still arriving".
+
+- **Driven by the data, never a clock.** The breath happens when the series changes, and at no other
+  time. There is no loop: a sparkline breathing on a schedule asserts a feed is live while nothing is
+  arriving, which is worse than a still line.
+- **A change means a new latest point**, not a new array. A re-read returns a fresh array every time,
+  so identity would make every refresh — changed or not — read as a tick.
+- **Not on the first draw.** A glyph appearing is not a tick.
+- **Opt-in.** A fixed historical series does not breathe, because nothing is arriving.
+- **Off under reduced motion.**
 
 ## The stop's curtain
 

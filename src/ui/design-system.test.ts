@@ -139,6 +139,7 @@ describe('motion — animations.md', () => {
   //   TabBar          the whole bar down and back up      250ms  (making way for the Messages drawer, 2026-09-16)
   //   AgentOrb        the agent's stage: breathe / settle  3600ms (thinking) · 900ms (executing) · 250ms (decided, filled)
   //   StopCurtain     the kill switch's own screen         420ms  (the curtain down) · 250ms (the confirm badge)
+  //   Sparkline       one breath when the series ticks      150ms up · 250ms back (opacity only; the line still snaps)
   // A new entry here means a primitive started animating something the policy does not sanction.
   // Argue it into motion.ts first, or take the animation out.
   it('only the sanctioned primitives animate', () => {
@@ -159,6 +160,7 @@ describe('motion — animations.md', () => {
       'TabBar.tsx',
       'charts/AreaChart.tsx',
       'charts/Candlestick.tsx',
+      'charts/Sparkline.tsx',
       'motion.ts',
     ]);
   });

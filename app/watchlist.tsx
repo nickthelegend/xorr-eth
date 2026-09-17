@@ -120,7 +120,7 @@ export default function Watchlist() {
                   middle={
                     closes.length > 1 ? (
                       <View style={{ marginHorizontal: space.s10 }}>
-                        <Sparkline data={closes} />
+                        <Sparkline data={closes} live />
                       </View>
                     ) : undefined
                   }
